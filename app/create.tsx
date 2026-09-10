@@ -39,8 +39,8 @@ export default function CreateActivity() {
     [goal, setGoal] = useState("None");
   return (
     <Screen
-      title="Give your people a plan."
-      eyebrow="CREATE ACTIVITY"
+      title="Create activity"
+      eyebrow="A simple plan starts here"
       create={false}
     >
       <Field

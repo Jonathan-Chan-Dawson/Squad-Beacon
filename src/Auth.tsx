@@ -23,14 +23,14 @@ export function Auth() {
     [message, setMessage] = useState("");
   return (
     <Screen
-      title="Good things happen together."
-      eyebrow="SQUAD BEACON"
+      title="Squad Beacon"
+      eyebrow="Make plans. Show up together."
       create={false}
     >
       <View style={styles.hero}>
         <Radio size={46} color={colors.lime} />
         <Text style={[styles.title, { color: "white", fontSize: 30 }]}>
-          Your people.{"\n"}Your plans.{"\n"}A little more progress.
+          Everyday plans, better together.
         </Text>
         <Text style={{ color: "#BDCFC5", fontSize: 15, lineHeight: 24 }}>
           Find a friend to train with, make time to create, or turn “we should
@@ -121,11 +121,7 @@ export function Onboard() {
     [username, setUsername] = useState(""),
     [birth, setBirth] = useState("");
   return (
-    <Screen
-      title="Make yourself at home."
-      eyebrow="YOUR PROFILE"
-      create={false}
-    >
+    <Screen title="Set up your profile" eyebrow="YOUR PROFILE" create={false}>
       <View style={styles.card}>
         <Field label="Your name" value={name} onChangeText={setName} />
         <Field

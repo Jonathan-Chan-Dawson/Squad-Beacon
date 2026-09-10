@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from "react";
 import { Text, View, Pressable } from "react-native";
 import { router } from "expo-router";
-import { MapPin, Radio, ShieldCheck } from "lucide-react-native";
+import { ShieldCheck } from "lucide-react-native";
 import BeaconMap from "@/components/BeaconMap";
 import { useBeacon } from "../store";
 import { ActivityCard } from "../ActivityCard";
-import { Button, Chips, Empty, Screen, Txt, colors, styles } from "../ui";
+import { Chips, Empty, Screen, Txt, colors, styles } from "../ui";
+import { AvatarToggle } from "../AvatarToggle";
 import { friendIds } from "../domain";
 export default function MapScreen() {
   const { data, userId } = useBeacon();
@@ -60,23 +61,12 @@ export default function MapScreen() {
     (l) => l.owner_id === userId && Date.parse(l.expires_at) > now,
   );
   return (
-    <Screen
-      title="Find your next together."
-      eyebrow="YOUR WORLD, A LITTLE CLOSER"
-    >
-      <View style={styles.between}>
-        <View style={styles.row}>
-          <MapPin size={16} color={colors.green} />
-          <Txt muted>Places your people have shared</Txt>
-        </View>
-        <Radio size={19} color={colors.green} />
-      </View>
+    <Screen title="Map" eyebrow="See plans. Join your friends.">
       <Chips
         options={["All", "Now", "Upcoming"]}
         value={time}
         onChange={setTime}
       />
-      <Chips options={choices} value={audience} onChange={setAudience} />
       <Chips
         options={["Map + list", "List only"]}
         value={view}
@@ -96,6 +86,12 @@ export default function MapScreen() {
           }
         />
       )}
+      <Text style={styles.muted}>Show plans from</Text>
+      <Chips options={choices} value={audience} onChange={setAudience} />
+      <AvatarToggle />
+      <Text style={styles.muted}>
+        Pins are meeting places. Avatars mark shared live locations.
+      </Text>
       <Pressable
         accessibilityRole="button"
         onPress={() => router.push("/location")}
@@ -118,37 +114,23 @@ export default function MapScreen() {
           <Txt muted>
             {sharing
               ? "Manage recipients and stop sharing →"
-              : "Meeting pins are places, not live friend locations. →"}
+              : "Share temporarily →"}
           </Txt>
         </View>
       </Pressable>
       <View style={styles.between}>
-        <Text style={styles.h2}>Room for one more</Text>
-        <Text style={styles.label}>{activities.length} PLANS</Text>
+        <Text style={styles.h2}>Shared activities</Text>
+        <Text style={styles.label}>{activities.length} plans</Text>
       </View>
       {activities.map((a) => (
         <ActivityCard key={a.id} activity={a} />
       ))}
       {!activities.length && (
         <Empty
-          title="Make the first move."
-          body="Create a plan and invite your people. Online activities are welcome here too."
+          title="No plans yet"
+          body="Create an activity and invite a friend."
         />
       )}
-      <View style={styles.hero}>
-        <Text style={[styles.h2, { color: "white" }]}>
-          “We should do something”{"\n"}starts here.
-        </Text>
-        <Text style={{ color: "#C7D8CC", lineHeight: 22 }}>
-          A walk, a study session, a few rounds. Give your friends something to
-          say yes to.
-        </Text>
-        <Button
-          secondary
-          title="Put a plan out there →"
-          onPress={() => router.push("/create")}
-        />
-      </View>
     </Screen>
   );
 }

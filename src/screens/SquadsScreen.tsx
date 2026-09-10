@@ -1,7 +1,8 @@
+import { ProfileAvatar } from "../ProfileAvatar";
 import React, { useState } from "react";
 import { Pressable, Text, View, Share } from "react-native";
 import { router } from "expo-router";
-import { Users, ArrowUpRight } from "lucide-react-native";
+import { ArrowUpRight } from "lucide-react-native";
 import { useBeacon } from "../store";
 import { friendIds } from "../domain";
 import { ActivityCard } from "../ActivityCard";
@@ -40,7 +41,7 @@ export default function SquadsScreen() {
     setModal(kind);
   }
   return (
-    <Screen title="Your kind of people." eyebrow="BETTER, TOGETHER">
+    <Screen title="Squads" eyebrow="Friends, groups, and shared plans">
       <Chips
         options={["Squads", "Friends", "Private lists"]}
         value={tab}
@@ -51,14 +52,9 @@ export default function SquadsScreen() {
       />
       {tab === "Squads" && (
         <>
-          <View style={styles.hero}>
-            <Users color={colors.lime} size={32} />
-            <Text style={[styles.h2, { color: "white" }]}>
-              A small crew. A shared rhythm.
-            </Text>
-            <Text style={{ color: "#C7D8CC", lineHeight: 22 }}>
-              Training partners, weekend people, late-night gamers. Keep each
-              crew in its own space.
+          <View style={styles.card}>
+            <Text style={styles.muted}>
+              Invite-only groups for the things you do together.
             </Text>
             <Button
               secondary
@@ -153,7 +149,7 @@ export default function SquadsScreen() {
                 }
                 style={[styles.card, styles.row]}
               >
-                <Avatar name={p.name} />
+                <ProfileAvatar profile={p} />
                 <View style={{ flex: 1 }}>
                   <Text style={styles.h2}>{p.name}</Text>
                   <Txt muted>@{p.username}</Txt>

@@ -6,7 +6,7 @@ test("demo supports RSVP, goals, habits, squads, and creation without a backend"
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto("/");
   await page.getByRole("button", { name: "Explore the demo →" }).click();
-  await expect(page.getByText("Find your next together.")).toBeVisible();
+  await expect(page.getByText("Map", { exact: true }).first()).toBeVisible();
   await page
     .getByRole("button", { name: "View A few rounds. Good company." })
     .click();
@@ -50,7 +50,7 @@ test("demo supports RSVP, goals, habits, squads, and creation without a backend"
   ).toBeVisible();
   await page.getByRole("tab", { name: "Profile" }).click();
   await expect(
-    page.getByText("A work in progress.", { exact: true }),
+    page.getByText("Your profile and settings", { exact: true }),
   ).toBeVisible();
   await page.getByRole("tab", { name: "Activities" }).click();
   expect(errors).toEqual([]);
@@ -72,3 +72,43 @@ test("demo location never starts device tracking and validation errors stay in t
     }),
   ).toBeVisible();
 });
+
+for (const width of [320, 375, 390]) {
+  test(`phone layout and saved avatar controls at ${width}px`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 667 });
+    await page.goto("/");
+    await page.getByRole("button", { name: "Explore the demo →" }).click();
+    await page.getByRole("tab", { name: "Activities" }).click();
+    await expect(page.getByTestId("user-avatar").first()).toBeVisible();
+    for (const tab of ["Map", "Activities", "Squads", "Progress", "Profile"]) {
+      await page.getByRole("tab", { name: tab, exact: true }).click();
+      await expect(
+        page.getByRole("tab", { name: tab, exact: true }),
+      ).toBeInViewport();
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+      ).toBe(true);
+    }
+    await page.getByRole("switch", { name: "Show avatars" }).click();
+    await expect(page.getByTestId("user-avatar")).toHaveCount(0);
+    await page.getByRole("tab", { name: "Activities" }).click();
+    await expect(page.getByTestId("user-avatar")).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "View A few rounds. Good company." }),
+    ).toContainText("Jordan Ellis");
+    await page.reload();
+    await page.getByRole("button", { name: "Explore the demo →" }).click();
+    await page.getByRole("tab", { name: "Profile" }).click();
+    await expect(
+      page.getByRole("switch", { name: "Show avatars" }),
+    ).not.toBeChecked();
+    await page.getByRole("switch", { name: "Show avatars" }).click();
+    await expect(page.getByTestId("user-avatar").first()).toBeVisible();
+    await page.getByRole("tab", { name: "Activities" }).click();
+    await page.screenshot({ path: `test-results/refined-${width}.png` });
+  });
+}

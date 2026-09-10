@@ -1,10 +1,11 @@
 import React, { useState } from "react";
 import { Text, View } from "react-native";
 import { router } from "expo-router";
-import { ShieldCheck, Sparkles } from "lucide-react-native";
+import { ShieldCheck } from "lucide-react-native";
 import { useBeacon } from "../store";
 import { featuredActivity } from "../domain";
 import { ProfileAvatar } from "../ProfileAvatar";
+import { AvatarToggle } from "../AvatarToggle";
 import { uploadAvatar } from "../avatar";
 import { ActivityCard } from "../ActivityCard";
 import { enablePush, stopDeviceLocation, clearPush } from "../device";
@@ -38,13 +39,13 @@ export default function ProfileScreen() {
   );
   const featured = featuredActivity(profile, data.activities);
   return (
-    <Screen
-      title="A work in progress."
-      eyebrow="YOUR LITTLE CORNER"
-      create={false}
-    >
-      <View style={[styles.card, { alignItems: "center", padding: 28 }]}>
-        <ProfileAvatar profile={profile} size={84} />
+    <Screen title="Profile" eyebrow="Your profile and settings" create={false}>
+      <View style={styles.card}>
+        <Text style={styles.h2}>Display</Text>
+        <AvatarToggle description />
+      </View>
+      <View style={[styles.card, { alignItems: "center" }]}>
+        <ProfileAvatar profile={profile} size={64} />
         <Text style={styles.title}>{profile.name}</Text>
         <Txt muted>@{profile.username}</Txt>
         <Txt>{profile.bio || "Tell your people a little about yourself."}</Txt>
@@ -76,7 +77,7 @@ export default function ProfileScreen() {
       <View style={styles.card}>
         <View style={styles.row}>
           <ShieldCheck color={colors.green} />
-          <Text style={styles.h2}>You’re in control.</Text>
+          <Text style={styles.h2}>Privacy and notifications</Text>
         </View>
         <Txt muted>
           Location is off unless you explicitly share it. Your birth date is
@@ -99,15 +100,6 @@ export default function ProfileScreen() {
           }}
         />
         <Action title="Disable this device’s push" secondary run={clearPush} />
-      </View>
-      <View style={styles.card}>
-        <Sparkles color={colors.green} />
-        <Text style={styles.h2}>The good stuff stays free.</Text>
-        <Txt muted>
-          Friends, squads, goals, habits, basic streaks, and privacy controls
-          are free. Deeper insights and customization are planned for a future
-          premium release.
-        </Txt>
       </View>
       <Button
         secondary

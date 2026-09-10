@@ -15,6 +15,7 @@ import { Plus, Radio, ShieldCheck, X } from "lucide-react-native";
 import { router } from "expo-router";
 import { useBeacon } from "./store";
 import type { Audience } from "./types";
+import { usePreferences } from "./preferences";
 export const colors = {
   bg: "#F4F5F0",
   ink: "#172C29",
@@ -28,28 +29,30 @@ export const colors = {
 export const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.bg },
   content: {
-    padding: 22,
-    gap: 20,
+    padding: 16,
+    gap: 14,
     width: "100%",
-    maxWidth: 1100,
+    maxWidth: 680,
     alignSelf: "center",
   },
   row: { flexDirection: "row", alignItems: "center", gap: 10 },
   between: {
     flexDirection: "row",
     alignItems: "center",
+    flexWrap: "wrap",
     justifyContent: "space-between",
     gap: 12,
   },
   title: {
-    fontSize: 32,
-    lineHeight: 39,
+    fontSize: 28,
+    lineHeight: 34,
     fontWeight: "700",
     color: colors.ink,
     letterSpacing: -1,
   },
   h2: {
-    fontSize: 21,
+    fontSize: 19,
+    flexShrink: 1,
     fontWeight: "700",
     color: colors.ink,
     letterSpacing: -0.4,
@@ -59,17 +62,17 @@ export const styles = StyleSheet.create({
   label: {
     fontSize: 11,
     fontWeight: "700",
-    letterSpacing: 1.5,
+    letterSpacing: 0.2,
     color: colors.green,
-    textTransform: "uppercase",
+    textTransform: "none",
   },
   card: {
     backgroundColor: colors.white,
     borderWidth: 1,
     borderColor: colors.line,
-    borderRadius: 22,
-    padding: 20,
-    gap: 14,
+    borderRadius: 18,
+    padding: 16,
+    gap: 10,
   },
   button: {
     minHeight: 46,
@@ -92,16 +95,23 @@ export const styles = StyleSheet.create({
     backgroundColor: colors.white,
   },
   chip: {
-    paddingHorizontal: 14,
+    minHeight: 44,
+    justifyContent: "center",
+    paddingHorizontal: 12,
     paddingVertical: 10,
     borderRadius: 30,
     borderWidth: 1,
     borderColor: colors.line,
     backgroundColor: colors.white,
   },
-  chipText: { fontSize: 13, fontWeight: "600", color: colors.muted },
+  chipText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: colors.muted,
+    textTransform: "capitalize",
+  },
   error: { color: colors.red, fontSize: 13, lineHeight: 20 },
-  hero: { backgroundColor: colors.ink, borderRadius: 24, padding: 25, gap: 16 },
+  hero: { backgroundColor: colors.ink, borderRadius: 18, padding: 18, gap: 10 },
 });
 export function Txt({
   children,
@@ -228,11 +238,14 @@ export function Chips<T extends string>({
   );
 }
 export function Avatar({ name, size = 42 }: { name: string; size?: number }) {
+  const { showAvatars } = usePreferences();
+  if (!showAvatars) return null;
   const tone = ["#E4E9CF", "#DFE8F2", "#F2DDCC", "#E7DDF0"][
     name.charCodeAt(0) % 4
   ];
   return (
     <View
+      testID="user-avatar"
       accessibilityLabel={name}
       style={{
         width: size,
@@ -359,9 +372,10 @@ export function Screen({
               accessibilityRole="button"
               accessibilityLabel="Create activity"
               onPress={() => router.push("/create")}
-              style={[styles.button, { width: 48, padding: 0 }]}
+              style={[styles.button, styles.row, { paddingHorizontal: 12 }]}
             >
-              <Plus color="white" />
+              <Plus color="white" size={18} />
+              <Text style={styles.buttonText}>Create</Text>
             </Pressable>
           )}
         </View>
@@ -374,7 +388,7 @@ export function Screen({
           >
             <ShieldCheck size={16} color={colors.green} />
             <Text style={{ fontSize: 12, color: colors.green, flex: 1 }}>
-              Demo playground · fictional people · resets when you leave
+              Demo · Sample people and plans
             </Text>
           </View>
         )}

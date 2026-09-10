@@ -25,7 +25,7 @@ export default function TabLayout() {
           paddingBottom: Math.max(insets.bottom, 8),
         },
         tabBarIconStyle: { width: 22, height: 22 },
-        tabBarLabelStyle: { fontSize: 11, fontWeight: "600", marginTop: 4 },
+        tabBarLabelStyle: { fontSize: 11, fontWeight: "600", marginTop: 0, lineHeight: 14 },
       }}
     >
       <Tabs.Screen

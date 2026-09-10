@@ -1,8 +1,10 @@
 import React from "react";
-import { Platform, View, Text } from "react-native";
+import { Platform, View, Text, useWindowDimensions } from "react-native";
 import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
 import { locationIsFresh } from "@/src/domain";
 import { colors } from "@/src/ui";
+import { usePreferences } from "@/src/preferences";
+import { ProfileAvatar } from "@/src/ProfileAvatar";
 import type { MapProps } from "./BeaconMap";
 export default function BeaconMap({
   activities,
@@ -14,6 +16,8 @@ export default function BeaconMap({
   onPick,
   selected,
 }: MapProps) {
+  const { height } = useWindowDimensions();
+  const { showAvatars } = usePreferences();
   const pins = places.filter(
     (p) =>
       p.latitude != null &&
@@ -24,7 +28,7 @@ export default function BeaconMap({
   return (
     <View
       style={{
-        height: onPick ? 260 : 330,
+        height: onPick ? 260 : Math.max(220, Math.min(320, height * 0.36)),
         borderRadius: 24,
         overflow: "hidden",
       }}
@@ -89,7 +93,14 @@ export default function BeaconMap({
                   padding: 9,
                 }}
               >
-                <Text style={{ fontWeight: "700" }}>●</Text>
+                {showAvatars ? (
+                  <ProfileAvatar
+                    profile={profiles.find((p) => p.id === l.owner_id)}
+                    size={32}
+                  />
+                ) : (
+                  <Text style={{ fontWeight: "700" }}>●</Text>
+                )}
               </View>
             </Marker>
           ))}

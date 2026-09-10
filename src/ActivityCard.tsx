@@ -79,7 +79,7 @@ export function ActivityCard({ activity: a }: { activity: Activity }) {
       <View
         style={[
           styles.between,
-          { borderTopWidth: 1, borderColor: colors.line, paddingTop: 13 },
+          { borderTopWidth: 1, borderColor: colors.line, paddingTop: 10 },
         ]}
       >
         <View style={styles.row}>
@@ -89,7 +89,7 @@ export function ActivityCard({ activity: a }: { activity: Activity }) {
           </Text>
         </View>
         <Text style={{ fontSize: 12, fontWeight: "700", color: colors.green }}>
-          See the plan →
+          Details →
         </Text>
       </View>
     </Pressable>

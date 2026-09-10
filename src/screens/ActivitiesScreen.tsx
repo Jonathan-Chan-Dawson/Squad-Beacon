@@ -23,7 +23,7 @@ export default function ActivitiesScreen() {
     )
     .sort((a, b) => a.starts_at.localeCompare(b.starts_at));
   return (
-    <Screen title="A little less “someday.”" eyebrow="ACTIVITIES">
+    <Screen title="Activities" eyebrow="Make time for your people">
       <Chips
         options={["Upcoming", "Joined", "My plans", "Past"]}
         value={filter}

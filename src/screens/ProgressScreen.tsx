@@ -49,14 +49,17 @@ export default function ProgressScreen() {
     setMilestone("");
   }
   return (
-    <Screen title="Small steps. Real progress." eyebrow="SHOW UP FOR YOURSELF">
+    <Screen title="Progress" eyebrow="Build a little momentum">
       <View style={styles.hero}>
-        <Text style={[styles.label, { color: colors.lime }]}>
-          YOUR WEEK, SO FAR
-        </Text>
+        <Text style={[styles.label, { color: colors.lime }]}>This week</Text>
         <View style={styles.between}>
           <View>
-            <Text style={[styles.title, { fontSize: 46, color: "white" }]}>
+            <Text
+              style={[
+                styles.title,
+                { fontSize: 36, lineHeight: 42, color: "white" },
+              ]}
+            >
               {checkins}
             </Text>
             <Text style={{ color: "#C7D8CC" }}>habit check-ins</Text>
@@ -64,13 +67,11 @@ export default function ProgressScreen() {
           <Trophy size={45} color={colors.lime} />
         </View>
         <Text style={{ color: "#C7D8CC", lineHeight: 22 }}>
-          {checkins
-            ? "Every small step counts. Keep making room for what matters."
-            : "A fresh start is always available. Try one small step today."}
+          {checkins ? "Small steps add up." : "Start with one habit check-in."}
         </Text>
       </View>
       <View style={styles.between}>
-        <Text style={styles.h2}>The bigger picture</Text>
+        <Text style={styles.h2}>Goals</Text>
         <Button secondary title="+ Goal" onPress={() => open("goal")} />
       </View>
       {goals.map((g) => (
@@ -117,14 +118,16 @@ export default function ProgressScreen() {
           accessibilityLabel="Add a long-term goal"
           onPress={() => open("goal")}
         >
-          <Empty
-            title={"Your next big thing · " + (goals.length + i + 1)}
-            body="What would you like to work toward? Fill this in whenever you’re ready."
-          />
+          <View
+            style={[styles.card, styles.between, { borderStyle: "dashed" }]}
+          >
+            <Text style={styles.body}>+ Add goal {goals.length + i + 1}</Text>
+            <Text style={styles.muted}>Optional</Text>
+          </View>
         </Pressable>
       ))}
       <View style={styles.between}>
-        <Text style={styles.h2}>Your everyday wins</Text>
+        <Text style={styles.h2}>Habits</Text>
         <Button secondary title="+ Habit" onPress={() => open("habit")} />
       </View>
       {habits.map((h, i) => (

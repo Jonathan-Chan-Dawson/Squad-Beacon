@@ -1,4 +1,5 @@
 import React from "react";
+import { PreferencesProvider } from "@/src/preferences";
 import { Stack, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -37,10 +38,12 @@ function Navigation() {
 export default function RootLayout() {
   return (
     <SafeAreaProvider>
-      <BeaconProvider>
-        <StatusBar style="dark" />
-        <Navigation />
-      </BeaconProvider>
+      <PreferencesProvider>
+        <BeaconProvider>
+          <StatusBar style="dark" />
+          <Navigation />
+        </BeaconProvider>
+      </PreferencesProvider>
     </SafeAreaProvider>
   );
 }
