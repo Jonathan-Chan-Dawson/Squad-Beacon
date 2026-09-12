@@ -17,7 +17,12 @@
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyAT1D5KGEV99uxxB03b6OhoW5ObtrnJhOA"
+        }
+      }
     },
     "web": {
       "bundler": "metro",
@@ -34,6 +39,13 @@
           "backgroundColor": "#ffffff"
         }
       ],
+      [
+        "react-native-maps",
+        {
+          "androidGoogleMapsApiKey": "AIzaSyAT1D5KGEV99uxxB03b6OhoW5ObtrnJhOA"
+        }
+      ],
+
       "expo-secure-store",
       "@react-native-community/datetimepicker"
     ],
