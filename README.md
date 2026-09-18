@@ -4,11 +4,37 @@ An Expo SDK 57 / TypeScript pilot for friends who want to turn intentions into s
 
 ## Run it
 
-Use Node 24 (tested with 24.12.0) and npm in the project’s WSL directory.
+Use Node 24 and npm. For the Windows Android emulator, run commands in PowerShell from the Windows checkout so Metro and Android SDK tools run on the same host.
 
 ```sh
 npm ci
 npm start
+```
+
+### Android development startup
+
+With a development build already installed and an emulator running (or a USB-debugging phone connected), run:
+
+```sh
+npm run start:android
+```
+
+This starts Metro on IPv4 localhost and opens the development build through ADB. IPv4 is selected explicitly because ADB forwards to `127.0.0.1`, while Windows may otherwise bind Metro only to IPv6 `::1`. Keep the terminal running. `npm run android` builds and installs the native app when needed; `start:android` reconnects an existing build without rebuilding it.
+
+For a physical phone over Wi-Fi, or when Metro runs in WSL, use:
+
+```sh
+npm run start:tunnel
+```
+
+If Expo prompts to install `@expo/ngrok`, accept the installation. Open the new QR code/link in the Squad Beacon development build. Both devices need internet access for the tunnel.
+
+`java.net.ConnectException` / `ECONNREFUSED` on port **8081** means the development build cannot reach Metro. Return to the development launcher and open the new server link instead of retrying a saved address such as `172.17.60.27:8081`. For localhost/USB connections, check `adb devices` and, if necessary, run `adb reverse tcp:8081 tcp:8081` from the same host as Metro. This error occurs before the app's map can load. See the [Expo CLI connection documentation](https://docs.expo.dev/more/expo-cli/#server-url).
+
+To install an Android app that starts without Metro, build and install the preview APK:
+
+```sh
+npx eas-cli build --profile preview --platform android
 ```
 
 Press **Explore the demo** to try the app without accounts or credentials. Demo people are fictional; changes last only for that demo session. Demo never uploads photos, sends push notifications, or shares device location.
@@ -56,7 +82,7 @@ No cloud project, paid account, deployment, or store listing has been created au
 
 Set `EXPO_PUBLIC_EAS_PROJECT_ID` after `eas init`. Default application identifiers are `com.squadbeacon.app`; change them before creating store records if that namespace is not yours.
 
-For Android, enable **Maps SDK for Android** and set `GOOGLE_MAPS_ANDROID_API_KEY` in the EAS environment. Restrict the key to the application package and the correct development/Play signing certificate. iOS uses Apple Maps.
+For Android, enable **Maps SDK for Android** and set `GOOGLE_MAPS_ANDROID_API_KEY` in the EAS environment (or local `.env` for local builds). The maps plugin uses that value, falling back to the existing `android.config.googleMaps.apiKey` in `app.json`. Restrict the key to the application package and the correct development/Play signing certificate. Rebuild the native app after changing the key; restarting Metro alone does not update native map credentials. iOS uses Apple Maps.
 
 ```sh
 npx eas-cli build --profile development --platform android

@@ -39,13 +39,6 @@
           "backgroundColor": "#ffffff"
         }
       ],
-      [
-        "react-native-maps",
-        {
-          "androidGoogleMapsApiKey": "AIzaSyAT1D5KGEV99uxxB03b6OhoW5ObtrnJhOA"
-        }
-      ],
-
       "expo-secure-store",
       "@react-native-community/datetimepicker"
     ],

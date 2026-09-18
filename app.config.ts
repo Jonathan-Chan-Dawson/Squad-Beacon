@@ -1,36 +1,39 @@
-import type { ConfigContext, ExpoConfig } from "expo/config";
+import type { ConfigContext, ExpoConfig } from 'expo/config';
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
-  name: "Squad Beacon",
-  slug: "Squad-Beacon",
-  userInterfaceStyle: "light",
-  ios: { ...config.ios, bundleIdentifier: "com.squadbeacon.app" },
-  android: { ...config.android, package: "com.squadbeacon.app" },
+  name: 'Squad Beacon',
+  slug: 'Squad-Beacon',
+  userInterfaceStyle: 'light',
+  ios: { ...config.ios, bundleIdentifier: 'com.squadbeacon.app' },
+  android: { ...config.android, package: 'com.squadbeacon.app' },
   plugins: [
     ...(config.plugins ?? []),
     [
-      "react-native-maps",
+      'react-native-maps',
       {
-        androidGoogleMapsApiKey: process.env.GOOGLE_MAPS_ANDROID_API_KEY ?? "",
+        androidGoogleMapsApiKey:
+          process.env.GOOGLE_MAPS_ANDROID_API_KEY?.trim() ||
+          config.android?.config?.googleMaps?.apiKey,
       },
     ],
+    ['expo-web-browser'],
     [
-      "expo-location",
+      'expo-location',
       {
         locationWhenInUsePermission:
-          "Choose your position only when you decide to share it.",
+          'Choose your position only when you decide to share it.',
         locationAlwaysAndWhenInUsePermission:
-          "Temporarily share your location with selected friends until your timer ends.",
+          'Temporarily share your location with selected friends until your timer ends.',
         isIosBackgroundLocationEnabled: true,
         isAndroidBackgroundLocationEnabled: true,
         isAndroidForegroundServiceEnabled: true,
       },
     ],
-    "expo-notifications",
+    'expo-notifications',
     [
-      "expo-image-picker",
+      'expo-image-picker',
       {
-        photosPermission: "Choose a photo for your Squad Beacon profile.",
+        photosPermission: 'Choose a photo for your Squad Beacon profile.',
         cameraPermission: false,
         microphonePermission: false,
       },
