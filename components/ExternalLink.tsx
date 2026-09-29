@@ -4,7 +4,9 @@ import type { ComponentProps } from "react";
 import { Platform } from "react-native";
 
 export function ExternalLink(
-  props: Omit<ComponentProps<typeof Link>, "href"> & { href: string },
+  props: Omit<ComponentProps<typeof Link>, "href"> & {
+    href: `https://${string}` | `http://${string}`;
+  },
 ) {
   return (
     <Link

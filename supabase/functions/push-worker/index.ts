@@ -17,6 +17,7 @@ Deno.serve(async (request) => {
       id: string;
       token: string;
       body: string;
+      activity_id: string | null;
     }[];
     for (const job of jobs) {
       try {
@@ -34,7 +35,7 @@ Deno.serve(async (request) => {
             body: job.body,
             sound: "default",
             channelId: "default",
-            data: {},
+            data: { activity_id: job.activity_id },
           }),
         });
         if (!response.ok) throw new Error("Push request failed");

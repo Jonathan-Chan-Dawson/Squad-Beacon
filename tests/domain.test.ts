@@ -129,3 +129,22 @@ test("activity validation rejects invalid time, links, and coordinates", () => {
     validateActivity({ ...valid, latitude: 500, longitude: 10 }),
   );
 });
+
+test("repeat suggestions use only your completed activities and rank repeats first", async () => {
+  const { repeatSuggestions } = await import("../src/templates");
+  const data = makeDemo();
+  const base = data.activities[0];
+  const completed = { ...base, owner_id: "me", status: "completed" as const };
+  const suggestions = repeatSuggestions(
+    [
+      { ...completed, id: "one", title: "Coffee" },
+      { ...completed, id: "two", title: "coffee" },
+      { ...completed, id: "three", title: "Walk" },
+      { ...completed, owner_id: "other", title: "Not mine" },
+      { ...completed, status: "cancelled", title: "Cancelled" },
+    ],
+    "me",
+  );
+  assert.equal(suggestions.length, 2);
+  assert.match(suggestions[0].label, /^Your usual:/);
+});

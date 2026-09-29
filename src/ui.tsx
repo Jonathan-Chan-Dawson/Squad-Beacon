@@ -11,8 +11,8 @@ import {
   type TextInputProps,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { Plus, Radio, ShieldCheck, X } from "lucide-react-native";
-import { router } from "expo-router";
+import { ArrowLeft, Radio, ShieldCheck, X } from "lucide-react-native";
+import { router, useSegments } from "expo-router";
 import { useBeacon } from "./store";
 import type { Audience } from "./types";
 import { usePreferences } from "./preferences";
@@ -155,10 +155,12 @@ export function Action({
   title,
   run,
   secondary = false,
+  disabled = false,
 }: {
   title: string;
   run: () => Promise<unknown>;
   secondary?: boolean;
+  disabled?: boolean;
 }) {
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
@@ -166,7 +168,7 @@ export function Action({
     <View style={{ gap: 6 }}>
       <Button
         title={busy ? "Working…" : title}
-        disabled={busy}
+        disabled={busy || disabled}
         secondary={secondary}
         onPress={() => {
           setBusy(true);
@@ -348,38 +350,37 @@ export function Screen({
   title,
   eyebrow,
   children,
-  create = true,
+  create: _create = true,
+  footer,
 }: {
   title: string;
   eyebrow: string;
   children: React.ReactNode;
   create?: boolean;
+  footer?: React.ReactNode;
 }) {
   const { demo, error, refresh } = useBeacon();
+  const segments = useSegments();
+  const inTabs = segments[0] === "(tabs)";
+  const back =
+    !inTabs || segments[1] === "progress" || segments[1] === "activities";
   return (
     <SafeAreaView edges={["top"]} style={styles.screen}>
       <ScrollView
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: inTabs ? 90 : 24, gap: footer ? 10 : 14 },
+        ]}
       >
+        {back && <BackButton />}
         <View style={styles.between}>
           <View style={{ flex: 1, gap: 6 }}>
             <Text style={styles.label}>{eyebrow}</Text>
             <Text style={styles.title}>{title}</Text>
           </View>
-          {create && (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Create activity"
-              onPress={() => router.push("/create")}
-              style={[styles.button, styles.row, { paddingHorizontal: 12 }]}
-            >
-              <Plus color="white" size={18} />
-              <Text style={styles.buttonText}>Create</Text>
-            </Pressable>
-          )}
         </View>
-        {demo && (
+        {demo && !footer && (
           <View
             style={[
               styles.row,
@@ -403,6 +404,13 @@ export function Screen({
         {children}
         <View style={{ height: 12 }} />
       </ScrollView>
+      {footer && (
+        <SafeAreaView edges={["bottom"]} style={{ backgroundColor: colors.bg }}>
+          <View style={[styles.content, { paddingVertical: 10 }]}>
+            {footer}
+          </View>
+        </SafeAreaView>
+      )}
     </SafeAreaView>
   );
 }
@@ -453,5 +461,21 @@ export function Loading() {
       <ActivityIndicator color={colors.green} />
       <Txt muted>Finding your people…</Txt>
     </View>
+  );
+}
+
+export function BackButton() {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel="Back"
+      onPress={() =>
+        router.canGoBack() ? router.back() : router.replace("/(tabs)")
+      }
+      style={[styles.row, { minHeight: 44, alignSelf: "flex-start" }]}
+    >
+      <ArrowLeft size={20} color={colors.ink} />
+      <Txt>Back</Txt>
+    </Pressable>
   );
 }

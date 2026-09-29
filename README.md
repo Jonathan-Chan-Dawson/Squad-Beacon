@@ -46,11 +46,14 @@ npm run export:web
 node scripts/serve-preview.cjs
 ```
 
-Open http://127.0.0.1:4173. Web provides an activity list instead of native maps and background location. Real phone testing needs an Expo development build, not just Expo Go.
+Open http://127.0.0.1:4173. Web includes an interactive beacon radar and list; the full street/satellite map and contacts picker run on phones. Real phone testing needs an Expo development build, not just Expo Go.
 
 ## Implemented pilot
 
-- Map, Activities, Squads, Progress, and Profile tabs; create/edit/cancel/complete activities.
+- Three tabs: Beacons (map/list), Squads (friends/groups), and Profile (goals, habits, memories, settings). A persistent Create Beacon action sits above the tabs.
+- Compact Normal/Advanced creation, useful starter templates, completed-plan repeat suggestions, and optional crew targets.
+- One-tap In/Maybe/Out, host approval only when selected, status-to-beacon conversion, and real written memories on completed plans.
+- Explicit contact-picker invitations via SMS draft; contacts are never uploaded.
 - Separate activity mode and audience. Solo, Squad, and Invite-only activities; Interested, Going, approval requests, host invitations/removals, comments and reactions.
 - Three optional starter goal slots, additional goals, milestones, progress, schedule-aware habits, daily check-ins, personal bests, badges, and weekly recap.
 - Accepted friendships, exact username invitations, deep links and QR invitations, private friend lists, shared squads with owners/admins and explicit invitations.
@@ -61,6 +64,8 @@ Open http://127.0.0.1:4173. Web provides an activity list instead of native maps
 - In-app privacy/community text and public support-page draft.
 
 Premium, paid subscriptions, ads, points, direct messaging, stranger discovery, recurring events, calendar integration and challenges remain deferred as agreed. All pilot features are free.
+
+Notification handling and native contacts setup: [docs/NOTIFICATIONS.md](docs/NOTIFICATIONS.md). Apply the new `202609290001_simple_beacons.sql` migration and redeploy the push worker for crew targets, status conversion, and notification deep links. Rebuild the native app for expo-contacts.
 
 ## Connect a real backend
 

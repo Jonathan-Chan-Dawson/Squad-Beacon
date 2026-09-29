@@ -1,3 +1,4 @@
+import { useNotificationHandling } from "@/src/notifications";
 import React from "react";
 import { PreferencesProvider } from "@/src/preferences";
 import { Stack, useSegments } from "expo-router";
@@ -12,6 +13,13 @@ export { ErrorBoundary } from "expo-router";
 function Navigation() {
   const { userId, loading, data, error, refresh } = useBeacon(),
     segments = useSegments();
+  useNotificationHandling(
+    !!userId &&
+      !loading &&
+      !error &&
+      data.profiles.some((p) => p.id === userId),
+    refresh,
+  );
   const publicRoute =
     segments[0] === "auth" ||
     segments[0] === "legal" ||

@@ -54,6 +54,7 @@ test("database migration and access-control acceptance scenarios", async (t) => 
     "202609060001_beacon.sql",
     "202609060002_delivery.sql",
     "202609060003_profile_metrics.sql",
+    "202609290001_simple_beacons.sql",
   ]) {
     const sql = readFileSync(
       new URL("../supabase/migrations/" + name, import.meta.url),
@@ -229,6 +230,37 @@ test("database migration and access-control acceptance scenarios", async (t) => 
       await assert.rejects(() => makeActivity({ ends_at: start }));
       await actor("bob");
       await assert.rejects(() => action("rsvp", { id: solo, status: "going" }));
+    },
+  );
+  await t.test(
+    "status conversion stays owner-only and crew targets persist",
+    async () => {
+      await actor("alice");
+      const id = String(
+        (await makeActivity({ mode: "solo", target_count: 4 })).id,
+      );
+      await assert.rejects(() => makeActivity({ target_count: 1 }));
+      await actor("bob");
+      await assert.rejects(() => action("open_status", { id }));
+      await actor("alice");
+      await action("open_status", { id });
+      const beacon = (await snapshot()).activities.find(
+        (a: any) => a.id === id,
+      );
+      assert.equal(beacon.mode, "squad");
+      assert.equal(beacon.target_count, 4);
+      await actor("bob");
+      await action("rsvp", { id, status: "going" });
+      assert.equal(
+        (await snapshot()).rsvps.find((r: any) => r.activity_id === id).status,
+        "going",
+      );
+      await action("rsvp", { id, status: "interested" });
+      await action("rsvp", { id, status: "withdraw" });
+      assert.equal(
+        (await snapshot()).rsvps.some((r: any) => r.activity_id === id),
+        false,
+      );
     },
   );
   let squad: string;

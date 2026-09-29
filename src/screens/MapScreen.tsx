@@ -5,14 +5,25 @@ import { ShieldCheck } from "lucide-react-native";
 import BeaconMap from "@/components/BeaconMap";
 import { useBeacon } from "../store";
 import { ActivityCard } from "../ActivityCard";
-import { Chips, Empty, Screen, Txt, colors, styles } from "../ui";
+import {
+  Button,
+  Chips,
+  Empty,
+  Screen,
+  Sheet,
+  Txt,
+  colors,
+  styles,
+} from "../ui";
 import { AvatarToggle } from "../AvatarToggle";
 import { friendIds } from "../domain";
 export default function MapScreen() {
   const { data, userId } = useBeacon();
   const [time, setTime] = useState("All"),
     [audience, setAudience] = useState("Everyone"),
-    [view, setView] = useState("Map + list"),
+    [view, setView] = useState("Map"),
+    [filters, setFilters] = useState(false),
+    [selected, setSelected] = useState<string | null>(null),
     [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 30000);
@@ -61,37 +72,70 @@ export default function MapScreen() {
     (l) => l.owner_id === userId && Date.parse(l.expires_at) > now,
   );
   return (
-    <Screen title="Map" eyebrow="See plans. Join your friends.">
+    <Screen title="Find your next little adventure." eyebrow="BEACONS">
+      <View style={styles.between}>
+        <Chips options={["Map", "List"]} value={view} onChange={setView} />
+        <Button title="Filters" secondary onPress={() => setFilters(true)} />
+        <Button
+          title="Past & inbox"
+          secondary
+          onPress={() => router.push("/(tabs)/activities")}
+        />
+      </View>
       <Chips
         options={["All", "Now", "Upcoming"]}
         value={time}
         onChange={setTime}
       />
-      <Chips
-        options={["Map + list", "List only"]}
-        value={view}
-        onChange={setView}
-      />
-      {view === "Map + list" && (
+      {view === "Map" && (
         <BeaconMap
           activities={activities}
           places={data.places}
           locations={locations}
           profiles={data.profiles}
-          onActivity={(id) =>
-            router.push({ pathname: "/activity/[id]", params: { id } })
-          }
+          onActivity={setSelected}
           onPerson={(id) =>
             router.push({ pathname: "/person/[id]", params: { id } })
           }
         />
       )}
-      <Text style={styles.muted}>Show plans from</Text>
-      <Chips options={choices} value={audience} onChange={setAudience} />
-      <AvatarToggle />
-      <Text style={styles.muted}>
-        Pins are meeting places. Avatars mark shared live locations.
-      </Text>
+      <Sheet
+        title="Your kind of plans"
+        visible={filters}
+        onClose={() => setFilters(false)}
+      >
+        <Text style={styles.muted}>Show plans from</Text>
+        <Chips options={choices} value={audience} onChange={setAudience} />
+        <AvatarToggle />
+        <Text style={styles.muted}>
+          Pins are meeting places. Avatars mark shared live locations.
+        </Text>
+      </Sheet>
+      <Sheet
+        title="Meet you there?"
+        visible={!!selected}
+        onClose={() => setSelected(null)}
+      >
+        {data.activities.find((a) => a.id === selected) && (
+          <ActivityCard
+            activity={data.activities.find((a) => a.id === selected)!}
+            onOpen={() => {
+              const id = selected!;
+              setSelected(null);
+              router.push({ pathname: "/activity/[id]", params: { id } });
+            }}
+          />
+        )}
+        <Button
+          title="Open full beacon"
+          secondary
+          onPress={() => {
+            const id = selected!;
+            setSelected(null);
+            router.push({ pathname: "/activity/[id]", params: { id } });
+          }}
+        />
+      </Sheet>
       <Pressable
         accessibilityRole="button"
         onPress={() => router.push("/location")}
@@ -119,17 +163,37 @@ export default function MapScreen() {
         </View>
       </Pressable>
       <View style={styles.between}>
-        <Text style={styles.h2}>Shared activities</Text>
+        <Text style={styles.h2}>Good company starts here</Text>
         <Text style={styles.label}>{activities.length} plans</Text>
       </View>
       {activities.map((a) => (
         <ActivityCard key={a.id} activity={a} />
       ))}
       {!activities.length && (
-        <Empty
-          title="No plans yet"
-          body="Create an activity and invite a friend."
-        />
+        <View style={{ gap: 10 }}>
+          <Empty
+            title={
+              audience !== "Everyone" || time !== "All"
+                ? "No beacons in this view"
+                : "A little quiet? Start something."
+            }
+            body="A coffee, a walk, a quick catch-up. Your next memory starts with a small plan."
+          />
+          <Button
+            title="Create your first beacon"
+            onPress={() => router.push("/create")}
+          />
+          <Button
+            title="Add friends"
+            secondary
+            onPress={() =>
+              router.push({
+                pathname: "/(tabs)/squads",
+                params: { tab: "Friends" },
+              })
+            }
+          />
+        </View>
       )}
     </Screen>
   );

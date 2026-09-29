@@ -84,6 +84,7 @@ export interface Checkin {
   local_date: string;
 }
 export interface Activity extends Shared {
+  target_count?: number | null;
   id: ID;
   owner_id: ID;
   title: string;

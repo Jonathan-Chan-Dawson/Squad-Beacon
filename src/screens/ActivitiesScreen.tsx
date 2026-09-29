@@ -1,13 +1,17 @@
-import React, { useState } from "react";
+import React, { useCallback, useState } from "react";
 import { useNow } from "../useNow";
 import { Text, View } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { useBeacon } from "../store";
 import { ActivityCard } from "../ActivityCard";
 import { Action, Button, Chips, Empty, Screen, styles } from "../ui";
 export default function ActivitiesScreen() {
+  const params = useLocalSearchParams<{ filter?: string }>();
   const { data, userId, act } = useBeacon(),
-    [filter, setFilter] = useState("Upcoming");
+    [filter, setFilter] = useState(
+      params.filter === "Past" ? "Past" : "Upcoming",
+    );
+  useFocusEffect(useCallback(() => { if (params.filter === "Past") setFilter("Past"); }, [params.filter]));
   const now = useNow();
   const activities = data.activities
     .filter((a) =>
@@ -23,7 +27,12 @@ export default function ActivitiesScreen() {
     )
     .sort((a, b) => a.starts_at.localeCompare(b.starts_at));
   return (
-    <Screen title="Activities" eyebrow="Make time for your people">
+    <Screen
+      title={
+        filter === "Past" ? "Little plans. Real memories." : "Your beacons"
+      }
+      eyebrow="Make time for your people"
+    >
       <Chips
         options={["Upcoming", "Joined", "My plans", "Past"]}
         value={filter}
@@ -33,10 +42,26 @@ export default function ActivitiesScreen() {
         <ActivityCard key={a.id} activity={a} />
       ))}
       {!activities.length && (
-        <Empty
-          title="Your next plan goes here."
-          body="Create an activity, or ask a friend to invite you."
-        />
+        <View style={{ gap: 10 }}>
+          <Empty
+            title="Your next plan goes here."
+            body="Make a plan with someone you know. Completed beacons keep your shared notes here."
+          />
+          <Button
+            title="Create a beacon"
+            onPress={() => router.push("/create")}
+          />
+          <Button
+            title="Add friends"
+            secondary
+            onPress={() =>
+              router.push({
+                pathname: "/(tabs)/squads",
+                params: { tab: "Friends" },
+              })
+            }
+          />
+        </View>
       )}
       <View style={styles.between}>
         <Text style={styles.h2}>Your inbox</Text>

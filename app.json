@@ -40,7 +40,13 @@
         }
       ],
       "expo-secure-store",
-      "@react-native-community/datetimepicker"
+      "@react-native-community/datetimepicker",
+      [
+        "expo-contacts",
+        {
+          "contactsPermission": "Choose a contact to invite to Squad Beacon. Your address book is never uploaded."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

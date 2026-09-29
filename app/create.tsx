@@ -1,11 +1,16 @@
 import React, { useState } from "react";
-
-import { router } from "expo-router";
+import { ScrollView, Text, View } from "react-native";
+import { router, useLocalSearchParams } from "expo-router";
 import BeaconMap from "@/components/BeaconMap";
 import DateField from "@/components/DateField";
 import { useBeacon } from "@/src/store";
-import type { Audience, Category, Mode } from "@/src/types";
+import type { Audience, Category } from "@/src/types";
 import { validateActivity } from "@/src/domain";
+import {
+  templates,
+  repeatSuggestions,
+  type BeaconTemplate,
+} from "@/src/templates";
 import {
   Action,
   AudiencePicker,
@@ -13,65 +18,210 @@ import {
   Chips,
   Field,
   Screen,
+  Sheet,
   Txt,
+  styles,
 } from "@/src/ui";
 export default function CreateActivity() {
   const { data, userId, act } = useBeacon();
-  const [title, setTitle] = useState(""),
-    [category, setCategory] = useState<Category>("Fitness"),
-    [mode, setMode] = useState<Mode>("squad"),
-    [audience, setAudience] = useState<Audience>("friends"),
-    [audienceId, setAudienceId] = useState<string | null>(null),
-    [approval, setApproval] = useState("Open joining");
-  const [starts, setStarts] = useState(() =>
-      new Date(Date.now() + 3600000).toISOString(),
-    ),
-    [ends, setEnds] = useState(() =>
-      new Date(Date.now() + 7200000).toISOString(),
-    );
-  const [placeType, setPlaceType] = useState("Decide later"),
-    [label, setLabel] = useState(""),
-    [url, setUrl] = useState(""),
-    [pin, setPin] = useState<{ latitude: number; longitude: number } | null>(
-      null,
-    ),
-    [habit, setHabit] = useState("None"),
+  const params = useLocalSearchParams<{
+    kind?: string;
+    squadId?: string;
+    repeat?: string;
+  }>();
+  const previous = data.activities.find((a) => a.id === params.repeat);
+  const [timing, setTiming] = useState(false);
+  const [view, setView] = useState("Normal");
+  const [kind, setKind] = useState(
+    params.kind === "status"
+      ? "Status"
+      : params.kind === "squad"
+        ? "Squad"
+        : "Beacon",
+  );
+  const [title, setTitle] = useState(previous?.title ?? "");
+  const [category, setCategory] = useState<Category>(
+    previous?.category ?? "Social",
+  );
+  const [audience, setAudience] = useState<Audience>(
+    params.kind === "squad" ? "squad" : "friends",
+  );
+  const [audienceId, setAudienceId] = useState<string | null>(
+    params.squadId ?? null,
+  );
+  const [target, setTarget] = useState("");
+  const [approval, setApproval] = useState("Open joining");
+  const [when, setWhen] = useState("Now"),
+    [duration, setDuration] = useState("1 hour");
+  const [starts, setStarts] = useState(() => new Date().toISOString());
+  const [ends, setEnds] = useState(() =>
+    new Date(Date.now() + 3600000).toISOString(),
+  );
+  const [label, setLabel] = useState("");
+  const [placeType, setPlaceType] = useState("In person"),
+    [url, setUrl] = useState("");
+  const [pin, setPin] = useState<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
+  const [showPin, setShowPin] = useState(false);
+  const [habit, setHabit] = useState("None"),
     [goal, setGoal] = useState("None");
+  const suggestions = repeatSuggestions(data.activities, userId!);
+  function applyTemplate(t: BeaconTemplate) {
+    setTitle(t.title);
+    setCategory(t.category);
+    setDuration(
+      t.minutes === 30
+        ? "30 min"
+        : t.minutes === 60
+          ? "1 hour"
+          : t.minutes === 120
+            ? "2 hours"
+            : "Custom",
+    );
+    setEnds(new Date(Date.parse(starts) + t.minutes * 60000).toISOString());
+  }
+  async function publish() {
+    const start =
+      when === "Now"
+        ? Date.now()
+        : when === "In 30 min"
+          ? Date.now() + 1800000
+          : Date.parse(starts);
+    const minutes =
+      duration === "30 min" ? 30 : duration === "2 hours" ? 120 : 60;
+    const payload = {
+      title: title.trim(),
+      category,
+      mode: kind === "Status" ? "solo" : "squad",
+      starts_at: new Date(start).toISOString(),
+      ends_at:
+        duration === "Custom"
+          ? ends
+          : new Date(start + minutes * 60000).toISOString(),
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      audience,
+      audience_id: audienceId,
+      target_count: kind === "Status" || !target.trim() ? null : Number(target),
+      approval_required: kind !== "Status" && approval === "Host approval",
+      goal_id:
+        data.goals.find((g) => g.owner_id === userId && g.title === goal)?.id ??
+        null,
+      habit_id:
+        data.habits.find((h) => h.owner_id === userId && h.title === habit)
+          ?.id ?? null,
+      label: label.trim(),
+      online_url: placeType === "Online" ? url : null,
+      latitude: placeType === "In person" ? (pin?.latitude ?? null) : null,
+      longitude: placeType === "In person" ? (pin?.longitude ?? null) : null,
+    };
+    if (
+      payload.target_count != null &&
+      (!Number.isInteger(payload.target_count) ||
+        payload.target_count < 2 ||
+        payload.target_count > 100)
+    )
+      throw new Error("Choose a crew target from 2 to 100, or leave it blank.");
+    validateActivity(payload);
+    if ((audience === "list" || audience === "squad") && !audienceId)
+      throw new Error("Choose who to share with first.");
+    await act("create_activity", payload);
+    router.replace("/(tabs)");
+  }
   return (
     <Screen
-      title="Create activity"
-      eyebrow="A simple plan starts here"
+      title={kind === "Status" ? "Share a little update" : "Create a beacon"}
+      eyebrow="SMALL PLANS. GOOD COMPANY."
       create={false}
+      footer={
+        <Action
+          title={kind === "Status" ? "Share my status" : "Light up this beacon"}
+          run={publish}
+        />
+      }
     >
+      <View style={styles.between}>
+        <Chips
+          options={["Normal", "Advanced"]}
+          value={view}
+          onChange={setView}
+        />
+        <Text style={styles.label}>{kind}</Text>
+      </View>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ gap: 8 }}
+      >
+        {[...suggestions, ...templates].map((t) => (
+          <Button
+            key={t.label}
+            secondary
+            title={t.label}
+            onPress={() => applyTemplate(t)}
+          />
+        ))}
+      </ScrollView>
       <Field
         label="What are you doing?"
-        placeholder="A few rounds of boxing"
+        placeholder="A tiny adventure with your people"
         value={title}
         onChangeText={setTitle}
         maxLength={120}
       />
-      <Chips
-        options={
-          ["Fitness", "Study", "Gaming", "Creative", "Social", "Other"] as const
-        }
-        value={category}
-        onChange={setCategory}
+      <View style={styles.row}>
+        <View style={{ flex: 1 }}>
+          <Button
+            secondary
+            title={
+              when === "Pick time"
+                ? new Date(starts).toLocaleString([], {
+                    month: "short",
+                    day: "numeric",
+                    hour: "numeric",
+                    minute: "2-digit",
+                  })
+                : when
+            }
+            onPress={() => setTiming(true)}
+          />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Button secondary title={duration} onPress={() => setTiming(true)} />
+        </View>
+      </View>
+      <Sheet
+        title="When shall we?"
+        visible={timing}
+        onClose={() => setTiming(false)}
+      >
+        <Chips
+          options={["Now", "In 30 min", "Pick time"]}
+          value={when}
+          onChange={setWhen}
+        />
+        {when === "Pick time" && (
+          <DateField label="Starts" value={starts} onChange={setStarts} />
+        )}
+        <Txt muted>How long?</Txt>
+        <Chips
+          options={["30 min", "1 hour", "2 hours", "Custom"]}
+          value={duration}
+          onChange={setDuration}
+        />
+        {duration === "Custom" && (
+          <DateField label="Ends" value={ends} onChange={setEnds} />
+        )}
+        <Button title="Done" onPress={() => setTiming(false)} />
+      </Sheet>
+      <Field
+        label="Where? (optional)"
+        placeholder="Your usual spot, or decide together"
+        value={label}
+        onChangeText={setLabel}
+        maxLength={160}
       />
-      <Txt muted>Activity mode</Txt>
-      <Chips
-        options={["solo", "squad", "invite"] as const}
-        value={mode}
-        onChange={setMode}
-      />
-      <Txt muted>
-        {mode === "solo"
-          ? "Share what you’re doing without opening attendance."
-          : mode === "invite"
-            ? "Only people you invite or approve can confirm attendance."
-            : "Friends can express interest, then confirm they’re going."}
-      </Txt>
-      <DateField label="Starts" value={starts} onChange={setStarts} />
-      <DateField label="Ends" value={ends} onChange={setEnds} />
       <AudiencePicker
         value={audience}
         id={audienceId}
@@ -80,116 +230,142 @@ export default function CreateActivity() {
           setAudienceId(id);
         }}
       />
-      {mode === "squad" && (
-        <Chips
-          options={["Open joining", "Host approval"]}
-          value={approval}
-          onChange={setApproval}
-        />
-      )}
-      <Chips
-        options={["Decide later", "In person", "Online"]}
-        value={placeType}
-        onChange={setPlaceType}
-      />
-      {placeType !== "Decide later" && (
-        <Field
-          label={
-            placeType === "Online"
-              ? "Online activity label"
-              : "Meeting place name"
-          }
-          value={label}
-          onChangeText={setLabel}
-        />
-      )}
-      {placeType === "Online" && (
-        <Field
-          label="HTTPS link"
-          value={url}
-          onChangeText={setUrl}
-          autoCapitalize="none"
-          keyboardType="url"
-        />
-      )}
-      {placeType === "In person" && (
+      <Txt muted>
+        {kind === "Status"
+          ? "Just your update. Switch to Beacon whenever you want company."
+          : approval === "Host approval"
+            ? "People request to join. You give the okay."
+            : "One tap to join. Maybe is welcome. Plans can change."}
+      </Txt>
+      {view === "Advanced" && (
         <>
-          <Txt muted>
-            Tap to deliberately choose a meeting pin. This does not share your
-            live location.
-          </Txt>
-          <BeaconMap
-            activities={[]}
-            places={[]}
-            locations={[]}
-            profiles={[]}
-            onActivity={() => {}}
-            onPerson={() => {}}
-            onPick={(latitude, longitude) => setPin({ latitude, longitude })}
-            selected={pin}
+          <Text style={styles.h2}>Make it yours</Text>
+          <Chips
+            options={["Beacon", "Status", "Squad"]}
+            value={kind}
+            onChange={(k) => {
+              setKind(k);
+              setAudience(k === "Squad" ? "squad" : "friends");
+              setAudienceId(null);
+            }}
           />
-          {pin && (
-            <Button secondary title="Remove pin" onPress={() => setPin(null)} />
+
+          {kind !== "Status" && (
+            <Field
+              label="How many make it happen? (optional)"
+              placeholder="4 people for doubles, including you"
+              value={target}
+              onChangeText={setTarget}
+              keyboardType="number-pad"
+            />
           )}
+          <Chips
+            options={
+              [
+                "Fitness",
+                "Study",
+                "Gaming",
+                "Creative",
+                "Social",
+                "Other",
+              ] as const
+            }
+            value={category}
+            onChange={setCategory}
+          />
+          {kind !== "Status" && (
+            <Chips
+              options={["Open joining", "Host approval"]}
+              value={approval}
+              onChange={setApproval}
+            />
+          )}
+          <Chips
+            options={["In person", "Online"]}
+            value={placeType}
+            onChange={setPlaceType}
+          />
+          {placeType === "Online" ? (
+            <Field
+              label="HTTPS link"
+              value={url}
+              onChangeText={setUrl}
+              autoCapitalize="none"
+              keyboardType="url"
+            />
+          ) : (
+            <>
+              <Button
+                secondary
+                title={
+                  showPin
+                    ? "Hide map"
+                    : pin
+                      ? "Edit meeting pin"
+                      : "Add a meeting pin"
+                }
+                onPress={() => setShowPin(!showPin)}
+              />
+              {showPin && (
+                <BeaconMap
+                  activities={[]}
+                  places={[]}
+                  locations={[]}
+                  profiles={[]}
+                  onActivity={() => {}}
+                  onPerson={() => {}}
+                  onPick={(latitude, longitude) =>
+                    setPin({ latitude, longitude })
+                  }
+                  selected={pin}
+                />
+              )}
+              {pin && (
+                <Button
+                  secondary
+                  title="Remove pin"
+                  onPress={() => setPin(null)}
+                />
+              )}
+            </>
+          )}
+          <Button
+            secondary
+            title="Set a custom end time"
+            onPress={() => setDuration("Custom")}
+          />
+          {duration === "Custom" && (
+            <DateField label="Ends" value={ends} onChange={setEnds} />
+          )}
+          <Txt muted>Connect a goal</Txt>
+          <Chips
+            options={[
+              "None",
+              ...data.goals
+                .filter((g) => g.owner_id === userId)
+                .map((g) => g.title),
+            ]}
+            value={goal}
+            onChange={setGoal}
+          />
+          <Txt muted>Build a habit</Txt>
+          <Chips
+            options={[
+              "None",
+              ...data.habits
+                .filter((h) => h.owner_id === userId)
+                .map((h) => h.title),
+            ]}
+            value={habit}
+            onChange={setHabit}
+          />
         </>
       )}
-      <Txt muted>Link your goal (optional)</Txt>
-      <Chips
-        options={[
-          "None",
-          ...data.goals
-            .filter((g) => g.owner_id === userId)
-            .map((g) => g.title),
-        ]}
-        value={goal}
-        onChange={setGoal}
-      />
-      <Txt muted>Link your habit (optional)</Txt>
-      <Chips
-        options={[
-          "None",
-          ...data.habits
-            .filter((h) => h.owner_id === userId)
-            .map((h) => h.title),
-        ]}
-        value={habit}
-        onChange={setHabit}
-      />
-      <Action
-        title="Create activity →"
-        run={async () => {
-          const payload = {
-            title: title.trim(),
-            category,
-            mode,
-            starts_at: starts,
-            ends_at: ends,
-            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-            audience,
-            audience_id: audienceId,
-            approval_required: approval === "Host approval",
-            goal_id:
-              data.goals.find((g) => g.owner_id === userId && g.title === goal)
-                ?.id ?? null,
-            habit_id:
-              data.habits.find(
-                (h) => h.owner_id === userId && h.title === habit,
-              )?.id ?? null,
-            label: placeType === "Decide later" ? "" : label,
-            online_url: placeType === "Online" ? url : null,
-            latitude:
-              placeType === "In person" ? (pin?.latitude ?? null) : null,
-            longitude:
-              placeType === "In person" ? (pin?.longitude ?? null) : null,
-          };
-          validateActivity(payload);
-          if ((audience === "list" || audience === "squad") && !audienceId)
-            throw new Error("Select an audience.");
-          await act("create_activity", payload);
-          router.replace("/(tabs)/activities");
-        }}
-      />
-      <Button title="Cancel" secondary onPress={() => router.back()} />
+      {duration === "Custom" && view === "Normal" && (
+        <Txt muted>
+          Custom end: {new Date(ends).toLocaleString()}. Edit in Advanced.
+        </Txt>
+      )}
     </Screen>
   );
 }

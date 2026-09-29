@@ -5,7 +5,7 @@ add
 
 create function private.avatar_changed() returns trigger language plpgsql security definer
 set
-  search_path = '' as $ $ declare object_name text;
+  search_path = '' as $$ declare object_name text;
 
 bucket text;
 
@@ -35,7 +35,7 @@ end if;
 
 return null;
 
-end $ $;
+end $$;
 
 revoke all on function private.avatar_changed()
 from
@@ -63,7 +63,7 @@ create index usage_events_time on private.usage_events(created_at);
 
 create function private.record_usage() returns trigger language plpgsql security definer
 set
-  search_path = '' as $ $ begin if new.result ->> 'event' not in (
+  search_path = '' as $$ begin if new.result ->> 'event' not in (
     'onboard',
     'create_activity',
     'rsvp',
@@ -93,7 +93,7 @@ values
 
 return null;
 
-end $ $;
+end $$;
 
 -- Successful request results are enriched in beacon_action before this trigger runs.
 revoke all on function private.record_usage()
@@ -109,7 +109,7 @@ insert
 
 create function public.beacon_pilot_metrics() returns jsonb language plpgsql security definer
 set
-  search_path = '' as $ $ begin if not private.is_moderator() then raise exception 'Moderator access required.';
+  search_path = '' as $$ begin if not private.is_moderator() then raise exception 'Moderator access required.';
 
 end if;
 
@@ -181,7 +181,7 @@ return jsonb_build_object(
   )
 );
 
-end $ $;
+end $$;
 
 revoke all on function public.beacon_pilot_metrics()
 from
@@ -192,7 +192,7 @@ grant execute on function public.beacon_pilot_metrics() to authenticated;
 
 create function public.beacon_location_recipients() returns uuid [] language sql security definer
 set
-  search_path = '' as $ $
+  search_path = '' as $$
 select
   coalesce(array_agg(r.user_id), '{}')
 from
@@ -202,7 +202,7 @@ where
   l.owner_id = auth.uid()
   and l.expires_at > now();
 
-$ $;
+$$;
 
 revoke all on function public.beacon_location_recipients()
 from

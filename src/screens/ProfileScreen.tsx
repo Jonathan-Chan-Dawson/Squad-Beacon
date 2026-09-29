@@ -40,6 +40,21 @@ export default function ProfileScreen() {
   const featured = featuredActivity(profile, data.activities);
   return (
     <Screen title="Profile" eyebrow="Your profile and settings" create={false}>
+      <Button
+        title="Goals & habits"
+        secondary
+        onPress={() => router.push("/(tabs)/progress")}
+      />
+      <Button
+        title="Your memories"
+        secondary
+        onPress={() =>
+          router.push({
+            pathname: "/(tabs)/activities",
+            params: { filter: "Past" },
+          })
+        }
+      />
       <View style={styles.card}>
         <Text style={styles.h2}>Display</Text>
         <AvatarToggle description />

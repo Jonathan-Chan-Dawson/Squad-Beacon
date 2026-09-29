@@ -1,7 +1,8 @@
+import { inviteContact } from "../contacts";
 import { ProfileAvatar } from "../ProfileAvatar";
-import React, { useState } from "react";
+import React, { useCallback, useState } from "react";
 import { Pressable, Text, View, Share } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams, useFocusEffect } from "expo-router";
 import { ArrowUpRight } from "lucide-react-native";
 import { useBeacon } from "../store";
 import { friendIds } from "../domain";
@@ -21,12 +22,21 @@ import {
   styles,
 } from "../ui";
 export default function SquadsScreen() {
-  const { data, userId, act } = useBeacon(),
-    [tab, setTab] = useState("Squads"),
+  const params = useLocalSearchParams<{ tab?: string }>();
+  const { data, userId, act, demo } = useBeacon(),
+    [tab, setTab] = useState(params.tab === "Friends" ? "Friends" : "Squads"),
     [modal, setModal] = useState<"squad" | "list" | "friend" | null>(null),
     [name, setName] = useState(""),
     [description, setDescription] = useState(""),
     [selected, setSelected] = useState<string | null>(null);
+  useFocusEffect(
+    useCallback(() => {
+      if (params.tab === "Friends") {
+        setTab("Friends");
+        setSelected(null);
+      }
+    }, [params.tab]),
+  );
   const friends = friendIds(data, userId!),
     squad = data.squads.find((s) => s.id === selected),
     list = data.lists.find((s) => s.id === selected),
@@ -62,6 +72,22 @@ export default function SquadsScreen() {
               onPress={() => open("squad")}
             />
           </View>
+          {!data.squad_members.some((m) => m.user_id === userId) && (
+            <Empty
+              title="Good times need good people."
+              body="Create a squad for your usual crew, or add a friend to get started."
+            />
+          )}
+          {!friends.length && (
+            <Button
+              title="Add your first friend"
+              secondary
+              onPress={() => {
+                setTab("Friends");
+                open("friend");
+              }}
+            />
+          )}
           {data.squad_invites
             .filter((i) => i.recipient_id === userId)
             .map((i) => (
@@ -107,6 +133,21 @@ export default function SquadsScreen() {
       )}
       {tab === "Friends" && (
         <>
+          <Action
+            title="Connect with a contact"
+            secondary
+            run={async () => {
+              if (demo)
+                throw new Error(
+                  "Sign in on your phone to invite a contact. The demo does not access contacts.",
+                );
+              await inviteContact(me!.username);
+            }}
+          />
+          <Txt muted>
+            Pick a contact and review their invitation. Your address book stays
+            on your phone.
+          </Txt>
           {me && <InviteQR username={me.username} />}
           <Button title="+ Add a friend" onPress={() => open("friend")} />
           <Action
@@ -318,7 +359,10 @@ export default function SquadsScreen() {
               title="Create an activity"
               onPress={() => {
                 setSelected(null);
-                router.push("/create");
+                router.push({
+                  pathname: "/create",
+                  params: { kind: "squad", squadId: squad.id },
+                });
               }}
             />
           </>

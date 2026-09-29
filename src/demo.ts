@@ -225,6 +225,7 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
       id: aid,
       owner_id: uid,
       title: String(p.title),
+      target_count: p.target_count == null ? null : Number(p.target_count),
       category: p.category as any,
       mode: p.mode as any,
       starts_at: String(p.starts_at),
@@ -247,6 +248,9 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
   }
   if (action === "rsvp") {
     const a = d.activities.find((x) => x.id === id)!;
+    const approved =
+      d.rsvps.find((x) => x.activity_id === id && x.user_id === uid)
+        ?.approved ?? false;
     d.rsvps = d.rsvps.filter(
       (x) => !(x.activity_id === id && x.user_id === uid),
     );
@@ -255,11 +259,26 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
         activity_id: id,
         user_id: uid,
         status:
-          p.status === "going" && (a.approval_required || a.mode === "invite")
+          p.status === "going" &&
+          (a.approval_required || a.mode === "invite") &&
+          !approved
             ? "requested"
             : (p.status as any),
-        approved: false,
+        approved,
       });
+  }
+  if (action === "open_status") {
+    const a = d.activities.find((x) => x.id === id);
+    if (
+      !a ||
+      a.owner_id !== uid ||
+      a.mode !== "solo" ||
+      a.status !== "scheduled" ||
+      Date.parse(a.ends_at) <= Date.now()
+    )
+      throw new Error("This status cannot be opened.");
+    a.mode = "squad";
+    a.approval_required = false;
   }
   if (action === "activity_status")
     d.activities.find((x) => x.id === id)!.status = p.status as any;

@@ -1,3 +1,4 @@
+import { BeaconResponse, BeaconMomentum } from "@/src/BeaconResponse";
 import React, { useState } from "react";
 import { useNow } from "@/src/useNow";
 import { Text, View, Linking } from "react-native";
@@ -46,7 +47,6 @@ export default function ActivityDetail() {
     place = data.places.find((p) => p.activity_id === id),
     mine = a.owner_id === userId,
     rsvps = data.rsvps.filter((r) => r.activity_id === id),
-    rsvp = rsvps.find((r) => r.user_id === userId),
     open = a.status === "scheduled" && Date.parse(a.ends_at) > now,
     friends = friendIds(data, userId!);
   return (
@@ -55,11 +55,6 @@ export default function ActivityDetail() {
       eyebrow={a.category + " · " + a.mode}
       create={false}
     >
-      <Button
-        secondary
-        title="← Activities"
-        onPress={() => router.replace("/(tabs)/activities")}
-      />
       <View style={styles.card}>
         <View style={styles.row}>
           <Avatar name={owner?.name ?? "Host"} />
@@ -103,35 +98,13 @@ export default function ActivityDetail() {
             : "Joining follows activity mode"}
         </Txt>
       </View>
-      {!mine && open && a.mode !== "solo" && (
-        <View style={styles.card}>
-          <Text style={styles.h2}>Make room for this.</Text>
-          <Txt muted>
-            Squad in means interested. Confirm Going when you’re ready. Your
-            location stays off.
-          </Txt>
-          {rsvp && <Txt>Your RSVP: {rsvp.status}</Txt>}
-          <Action
-            title="Squad in · Interested"
-            secondary
-            run={() => act("rsvp", { id, status: "interested" })}
-          />
-          <Action
-            title={
-              a.approval_required || a.mode === "invite"
-                ? "Confirm / request Going"
-                : "I’m going"
-            }
-            run={() => act("rsvp", { id, status: "going" })}
-          />
-          {rsvp && (
-            <Action
-              title="Withdraw RSVP"
-              secondary
-              run={() => act("rsvp", { id, status: "withdraw" })}
-            />
-          )}
-        </View>
+      <BeaconMomentum activity={a} />
+      <BeaconResponse activity={a} />
+      {mine && a.mode === "solo" && open && (
+        <Action
+          title="Invite company: turn into a beacon"
+          run={() => act("open_status", { id })}
+        />
       )}
       {mine && a.status === "scheduled" && (
         <View style={styles.card}>
@@ -215,16 +188,26 @@ export default function ActivityDetail() {
             ))}
         </>
       )}
-      <View style={styles.between}>
-        <Text style={styles.h2}>Keep the plan moving</Text>
-        <Action
-          title={
-            "🙌 " + data.reactions.filter((r) => r.activity_id === id).length
-          }
-          secondary
-          run={() => act("react", { id })}
-        />
-      </View>
+      <Text style={styles.h2}>
+        {a.status === "completed"
+          ? "The moments worth keeping"
+          : "Plan together"}
+      </Text>
+      {a.status === "completed" && (
+        <>
+          <Txt muted>
+            A small detail, an inside joke, something you want to remember. Keep
+            it real.
+          </Txt>
+          <Button
+            title="Do this again"
+            secondary
+            onPress={() =>
+              router.push({ pathname: "/create", params: { repeat: a.id } })
+            }
+          />
+        </>
+      )}
       {data.comments
         .filter((c) => c.activity_id === id)
         .sort((a, b) => a.created_at.localeCompare(b.created_at))
@@ -243,14 +226,14 @@ export default function ActivityDetail() {
           </View>
         ))}
       <Field
-        label="Add a comment"
+        label={a.status === "completed" ? "Keep a memory" : "Add a comment"}
         value={comment}
         onChangeText={setComment}
         multiline
         maxLength={2000}
       />
       <Action
-        title="Post comment"
+        title={a.status === "completed" ? "Save memory" : "Post comment"}
         run={async () => {
           if (!comment.trim()) throw new Error("Write a comment first.");
           await act("comment", { id, body: comment.trim() });
