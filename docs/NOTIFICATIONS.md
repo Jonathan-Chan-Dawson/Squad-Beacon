@@ -1,6 +1,6 @@
 # Notification handling
 
-Client script: `src/notifications.native.ts`, mounted by `app/_layout.tsx` after sign-in and profile loading. Handles foreground delivery, taps while running, and the last tap on cold start. UUID activity IDs open their beacon; other notices open the inbox. Responses are deduplicated and cleared after handling. Web uses the no-op `src/notifications.ts`.
+Client script: `src/notifications.native.ts`, mounted by `app/_layout.tsx` after sign-in and profile loading. Handles foreground delivery, taps while running, and the last tap on cold start. UUID activity IDs open their beacon in the map panel; other notices open the inbox. Responses are deduplicated and cleared after handling. Web uses the no-op `src/notifications.ts`.
 
 Token permission/registration: `src/device.native.ts` (`enablePush`), called explicitly from Profile. No permission prompt on launch.
 

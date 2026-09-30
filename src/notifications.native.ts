@@ -31,8 +31,12 @@ export function useNotificationHandling(
           id,
         )
       )
-        router.push({ pathname: "/activity/[id]", params: { id } });
-      else router.push("/(tabs)/activities");
+        router.push({ pathname: "/(tabs)", params: { beacon: id } });
+      else
+        router.push({
+          pathname: "/(tabs)/activities",
+          params: { inbox: "yes" },
+        });
     }
     const subscription =
       Notifications.addNotificationResponseReceivedListener(open);

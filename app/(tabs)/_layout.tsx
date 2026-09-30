@@ -1,76 +1,116 @@
 import React, { useState } from "react";
-import { View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { Tabs, router } from "expo-router";
-import { Map, Users, UserRound } from "lucide-react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Button, Sheet, colors } from "@/src/ui";
+import { Map, Radio, Users, UserRound, Plus } from "lucide-react-native";
+import { Button, Sheet, useTheme } from "@/src/ui";
+const items = [
+  { name: "index", label: "Map", Icon: Map },
+  { name: "activities", label: "Beacons", Icon: Radio },
+  { name: "squads", label: "Squads", Icon: Users },
+  { name: "profile", label: "Profile", Icon: UserRound },
+];
 export default function TabLayout() {
-  const insets = useSafeAreaInsets();
+  const { colors } = useTheme();
+
   const [actions, setActions] = useState(false);
-  const create = (kind: string) => {
+  function create(kind: string) {
     setActions(false);
     router.push({ pathname: "/create", params: { kind } });
-  };
+  }
   return (
-    <View style={{ flex: 1 }}>
+    <>
       <Tabs
-        screenOptions={{
-          headerShown: false,
-          tabBarActiveTintColor: colors.green,
-          tabBarInactiveTintColor: colors.muted,
-          tabBarStyle: {
-            backgroundColor: "#FCFDF9",
-            borderTopColor: colors.line,
-            height: 64 + insets.bottom,
-            paddingTop: 8,
-            paddingBottom: Math.max(insets.bottom, 8),
-          },
-          tabBarIconStyle: { width: 22, height: 22 },
-          tabBarLabelStyle: {
-            fontSize: 11,
-            fontWeight: "600",
-            marginTop: 0,
-            lineHeight: 14,
-          },
-        }}
+        screenOptions={{ headerShown: false }}
+        tabBar={({ state, navigation, insets }) => (
+          <View
+            style={{
+              backgroundColor: colors.white,
+              borderTopWidth: 1,
+              borderColor: colors.line,
+              paddingBottom: Math.max(insets.bottom, 8),
+              paddingTop: 8,
+            }}
+          >
+            <View
+              style={{ flexDirection: "row", alignItems: "center", height: 54 }}
+            >
+              {items.map(({ name, label, Icon }, index) => {
+                const route = state.routes.find((r) => r.name === name)!;
+                const focused = state.routes[state.index].name === name;
+                return (
+                  <React.Fragment key={name}>
+                    {index === 2 && <View style={{ width: 76 }} />}
+                    <Pressable
+                      accessibilityRole="tab"
+                      accessibilityLabel={label}
+                      accessibilityState={{ selected: focused }}
+                      onPress={() => {
+                        const event = navigation.emit({
+                          type: "tabPress",
+                          target: route.key,
+                          canPreventDefault: true,
+                        });
+                        if (!event.defaultPrevented) navigation.navigate(name);
+                      }}
+                      style={{
+                        flex: 1,
+                        minHeight: 48,
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 4,
+                      }}
+                    >
+                      <Icon
+                        size={22}
+                        color={focused ? colors.green : colors.muted}
+                      />
+                      <Text
+                        style={{
+                          fontSize: 11,
+                          fontWeight: focused ? "700" : "500",
+                          color: focused ? colors.green : colors.muted,
+                        }}
+                      >
+                        {label}
+                      </Text>
+                    </Pressable>
+                  </React.Fragment>
+                );
+              })}
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Create Beacon"
+              onPress={() => setActions(true)}
+              style={({ pressed }) => ({
+                position: "absolute",
+                left: "50%",
+                marginLeft: -32,
+                top: -20,
+                width: 64,
+                height: 64,
+                borderRadius: 32,
+                borderWidth: 5,
+                borderColor: colors.bg,
+                backgroundColor: colors.ink,
+                alignItems: "center",
+                justifyContent: "center",
+                opacity: pressed ? 0.8 : 1,
+                elevation: 6,
+                boxShadow: "0 3px 10px #102b2926",
+              })}
+            >
+              <Plus size={29} color={colors.lime} />
+            </Pressable>
+          </View>
+        )}
       >
-        <Tabs.Screen
-          name="index"
-          options={{
-            title: "Beacons",
-            tabBarIcon: ({ color }) => <Map color={color} size={22} />,
-          }}
-        />
-        <Tabs.Screen
-          name="squads"
-          options={{
-            title: "Squads",
-            tabBarIcon: ({ color }) => <Users color={color} size={22} />,
-          }}
-        />
-        <Tabs.Screen
-          name="profile"
-          options={{
-            title: "Profile",
-            tabBarIcon: ({ color }) => <UserRound color={color} size={22} />,
-          }}
-        />
-        <Tabs.Screen name="activities" options={{ href: null }} />
-        <Tabs.Screen name="progress" options={{ href: null }} />
+        <Tabs.Screen name="index" options={{ title: "Map" }} />
+        <Tabs.Screen name="activities" options={{ title: "Beacons" }} />
+        <Tabs.Screen name="squads" options={{ title: "Squads" }} />
+        <Tabs.Screen name="profile" options={{ title: "Profile" }} />
         <Tabs.Screen name="two" options={{ href: null }} />
       </Tabs>
-      <View
-        pointerEvents="box-none"
-        style={{
-          position: "absolute",
-          bottom: 76 + insets.bottom,
-          alignSelf: "center",
-          width: "90%",
-          maxWidth: 420,
-        }}
-      >
-        <Button title="+ Create Beacon" onPress={() => setActions(true)} />
-      </View>
       <Sheet
         title="What are you up to?"
         visible={actions}
@@ -87,15 +127,7 @@ export default function TabLayout() {
           secondary
           onPress={() => create("squad")}
         />
-        <Button
-          title="Customize profile & avatar"
-          secondary
-          onPress={() => {
-            setActions(false);
-            router.push("/(tabs)/profile");
-          }}
-        />
       </Sheet>
-    </View>
+    </>
   );
 }

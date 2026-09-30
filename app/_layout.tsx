@@ -1,6 +1,6 @@
 import { useNotificationHandling } from "@/src/notifications";
 import React from "react";
-import { PreferencesProvider } from "@/src/preferences";
+import { PreferencesProvider, usePreferences } from "@/src/preferences";
 import { Stack, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
@@ -10,6 +10,10 @@ import { BeaconProvider, useBeacon } from "@/src/store";
 import { Auth, Onboard } from "@/src/Auth";
 import { Loading, Screen, Action, Txt } from "@/src/ui";
 export { ErrorBoundary } from "expo-router";
+function ThemedStatusBar() {
+  const { theme } = usePreferences();
+  return <StatusBar style={theme === "Midnight" ? "light" : "dark"} />;
+}
 function Navigation() {
   const { userId, loading, data, error, refresh } = useBeacon(),
     segments = useSegments();
@@ -48,7 +52,7 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <PreferencesProvider>
         <BeaconProvider>
-          <StatusBar style="dark" />
+          <ThemedStatusBar />
           <Navigation />
         </BeaconProvider>
       </PreferencesProvider>

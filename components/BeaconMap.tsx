@@ -2,7 +2,7 @@ import React from "react";
 import Svg, { Circle, Line, Path } from "react-native-svg";
 import { View, Text, Pressable } from "react-native";
 import { MapPin } from "lucide-react-native";
-import { colors, styles } from "@/src/ui";
+import { useTheme } from "@/src/ui";
 import type {
   Activity,
   ActivityPlace,
@@ -10,6 +10,11 @@ import type {
   Profile,
 } from "@/src/types";
 export interface MapProps {
+  onAnchor?: (point: { x: number; y: number } | null) => void;
+  fullScreen?: boolean;
+  controlsTop?: number;
+  panelHeight?: number;
+  focused?: { latitude: number; longitude: number } | null;
   activities: Activity[];
   places: ActivityPlace[];
   locations: LocationSession[];
@@ -26,6 +31,8 @@ export default function BeaconMap({
   onPick,
   selected,
 }: MapProps) {
+  const { styles, colors } = useTheme();
+
   const pins = places.filter(
     (p) =>
       p.latitude != null &&
@@ -144,7 +151,9 @@ export default function BeaconMap({
           }}
         >
           <Text style={{ color: colors.white, fontWeight: "700" }}>
-            {i + 1}{" \u00b7 "}{activities.find((a) => a.id === p.activity_id)?.category}
+            {i + 1}
+            {" \u00b7 "}
+            {activities.find((a) => a.id === p.activity_id)?.category}
           </Text>
         </Pressable>
       ))}

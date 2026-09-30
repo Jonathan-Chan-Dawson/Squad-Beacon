@@ -1,13 +1,15 @@
 import React from "react";
 import { Switch, Text, View } from "react-native";
 import { usePreferences } from "./preferences";
-import { colors, styles } from "./ui";
+import { useTheme } from "./ui";
 
 export function AvatarToggle({
   description = false,
 }: {
   description?: boolean;
 }) {
+  const { styles, colors } = useTheme();
+
   const { showAvatars, setShowAvatars, ready, error } = usePreferences();
   return (
     <View style={{ gap: 4 }}>

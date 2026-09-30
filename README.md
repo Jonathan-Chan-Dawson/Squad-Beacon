@@ -46,16 +46,17 @@ npm run export:web
 node scripts/serve-preview.cjs
 ```
 
-Open http://127.0.0.1:4173. Web includes an interactive beacon radar and list; the full street/satellite map and contacts picker run on phones. Real phone testing needs an Expo development build, not just Expo Go.
+Open http://127.0.0.1:4173. Web includes an interactive OpenStreetMap map. Native maps support street/satellite views and compass controls; the contacts picker runs on phones. Real phone testing needs an Expo development build, not just Expo Go.
 
 ## Implemented pilot
 
-- Three tabs: Beacons (map/list), Squads (friends/groups), and Profile (goals, habits, memories, settings). A persistent Create Beacon action sits above the tabs.
+- Four tabs: Map, Beacons (Now / Upcoming / Past), Squads, and Profile. A raised circular Create button sits in the center; Inbox stays at the top right.
 - Compact Normal/Advanced creation, useful starter templates, completed-plan repeat suggestions, and optional crew targets.
 - One-tap In/Maybe/Out, host approval only when selected, status-to-beacon conversion, and real written memories on completed plans.
 - Explicit contact-picker invitations via SMS draft; contacts are never uploaded.
 - Separate activity mode and audience. Solo, Squad, and Invite-only activities; Interested, Going, approval requests, host invitations/removals, comments and reactions.
-- Three optional starter goal slots, additional goals, milestones, progress, schedule-aware habits, daily check-ins, personal bests, badges, and weekly recap.
+- Friends Now prioritizes explicitly free friends and private favorites. One favorite manager covers friends and squads; private lists remain sharing audiences.
+- Personal templates, inline map RSVP/details/comments/participant chat, and accepted-friend messages. Goals and habits are removed from the UI; historical database tables remain for migration compatibility.
 - Accepted friendships, exact username invitations, deep links and QR invitations, private friend lists, shared squads with owners/admins and explicit invitations.
 - Verified email/password accounts, password recovery, age eligibility, private compressed avatars, report/block/delete flows, and restricted moderator reports/metrics.
 - Temporary location sharing to selected accepted friends; up to four hours, only latest point, five-minute freshness, explicit stop.
@@ -63,7 +64,7 @@ Open http://127.0.0.1:4173. Web includes an interactive beacon radar and list; t
 - Durable push queue, retries, Expo ticket receipts, device-token cleanup, quiet hours, habit/activity reminders, SQL cleanup schedules.
 - In-app privacy/community text and public support-page draft.
 
-Premium, paid subscriptions, ads, points, direct messaging, stranger discovery, recurring events, calendar integration and challenges remain deferred as agreed. All pilot features are free.
+Premium, paid subscriptions, ads, points, stranger discovery, recurring events, calendar integration and challenges remain deferred as agreed. All pilot features are free.
 
 Notification handling and native contacts setup: [docs/NOTIFICATIONS.md](docs/NOTIFICATIONS.md). Apply the new `202609290001_simple_beacons.sql` migration and redeploy the push worker for crew targets, status conversion, and notification deep links. Rebuild the native app for expo-contacts.
 
@@ -118,7 +119,7 @@ npm run test:e2e
 
 The database tests execute the real migration SQL in embedded PostgreSQL (PGlite), using a small Auth/Storage schema harness. They verify RLS and transactional behavior, including direct API-equivalent unauthorized reads and writes. They do not replace hosted Supabase Auth, Storage HTTP, Realtime, Edge Function or phone testing.
 
-Browser tests exercise the demo’s RSVP/comment, goals, habits, squad creation and activity creation flows. On Windows they use installed Chrome; elsewhere they use Playwright Chromium.
+Browser tests exercise the demo’s Now/favorites, RSVP/chat, personal templates, profile editing, persistent Inbox and narrow-screen flows. On Windows they use installed Chrome; elsewhere they use Playwright Chromium.
 
 The installed dependency audit reports 15 moderate advisories (the same count reported before feature dependencies were added). Review the dependency audit before public release; no forced SDK upgrade was applied.
 
@@ -145,3 +146,15 @@ Recruit 5–10 existing friend groups (30–100 people) through your own approve
 Budget a small pilot at roughly $25–$75/month, excluding labor, store accounts, domains, taxes and overages. Start with Supabase Pro around $25/month and Expo free allowances; upgrade based on measured usage. Prices must be rechecked before purchase.
 
 Keep the core free. After validation, test premium at $3.99/month or $29.99/year for deeper insights, themes, advanced reminders and planning templates. Add RevenueCat and native store billing at that stage, including purchase restoration and server-verified entitlements. Privacy and blocking remain free.
+
+Map workspace migration: apply `supabase/migrations/202609290002_map_workspace.sql` before using real-account templates, favorites, chat, availability, and extra profile fields. It is covered by local database acceptance tests; this change does not deploy the remote database.
+
+## Playful neighborhood update
+
+- Friends Now includes larger illustrated cards, Free/Starred filters, roster search and a demo-only Find Friends flow (36 fictional profiles; no real accounts created).
+- Test fixture data lives in `tests/fixtures/neighborhood.ts`; test instructions live in `tests/README.md`.
+- Profile > Style my mini customizes a built-in SVG character (216 combinations). Uploaded photos remain supported. Apply `202609290003_mini_avatars.sql` to persist choices for real accounts.
+- Mint, Sunset and Midnight themes persist on this device. Change them in Profile or Map filters.
+- Map selection opens an inline RSVP tooltip positioned relative to the map coordinate. Details opens a separate translucent workspace with Overview, People, Comments and Chat. No native callout or modal is used for RSVP.
+
+Avatar art is generated locally from a bounded numeric seed; this is an original simple illustration system, not a Snapchat/Bitmoji integration. Web map avatars are illustrated; private uploaded photos remain in app profile views. Live-location illustrations still respect permission and freshness checks. Theme transparency is a tinted overlay, not a native blur effect.

@@ -15,9 +15,11 @@ import {
   Screen,
   Sheet,
   Txt,
-  styles,
+  useTheme,
 } from "@/src/ui";
 export default function ActivityDetail() {
+  const { styles } = useTheme();
+
   const { id } = useLocalSearchParams<{ id: string }>(),
     { data, userId, act } = useBeacon();
   const a = data.activities.find((x) => x.id === id),
@@ -26,7 +28,6 @@ export default function ActivityDetail() {
     [title, setTitle] = useState(""),
     [starts, setStarts] = useState(""),
     [ends, setEnds] = useState(""),
-    [completed, setCompleted] = useState(false),
     [report, setReport] = useState(false),
     [reason, setReason] = useState("");
   const now = useNow();
@@ -123,26 +124,12 @@ export default function ActivityDetail() {
             title="Mark completed"
             run={async () => {
               await act("activity_status", { id, status: "completed" });
-              setCompleted(true);
             }}
           />
           <Action
             title="Cancel activity"
             secondary
             run={() => act("activity_status", { id, status: "cancelled" })}
-          />
-        </View>
-      )}
-      {(completed || a.status === "completed") && mine && a.habit_id && (
-        <View style={styles.card}>
-          <Txt>Count this toward your linked habit?</Txt>
-          <Txt muted>
-            Only confirm if you completed it. Today can receive credit once.
-          </Txt>
-          <Action
-            title="Confirm habit check-in"
-            secondary
-            run={() => act("checkin", { id: a.habit_id })}
           />
         </View>
       )}
@@ -159,7 +146,7 @@ export default function ActivityDetail() {
               title="Approve Going"
               run={() => act("approve_rsvp", { id, user_id: r.user_id })}
             />
-          )}{" "}
+          )}
           {mine && r.user_id !== userId && (
             <Action
               secondary

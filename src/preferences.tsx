@@ -8,8 +8,11 @@ import React, {
 import { Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
 
+import { type ThemeName } from "./themes";
 const key = "beacon.show-avatars";
 const Preferences = createContext({
+  theme: "Mint" as ThemeName,
+  setTheme: (_value: ThemeName) => {},
   showAvatars: true,
   ready: false,
   error: "",
@@ -20,6 +23,7 @@ export function PreferencesProvider({
 }: {
   children: React.ReactNode;
 }) {
+  const [theme, setThemeValue] = useState<ThemeName>("Mint");
   const [showAvatars, setValue] = useState(true);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
@@ -32,7 +36,19 @@ export function PreferencesProvider({
           Platform.OS === "web"
             ? localStorage.getItem(key)
             : await SecureStore.getItemAsync(key);
-        if (active) setValue(saved !== "false");
+        const savedTheme =
+          Platform.OS === "web"
+            ? localStorage.getItem("beacon.theme")
+            : await SecureStore.getItemAsync("beacon.theme");
+        if (active) {
+          setValue(saved !== "false");
+          if (
+            savedTheme === "Mint" ||
+            savedTheme === "Sunset" ||
+            savedTheme === "Midnight"
+          )
+            setThemeValue(savedTheme);
+        }
       } catch {
         if (active) setError("Display settings could not be loaded.");
       } finally {
@@ -58,8 +74,21 @@ export function PreferencesProvider({
       }
     });
   };
+  const setTheme = (value: ThemeName) => {
+    setThemeValue(value);
+    writes.current = writes.current.then(async () => {
+      try {
+        if (Platform.OS === "web") localStorage.setItem("beacon.theme", value);
+        else await SecureStore.setItemAsync("beacon.theme", value);
+      } catch {
+        setError("Theme changed for now; this device could not save it.");
+      }
+    });
+  };
   return (
-    <Preferences.Provider value={{ showAvatars, ready, error, setShowAvatars }}>
+    <Preferences.Provider
+      value={{ theme, setTheme, showAvatars, ready, error, setShowAvatars }}
+    >
       {children}
     </Preferences.Provider>
   );

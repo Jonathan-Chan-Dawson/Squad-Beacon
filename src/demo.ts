@@ -1,218 +1,74 @@
-import { emptyData, type Data, type Payload } from "./types";
+import { canChat } from "./browsing";
+import { type Data, type Payload } from "./types";
 import { localDate, validateActivity } from "./domain";
+export { makeDemo } from "../tests/fixtures/neighborhood";
 export const DEMO_ID = "demo-you";
-export function makeDemo(): Data {
-  const d = emptyData(),
-    now = Date.now();
-  const person = (id: string, name: string, username: string, bio: string) => ({
-    id,
-    name,
-    username,
-    bio,
-    interests: ["Fitness", "Creative"],
-    featured_activity_id: null,
-    hide_featured: false,
-    timezone: "America/Chicago",
-    quiet_start: 22,
-    quiet_end: 8,
-  });
-  d.profiles = [
-    person(
-      DEMO_ID,
-      "Alex Morgan",
-      "alex",
-      "Small steps. Good company. Big things ahead.",
-    ),
-    person(
-      "maya",
-      "Maya Chen",
-      "maya",
-      "Making room for movement and a little creativity.",
-    ),
-    person(
-      "jordan",
-      "Jordan Ellis",
-      "jordan",
-      "Always down for one more round.",
-    ),
-    person("sam", "Sam Rivera", "sam", "Coffee, code, and a good trail."),
-  ];
-  d.friendships = ["maya", "jordan", "sam"].map((id) => ({
-    id: "friend-" + id,
-    sender_id: DEMO_ID,
-    recipient_id: id,
-    status: "accepted",
-  }));
-  d.lists = [{ id: "close", owner_id: DEMO_ID, name: "Close Friends" }];
-  d.squads = [
-    {
-      id: "boxing",
-      owner_id: DEMO_ID,
-      name: "The training crew",
-      description: "Show up for each other. One round at a time.",
-    },
-    {
-      id: "weekend",
-      owner_id: "maya",
-      name: "Weekend people",
-      description: "Less scrolling, more doing.",
-    },
-  ];
-  d.squad_members = [
-    { squad_id: "boxing", user_id: DEMO_ID, role: "owner" },
-    { squad_id: "boxing", user_id: "jordan", role: "member" },
-    { squad_id: "weekend", user_id: DEMO_ID, role: "member" },
-    { squad_id: "weekend", user_id: "maya", role: "owner" },
-    { squad_id: "weekend", user_id: "sam", role: "member" },
-  ];
-  d.goals = [
-    {
-      id: "g1",
-      owner_id: DEMO_ID,
-      title: "Feel stronger, every week",
-      description: "Build a training routine I actually enjoy.",
-      target_date: null,
-      progress: 40,
-      audience: "friends",
-      audience_id: null,
-    },
-    {
-      id: "g2",
-      owner_id: DEMO_ID,
-      title: "Make something of my own",
-      description: "Finish my first personal creative project.",
-      target_date: null,
-      progress: 25,
-      audience: "private",
-      audience_id: null,
-    },
-    {
-      id: "g3",
-      owner_id: "maya",
-      title: "Run my first 10K",
-      description: "A little further each week.",
-      target_date: null,
-      progress: 60,
-      audience: "friends",
-      audience_id: null,
-    },
-  ];
-  d.milestones = [
-    { id: "m1", goal_id: "g1", title: "Find a training partner", done: true },
-    { id: "m2", goal_id: "g1", title: "Complete 12 sessions", done: false },
-  ];
-  d.habits = [
-    {
-      id: "h1",
-      owner_id: DEMO_ID,
-      title: "Move for 30 minutes",
-      goal_id: "g1",
-      schedule: "weekly",
-      weekdays: [],
-      weekly_target: 3,
-      timezone: "America/Chicago",
-      reminder_hour: 18,
-      audience: "private",
-      audience_id: null,
-    },
-    {
-      id: "h2",
-      owner_id: DEMO_ID,
-      title: "Make time to create",
-      goal_id: "g2",
-      schedule: "days",
-      weekdays: [1, 2, 3, 4, 5],
-      weekly_target: 1,
-      timezone: "America/Chicago",
-      reminder_hour: null,
-      audience: "private",
-      audience_id: null,
-    },
-  ];
-  d.checkins = [1, 2, 4, 7, 8, 10].map((n) => ({
-    id: "c" + n,
-    habit_id: "h1",
-    owner_id: DEMO_ID,
-    local_date: localDate(new Date(now - n * 86400000), "America/Chicago"),
-  }));
-  const activity = (
-    id: string,
-    owner_id: string,
-    title: string,
-    category: "Fitness" | "Study" | "Gaming",
-    offset: number,
-    audience_id: string | null,
-  ) => ({
-    id,
-    owner_id,
-    title,
-    category,
-    mode: "squad" as const,
-    starts_at: new Date(now + offset * 3600000).toISOString(),
-    ends_at: new Date(now + (offset + 2) * 3600000).toISOString(),
-    timezone: "America/Chicago",
-    approval_required: false,
-    status: "scheduled" as const,
-    goal_id: null,
-    habit_id: null,
-    audience: audience_id ? ("squad" as const) : ("friends" as const),
-    audience_id,
-  });
-  d.activities = [
-    activity(
-      "a1",
-      "jordan",
-      "A few rounds. Good company.",
-      "Fitness",
-      -0.25,
-      "boxing",
-    ),
-    activity("a2", "maya", "Coffee & a little focus", "Study", 2, null),
-    activity("a3", "sam", "Game night, anyone?", "Gaming", 5, "weekend"),
-  ];
-  d.places = [
-    {
-      activity_id: "a1",
-      label: "Chicago Boxing Club",
-      latitude: 41.889,
-      longitude: -87.65,
-      online_url: null,
-    },
-    {
-      activity_id: "a2",
-      label: "The neighborhood café",
-      latitude: 41.882,
-      longitude: -87.637,
-      online_url: null,
-    },
-    {
-      activity_id: "a3",
-      label: "Online · bring your favorite game",
-      latitude: null,
-      longitude: null,
-      online_url: "https://discord.com",
-    },
-  ];
-  d.rsvps = [
-    { activity_id: "a1", user_id: "jordan", status: "going", approved: true },
-    { activity_id: "a2", user_id: "maya", status: "going", approved: true },
-  ];
-  d.comments = [
-    {
-      id: "comment1",
-      activity_id: "a1",
-      author_id: "jordan",
-      body: "All levels welcome. Come hang out!",
-      created_at: new Date(now - 600000).toISOString(),
-    },
-  ];
-  return d;
-}
 export function demoAction(previous: Data, action: string, p: Payload): Data {
   const d = structuredClone(previous),
     id = String(p.id ?? ""),
     uid = DEMO_ID;
   const newId = () => "demo-" + Math.random().toString(36).slice(2);
+  if (action === "favorite") {
+    d.favorites = d.favorites.filter(
+      (f) => !(f.owner_id === uid && f.kind === p.kind && f.target_id === id),
+    );
+    if (p.add)
+      d.favorites.push({
+        owner_id: uid,
+        kind: p.kind as "friend" | "squad",
+        target_id: id,
+      });
+  }
+  if (action === "save_template") {
+    if (!String(p.name ?? "").trim() || !String(p.title ?? "").trim())
+      throw new Error("Give your template a name and activity.");
+    const minutes = Number(p.minutes);
+    if (!Number.isInteger(minutes) || minutes < 5 || minutes > 1440)
+      throw new Error("Choose a duration from 5 to 1440 minutes.");
+    const existing = d.templates.find((t) => t.id === id && t.owner_id === uid);
+    const template = {
+      id: existing?.id ?? newId(),
+      owner_id: uid,
+      name: String(p.name).trim(),
+      title: String(p.title).trim(),
+      description: String(p.description ?? ""),
+      category: p.category as any,
+      minutes,
+      label: String(p.label ?? ""),
+      target_count: p.target_count == null ? null : Number(p.target_count),
+      approval_required: !!p.approval_required,
+    };
+    if (existing) Object.assign(existing, template);
+    else d.templates.push(template);
+  }
+  if (action === "delete_template")
+    d.templates = d.templates.filter((t) => t.id !== id || t.owner_id !== uid);
+  if (action === "send_message") {
+    const body = String(p.body ?? "").trim();
+    if (!body || body.length > 2000)
+      throw new Error("Write a message of 1 to 2000 characters.");
+    const a = d.activities.find((a) => a.id === p.activity_id);
+    if (p.activity_id && (!a || !canChat(d, a, uid)))
+      throw new Error("Join this beacon before entering its chat.");
+    if (
+      !p.activity_id &&
+      !d.friendships.some(
+        (f) =>
+          f.status === "accepted" &&
+          ((f.sender_id === uid && f.recipient_id === p.recipient_id) ||
+            (f.recipient_id === uid && f.sender_id === p.recipient_id)),
+      )
+    )
+      throw new Error("Connect as friends to message.");
+    d.messages.push({
+      id: newId(),
+      author_id: uid,
+      activity_id: a?.id ?? null,
+      recipient_id: p.recipient_id ? String(p.recipient_id) : null,
+      body,
+      created_at: new Date().toISOString(),
+    });
+  }
   if (action === "save_profile")
     Object.assign(
       d.profiles.find((x) => x.id === uid)!,
@@ -225,6 +81,8 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
       id: aid,
       owner_id: uid,
       title: String(p.title),
+      available: !!p.available,
+      description: String(p.description ?? ""),
       target_count: p.target_count == null ? null : Number(p.target_count),
       category: p.category as any,
       mode: p.mode as any,

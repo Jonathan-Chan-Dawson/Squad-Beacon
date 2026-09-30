@@ -2,9 +2,11 @@ import React from "react";
 import { View, Text } from "react-native";
 import { useBeacon } from "./store";
 import { useNow } from "./useNow";
-import { Action, styles } from "./ui";
+import { Action, useTheme } from "./ui";
 import type { Activity } from "./types";
 export function BeaconResponse({ activity: a }: { activity: Activity }) {
+  const { styles } = useTheme();
+
   const { data, userId, act } = useBeacon();
   const now = useNow();
   const rsvp = data.rsvps.find(
@@ -71,6 +73,8 @@ export function BeaconResponse({ activity: a }: { activity: Activity }) {
   );
 }
 export function BeaconMomentum({ activity: a }: { activity: Activity }) {
+  const { styles } = useTheme();
+
   const { data } = useBeacon();
   const responses = data.rsvps.filter((r) => r.activity_id === a.id);
   const going = responses.filter(

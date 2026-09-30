@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useBeacon } from "@/src/store";
-import { featuredActivity, habitStats } from "@/src/domain";
+import { featuredActivity, friendIds } from "@/src/domain";
 import { ActivityCard } from "@/src/ActivityCard";
 import { ProfileAvatar } from "@/src/ProfileAvatar";
 import {
@@ -13,9 +13,11 @@ import {
   Screen,
   Sheet,
   Txt,
-  styles,
+  useTheme,
 } from "@/src/ui";
 export default function Person() {
+  const { styles } = useTheme();
+
   const { id } = useLocalSearchParams<{ id: string }>(),
     { data, act, userId } = useBeacon(),
     person = data.profiles.find((p) => p.id === id),
@@ -44,27 +46,36 @@ export default function Person() {
         <Txt muted>{person.interests.join(" · ")}</Txt>
       </View>
       {featured && <ActivityCard activity={featured} />}
-      <Text style={styles.h2}>Working toward</Text>
-      {data.goals
-        .filter((g) => g.owner_id === id)
-        .map((g) => (
-          <View style={styles.card} key={g.id}>
-            <Text style={styles.h2}>{g.title}</Text>
-            <Txt muted>{g.description}</Txt>
-            <Txt>{g.progress}%</Txt>
-          </View>
+      {[
+        person.home,
+        person.birthday_note,
+        person.aspirations,
+        person.personality,
+        person.quote,
+      ]
+        .filter(Boolean)
+        .map((text, i) => (
+          <Txt key={i}>{text}</Txt>
         ))}
-      <Text style={styles.h2}>Building a rhythm</Text>
-      {data.habits
-        .filter((h) => h.owner_id === id)
-        .map((h) => (
-          <View style={styles.card} key={h.id}>
-            <Txt>{h.title}</Txt>
-            <Txt muted>
-              {habitStats(h, data.checkins).streak}{" "}
-              {habitStats(h, data.checkins).unit} streak
-            </Txt>
-          </View>
+      {id !== userId &&
+        (friendIds(data, userId!).includes(id) ? (
+          <Button
+            title="Message"
+            onPress={() =>
+              router.push({ pathname: "/messages/[id]", params: { id } })
+            }
+          />
+        ) : (
+          <Action
+            title="Add friend"
+            run={() => act("friend_request", { username: person.username })}
+          />
+        ))}
+      <Text style={styles.h2}>Past beacons</Text>
+      {data.activities
+        .filter((a) => a.owner_id === id && a.status === "completed")
+        .map((a) => (
+          <ActivityCard key={a.id} activity={a} />
         ))}
       <Txt muted>Only information shared with you appears here.</Txt>
       {id !== userId && (

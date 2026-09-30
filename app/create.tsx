@@ -20,15 +20,25 @@ import {
   Screen,
   Sheet,
   Txt,
-  styles,
+  useTheme,
 } from "@/src/ui";
 export default function CreateActivity() {
+  const { styles } = useTheme();
+
   const { data, userId, act } = useBeacon();
   const params = useLocalSearchParams<{
     kind?: string;
     squadId?: string;
     repeat?: string;
+    template?: string;
+    editTemplate?: string;
+    saveTemplate?: string;
   }>();
+  const saved = data.templates.find(
+    (t) => t.id === params.template && t.owner_id === userId,
+  );
+  const templateEditor =
+    params.editTemplate === "yes" || params.saveTemplate === "yes";
   const previous = data.activities.find((a) => a.id === params.repeat);
   const [timing, setTiming] = useState(false);
   const [view, setView] = useState("Normal");
@@ -39,25 +49,49 @@ export default function CreateActivity() {
         ? "Squad"
         : "Beacon",
   );
-  const [title, setTitle] = useState(previous?.title ?? "");
+  const [title, setTitle] = useState(saved?.title ?? previous?.title ?? "");
+  const [description, setDescription] = useState(
+    saved?.description ?? previous?.description ?? "",
+  );
+  const [templateName, setTemplateName] = useState(
+    saved?.name ?? previous?.title ?? "",
+  );
+  const [available, setAvailable] = useState(false);
   const [category, setCategory] = useState<Category>(
-    previous?.category ?? "Social",
+    saved?.category ?? previous?.category ?? "Social",
   );
   const [audience, setAudience] = useState<Audience>(
-    params.kind === "squad" ? "squad" : "friends",
+    params.kind === "squad"
+      ? "squad"
+      : (data.profiles.find((p) => p.id === userId)?.default_audience ??
+          "friends"),
   );
   const [audienceId, setAudienceId] = useState<string | null>(
     params.squadId ?? null,
   );
-  const [target, setTarget] = useState("");
-  const [approval, setApproval] = useState("Open joining");
+  const [target, setTarget] = useState(
+    saved?.target_count ? String(saved.target_count) : "",
+  );
+  const [approval, setApproval] = useState(
+    saved?.approval_required ? "Host approval" : "Open joining",
+  );
   const [when, setWhen] = useState("Now"),
-    [duration, setDuration] = useState("1 hour");
+    [duration, setDuration] = useState(
+      saved
+        ? saved.minutes === 30
+          ? "30 min"
+          : saved.minutes === 60
+            ? "1 hour"
+            : saved.minutes === 120
+              ? "2 hours"
+              : "Custom"
+        : "1 hour",
+    );
   const [starts, setStarts] = useState(() => new Date().toISOString());
   const [ends, setEnds] = useState(() =>
-    new Date(Date.now() + 3600000).toISOString(),
+    new Date(Date.now() + (saved?.minutes ?? 60) * 60000).toISOString(),
   );
-  const [label, setLabel] = useState("");
+  const [label, setLabel] = useState(saved?.label ?? "");
   const [placeType, setPlaceType] = useState("In person"),
     [url, setUrl] = useState("");
   const [pin, setPin] = useState<{
@@ -65,8 +99,6 @@ export default function CreateActivity() {
     longitude: number;
   } | null>(null);
   const [showPin, setShowPin] = useState(false);
-  const [habit, setHabit] = useState("None"),
-    [goal, setGoal] = useState("None");
   const suggestions = repeatSuggestions(data.activities, userId!);
   function applyTemplate(t: BeaconTemplate) {
     setTitle(t.title);
@@ -82,6 +114,30 @@ export default function CreateActivity() {
     );
     setEnds(new Date(Date.parse(starts) + t.minutes * 60000).toISOString());
   }
+  async function saveTemplate() {
+    const minutes =
+      duration === "Custom"
+        ? Math.round((Date.parse(ends) - Date.parse(starts)) / 60000)
+        : duration === "30 min"
+          ? 30
+          : duration === "2 hours"
+            ? 120
+            : 60;
+    if (!templateName.trim() || !title.trim())
+      throw new Error("Give your template a name and activity.");
+    await act("save_template", {
+      id: saved?.id,
+      name: templateName.trim(),
+      title: title.trim(),
+      description: description.trim(),
+      category,
+      minutes,
+      label: label.trim(),
+      target_count: target.trim() ? Number(target) : null,
+      approval_required: approval === "Host approval",
+    });
+    router.replace("/(tabs)/activities");
+  }
   async function publish() {
     const start =
       when === "Now"
@@ -93,6 +149,8 @@ export default function CreateActivity() {
       duration === "30 min" ? 30 : duration === "2 hours" ? 120 : 60;
     const payload = {
       title: title.trim(),
+      description: description.trim(),
+      available: kind === "Status" && available,
       category,
       mode: kind === "Status" ? "solo" : "squad",
       starts_at: new Date(start).toISOString(),
@@ -105,12 +163,6 @@ export default function CreateActivity() {
       audience_id: audienceId,
       target_count: kind === "Status" || !target.trim() ? null : Number(target),
       approval_required: kind !== "Status" && approval === "Host approval",
-      goal_id:
-        data.goals.find((g) => g.owner_id === userId && g.title === goal)?.id ??
-        null,
-      habit_id:
-        data.habits.find((h) => h.owner_id === userId && h.title === habit)
-          ?.id ?? null,
       label: label.trim(),
       online_url: placeType === "Online" ? url : null,
       latitude: placeType === "In person" ? (pin?.latitude ?? null) : null,
@@ -131,13 +183,25 @@ export default function CreateActivity() {
   }
   return (
     <Screen
-      title={kind === "Status" ? "Share a little update" : "Create a beacon"}
+      title={
+        templateEditor
+          ? "Your repeat plan"
+          : kind === "Status"
+            ? "Share a little update"
+            : "Create a beacon"
+      }
       eyebrow="SMALL PLANS. GOOD COMPANY."
       create={false}
       footer={
         <Action
-          title={kind === "Status" ? "Share my status" : "Light up this beacon"}
-          run={publish}
+          title={
+            templateEditor
+              ? "Save template"
+              : kind === "Status"
+                ? "Share my status"
+                : "Light up this beacon"
+          }
+          run={templateEditor ? saveTemplate : publish}
         />
       }
     >
@@ -163,6 +227,21 @@ export default function CreateActivity() {
           />
         ))}
       </ScrollView>
+      {templateEditor && (
+        <Field
+          label="Template name"
+          value={templateName}
+          onChangeText={setTemplateName}
+          maxLength={80}
+        />
+      )}
+      {kind === "Status" && (
+        <Chips
+          options={["Busy", "Free to hang"]}
+          value={available ? "Free to hang" : "Busy"}
+          onChange={(v) => setAvailable(v === "Free to hang")}
+        />
+      )}
       <Field
         label="What are you doing?"
         placeholder="A tiny adventure with your people"
@@ -337,28 +416,24 @@ export default function CreateActivity() {
           {duration === "Custom" && (
             <DateField label="Ends" value={ends} onChange={setEnds} />
           )}
-          <Txt muted>Connect a goal</Txt>
-          <Chips
-            options={[
-              "None",
-              ...data.goals
-                .filter((g) => g.owner_id === userId)
-                .map((g) => g.title),
-            ]}
-            value={goal}
-            onChange={setGoal}
+          <Field
+            label="A little more detail (optional)"
+            value={description}
+            onChangeText={setDescription}
+            multiline
+            maxLength={2000}
           />
-          <Txt muted>Build a habit</Txt>
-          <Chips
-            options={[
-              "None",
-              ...data.habits
-                .filter((h) => h.owner_id === userId)
-                .map((h) => h.title),
-            ]}
-            value={habit}
-            onChange={setHabit}
-          />
+          {!templateEditor && (
+            <>
+              <Field
+                label="Save this as a template (optional name)"
+                value={templateName}
+                onChangeText={setTemplateName}
+                maxLength={80}
+              />
+              <Action title="Save as template" secondary run={saveTemplate} />
+            </>
+          )}
         </>
       )}
       {duration === "Custom" && view === "Normal" && (

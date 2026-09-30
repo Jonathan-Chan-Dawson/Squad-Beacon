@@ -3,17 +3,10 @@ import { Text, View } from "react-native";
 import { Radio } from "lucide-react-native";
 import { useBeacon } from "./store";
 import { supabase } from "./supabase";
-import {
-  Action,
-  Button,
-  Chips,
-  Field,
-  Screen,
-  Txt,
-  colors,
-  styles,
-} from "./ui";
+import { Action, Button, Chips, Field, Screen, Txt, useTheme } from "./ui";
 export function Auth() {
+  const { styles, colors } = useTheme();
+
   const { startDemo } = useBeacon();
   const [mode, setMode] = useState<
     "Sign in" | "Create account" | "Reset password"
@@ -116,6 +109,8 @@ export function Auth() {
   );
 }
 export function Onboard() {
+  const { styles } = useTheme();
+
   const { act, signOut } = useBeacon();
   const [name, setName] = useState(""),
     [username, setUsername] = useState(""),

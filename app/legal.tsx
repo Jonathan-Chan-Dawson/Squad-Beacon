@@ -1,7 +1,9 @@
 import React from "react";
 import { Text, View, Linking } from "react-native";
-import { Action, Screen, Txt, styles } from "@/src/ui";
+import { Action, Screen, Txt, useTheme } from "@/src/ui";
 export default function Legal() {
+  const { styles } = useTheme();
+
   const support = process.env.EXPO_PUBLIC_SUPPORT_EMAIL;
   return (
     <Screen
@@ -13,8 +15,8 @@ export default function Legal() {
         <Text style={styles.h2}>What we store</Text>
         <Txt>
           Account details, your private birth date for age eligibility, profile,
-          friendships, groups, goals, habits, activity plans, RSVPs, and
-          comments. Each item is visible only to its authorized audience.
+          friendships, groups, beacon plans, RSVPs, messages, and comments. Each
+          item is visible only to its authorized audience.
         </Txt>
         <Txt>
           Your live location is off by default. If you enable sharing, we keep
@@ -26,9 +28,9 @@ export default function Legal() {
       <View style={styles.card}>
         <Text style={styles.h2}>Your choices</Text>
         <Txt>
-          Choose who sees each goal, habit, and activity. Stop location sharing
-          at any time. Block accounts and report concerns from a profile or
-          activity. Delete your account in Profile.
+          Choose who sees each beacon. Stop location sharing at any time. Block
+          accounts and report concerns from a profile or activity. Delete your
+          account in Profile.
         </Txt>
         <Txt>
           Deleted accounts lose their app data. Safety reports are retained for

@@ -2,8 +2,10 @@ import React, { useState } from "react";
 import { View, Text } from "react-native";
 import { useBeacon } from "@/src/store";
 import { supabase } from "@/src/supabase";
-import { Action, Button, Screen, Sheet, Txt, styles } from "@/src/ui";
+import { Action, Button, Screen, Sheet, Txt, useTheme } from "@/src/ui";
 export default function Moderation() {
+  const { styles } = useTheme();
+
   const { data, act } = useBeacon(),
     [metrics, setMetrics] = useState<Record<string, number> | null>(null),
     [removing, setRemoving] = useState<string | null>(null);

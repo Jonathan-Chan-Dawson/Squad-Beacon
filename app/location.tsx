@@ -3,17 +3,10 @@ import { Text, View } from "react-native";
 import { useBeacon } from "@/src/store";
 import { friendIds } from "@/src/domain";
 import { startDeviceLocation, stopDeviceLocation } from "@/src/device";
-import {
-  Action,
-  Button,
-  Chips,
-  Empty,
-  Screen,
-  Txt,
-  colors,
-  styles,
-} from "@/src/ui";
+import { Action, Button, Chips, Empty, Screen, Txt, useTheme } from "@/src/ui";
 export default function LocationScreen() {
+  const { styles, colors } = useTheme();
+
   const { data, userId, act, demo } = useBeacon(),
     [selected, setSelected] = useState<string[]>([]),
     [duration, setDuration] = useState("15 minutes"),

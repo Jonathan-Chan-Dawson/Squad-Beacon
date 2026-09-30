@@ -46,7 +46,8 @@
         {
           "contactsPermission": "Choose a contact to invite to Squad Beacon. Your address book is never uploaded."
         }
-      ]
+      ],
+      "expo-widgets"
     ],
     "experiments": {
       "typedRoutes": true

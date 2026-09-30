@@ -6,7 +6,7 @@ import { ArrowUpRight, MapPin, Monitor } from "lucide-react-native";
 import { Activity } from "./types";
 import { useBeacon } from "./store";
 import { activityWhen } from "./domain";
-import { colors, styles } from "./ui";
+import { useTheme } from "./ui";
 import { ProfileAvatar } from "./ProfileAvatar";
 export function ActivityCard({
   activity: a,
@@ -15,6 +15,8 @@ export function ActivityCard({
   activity: Activity;
   onOpen?: () => void;
 }) {
+  const { styles, colors } = useTheme();
+
   const { data } = useBeacon(),
     owner = data.profiles.find((p) => p.id === a.owner_id),
     place = data.places.find((p) => p.activity_id === a.id);
@@ -26,8 +28,7 @@ export function ActivityCard({
         accessibilityLabel={"View " + a.title}
         onPress={
           onOpen ??
-          (() =>
-            router.push({ pathname: "/activity/[id]", params: { id: a.id } }))
+          (() => router.push({ pathname: "/(tabs)", params: { beacon: a.id } }))
         }
         style={({ pressed }) => [{ gap: 10, opacity: pressed ? 0.8 : 1 }]}
       >

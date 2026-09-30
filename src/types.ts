@@ -4,6 +4,15 @@ export type Mode = "solo" | "squad" | "invite";
 export type Category =
   "Fitness" | "Study" | "Gaming" | "Creative" | "Social" | "Other";
 export interface Profile {
+  avatar_seed?: number;
+  avatar_style?: "illustrated" | "photo";
+  home?: string;
+  birthday_note?: string;
+  aspirations?: string;
+  personality?: string;
+  quote?: string;
+  default_audience?: "private" | "friends";
+
   avatar_updated_at?: string | null;
   id: ID;
   username: string;
@@ -84,6 +93,8 @@ export interface Checkin {
   local_date: string;
 }
 export interface Activity extends Shared {
+  available?: boolean;
+  description?: string;
   target_count?: number | null;
   id: ID;
   owner_id: ID;
@@ -147,7 +158,35 @@ export interface Report {
   created_at: string;
   resolved: boolean;
 }
+export interface PersonalTemplate {
+  id: ID;
+  owner_id: ID;
+  name: string;
+  title: string;
+  description: string;
+  category: Category;
+  minutes: number;
+  label: string;
+  target_count: number | null;
+  approval_required: boolean;
+}
+export interface Message {
+  id: ID;
+  author_id: ID;
+  activity_id: ID | null;
+  recipient_id: ID | null;
+  body: string;
+  created_at: string;
+}
 export interface Data {
+  favorites: {
+    owner_id: string;
+    kind: "friend" | "squad";
+    target_id: string;
+  }[];
+  templates: PersonalTemplate[];
+  messages: Message[];
+
   is_moderator?: boolean;
   location_recipients?: string[];
   profiles: Profile[];
@@ -173,6 +212,9 @@ export interface Data {
 }
 export type Payload = Record<string, unknown>;
 export const emptyData = (): Data => ({
+  favorites: [],
+  templates: [],
+  messages: [],
   profiles: [],
   friendships: [],
   lists: [],

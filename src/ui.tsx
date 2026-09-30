@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Modal,
@@ -11,108 +11,124 @@ import {
   type TextInputProps,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { ArrowLeft, Radio, ShieldCheck, X } from "lucide-react-native";
-import { router, useSegments } from "expo-router";
+import { ArrowLeft, Inbox, Radio, ShieldCheck, X } from "lucide-react-native";
+import {
+  router,
+  useSegments,
+  useFocusEffect,
+  useLocalSearchParams,
+} from "expo-router";
 import { useBeacon } from "./store";
 import type { Audience } from "./types";
 import { usePreferences } from "./preferences";
-export const colors = {
-  bg: "#F4F5F0",
-  ink: "#172C29",
-  muted: "#6F7C75",
-  line: "#E0E5DD",
-  green: "#26735A",
-  lime: "#DDF19A",
-  white: "#FFFFFF",
-  red: "#AA3D36",
+import { themes } from "./themes";
+export const colors = themes.Mint;
+const makeStyles = (colors: typeof themes.Mint) =>
+  StyleSheet.create({
+    screen: { flex: 1, backgroundColor: colors.bg },
+    content: {
+      padding: 16,
+      gap: 14,
+      width: "100%",
+      maxWidth: 680,
+      alignSelf: "center",
+    },
+    row: { flexDirection: "row", alignItems: "center", gap: 10 },
+    between: {
+      flexDirection: "row",
+      alignItems: "center",
+      flexWrap: "wrap",
+      justifyContent: "space-between",
+      gap: 12,
+    },
+    title: {
+      fontSize: 28,
+      lineHeight: 34,
+      fontWeight: "700",
+      color: colors.ink,
+      letterSpacing: -1,
+    },
+    h2: {
+      fontSize: 19,
+      flexShrink: 1,
+      fontWeight: "700",
+      color: colors.ink,
+      letterSpacing: -0.4,
+    },
+    body: { fontSize: 15, lineHeight: 23, color: colors.ink },
+    muted: { fontSize: 13, lineHeight: 20, color: colors.muted },
+    label: {
+      fontSize: 11,
+      fontWeight: "700",
+      letterSpacing: 0.2,
+      color: colors.green,
+      textTransform: "none",
+    },
+    card: {
+      backgroundColor: colors.white,
+      borderWidth: 1,
+      borderColor: colors.line,
+      borderRadius: 18,
+      padding: 16,
+      gap: 10,
+    },
+    button: {
+      minHeight: 48,
+      paddingHorizontal: 18,
+      paddingVertical: 12,
+      borderRadius: 17,
+      borderWidth: 1,
+      borderColor: colors.ink,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: colors.ink,
+      elevation: 2,
+    },
+    buttonText: { fontSize: 14, fontWeight: "700", color: colors.white },
+    input: {
+      borderWidth: 1,
+      borderColor: colors.line,
+      borderRadius: 13,
+      padding: 14,
+      minHeight: 48,
+      color: colors.ink,
+      fontSize: 15,
+      backgroundColor: colors.white,
+    },
+    chip: {
+      minHeight: 44,
+      justifyContent: "center",
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      borderRadius: 30,
+      borderWidth: 1,
+      borderColor: colors.line,
+      backgroundColor: colors.white,
+    },
+    chipText: {
+      fontSize: 13,
+      fontWeight: "600",
+      color: colors.muted,
+      textTransform: "capitalize",
+    },
+    error: { color: colors.red, fontSize: 13, lineHeight: 20 },
+    hero: {
+      backgroundColor: colors.ink,
+      borderRadius: 18,
+      padding: 18,
+      gap: 10,
+    },
+  });
+const themedStyles = {
+  Mint: makeStyles(themes.Mint),
+  Sunset: makeStyles(themes.Sunset),
+  Midnight: makeStyles(themes.Midnight),
 };
-export const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: colors.bg },
-  content: {
-    padding: 16,
-    gap: 14,
-    width: "100%",
-    maxWidth: 680,
-    alignSelf: "center",
-  },
-  row: { flexDirection: "row", alignItems: "center", gap: 10 },
-  between: {
-    flexDirection: "row",
-    alignItems: "center",
-    flexWrap: "wrap",
-    justifyContent: "space-between",
-    gap: 12,
-  },
-  title: {
-    fontSize: 28,
-    lineHeight: 34,
-    fontWeight: "700",
-    color: colors.ink,
-    letterSpacing: -1,
-  },
-  h2: {
-    fontSize: 19,
-    flexShrink: 1,
-    fontWeight: "700",
-    color: colors.ink,
-    letterSpacing: -0.4,
-  },
-  body: { fontSize: 15, lineHeight: 23, color: colors.ink },
-  muted: { fontSize: 13, lineHeight: 20, color: colors.muted },
-  label: {
-    fontSize: 11,
-    fontWeight: "700",
-    letterSpacing: 0.2,
-    color: colors.green,
-    textTransform: "none",
-  },
-  card: {
-    backgroundColor: colors.white,
-    borderWidth: 1,
-    borderColor: colors.line,
-    borderRadius: 18,
-    padding: 16,
-    gap: 10,
-  },
-  button: {
-    minHeight: 46,
-    paddingHorizontal: 18,
-    paddingVertical: 12,
-    borderRadius: 14,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: colors.ink,
-  },
-  buttonText: { fontSize: 14, fontWeight: "700", color: colors.white },
-  input: {
-    borderWidth: 1,
-    borderColor: colors.line,
-    borderRadius: 13,
-    padding: 14,
-    minHeight: 48,
-    color: colors.ink,
-    fontSize: 15,
-    backgroundColor: colors.white,
-  },
-  chip: {
-    minHeight: 44,
-    justifyContent: "center",
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 30,
-    borderWidth: 1,
-    borderColor: colors.line,
-    backgroundColor: colors.white,
-  },
-  chipText: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: colors.muted,
-    textTransform: "capitalize",
-  },
-  error: { color: colors.red, fontSize: 13, lineHeight: 20 },
-  hero: { backgroundColor: colors.ink, borderRadius: 18, padding: 18, gap: 10 },
-});
+export const styles = themedStyles.Mint;
+export function useTheme() {
+  const { theme } = usePreferences();
+  return { colors: themes[theme], styles: themedStyles[theme], theme };
+}
 export function Txt({
   children,
   muted = false,
@@ -120,6 +136,8 @@ export function Txt({
   children: React.ReactNode;
   muted?: boolean;
 }) {
+  const { styles } = useTheme();
+
   return <Text style={muted ? styles.muted : styles.body}>{children}</Text>;
 }
 export function Button({
@@ -127,12 +145,16 @@ export function Button({
   onPress,
   secondary = false,
   disabled = false,
+  compact = false,
 }: {
   title: string;
   onPress: () => void;
   secondary?: boolean;
   disabled?: boolean;
+  compact?: boolean;
 }) {
+  const { styles, colors } = useTheme();
+
   return (
     <Pressable
       accessibilityRole="button"
@@ -141,11 +163,27 @@ export function Button({
       onPress={onPress}
       style={({ pressed }) => [
         styles.button,
-        secondary && { backgroundColor: colors.lime },
-        (disabled || pressed) && { opacity: 0.55 },
+        compact && { paddingHorizontal: 12, paddingVertical: 9, minHeight: 44 },
+        secondary && {
+          backgroundColor: colors.lime,
+          borderColor: colors.green,
+          elevation: 1,
+        },
+        disabled && { opacity: 0.5, elevation: 0 },
+        pressed && {
+          opacity: 0.82,
+          transform: [{ scale: 0.985 }],
+          elevation: 0,
+        },
       ]}
     >
-      <Text style={[styles.buttonText, secondary && { color: colors.ink }]}>
+      <Text
+        style={[
+          styles.buttonText,
+          compact && { fontSize: 12 },
+          secondary && { color: colors.ink },
+        ]}
+      >
         {title}
       </Text>
     </Pressable>
@@ -156,12 +194,16 @@ export function Action({
   run,
   secondary = false,
   disabled = false,
+  compact = false,
 }: {
   title: string;
   run: () => Promise<unknown>;
   secondary?: boolean;
   disabled?: boolean;
+  compact?: boolean;
 }) {
+  const { styles } = useTheme();
+
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   return (
@@ -169,6 +211,7 @@ export function Action({
       <Button
         title={busy ? "Working…" : title}
         disabled={busy || disabled}
+        compact={compact}
         secondary={secondary}
         onPress={() => {
           setBusy(true);
@@ -188,6 +231,8 @@ export function Action({
   );
 }
 export function Field({ label, ...props }: TextInputProps & { label: string }) {
+  const { styles } = useTheme();
+
   return (
     <View style={{ gap: 7 }}>
       <Text style={[styles.muted, { fontWeight: "600" }]}>{label}</Text>
@@ -213,6 +258,8 @@ export function Chips<T extends string>({
   value: T;
   onChange: (value: T) => void;
 }) {
+  const { styles, colors } = useTheme();
+
   return (
     <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
       {options.map((o) => (
@@ -240,6 +287,8 @@ export function Chips<T extends string>({
   );
 }
 export function Avatar({ name, size = 42 }: { name: string; size?: number }) {
+  const { colors } = useTheme();
+
   const { showAvatars } = usePreferences();
   if (!showAvatars) return null;
   const tone = ["#E4E9CF", "#DFE8F2", "#F2DDCC", "#E7DDF0"][
@@ -261,7 +310,7 @@ export function Avatar({ name, size = 42 }: { name: string; size?: number }) {
       }}
     >
       <Text
-        style={{ color: colors.ink, fontSize: size * 0.3, fontWeight: "700" }}
+        style={{ color: "#173D32", fontSize: size * 0.3, fontWeight: "700" }}
       >
         {name
           .split(" ")
@@ -273,6 +322,8 @@ export function Avatar({ name, size = 42 }: { name: string; size?: number }) {
   );
 }
 export function Empty({ title, body }: { title: string; body: string }) {
+  const { styles, colors } = useTheme();
+
   return (
     <View
       style={[
@@ -297,6 +348,8 @@ export function Sheet({
   onClose: () => void;
   children: React.ReactNode;
 }) {
+  const { colors, styles } = useTheme();
+
   if (!visible) return null;
   return (
     <Modal
@@ -359,32 +412,48 @@ export function Screen({
   create?: boolean;
   footer?: React.ReactNode;
 }) {
+  const { styles, colors } = useTheme();
+
   const { demo, error, refresh } = useBeacon();
   const segments = useSegments();
   const inTabs = segments[0] === "(tabs)";
-  const back =
-    !inTabs || segments[1] === "progress" || segments[1] === "activities";
+  const back = !inTabs;
   return (
     <SafeAreaView edges={["top"]} style={styles.screen}>
+      {inTabs && (
+        <View style={[styles.content, { paddingBottom: 8 }]}>
+          <View style={styles.between}>
+            <View style={{ flex: 1, gap: 6 }}>
+              <Text style={styles.label}>{eyebrow}</Text>
+              <Text style={styles.title}>{title}</Text>
+            </View>
+            {inTabs && <InboxButton />}
+          </View>
+        </View>
+      )}
       <ScrollView
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={[
           styles.content,
-          { paddingBottom: inTabs ? 90 : 24, gap: footer ? 10 : 14 },
+          { paddingBottom: inTabs ? 42 : 24, gap: footer ? 10 : 14 },
         ]}
       >
         {back && <BackButton />}
-        <View style={styles.between}>
-          <View style={{ flex: 1, gap: 6 }}>
-            <Text style={styles.label}>{eyebrow}</Text>
-            <Text style={styles.title}>{title}</Text>
-          </View>
-        </View>
+        {!inTabs && (
+          <>
+            <View style={styles.between}>
+              <View style={{ flex: 1, gap: 6 }}>
+                <Text style={styles.label}>{eyebrow}</Text>
+                <Text style={styles.title}>{title}</Text>
+              </View>
+            </View>
+          </>
+        )}
         {demo && !footer && (
           <View
             style={[
               styles.row,
-              { backgroundColor: "#E7EDD9", padding: 10, borderRadius: 12 },
+              { backgroundColor: colors.lime, padding: 10, borderRadius: 12 },
             ]}
           >
             <ShieldCheck size={16} color={colors.green} />
@@ -393,7 +462,7 @@ export function Screen({
             </Text>
           </View>
         )}
-        {error && (
+        {!!error && (
           <View style={styles.card}>
             <Text style={styles.error}>
               Could not refresh. Protected data has been cleared. {error}
@@ -423,6 +492,8 @@ export function AudiencePicker({
   id: string | null;
   onChange: (value: Audience, id: string | null) => void;
 }) {
+  const { styles } = useTheme();
+
   const { data } = useBeacon();
   return (
     <View style={{ gap: 9 }}>
@@ -451,6 +522,8 @@ export function AudiencePicker({
   );
 }
 export function Loading() {
+  const { styles, colors } = useTheme();
+
   return (
     <View
       style={[
@@ -465,6 +538,8 @@ export function Loading() {
 }
 
 export function BackButton() {
+  const { styles, colors } = useTheme();
+
   return (
     <Pressable
       accessibilityRole="button"
@@ -477,5 +552,160 @@ export function BackButton() {
       <ArrowLeft size={20} color={colors.ink} />
       <Txt>Back</Txt>
     </Pressable>
+  );
+}
+
+export function InboxButton() {
+  const { colors, styles } = useTheme();
+
+  const { data, userId, act } = useBeacon();
+  const [open, setOpen] = useState(false),
+    [tab, setTab] = useState("Updates");
+  const params = useLocalSearchParams<{ inbox?: string }>();
+  useFocusEffect(
+    useCallback(() => {
+      if (params.inbox === "yes") {
+        setOpen(true);
+        router.setParams({ inbox: undefined });
+      }
+    }, [params.inbox]),
+  );
+  const unread = data.notices.filter((n) => !n.read_at).length;
+  const partners = [
+    ...new Set(
+      data.messages
+        .filter((m) => !m.activity_id)
+        .map((m) => (m.author_id === userId ? m.recipient_id! : m.author_id)),
+    ),
+  ];
+  return (
+    <>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={unread ? `Inbox, ${unread} unread` : "Inbox"}
+        onPress={() => setOpen(true)}
+        style={{
+          width: 46,
+          height: 46,
+          borderRadius: 23,
+          backgroundColor: colors.white,
+          borderWidth: 1,
+          borderColor: colors.line,
+          alignItems: "center",
+          justifyContent: "center",
+          elevation: 3,
+        }}
+      >
+        <Inbox size={21} color={colors.ink} />
+        {unread > 0 && (
+          <View
+            style={{
+              position: "absolute",
+              top: -3,
+              right: -3,
+              borderRadius: 10,
+              backgroundColor: colors.green,
+              minWidth: 20,
+              alignItems: "center",
+              padding: 2,
+            }}
+          >
+            <Text style={{ color: "white", fontWeight: "700", fontSize: 10 }}>
+              {unread > 99 ? "99+" : unread}
+            </Text>
+          </View>
+        )}
+      </Pressable>
+      <Sheet title="Your inbox" visible={open} onClose={() => setOpen(false)}>
+        <Chips
+          options={["Updates", "Messages"]}
+          value={tab}
+          onChange={setTab}
+        />
+        {tab === "Updates" ? (
+          <>
+            {unread > 0 && (
+              <Action
+                title="Mark all read"
+                secondary
+                run={() => act("read_notices")}
+              />
+            )}
+            {!data.notices.length && (
+              <Txt muted>
+                You are all caught up. Invitations and beacon updates will
+                appear here.
+              </Txt>
+            )}
+            {data.notices
+              .slice()
+              .sort((a, b) => b.created_at.localeCompare(a.created_at))
+              .slice(0, 50)
+              .map((n) => (
+                <View key={n.id} style={styles.card}>
+                  <Text
+                    style={[
+                      styles.body,
+                      { fontWeight: n.read_at ? "400" : "700" },
+                    ]}
+                  >
+                    {n.body}
+                  </Text>
+                  <Button
+                    secondary
+                    title={
+                      n.activity_id
+                        ? "Open on map"
+                        : "View friends & invitations"
+                    }
+                    onPress={() => {
+                      setOpen(false);
+                      router.push(
+                        n.activity_id
+                          ? {
+                              pathname: "/(tabs)",
+                              params: { beacon: n.activity_id },
+                            }
+                          : {
+                              pathname: "/(tabs)/squads",
+                              params: { tab: "Friends" },
+                            },
+                      );
+                    }}
+                  />
+                </View>
+              ))}
+          </>
+        ) : (
+          <>
+            {!partners.length && (
+              <Txt muted>Your conversations start on a friend profile.</Txt>
+            )}
+            {partners.map((id) => (
+              <Button
+                key={id}
+                secondary
+                title={data.profiles.find((p) => p.id === id)?.name ?? "Friend"}
+                onPress={() => {
+                  setOpen(false);
+                  router.push({ pathname: "/messages/[id]", params: { id } });
+                }}
+              />
+            ))}
+            <Button
+              title="Find a friend"
+              secondary
+              onPress={() => {
+                setOpen(false);
+                router.push({
+                  pathname: "/(tabs)/squads",
+                  params: { tab: "Friends" },
+                });
+              }}
+            />
+          </>
+        )}
+      </Sheet>
+    </>
   );
 }

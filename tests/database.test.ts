@@ -55,6 +55,8 @@ test("database migration and access-control acceptance scenarios", async (t) => 
     "202609060002_delivery.sql",
     "202609060003_profile_metrics.sql",
     "202609290001_simple_beacons.sql",
+    "202609290002_map_workspace.sql",
+    "202609290003_mini_avatars.sql",
   ]) {
     const sql = readFileSync(
       new URL("../supabase/migrations/" + name, import.meta.url),
@@ -119,6 +121,36 @@ test("database migration and access-control acceptance scenarios", async (t) => 
     await action("accept_friend", { id: friendship });
     assert.equal((await snapshot()).friendships[0].status, "accepted");
   });
+  await t.test(
+    "mini avatar settings persist and reject invalid seeds",
+    async () => {
+      await actor("alice");
+      const profile = (await snapshot()).profiles.find(
+        (p: any) => p.id === ids.alice,
+      );
+      await action("save_profile", {
+        ...profile,
+        avatar_seed: 37,
+        avatar_style: "illustrated",
+      });
+      const saved = (await snapshot()).profiles.find(
+        (p: any) => p.id === ids.alice,
+      );
+      assert.equal(saved.avatar_seed, 37);
+      assert.equal(saved.avatar_style, "illustrated");
+      await assert.rejects(() =>
+        action("save_profile", { ...profile, avatar_seed: 216 }),
+      );
+      await assert.rejects(() =>
+        action("save_profile", { ...profile, avatar_style: "unknown" }),
+      );
+      assert.equal(
+        (await snapshot()).profiles.find((p: any) => p.id === ids.alice)
+          .avatar_seed,
+        37,
+      );
+    },
+  );
   let goal: string;
   await t.test(
     "private goals stay private; explicit sharing grants access only to accepted friends",
@@ -186,6 +218,68 @@ test("database migration and access-control acceptance scenarios", async (t) => 
       longitude: -87.6,
       ...extra,
     });
+  await t.test(
+    "templates and favorites are private; chat requires participation",
+    async () => {
+      await actor("alice");
+      await action("save_template", {
+        name: "Coffee",
+        title: "Coffee together",
+        category: "Social",
+        minutes: 30,
+      });
+      const template = (await snapshot()).templates[0];
+      await action("favorite", { kind: "friend", id: ids.bob, add: true });
+      assert.equal((await snapshot()).favorites.length, 1);
+      await assert.rejects(() =>
+        action("favorite", { kind: "friend", id: ids.carol, add: true }),
+      );
+      const aid = String(
+        (
+          await makeActivity({
+            approval_required: true,
+            description: "Bring water",
+          })
+        ).id,
+      );
+      await action("send_message", { activity_id: aid, body: "Hello crew" });
+      await actor("bob");
+      assert.equal((await snapshot()).templates.length, 0);
+      assert.equal((await snapshot()).favorites.length, 0);
+      await assert.rejects(() =>
+        action("save_template", { ...template, name: "Stolen" }),
+      );
+      assert.equal((await snapshot()).messages.length, 0);
+      await assert.rejects(() =>
+        action("send_message", { activity_id: aid, body: "Before joining" }),
+      );
+      await action("rsvp", { id: aid, status: "going" });
+      await assert.rejects(() =>
+        action("send_message", { activity_id: aid, body: "Pending" }),
+      );
+      await actor("alice");
+      await action("approve_rsvp", { id: aid, user_id: ids.bob });
+      await actor("bob");
+      assert.equal((await snapshot()).messages.length, 1);
+      await action("send_message", { activity_id: aid, body: "On my way" });
+      await action("rsvp", { id: aid, status: "withdraw" });
+      assert.equal((await snapshot()).messages.length, 0);
+      await action("send_message", {
+        recipient_id: ids.alice,
+        body: "Direct hello",
+      });
+      await assert.rejects(() =>
+        action("send_message", { recipient_id: ids.carol, body: "Stranger" }),
+      );
+      await actor("carol");
+      assert.equal((await snapshot()).messages.length, 0);
+      await root();
+      await db.query("delete from public.activities where id=$1", [aid]);
+      await db.exec(
+        "delete from public.messages; delete from public.templates; delete from public.favorites;",
+      );
+    },
+  );
   let activity: string;
   await t.test(
     "approval protects meeting details and distinguishes Interested from Going",

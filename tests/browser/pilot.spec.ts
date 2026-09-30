@@ -5,145 +5,144 @@ async function demo(page: Page) {
 }
 async function create(page: Page, action = "Create a beacon") {
   await page
-    .getByRole("button", { name: "+ Create Beacon", exact: true })
+    .getByRole("button", { name: "Create Beacon", exact: true })
     .click();
   await page.getByRole("button", { name: action, exact: true }).click();
 }
-test("three tabs, easy RSVP, goals, squads and compact creation", async ({
+test("map header opens the Beacons tab", async ({ page }) => {
+  await demo(page);
+  await page.getByRole("button", { name: "View beacons", exact: true }).click();
+  await expect(page).toHaveURL(/\/activities$/);
+  await expect(page.getByText("Friends Now", { exact: true })).toBeVisible();
+});
+test("Squads is a unified people and groups directory", async ({ page }) => {
+  await demo(page);
+  await page.getByRole("tab", { name: "Squads", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Open squad The training crew" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Open profile Maya Chen" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Open private list Close Friends" }),
+  ).toBeVisible();
+  await page.screenshot({ path: "test-results/squads-directory-390.png" });
+
+  await page.getByRole("button", { name: "Squads", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Open profile Maya Chen" }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "Friends", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Open profile Maya Chen" }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Private lists", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Open private list Close Friends" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Find friends", exact: true }).click();
+  await expect(page.getByLabel("Find test friends")).toBeVisible();
+});
+test("four tabs, Now friends, favorites, joining and map chat", async ({
   page,
 }) => {
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await demo(page);
-  await expect(page.getByRole("tab")).toHaveCount(3);
+  await expect(page.getByRole("tab")).toHaveCount(4);
+  await expect(page.getByTestId("full-map-screen")).toBeVisible();
+  await page.getByRole("tab", { name: "Beacons", exact: true }).click();
+  await expect(page.getByText("Friends Now", { exact: true })).toBeVisible();
+  await expect(page.getByText(/Free til/).first()).toBeVisible();
+  await page.getByRole("button", { name: "Favorites", exact: true }).click();
   await page
-    .getByRole("button", { name: "View A few rounds. Good company." })
+    .getByRole("button", { name: "Favorite Maya Chen", exact: true })
     .click();
-  await page.getByRole("button", { name: "Maybe", exact: true }).click();
   await expect(
-    page
-      .getByText("You're considering it. No pressure.")
-      .filter({ visible: true }),
+    page.getByRole("button", { name: "Unfavorite Maya Chen", exact: true }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "I'm in", exact: true }).click();
-  await expect(
-    page.getByText("You're in. See you there!").filter({ visible: true }),
-  ).toBeVisible();
+  await page.getByRole("button", { name: "Done", exact: true }).click();
+  await page
+    .getByRole("button", {
+      name: "View A few rounds. Good company.",
+      exact: true,
+    })
+    .locator("..")
+    .getByRole("button", { name: "Join", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Going - view beacon", exact: true })
+    .click();
+  await expect(page.getByTestId("map-tooltip")).toBeVisible();
+  await expect(page.getByTestId("map-panel")).toHaveCount(0);
+  await page.getByRole("button", { name: "Beacon details" }).click();
+  await expect(page.getByTestId("map-panel")).toBeVisible();
+  await page.getByRole("tab", { name: "Chat", exact: true }).click();
+  await page.getByLabel("Message", { exact: true }).fill("On my way!");
+  await page.getByRole("button", { name: "Send message", exact: true }).click();
+  await expect(page.getByText("On my way!", { exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: "Overview", exact: true }).click();
   await page.getByRole("button", { name: "I'm out", exact: true }).click();
-  await expect(
-    page.getByRole("button", { name: "I'm in", exact: true }),
-  ).toBeVisible();
-  await page.getByLabel("Add a comment").fill("See you there!");
-  await page.getByRole("button", { name: "Post comment" }).click();
-  await expect(page.getByText("See you there!", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Back", exact: true }).click();
-  await page.getByRole("tab", { name: "Profile" }).click();
-  await page.getByRole("button", { name: "Goals & habits" }).click();
-  await page.getByRole("button", { name: "+ Goal", exact: true }).click();
-  await page.getByLabel("Title", { exact: true }).fill("Finish my first 10K");
-  await page.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(
-    page.getByRole("button", { name: "Edit goal Finish my first 10K" }),
-  ).toBeVisible();
-  await page.getByRole("tab", { name: "Squads" }).click();
-  await page.getByRole("button", { name: "+ Create a squad" }).click();
-  await page.getByLabel("Name", { exact: true }).fill("The study crew");
-  await page.getByRole("button", { name: "Create", exact: true }).click();
-  await page.getByRole("button", { name: "Open squad The study crew" }).click();
-  await page.getByRole("button", { name: "Create an activity" }).click();
-  await expect(
-    page.getByRole("button", { name: /The study crew/ }),
-  ).toBeVisible();
-  await page.getByLabel("What are you doing?").fill("A focused afternoon");
-  await page.getByRole("button", { name: "Light up this beacon" }).click();
-  await expect(
-    page.getByRole("button", { name: "View A focused afternoon" }),
-  ).toBeVisible();
+  await page.getByRole("tab", { name: "Chat", exact: true }).click();
+  await expect(page.getByText("A room for the crew")).toBeVisible();
+  await page.getByRole("button", { name: "Back to map tooltip" }).click();
+  await page.getByRole("button", { name: /^Inbox/ }).click();
+  await expect(page.getByText("Your inbox", { exact: true })).toBeVisible();
   expect(errors).toEqual([]);
 });
-test("status to beacon to real memory and repeat template", async ({
+test("personal templates save without publishing and hydrate creation", async ({
   page,
 }) => {
   await demo(page);
-  await create(page, "Share a status");
+  await page.getByRole("tab", { name: "Beacons", exact: true }).click();
+  await page.getByRole("button", { name: "My templates" }).click();
+  await page.getByRole("button", { name: "New template" }).click();
+  await page.getByLabel("Template name", { exact: true }).fill("Usual coffee");
+  await page.getByLabel("What are you doing?").fill("Coffee on Friday");
   await page
-    .getByRole("button", { name: "Coffee & catch-up", exact: true })
-    .click();
-  await page.getByRole("button", { name: "Share my status" }).click();
-  await page
-    .getByRole("button", { name: "View Coffee and a little catch-up" })
-    .click();
-  await page
-    .getByRole("button", { name: "Invite company: turn into a beacon" })
+    .getByRole("button", { name: "Save template", exact: true })
     .click();
   await expect(
-    page.getByRole("button", { name: "Invite company: turn into a beacon" }),
+    page.getByRole("button", { name: "View Coffee on Friday" }),
   ).toHaveCount(0);
-  await page.getByRole("button", { name: "Mark completed" }).click();
-  await page.getByLabel("Keep a memory").fill("We stayed for a second coffee.");
-  await page.getByRole("button", { name: "Save memory" }).click();
-  await expect(
-    page.getByText("We stayed for a second coffee.", { exact: true }),
-  ).toBeVisible();
-  await page.getByRole("button", { name: "Do this again" }).click();
+  await page.getByRole("button", { name: "My templates" }).click();
+  await page.getByRole("button", { name: "Use Usual coffee" }).click();
   await expect(page.getByLabel("What are you doing?")).toHaveValue(
-    "Coffee and a little catch-up",
+    "Coffee on Friday",
   );
-  await expect(
-    page.getByRole("button", { name: "Again? Coffee and a little catch-up" }),
-  ).toBeVisible();
-});
-test("normal and advanced retain edits and crew target", async ({ page }) => {
-  await demo(page);
-  await create(page);
   await page.getByRole("button", { name: "Light up this beacon" }).click();
-  await expect(page.getByRole("alert")).toBeVisible();
-  await page.getByLabel("What are you doing?").fill("Doubles in the park");
-  await page.getByRole("button", { name: "Advanced", exact: true }).click();
-  await page.getByLabel("How many make it happen? (optional)").fill("4");
-  await page
-    .getByRole("button", { name: "Host approval", exact: true })
-    .click();
-  await page.getByRole("button", { name: "Normal", exact: true }).click();
-  await expect(page.getByLabel("What are you doing?")).toHaveValue(
-    "Doubles in the park",
-  );
+  await page.getByRole("tab", { name: "Beacons", exact: true }).click();
   await expect(
-    page.getByText("People request to join. You give the okay."),
+    page.getByRole("button", { name: "View Coffee on Friday" }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Light up this beacon" }).click();
-  await expect(
-    page.getByRole("button", { name: "View Doubles in the park" }),
-  ).toContainText("Need 3 more");
 });
-test("demo never accesses contacts or live location", async ({ page }) => {
+test("status availability and removed goals", async ({ page }) => {
   await demo(page);
-  await page.getByText("Your live location is off", { exact: true }).click();
-  await page.getByRole("button", { name: "Start temporary sharing" }).click();
-  await expect(
-    page.getByText("The demo never shares your device location.", {
-      exact: false,
-    }),
-  ).toBeVisible();
-  await page.getByRole("button", { name: "Back", exact: true }).click();
-  await page.getByRole("tab", { name: "Squads" }).click();
-  await page.getByRole("button", { name: "Friends", exact: true }).click();
-  await page.getByRole("button", { name: "Connect with a contact" }).click();
-  await expect(
-    page.getByText(/The demo does not access contacts/),
-  ).toBeVisible();
+  await create(page, "Share a status");
+  await page.getByLabel("What are you doing?").fill("Anyone for lunch?");
+  await page.getByRole("button", { name: "Free to hang", exact: true }).click();
+  await page.getByRole("button", { name: "Share my status" }).click();
+  await page.getByRole("tab", { name: "Profile", exact: true }).click();
+  await expect(page.getByText("Goals & habits")).toHaveCount(0);
+  await page.getByRole("button", { name: "Edit profile", exact: true }).click();
+  await page.getByLabel("Lives in (optional)").fill("Chicago");
+  await page.getByRole("button", { name: "Save profile", exact: true }).click();
+  await expect(page.getByText("Chicago", { exact: true })).toBeVisible();
 });
-for (const width of [320, 375, 390]) {
-  test(`small phone layout at ${width}px`, async ({ page }) => {
-    await page.setViewportSize({ width, height: 667 });
+for (const width of [320, 390])
+  test(`persistent inbox and layout at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 740 });
     await demo(page);
-    for (const tab of ["Beacons", "Squads", "Profile"]) {
+    for (const tab of ["Map", "Beacons", "Squads", "Profile"]) {
       await page.getByRole("tab", { name: tab, exact: true }).click();
       await expect(
-        page.getByRole("tab", { name: tab, exact: true }),
+        page.getByRole("button", { name: /^Inbox/ }),
       ).toBeInViewport();
       await expect(
-        page.getByRole("button", { name: "+ Create Beacon", exact: true }),
+        page.getByRole("button", { name: "Create Beacon", exact: true }),
       ).toBeInViewport();
       expect(
         await page.evaluate(
@@ -151,41 +150,93 @@ for (const width of [320, 375, 390]) {
         ),
       ).toBe(true);
     }
-    await page.getByRole("switch", { name: "Show avatars" }).click();
-    await expect(page.getByTestId("user-avatar")).toHaveCount(0);
-    await page.getByRole("tab", { name: "Beacons" }).click();
-    await page.screenshot({ path: `test-results/beacons-${width}.png` });
+    await page.getByRole("tab", { name: "Beacons", exact: true }).click();
+    await page.getByRole("button", { name: "Compact", exact: true }).click();
+    await expect(
+      page.getByRole("button", {
+        name: "View A few rounds. Good company.",
+        exact: true,
+      }),
+    ).toBeVisible();
+    await page.screenshot({ path: `test-results/now-compact-${width}.png` });
+    await page.getByRole("button", { name: "Full", exact: true }).click();
+    await page.screenshot({ path: `test-results/now-${width}.png` });
     await create(page);
     await expect(
       page.getByRole("button", { name: "Light up this beacon" }),
     ).toBeInViewport();
-    await page.screenshot({ path: `test-results/create-${width}.png` });
   });
-}
-
-test("map preview opens a beacon and closes its sheet", async ({ page }) => {
+test("map pin opens inline details", async ({ page }) => {
   await demo(page);
   await page
-    .getByRole("button", { name: "Map: A few rounds. Good company." })
+    .getByRole("button", {
+      name: "Map: A few rounds. Good company.",
+      exact: true,
+    })
     .click();
+  await expect(page.getByTestId("map-tooltip")).toBeVisible();
+  await expect(page.getByTestId("map-panel")).toHaveCount(0);
+  await page.getByRole("button", { name: "Maybe", exact: true }).click();
+  await expect(page.getByTestId("map-panel")).toHaveCount(0);
+  await page.getByRole("button", { name: "In", exact: true }).click();
   await expect(
-    page.getByText("Meet you there?", { exact: true }),
-  ).toBeVisible();
-  await page
-    .getByRole("button", { name: "Open full beacon", exact: true })
-    .click();
+    page.getByRole("button", { name: "Going", exact: true }),
+  ).toBeDisabled();
+  await page.screenshot({ path: "test-results/map-inline-rsvp.png" });
+  await page.getByRole("button", { name: "Out", exact: true }).click();
+  await page.getByRole("button", { name: "Beacon details" }).click();
+  await expect(page.getByTestId("map-panel")).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Back", exact: true }),
+    page.getByRole("tab", { name: "Overview", exact: true }),
   ).toBeVisible();
-  await expect(page.getByText("Meet you there?", { exact: true })).toHaveCount(
-    0,
-  );
+  await page.getByRole("button", { name: "Back to map tooltip" }).click();
+  await expect(page.getByTestId("map-panel")).toHaveCount(0);
+  await expect(page.getByTestId("map-tooltip")).toBeVisible();
 });
 
-test("profile memories work after the inbox was already opened", async ({ page }) => {
+test("test neighborhood discovery and simulated acceptance", async ({
+  page,
+}) => {
   await demo(page);
-  await page.getByRole("button", { name: "Past & inbox" }).click();
+  await page.getByRole("tab", { name: "Beacons", exact: true }).click();
+  await expect(page.getByText(/23 friends/)).toBeVisible();
+  await page.getByRole("button", { name: "Find friends", exact: true }).click();
+  await page.getByLabel("Find test friends").fill("Luca Hayes");
+  await page
+    .getByRole("button", { name: "Add Luca Hayes", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Simulate Luca accepting", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Back to Friends Now", exact: true })
+    .click();
+  await expect(page.getByText(/24 friends/)).toBeVisible();
+  await page.getByRole("button", { name: "See more", exact: true }).click();
+  await page.getByLabel("Search your friends").fill("Luca");
+  await expect(
+    page.getByRole("button", { name: "See Luca Hayes now" }),
+  ).toBeVisible();
+});
+test("themes persist and mini avatar customization works", async ({ page }) => {
+  await demo(page);
   await page.getByRole("tab", { name: "Profile", exact: true }).click();
-  await page.getByRole("button", { name: "Your memories", exact: true }).click();
-  await expect(page.getByText("Little plans. Real memories.", { exact: true }).filter({ visible: true })).toBeVisible();
+  await page.getByRole("button", { name: "Midnight", exact: true }).click();
+  await page.getByRole("button", { name: "Style my mini" }).click();
+  await page.getByRole("button", { name: "Change outfit" }).click();
+  await page.getByRole("button", { name: "Use this mini" }).click();
+  await page.getByRole("tab", { name: "Beacons", exact: true }).click();
+  await page.screenshot({ path: "test-results/neighborhood-midnight.png" });
+  expect(await page.evaluate(() => localStorage.getItem("beacon.theme"))).toBe(
+    "Midnight",
+  );
+  await page.reload();
+  await page.getByRole("button", { name: /Explore the demo/ }).click();
+  await page.getByRole("tab", { name: "Profile", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Midnight", exact: true }),
+  ).toHaveCSS("background-color", "rgb(239, 243, 255)");
+  await page.getByRole("button", { name: "Sunset", exact: true }).click();
+  await page.getByRole("tab", { name: "Beacons", exact: true }).click();
+  await page.screenshot({ path: "test-results/neighborhood-sunset.png" });
 });
