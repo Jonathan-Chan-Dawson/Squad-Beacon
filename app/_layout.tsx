@@ -9,6 +9,8 @@ import "@/src/device";
 import { BeaconProvider, useBeacon } from "@/src/store";
 import { Auth, Onboard } from "@/src/Auth";
 import { Loading, Screen, Action, Txt } from "@/src/ui";
+import { WidgetPreferencesProvider } from "@/src/widgets/preferences";
+import { WidgetSync } from "@/src/widgets/WidgetRuntime";
 export { ErrorBoundary } from "expo-router";
 function ThemedStatusBar() {
   const { theme } = usePreferences();
@@ -47,13 +49,22 @@ function Navigation() {
     </Stack>
   );
 }
+function AppRuntime() {
+  const { userId } = useBeacon();
+  return (
+    <WidgetPreferencesProvider accountId={userId}>
+      <WidgetSync />
+      <ThemedStatusBar />
+      <Navigation />
+    </WidgetPreferencesProvider>
+  );
+}
 export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <PreferencesProvider>
         <BeaconProvider>
-          <ThemedStatusBar />
-          <Navigation />
+          <AppRuntime />
         </BeaconProvider>
       </PreferencesProvider>
     </SafeAreaProvider>

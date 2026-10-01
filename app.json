@@ -47,7 +47,90 @@
           "contactsPermission": "Choose a contact to invite to Squad Beacon. Your address book is never uploaded."
         }
       ],
-      "expo-widgets"
+      [
+        "expo-widgets",
+        {
+          "widgets": [
+            {
+              "name": "FriendsNowWidget",
+              "displayName": "Friends Now",
+              "description": "See who is free and which friends have an active beacon.",
+              "ios": {
+                "supportedFamilies": [
+                  "systemSmall",
+                  "systemMedium",
+                  "systemLarge",
+                  "accessoryRectangular",
+                  "accessoryInline"
+                ],
+                "configuration": {
+                  "title": "Choose a circle",
+                  "description": "Show everyone or one of your three circles.",
+                  "parameters": {
+                    "circle": {
+                      "title": "Friends to show",
+                      "type": "enum",
+                      "default": "all",
+                      "values": [
+                        { "name": "All friends", "value": "all" },
+                        { "name": "Circle 1", "value": "circle1" },
+                        { "name": "Circle 2", "value": "circle2" },
+                        { "name": "Circle 3", "value": "circle3" }
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "SquadBeaconsWidget",
+              "displayName": "Circle Beacons",
+              "description": "A little map-like pulse of active plans in a circle.",
+              "ios": {
+                "supportedFamilies": ["systemMedium", "systemLarge"],
+                "configuration": {
+                  "title": "Choose a circle",
+                  "description": "Use a circle configured in Widget Studio.",
+                  "parameters": {
+                    "circle": {
+                      "title": "Circle",
+                      "type": "enum",
+                      "default": "circle1",
+                      "values": [
+                        { "name": "Circle 1", "value": "circle1" },
+                        { "name": "Circle 2", "value": "circle2" },
+                        { "name": "Circle 3", "value": "circle3" }
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            {
+              "name": "NextBeaconWidget",
+              "displayName": "Next Beacon",
+              "description": "Your next beacon and when it begins.",
+              "ios": {
+                "supportedFamilies": [
+                  "systemSmall",
+                  "systemMedium",
+                  "accessoryCircular",
+                  "accessoryRectangular",
+                  "accessoryInline"
+                ]
+              }
+            },
+            {
+              "name": "CirclePulseWidget",
+              "displayName": "Circle Pulse",
+              "description": "A compact count of free friends and active beacons.",
+              "ios": {
+                "supportedFamilies": ["systemSmall", "systemMedium"]
+              }
+            }
+          ]
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true

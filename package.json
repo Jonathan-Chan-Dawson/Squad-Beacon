@@ -3,6 +3,7 @@
   "main": "expo-router/entry",
   "version": "1.0.0",
   "dependencies": {
+    "@expo/ui": "~57.0.21",
     "@react-native-community/datetimepicker": "9.1.0",
     "@supabase/supabase-js": "^2.115.0",
     "expo": "~57.0.26",
@@ -63,7 +64,7 @@
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
     "lint": "eslint app src components --max-warnings=0",
-    "test": "tsx --test tests/domain.test.ts tests/database.test.ts",
+    "test": "tsx --test tests/domain.test.ts tests/database.test.ts tests/widgets.test.ts",
     "test:e2e": "playwright test",
     "export:web": "expo export --platform web"
   },

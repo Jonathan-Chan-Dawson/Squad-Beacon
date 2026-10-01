@@ -4,6 +4,7 @@ import { avatarSeed } from "../avatarArt";
 import React, { useState } from "react";
 import { Text, View } from "react-native";
 import { router } from "expo-router";
+import type { Href } from "expo-router";
 import { ShieldCheck } from "lucide-react-native";
 import { useBeacon } from "../store";
 import { featuredActivity } from "../domain";
@@ -11,6 +12,7 @@ import { ProfileAvatar } from "../ProfileAvatar";
 import { AvatarToggle } from "../AvatarToggle";
 import { uploadAvatar } from "../avatar";
 import { ActivityCard } from "../ActivityCard";
+import WidgetAdviceTip from "../widgets/WidgetAdviceTip";
 import { enablePush, stopDeviceLocation, clearPush } from "../device";
 import { supabase } from "../supabase";
 import {
@@ -63,6 +65,12 @@ export default function ProfileScreen() {
           })
         }
       />
+      <Button
+        title="Widget Studio"
+        secondary
+        onPress={() => router.push("/widgets" as Href)}
+      />
+      <WidgetAdviceTip />
       <View style={styles.card}>
         <Text style={styles.h2}>Make it feel like you</Text>
         <Chips
@@ -149,6 +157,11 @@ export default function ProfileScreen() {
         secondary
         title="Privacy, safety & support"
         onPress={() => router.push("/legal")}
+      />
+      <Button
+        secondary
+        title="Help & tutorial"
+        onPress={() => router.push("/help" as Href)}
       />
       {data.is_moderator && (
         <Button
