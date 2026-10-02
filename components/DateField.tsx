@@ -1,5 +1,5 @@
 import React from "react";
-import { Field } from "@/src/ui";
+import { Field } from "@/src/shared/ui";
 export default function DateField({
   label,
   value,

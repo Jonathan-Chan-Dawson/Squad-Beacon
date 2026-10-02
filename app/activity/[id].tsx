@@ -1,11 +1,16 @@
-import { BeaconResponse, BeaconMomentum } from "@/src/BeaconResponse";
+import { BeaconResponse, BeaconMomentum } from "@/src/features/beacons/BeaconResponse";
+import { BeaconTools } from "@/src/features/beacons/BeaconTools";
+import { BeaconSettings } from "@/src/features/beacons/BeaconSettings";
+import { AttendanceControls } from "@/src/features/beacons/AttendanceControls";
+import { canManageBeaconSettings, canWriteBeaconModule } from "@/src/features/beacons/permissions";
+import { beaconSettingsDraftKey } from "@/src/features/beacons/controls";
 import React, { useState } from "react";
-import { useNow } from "@/src/useNow";
+import { useNow } from "@/src/shared/useNow";
 import { Text, View, Linking } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import DateField from "@/components/DateField";
-import { useBeacon } from "@/src/store";
-import { activityWhen, friendIds, validateActivity } from "@/src/domain";
+import { useBeacon } from "@/src/shared/store";
+import { activityWhen, friendIds, validateActivity } from "@/src/shared/domain";
 import {
   Action,
   Avatar,
@@ -16,7 +21,7 @@ import {
   Sheet,
   Txt,
   useTheme,
-} from "@/src/ui";
+} from "@/src/shared/ui";
 export default function ActivityDetail() {
   const { styles } = useTheme();
 
@@ -46,10 +51,13 @@ export default function ActivityDetail() {
     );
   const owner = data.profiles.find((p) => p.id === a.owner_id),
     place = data.places.find((p) => p.activity_id === id),
+    plan = a.plan_id ? data.plans.find((p) => p.id === a.plan_id) : undefined,
+    linkedAspirations = (owner?.aspiration_goals ?? []).filter((goal) => a.aspiration_ids.includes(goal.id)),
     mine = a.owner_id === userId,
     rsvps = data.rsvps.filter((r) => r.activity_id === id),
     open = a.status === "scheduled" && Date.parse(a.ends_at) > now,
-    friends = friendIds(data, userId!);
+    friends = friendIds(data, userId!),
+    canComment = !!userId && canWriteBeaconModule(data, a, userId, "experiences");
   return (
     <Screen
       title={a.title}
@@ -79,6 +87,8 @@ export default function ActivityDetail() {
           {new Date(a.ends_at).toLocaleString()}
         </Txt>
         <Txt muted>Event timezone: {a.timezone}</Txt>
+        {plan && <Button title={`Part of ${plan.title}`} secondary onPress={() => router.push({ pathname: "/plan/[id]", params: { id: plan.id } })} />}
+        {linkedAspirations.length > 0 && <Txt muted>For: {linkedAspirations.map((goal) => goal.title).join(" · ")}</Txt>}
         <Txt>
           {place?.label ||
             (place
@@ -101,6 +111,14 @@ export default function ActivityDetail() {
       </View>
       <BeaconMomentum activity={a} />
       <BeaconResponse activity={a} />
+      <AttendanceControls activity={a} />
+      {userId && canManageBeaconSettings(data, a, userId) && (
+        <BeaconSettings
+          key={beaconSettingsDraftKey(a)}
+          activity={a}
+          onSave={(settings) => act("set_beacon_controls", { id, ...settings })}
+        />
+      )}
       {mine && a.mode === "solo" && open && (
         <Action
           title="Invite company: turn into a beacon"
@@ -175,16 +193,16 @@ export default function ActivityDetail() {
             ))}
         </>
       )}
+      <BeaconTools key={a.id} activity={a} />
       <Text style={styles.h2}>
         {a.status === "completed"
-          ? "The moments worth keeping"
+          ? "Memory comments"
           : "Plan together"}
       </Text>
       {a.status === "completed" && (
         <>
           <Txt muted>
-            A small detail, an inside joke, something you want to remember. Keep
-            it real.
+            Memory comments are shared text. Media uploads aren’t available yet.
           </Txt>
           <Button
             title="Do this again"
@@ -212,21 +230,27 @@ export default function ActivityDetail() {
             <Txt>{c.body}</Txt>
           </View>
         ))}
-      <Field
-        label={a.status === "completed" ? "Keep a memory" : "Add a comment"}
-        value={comment}
-        onChangeText={setComment}
-        multiline
-        maxLength={2000}
-      />
-      <Action
-        title={a.status === "completed" ? "Save memory" : "Post comment"}
-        run={async () => {
-          if (!comment.trim()) throw new Error("Write a comment first.");
-          await act("comment", { id, body: comment.trim() });
-          setComment("");
-        }}
-      />
+      {canComment ? (
+        <>
+          <Field
+            label={a.status === "completed" ? "Add a memory comment" : "Add a comment"}
+            value={comment}
+            onChangeText={setComment}
+            multiline
+            maxLength={2000}
+          />
+          <Action
+            title="Post comment"
+            run={async () => {
+              if (!comment.trim()) throw new Error("Write a comment first.");
+              await act("comment", { id, body: comment.trim() });
+              setComment("");
+            }}
+          />
+        </>
+      ) : (
+        <Txt muted>Memory comments are paused by the host or unavailable for this beacon.</Txt>
+      )}
       {!mine && (
         <Button
           secondary

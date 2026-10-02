@@ -1,8 +1,8 @@
 import React, { useState } from "react";
 import { View, Text } from "react-native";
-import { useBeacon } from "@/src/store";
-import { supabase } from "@/src/supabase";
-import { Action, Button, Screen, Sheet, Txt, useTheme } from "@/src/ui";
+import { useBeacon } from "@/src/shared/store";
+import { supabase } from "@/src/shared/supabase";
+import { Action, Button, Screen, Sheet, Txt, useTheme } from "@/src/shared/ui";
 export default function Moderation() {
   const { styles } = useTheme();
 

@@ -1,1 +1,1 @@
-export { default } from "@/src/screens/ActivitiesScreen";
+export { default } from "@/src/features/beacons/screens/ActivitiesScreen";

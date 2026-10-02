@@ -1,0 +1,8 @@
+Beacons feature
+
+- screens/ActivitiesScreen.tsx: Current, Upcoming, and Past beacon feed.
+- ActivityCard.tsx, ActivityBadge.tsx, BeaconResponse.tsx: feed rows, status, and RSVP controls.
+- BeaconTools.tsx, beaconModules.ts: shared checklist/journal tools and access helpers.
+- controls.ts, permissions.ts: organizer roles/capabilities and authorization helpers.
+- createTiming.ts, focusTimer.ts: duration/deadline and local focus timer helpers.
+- PeriodTabs.tsx: activity period selector.

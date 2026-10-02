@@ -1,6 +1,6 @@
 import React from "react";
 import { Text, View, Linking } from "react-native";
-import { Action, Screen, Txt, useTheme } from "@/src/ui";
+import { Action, Screen, Txt, useTheme } from "@/src/shared/ui";
 export default function Legal() {
   const { styles } = useTheme();
 

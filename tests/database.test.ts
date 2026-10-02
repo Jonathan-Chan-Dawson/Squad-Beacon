@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { PGlite } from "@electric-sql/pglite";
+import { canUseBeaconModules } from "../src/features/beacons/beaconModules";
+import { normalizeData } from "../src/shared/types";
 const db = new PGlite();
 const ids = {
   alice: "11111111-1111-4111-8111-111111111111",
@@ -68,6 +70,87 @@ test("database migration and access-control acceptance scenarios", async (t) => 
       throw new Error("Migration " + name + ": " + (e as Error).message);
     }
   }
+  const legacyId = "66666666-6666-4666-8666-666666666666";
+  const legacyActivityId = "77777777-7777-4777-8777-777777777779";
+  const legacyNoteId = "77777777-7777-4777-8777-777777777778";
+  const legacyInvitedUserId = "88888888-8888-4888-8888-888888888888";
+  const legacyGoingUserId = "99999999-9999-4999-8999-999999999999";
+  await root();
+  await db.query("insert into auth.users values($1,now())", [legacyId]);
+  await db.query(
+    "insert into public.profiles(id,username,name) values($1,'legacy_user','Legacy user')",
+    [legacyId],
+  );
+  await db.query("insert into auth.users values($1,now()),($2,now())", [
+    legacyInvitedUserId,
+    legacyGoingUserId,
+  ]);
+  await db.query(
+    "insert into public.profiles(id,username,name) values($1,'legacy_invited','Legacy invited'),($2,'legacy_going','Legacy going')",
+    [legacyInvitedUserId, legacyGoingUserId],
+  );
+  for (const name of [
+    "202610010001_plans_profile_survey.sql",
+    "202610010002_beacon_modules.sql",
+  ]) {
+    const sql = readFileSync(
+      new URL("../supabase/migrations/" + name, import.meta.url),
+      "utf8",
+    ).replace("create extension if not exists pgcrypto;", "");
+    try {
+      await db.exec(sql);
+    } catch (e) {
+      throw new Error("Migration " + name + ": " + (e as Error).message);
+    }
+  }
+  await root();
+  await db.query(
+    "insert into public.activities(id,owner_id,title,category,mode,starts_at,ends_at,timezone,audience) values($1,$2,'Legacy journal','Social','solo',now()+interval '1 day',now()+interval '2 days','UTC','private')",
+    [legacyActivityId, legacyId],
+  );
+  await db.query(
+    "insert into public.beacon_notes(id,activity_id,author_id,body,created_at) values($1,$2,$3,'Legacy memory','2026-09-01T12:00:00Z')",
+    [legacyNoteId, legacyActivityId, legacyId],
+  );
+  await db.query(
+    "insert into public.rsvps(activity_id,user_id,status,approved) values($1,$2,'invited',true),($1,$3,'going',true)",
+    [legacyActivityId, legacyInvitedUserId, legacyGoingUserId],
+  );
+  const libraryMigration = readFileSync(
+    new URL("../supabase/migrations/202610010003_shared_libraries.sql", import.meta.url),
+    "utf8",
+  ).replace("create extension if not exists pgcrypto;", "");
+  try {
+    await db.exec(libraryMigration);
+  } catch (e) {
+    throw new Error("Migration 202610010003_shared_libraries.sql: " + (e as Error).message);
+  }
+  const planningMigration = readFileSync(
+    new URL("../supabase/migrations/202610010004_planning_threads.sql", import.meta.url),
+    "utf8",
+  ).replace("create extension if not exists pgcrypto;", "");
+  try {
+    await db.exec(planningMigration);
+  } catch (e) {
+    throw new Error("Migration 202610010004_planning_threads.sql: " + (e as Error).message);
+  }
+  const controlsMigration = readFileSync(
+    new URL("../supabase/migrations/202610010005_beacon_controls.sql", import.meta.url),
+    "utf8",
+  ).replace("create extension if not exists pgcrypto;", "");
+  try {
+    await db.exec(controlsMigration);
+  } catch (e) {
+    throw new Error("Migration 202610010005_beacon_controls.sql: " + (e as Error).message);
+  }
+  await root();
+  const invitationBackfill = await db.query<{ user_id: string; invited_by: string }>(
+    "select user_id,invited_by from public.beacon_invitation_grants where activity_id=$1",
+    [legacyActivityId],
+  );
+  assert.deepEqual(invitationBackfill.rows, [
+    { user_id: legacyInvitedUserId, invited_by: legacyId },
+  ]);
   for (const [name, id] of Object.entries(ids)) {
     await root();
     await db.query("insert into auth.users values($1,now())", [id]);
@@ -79,6 +162,39 @@ test("database migration and access-control acceptance scenarios", async (t) => 
       timezone: "America/Chicago",
     });
   }
+  await t.test(
+    "old profiles skip the new survey while newly onboarded accounts start pending",
+    async () => {
+      await root();
+      const old = await db.query<{ onboarding_survey_status: string }>(
+        "select onboarding_survey_status from public.profiles where id=$1",
+        [legacyId],
+      );
+      assert.equal(old.rows[0].onboarding_survey_status, "skipped");
+      const oldNote = await db.query<{
+        body: string;
+        revision: number;
+        created_at: string;
+        updated_at: string;
+      }>(
+        "select body,revision,created_at,updated_at from public.beacon_notes where id=$1",
+        [legacyNoteId],
+      );
+      assert.equal(oldNote.rows[0].body, "Legacy memory");
+      assert.equal(oldNote.rows[0].revision, 0);
+      assert.equal(
+        new Date(oldNote.rows[0].updated_at).getTime(),
+        new Date(oldNote.rows[0].created_at).getTime(),
+      );
+      await actor("alice");
+      const fresh = (await snapshot()).profiles.find(
+        (profile: any) => profile.id === ids.alice,
+      );
+      assert.equal(fresh.onboarding_survey_status, "pending");
+      assert.deepEqual(fresh.identity_tags, []);
+      assert.deepEqual(fresh.aspiration_goals, []);
+    },
+  );
   await t.test(
     "anonymous cannot read the API or invoke privileged functions",
     async () => {
@@ -280,30 +396,1536 @@ test("database migration and access-control acceptance scenarios", async (t) => 
       );
     },
   );
+  await t.test(
+    "profile survey data is validated, retained on partial saves, and linked to beacons",
+    async () => {
+      await actor("alice");
+      const profile = (await snapshot()).profiles.find(
+        (item: any) => item.id === ids.alice,
+      );
+      await action("save_profile", {
+        ...profile,
+        identity_tags: ["Runner", "Spanish speaker"],
+        aspiration_goals: [
+          {
+            id: "run-weekly",
+            title: "Run together",
+            category: "Fitness",
+            target_per_week: 3,
+          },
+        ],
+        onboarding_survey_status: "completed",
+      });
+      const saved = (await snapshot()).profiles.find(
+        (item: any) => item.id === ids.alice,
+      );
+      assert.deepEqual(saved.identity_tags, ["Runner", "Spanish speaker"]);
+      assert.equal(saved.aspiration_goals[0].id, "run-weekly");
+      assert.equal(saved.onboarding_survey_status, "completed");
+      const {
+        identity_tags: _identity,
+        aspiration_goals: _goals,
+        onboarding_survey_status: _status,
+        ...legacyFields
+      } = saved;
+      await action("save_profile", {
+        ...legacyFields,
+        onboarding_survey_status: "skipped",
+      });
+      const afterPartial = (await snapshot()).profiles.find(
+        (item: any) => item.id === ids.alice,
+      );
+      assert.deepEqual(afterPartial.identity_tags, ["Runner", "Spanish speaker"]);
+      assert.equal(afterPartial.aspiration_goals[0].id, "run-weekly");
+      assert.equal(afterPartial.onboarding_survey_status, "skipped");
+      await assert.rejects(() =>
+        action("save_profile", {
+          ...afterPartial,
+          aspiration_goals: [
+            {
+              id: "bad-target",
+              title: "Impossible",
+              category: "Fitness",
+              target_per_week: 8,
+            },
+          ],
+        }),
+      );
+      const activity = String(
+        (
+          await makeActivity({
+            aspiration_ids: ["run-weekly"],
+          })
+        ).id,
+      );
+      assert.deepEqual(
+        (await snapshot()).activities.find((item: any) => item.id === activity)
+          .aspiration_ids,
+        ["run-weekly"],
+      );
+      await assert.rejects(() =>
+        makeActivity({ aspiration_ids: ["someone-elses-goal"] }),
+      );
+    },
+  );
+  await t.test(
+    "plans create ordered beacons atomically and preserve edited template steps",
+    async () => {
+      await actor("alice");
+      const profile = (await snapshot()).profiles.find(
+          (item: any) => item.id === ids.alice,
+        ),
+        localDate = new Intl.DateTimeFormat("en-CA", {
+          timeZone: "America/Chicago",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        })
+          .format(new Date())
+          .replaceAll("/", "-"),
+        tomorrow = new Date(Date.parse(localDate + "T12:00:00Z") + 86400000)
+          .toISOString()
+          .slice(0, 10),
+        step = (extra: Record<string, unknown> = {}) => ({
+          title: "Run together",
+          description: "Easy pace",
+          category: "Fitness",
+          location_name: "Lakefront",
+          lat: 41.8,
+          lng: -87.6,
+          day_offset: 0,
+          start_time: "09:00",
+          duration_minutes: 60,
+          aspiration_ids: ["run-weekly"],
+          ...extra,
+        }),
+        steps = [step(), step({ title: "Coffee", day_offset: 2, start_time: "10:00", duration_minutes: 30, aspiration_ids: [] })];
+      assert.ok(profile);
+      const plan = await action("create_plan", {
+        title: "Weekend rhythm",
+        description: "Move, then refuel.",
+        timezone: "America/Chicago",
+        start_date: tomorrow,
+        steps,
+      });
+      const planId = String(plan.id),
+        generated = plan.activity_ids as string[];
+      assert.equal(generated.length, 2);
+      let aliceSnapshot = await snapshot();
+      const activities = aliceSnapshot.activities.filter(
+        (item: any) => item.plan_id === planId,
+      );
+      assert.deepEqual(
+        activities.map((item: any) => item.plan_step_index),
+        [0, 1],
+      );
+      assert.deepEqual(activities[0].aspiration_ids, ["run-weekly"]);
+      await actor("bob");
+      assert.equal(
+        (await snapshot()).plans.some((item: any) => item.id === planId),
+        false,
+      );
+      await assert.rejects(() => action("cancel_plan", { id: planId }));
+      await actor("alice");
+
+      const templateResult = await action("save_plan_template", {
+          title: "Easy morning",
+          description: "Personal plan template.",
+          timezone: "America/Chicago",
+          steps: [step({ title: "Template title" })],
+        }),
+        templateId = String(templateResult.id),
+        editedSteps = [
+          step({ title: "Edited preview title", start_time: "11:00" }),
+          step({ title: "Added preview beacon", day_offset: 1, aspiration_ids: [] }),
+        ];
+      const fromTemplate = await action("create_plan", {
+        title: "Edited template plan",
+        description: "Uses the preview changes.",
+        timezone: "America/Chicago",
+        start_date: tomorrow,
+        template_id: templateId,
+        steps: editedSteps,
+      });
+      aliceSnapshot = await snapshot();
+      const edited = aliceSnapshot.activities.filter(
+        (item: any) => item.plan_id === fromTemplate.id,
+      );
+      assert.equal(edited.length, 2);
+      assert.equal(edited[0].title, "Edited preview title");
+      assert.equal(edited[1].title, "Added preview beacon");
+
+      const beforeRollback = await db.query<{ plans: number; activities: number }>(
+        "select (select count(*)::int from public.plans) plans,(select count(*)::int from public.activities) activities",
+      );
+      await assert.rejects(() =>
+        action("create_plan", {
+          title: "Bad overlap",
+          timezone: "America/Chicago",
+          start_date: tomorrow,
+          steps: [step({ aspiration_ids: [] }), step({ start_time: "09:30", aspiration_ids: [] })],
+        }),
+      );
+      await assert.rejects(() =>
+        action("create_plan", {
+          title: "Missing steps",
+          timezone: "America/Chicago",
+          start_date: tomorrow,
+        }),
+      );
+      const afterRollback = await db.query<{ plans: number; activities: number }>(
+        "select (select count(*)::int from public.plans) plans,(select count(*)::int from public.activities) activities",
+      );
+      assert.deepEqual(afterRollback.rows[0], beforeRollback.rows[0]);
+      assert.equal((await db.query("select * from public.plan_templates")).rows.length, 1);
+
+      await action("activity_status", { id: generated[0], status: "completed" });
+      await action("cancel_plan", { id: planId });
+      const cancelled = await snapshot();
+      assert.equal(cancelled.plans.find((item: any) => item.id === planId).status, "cancelled");
+      assert.equal(cancelled.activities.find((item: any) => item.id === generated[0]).status, "completed");
+      assert.equal(cancelled.activities.find((item: any) => item.id === generated[1]).status, "cancelled");
+      await action("cancel_plan", { id: planId });
+      assert.equal(
+        (await snapshot()).activities.find((item: any) => item.id === generated[1])
+          .status,
+        "cancelled",
+      );
+    },
+  );
+  await t.test(
+    "squad plans inherit member visibility and squad templates are admin-write only",
+    async () => {
+      await actor("alice");
+      const created = await action("create_squad", { name: "Plan crew" }),
+        squadId = String(created.squad_id);
+      await action("invite_squad", { id: squadId, user_id: ids.bob });
+      await actor("bob");
+      const invite = (await snapshot()).squad_invites.find(
+        (item: any) => item.squad_id === squadId,
+      );
+      await action("accept_squad", { id: invite.id });
+      await actor("alice");
+      const step = {
+          title: "Crew walk",
+          description: "",
+          category: "Social",
+          location_name: "The park",
+          lat: null,
+          lng: null,
+          day_offset: 0,
+          start_time: "10:00",
+          duration_minutes: 45,
+          aspiration_ids: ["run-weekly"],
+        },
+        savedTemplate = await action("save_plan_template", {
+          squad_id: squadId,
+          title: "Crew Saturday",
+          description: "A reusable squad plan.",
+          timezone: "America/Chicago",
+          steps: [step],
+        }),
+        templateId = String(savedTemplate.id),
+        squadLocalToday = new Intl.DateTimeFormat("en-CA", {
+          timeZone: "America/Chicago",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+        })
+          .format(new Date())
+          .replaceAll("/", "-"),
+        squadTomorrow = new Date(
+          Date.parse(squadLocalToday + "T12:00:00Z") + 86400000,
+        )
+          .toISOString()
+          .slice(0, 10);
+      await actor("bob");
+      assert.equal(
+        (await snapshot()).plan_templates.find((item: any) => item.id === templateId)
+          .steps[0].aspiration_ids.length,
+        0,
+      );
+      await assert.rejects(() =>
+        action("save_plan_template", {
+          id: templateId,
+          squad_id: squadId,
+          title: "Attempted overwrite",
+          timezone: "America/Chicago",
+          steps: [step],
+        }),
+      );
+      const sharedPlan = await action("create_plan", {
+        title: "Crew Saturday",
+        description: "Together.",
+        timezone: "America/Chicago",
+        start_date: squadTomorrow,
+        squad_id: squadId,
+        template_id: templateId,
+        steps: [{ ...step, aspiration_ids: [] }],
+      });
+      assert.equal((await snapshot()).rsvps.some(
+        (item: any) => item.activity_id === sharedPlan.activity_ids[0],
+      ), false);
+      await actor("carol");
+      const hidden = await snapshot();
+      assert.equal(hidden.plans.some((item: any) => item.id === sharedPlan.id), false);
+      assert.equal(hidden.plan_templates.some((item: any) => item.id === templateId), false);
+      await assert.rejects(() =>
+        action("create_plan", {
+          title: "Not a member",
+          timezone: "America/Chicago",
+          start_date: squadTomorrow,
+          squad_id: squadId,
+          steps: [step],
+        }),
+      );
+      await actor("alice");
+      assert.equal(
+        (await snapshot()).plans.some((item: any) => item.id === sharedPlan.id),
+        true,
+      );
+    },
+  );
+  const controlActivityIds: string[] = [],
+    controlSquadIds: string[] = [],
+    controlListIds: string[] = [],
+    controlFriendshipIds: string[] = [],
+    controlNoticeIds: string[] = [];
   let activity: string;
+  await t.test(
+    "beacon controls use canonical activity IDs and preserve active role access",
+    async () => {
+      await actor("alice");
+      await action("friend_request", { username: "carol" });
+      const carolRequest = (await snapshot()).friendships.find(
+        (item: any) => item.sender_id === ids.alice && item.recipient_id === ids.carol,
+      );
+      controlFriendshipIds.push(carolRequest.id);
+      await actor("carol");
+      await action("accept_friend", { id: carolRequest.id });
+      await actor("alice");
+      await action("friend_request", { username: "teen" });
+      const teenRequest = (await snapshot()).friendships.find(
+        (item: any) => item.sender_id === ids.alice && item.recipient_id === ids.teen,
+      );
+      controlFriendshipIds.push(teenRequest.id);
+      await actor("teen");
+      await action("accept_friend", { id: teenRequest.id });
+
+      await actor("alice");
+      const fullBeacon = String(
+          (await makeActivity({
+            capacity_limit: 2,
+            capacity_policy: "strict",
+            enable_reactions: false,
+          })).activity_id,
+        ),
+        decoyBeacon = String((await makeActivity()).activity_id);
+      controlActivityIds.push(fullBeacon, decoyBeacon);
+      await actor("carol");
+      await action("rsvp", { id: fullBeacon, status: "going" });
+      await actor("bob");
+      await assert.rejects(() =>
+        action("rsvp", {
+          id: fullBeacon,
+          activity_id: decoyBeacon,
+          status: "going",
+        }),
+      );
+      await assert.rejects(() =>
+        action("react", { id: fullBeacon, activity_id: decoyBeacon }),
+      );
+      await actor("alice");
+      await root();
+      assert.equal(
+        (
+          await db.query<{ count: number }>(
+            "select count(*)::int count from public.rsvps where activity_id=$1 and user_id=$2",
+            [fullBeacon, ids.bob],
+          )
+        ).rows[0].count,
+        0,
+      );
+
+      await actor("alice");
+      const roleBeacon = String((await makeActivity()).activity_id);
+      controlActivityIds.push(roleBeacon);
+      await actor("bob");
+      await action("rsvp", { id: roleBeacon, status: "going" });
+      await actor("carol");
+      await action("rsvp", { id: roleBeacon, status: "going" });
+      await actor("teen");
+      await action("rsvp", { id: roleBeacon, status: "going" });
+      await actor("alice");
+      await action("assign_beacon_role", {
+        id: roleBeacon,
+        user_id: ids.bob,
+        role: "coowner",
+      });
+      await action("assign_beacon_role", {
+        id: roleBeacon,
+        user_id: ids.carol,
+        role: "coowner",
+      });
+      await action("assign_beacon_role", {
+        id: roleBeacon,
+        user_id: ids.teen,
+        role: "admin",
+      });
+      await actor("bob");
+      await assert.rejects(() =>
+        action("assign_beacon_role", {
+          id: roleBeacon,
+          user_id: ids.carol,
+          role: "admin",
+        }),
+      );
+      await assert.rejects(() =>
+        action("remove_rsvp", { id: roleBeacon, user_id: ids.carol }),
+      );
+      await actor("teen");
+      await assert.rejects(() =>
+        action("set_beacon_controls", { id: roleBeacon, manual_closed: true }),
+      );
+      await assert.rejects(() =>
+        action("remove_rsvp", { id: roleBeacon, user_id: ids.bob }),
+      );
+      await actor("bob");
+      await actor("carol");
+      await action("set_beacon_attendance", {
+        id: roleBeacon,
+        state: "arriving",
+      });
+      await actor("alice");
+      await action("invite_activity", {
+        id: roleBeacon,
+        user_id: ids.carol,
+      });
+      const afterInvite = await snapshot();
+      assert.equal(
+        afterInvite.rsvps.find(
+          (item: any) => item.activity_id === roleBeacon && item.user_id === ids.carol,
+        ).status,
+        "going",
+      );
+      assert.equal(
+        afterInvite.beacon_roles.find(
+          (item: any) => item.activity_id === roleBeacon && item.user_id === ids.carol,
+        ).role,
+        "coowner",
+      );
+      assert.equal(
+        afterInvite.beacon_attendance.find(
+          (item: any) => item.activity_id === roleBeacon && item.user_id === ids.carol,
+        ).state,
+        "arriving",
+      );
+
+      await action("create_list", { name: "Controls access" });
+      const listId = String(
+        (await snapshot()).lists.find((item: any) => item.name === "Controls access").id,
+      );
+      controlListIds.push(listId);
+      await action("list_member", {
+        id: listId,
+        user_id: ids.bob,
+        add: true,
+      });
+      const listBeacon = String(
+        (await makeActivity({ audience: "list", audience_id: listId })).activity_id,
+      );
+      controlActivityIds.push(listBeacon);
+      await actor("bob");
+      await action("rsvp", { id: listBeacon, status: "going" });
+      const bobListSnapshot = normalizeData({
+        ...(await snapshot()),
+        viewer_id: ids.bob,
+      });
+      const bobListActivity = bobListSnapshot.activities.find(
+        (item) => item.id === listBeacon,
+      );
+      assert.equal(bobListActivity?.viewer_can_access, true);
+      assert.equal(bobListActivity?.accepted_seat_count, 2);
+      assert.equal(
+        bobListActivity &&
+          canUseBeaconModules(bobListSnapshot, bobListActivity, ids.bob),
+        true,
+      );
+      await actor("alice");
+      await action("assign_beacon_role", {
+        id: listBeacon,
+        user_id: ids.bob,
+        role: "coowner",
+      });
+      await action("list_member", {
+        id: listId,
+        user_id: ids.bob,
+        add: false,
+      });
+      await actor("bob");
+      await assert.rejects(() =>
+        action("set_beacon_controls", {
+          id: listBeacon,
+          manual_closed: true,
+        }),
+      );
+      await assert.rejects(() =>
+        action("set_beacon_attendance", {
+          id: listBeacon,
+          state: "arriving",
+        }),
+      );
+      await actor("alice");
+      await action("list_member", {
+        id: listId,
+        user_id: ids.bob,
+        add: true,
+      });
+      await actor("bob");
+      await action("set_beacon_controls", {
+        id: listBeacon,
+        manual_closed: true,
+      });
+    },
+  );
+  await t.test(
+    "strict capacity counts accepted seats, keeps retries harmless, and checks approvals",
+    async () => {
+      await actor("alice");
+      const softBeacon = String(
+          (await makeActivity({ capacity_limit: 2, capacity_policy: "strict" })).activity_id,
+        ),
+        approvalBeacon = String(
+          (
+            await makeActivity({
+              approval_required: true,
+              capacity_limit: 2,
+              capacity_policy: "strict",
+            })
+          ).activity_id,
+        );
+      controlActivityIds.push(softBeacon, approvalBeacon);
+
+      await actor("bob");
+      await action("rsvp", { id: softBeacon, status: "going" });
+      await action("rsvp", { id: softBeacon, status: "going" });
+      await actor("alice");
+      await action("set_beacon_controls", {
+        id: softBeacon,
+        manual_closed: true,
+      });
+      await actor("bob");
+      await action("rsvp", { id: softBeacon, status: "going" });
+      await actor("carol");
+      await assert.rejects(() =>
+        action("rsvp", { id: softBeacon, status: "going" }),
+      );
+      await actor("alice");
+      await action("set_beacon_controls", {
+        id: softBeacon,
+        manual_closed: false,
+        capacity_policy: "soft",
+      });
+      await actor("carol");
+      await action("rsvp", { id: softBeacon, status: "going" });
+      await actor("alice");
+      await assert.rejects(() =>
+        action("set_beacon_controls", {
+          id: softBeacon,
+          capacity_limit: 2,
+          capacity_policy: "strict",
+        }),
+      );
+      await assert.rejects(() =>
+        action("set_beacon_controls", {
+          id: softBeacon,
+          music_url: "https://open.spotify.com.evil.example/playlist/x",
+        }),
+      );
+      await action("set_beacon_controls", {
+        id: softBeacon,
+        capacity_limit: 2,
+        capacity_policy: "soft",
+        music_url: "https://open.spotify.com/playlist/abc",
+        decoration_emoji: "✨",
+        decoration_accent: "ocean",
+      });
+      const configured = (await snapshot()).activities.find(
+        (item: any) => item.id === softBeacon,
+      );
+      assert.equal(configured.capacity_policy, "soft");
+      assert.equal(configured.music_url, "https://open.spotify.com/playlist/abc");
+      assert.equal(configured.decoration_emoji, "✨");
+
+      await actor("bob");
+      await action("rsvp", { id: approvalBeacon, status: "going" });
+      await actor("carol");
+      await action("rsvp", { id: approvalBeacon, status: "going" });
+      assert.equal(
+        (await snapshot()).rsvps.find(
+          (item: any) => item.activity_id === approvalBeacon,
+        ).status,
+        "requested",
+      );
+      await actor("alice");
+      await action("approve_rsvp", { id: approvalBeacon, user_id: ids.bob });
+      await assert.rejects(() =>
+        action("approve_rsvp", { id: approvalBeacon, user_id: ids.carol }),
+      );
+      await actor("carol");
+      await action("rsvp", { id: approvalBeacon, status: "going" });
+      await actor("alice");
+      await action("invite_activity", {
+        id: approvalBeacon,
+        user_id: ids.teen,
+      });
+      await actor("teen");
+      await assert.rejects(() =>
+        action("rsvp", { id: approvalBeacon, status: "going" }),
+      );
+      assert.equal(
+        (await snapshot()).rsvps.find(
+          (item: any) => item.activity_id === approvalBeacon && item.user_id === ids.teen,
+        ).status,
+        "invited",
+      );
+    },
+  );
+  await t.test(
+    "invites survive I'm Out, release capacity, and cannot be restored after removal",
+    async () => {
+      await actor("alice");
+      const carolFriendship = (await snapshot()).friendships.find(
+        (item: any) => item.status === "accepted" &&
+          ((item.sender_id === ids.alice && item.recipient_id === ids.carol) ||
+            (item.sender_id === ids.carol && item.recipient_id === ids.alice)),
+      );
+      assert.ok(carolFriendship, "the control fixture has an accepted Alice/Carol friendship");
+      await actor("alice");
+      const inviteBeacon = String((await makeActivity({
+        audience: "private",
+        approval_required: true,
+        capacity_limit: 2,
+        capacity_policy: "strict",
+      })).activity_id);
+      controlActivityIds.push(inviteBeacon);
+      await action("invite_activity", { id: inviteBeacon, user_id: ids.bob });
+      await actor("bob");
+      let bobSnapshot = await snapshot();
+      assert.equal(bobSnapshot.activities.some((item: any) => item.id === inviteBeacon), true);
+      assert.equal(bobSnapshot.beacon_invitation_grants.some(
+        (item: any) => item.activity_id === inviteBeacon && item.user_id === ids.bob,
+      ), true);
+      await action("rsvp", { id: inviteBeacon, status: "going" });
+      await actor("alice");
+      await action("assign_beacon_role", {
+        id: inviteBeacon,
+        user_id: ids.bob,
+        role: "admin",
+      });
+      await actor("bob");
+      await action("rsvp", { id: inviteBeacon, status: "withdraw" });
+      bobSnapshot = await snapshot();
+      assert.equal(bobSnapshot.rsvps.find(
+        (item: any) => item.activity_id === inviteBeacon && item.user_id === ids.bob,
+      ).status, "invited");
+      assert.equal(bobSnapshot.beacon_roles.some(
+        (item: any) => item.activity_id === inviteBeacon && item.user_id === ids.bob,
+      ), true);
+      assert.equal(bobSnapshot.activities.find((item: any) => item.id === inviteBeacon).accepted_seat_count, 1);
+      await assert.rejects(() => action("approve_rsvp", { id: inviteBeacon, user_id: ids.bob }));
+      await assert.rejects(() => action("send_message", {
+        activity_id: inviteBeacon,
+        body: "An invite alone is not chat access.",
+      }));
+      await actor("alice");
+      await action("invite_activity", { id: inviteBeacon, user_id: ids.carol });
+      await actor("carol");
+      await action("rsvp", { id: inviteBeacon, status: "going" });
+      await actor("bob");
+      await assert.rejects(() => action("rsvp", { id: inviteBeacon, status: "going" }));
+      bobSnapshot = await snapshot();
+      assert.equal(bobSnapshot.activities.find((item: any) => item.id === inviteBeacon).accepted_seat_count, 2);
+      await actor("carol");
+      await action("rsvp", { id: inviteBeacon, status: "withdraw" });
+      await actor("bob");
+      await action("rsvp", { id: inviteBeacon, status: "going" });
+      await action("send_message", {
+        activity_id: inviteBeacon,
+        body: "I am back in.",
+      });
+      await actor("alice");
+      await action("remove_rsvp", { id: inviteBeacon, user_id: ids.bob });
+      await actor("bob");
+      bobSnapshot = await snapshot();
+      assert.equal(bobSnapshot.activities.some((item: any) => item.id === inviteBeacon), false);
+      assert.equal(bobSnapshot.beacon_invitation_grants.some(
+        (item: any) => item.activity_id === inviteBeacon && item.user_id === ids.bob,
+      ), false);
+      await assert.rejects(() => action("rsvp", { id: inviteBeacon, status: "going" }));
+
+      await actor("alice");
+      const pendingBeacon = String((await makeActivity({ approval_required: true })).activity_id);
+      controlActivityIds.push(pendingBeacon);
+      await actor("bob");
+      await action("rsvp", { id: pendingBeacon, status: "going" });
+      await assert.rejects(() => action("approve_rsvp", {
+        id: pendingBeacon,
+        user_id: ids.bob,
+      }));
+      assert.equal((await snapshot()).rsvps.find(
+        (item: any) => item.activity_id === pendingBeacon && item.user_id === ids.bob,
+      ).status, "requested");
+    },
+  );
+  await t.test(
+    "manual arrival is self-only and retained read-only after completion",
+    async () => {
+      await actor("alice");
+      const arrivalBeacon = String((await makeActivity()).activity_id);
+      controlActivityIds.push(arrivalBeacon);
+      await actor("bob");
+      await action("rsvp", { id: arrivalBeacon, status: "going" });
+      await action("set_beacon_attendance", {
+        id: arrivalBeacon,
+        state: "arriving",
+      });
+      await assert.rejects(() =>
+        action("set_beacon_attendance", {
+          id: arrivalBeacon,
+          state: "present",
+        }),
+      );
+      await assert.rejects(() =>
+        action("set_beacon_attendance", {
+          id: arrivalBeacon,
+          user_id: ids.carol,
+          state: "arriving",
+        }),
+      );
+      await root();
+      await db.query(
+        "update public.activities set starts_at=now()-interval '1 minute',ends_at=now()+interval '1 hour' where id=$1",
+        [arrivalBeacon],
+      );
+      await actor("bob");
+      await action("set_beacon_attendance", {
+        id: arrivalBeacon,
+        state: "present",
+      });
+      await actor("alice");
+      await action("activity_status", {
+        id: arrivalBeacon,
+        status: "completed",
+      });
+      await actor("bob");
+      await action("set_beacon_attendance", {
+        id: arrivalBeacon,
+        state: "present",
+      });
+      await assert.rejects(() =>
+        action("set_beacon_attendance", {
+          id: arrivalBeacon,
+          state: "none",
+        }),
+      );
+      assert.equal(
+        (await snapshot()).beacon_attendance.find(
+          (item: any) => item.activity_id === arrivalBeacon && item.user_id === ids.bob,
+        ).state,
+        "present",
+      );
+      await actor("alice");
+      await action("activity_status", {
+        id: arrivalBeacon,
+        status: "cancelled",
+      });
+      await actor("bob");
+      await assert.rejects(() =>
+        action("set_beacon_attendance", {
+          id: arrivalBeacon,
+          state: "none",
+        }),
+      );
+    },
+  );
+  await t.test(
+    "paused tools keep history readable but reject new writes independently",
+    async () => {
+      await actor("alice");
+      const moduleBeacon = String((await makeActivity()).activity_id),
+        checklist = await action("add_checklist_item", {
+          activity_id: moduleBeacon,
+          text: "Bring water",
+        }),
+        hostNote = await action("add_beacon_note", {
+          activity_id: moduleBeacon,
+          body: "Meet outside.",
+        });
+      controlActivityIds.push(moduleBeacon);
+      await actor("bob");
+      await action("rsvp", { id: moduleBeacon, status: "going" });
+      await actor("alice");
+      await action("set_beacon_controls", {
+        id: moduleBeacon,
+        enable_chat: false,
+        enable_checklist: false,
+      });
+      await actor("bob");
+      const pausedSnapshot = await snapshot();
+      assert.equal(
+        pausedSnapshot.beacon_checklist_items.some(
+          (item: any) => item.id === checklist.id,
+        ),
+        true,
+      );
+      assert.equal(
+        pausedSnapshot.beacon_notes.some((item: any) => item.id === hostNote.id),
+        true,
+      );
+      await assert.rejects(() =>
+        action("send_message", {
+          activity_id: moduleBeacon,
+          body: "Chat should be paused.",
+        }),
+      );
+      await assert.rejects(() =>
+        action("add_checklist_item", {
+          activity_id: moduleBeacon,
+          text: "Paused item",
+        }),
+      );
+      await assert.rejects(() =>
+        action("toggle_checklist_item", {
+          id: checklist.id,
+          completed: true,
+        }),
+      );
+      const bobNote = await action("add_beacon_note", {
+        activity_id: moduleBeacon,
+        body: "Journal stays open while chat is paused.",
+      });
+      await actor("alice");
+      await action("set_beacon_controls", {
+        id: moduleBeacon,
+        enable_journal: false,
+        enable_experiences: false,
+        enable_reactions: false,
+        enable_focus: false,
+      });
+      await actor("bob");
+      await assert.rejects(() =>
+        action("edit_beacon_note", {
+          id: bobNote.id,
+          body: "Edit after pause.",
+          expected_revision: 1,
+        }),
+      );
+      await assert.rejects(() =>
+        action("delete_beacon_note", { id: bobNote.id }),
+      );
+      await assert.rejects(() =>
+        action("comment", { id: moduleBeacon, body: "Paused experience." }),
+      );
+      await assert.rejects(() => action("react", { id: moduleBeacon }));
+      const history = await snapshot();
+      assert.equal(
+        history.beacon_notes.some((item: any) => item.id === bobNote.id),
+        true,
+      );
+    },
+  );
+  await t.test(
+    "squad creation from a beacon sends invites without enrolling attendees",
+    async () => {
+      await root();
+      const existingInviteNotices = (
+        await db.query<{ id: string }>(
+          "select id from public.notices where actor_id=$1 and recipient_id=$2 and body='You have a squad invitation.' and activity_id is null",
+          [ids.alice, ids.bob],
+        )
+      ).rows.map((notice) => notice.id);
+      await actor("alice");
+      const squadBeacon = String((await makeActivity()).activity_id);
+      controlActivityIds.push(squadBeacon);
+      await actor("bob");
+      await action("rsvp", { id: squadBeacon, status: "going" });
+      await actor("alice");
+      const requestId = "55555555-5555-4555-8555-555555555555",
+        created = await action(
+          "create_squad_from_beacon",
+          {
+            activity_id: squadBeacon,
+            name: "Walk crew",
+            description: "Only invited people may join.",
+            invite_user_ids: [ids.bob],
+          },
+          requestId,
+        );
+      controlSquadIds.push(String(created.squad_id));
+      await root();
+      controlNoticeIds.push(
+        ...(
+          await db.query<{ id: string }>(
+            "select id from public.notices where actor_id=$1 and recipient_id=$2 and body='You have a squad invitation.' and activity_id is null",
+            [ids.alice, ids.bob],
+          )
+        ).rows
+          .map((notice) => notice.id)
+          .filter((noticeId) => !existingInviteNotices.includes(noticeId)),
+      );
+      await actor("alice");
+      await action(
+        "create_squad_from_beacon",
+        {
+          activity_id: squadBeacon,
+          name: "Walk crew",
+          description: "Only invited people may join.",
+          invite_user_ids: [ids.bob],
+        },
+        requestId,
+      );
+      await actor("bob");
+      const bobData = await snapshot();
+      assert.equal(
+        bobData.squad_invites.filter(
+          (invite: any) => invite.squad_id === created.squad_id,
+        ).length,
+        1,
+      );
+      assert.equal(
+        bobData.squad_members.some(
+          (member: any) => member.squad_id === created.squad_id,
+        ),
+        false,
+      );
+    },
+  );
+  await t.test("remove beacon control fixtures and temporary friendship grants", async () => {
+    await root();
+    await db.query("delete from public.activities where id=any($1::uuid[])", [controlActivityIds]);
+    await db.query("delete from public.squads where id=any($1::uuid[])", [controlSquadIds]);
+    await db.query("delete from public.lists where id=any($1::uuid[])", [controlListIds]);
+    await db.query("delete from public.friendships where id=any($1::uuid[])", [controlFriendshipIds]);
+    await db.query("delete from public.notices where id=any($1::uuid[])", [controlNoticeIds]);
+    await db.query(
+      "delete from public.notices where actor_id=$1 and recipient_id=any($2::uuid[]) and body='You have a friend request.'",
+      [ids.alice, [ids.carol, ids.teen]],
+    );
+  });
   await t.test(
     "approval protects meeting details and distinguishes Interested from Going",
     async () => {
       await actor("alice");
       activity = String((await makeActivity({ approval_required: true })).id);
       await actor("bob");
-      assert.equal((await snapshot()).places.length, 0);
+      assert.equal(
+        (await snapshot()).places.some((place: any) => place.activity_id === activity),
+        false,
+      );
       await action("rsvp", { id: activity, status: "interested" });
-      assert.equal((await snapshot()).rsvps[0].status, "interested");
+      assert.equal(
+        (await snapshot()).rsvps.find((item: any) => item.activity_id === activity)
+          .status,
+        "interested",
+      );
       await action("rsvp", { id: activity, status: "going" });
-      assert.equal((await snapshot()).rsvps[0].status, "requested");
+      assert.equal(
+        (await snapshot()).rsvps.find((item: any) => item.activity_id === activity)
+          .status,
+        "requested",
+      );
       await assert.rejects(() =>
         action("approve_rsvp", { id: activity, user_id: ids.bob }),
       );
       await actor("alice");
       await action("approve_rsvp", { id: activity, user_id: ids.bob });
       await actor("bob");
-      assert.equal((await snapshot()).places.length, 1);
-      assert.equal((await snapshot()).rsvps[0].status, "going");
+      assert.equal(
+        (await snapshot()).places.filter((place: any) => place.activity_id === activity)
+          .length,
+        1,
+      );
+      assert.equal(
+        (await snapshot()).rsvps.find((item: any) => item.activity_id === activity)
+          .status,
+        "going",
+      );
       await actor("carol");
-      assert.equal((await snapshot()).activities.length, 0);
+      assert.equal(
+        (await snapshot()).activities.some((item: any) => item.id === activity),
+        false,
+      );
       await assert.rejects(() =>
         action("comment", { id: activity, body: "Intrusion" }),
+      );
+    },
+  );
+  await t.test(
+    "beacon modules require approved participants and stay read-only after cancellation",
+    async () => {
+      await actor("alice");
+      const moduleActivity = String(
+        (await makeActivity({ approval_required: true })).id,
+      );
+      const hostItem = await action("add_checklist_item", {
+        activity_id: moduleActivity,
+        text: "Bring water",
+      });
+      await action("add_beacon_note", {
+        activity_id: moduleActivity,
+        body: "Meet near the front entrance.",
+      });
+      const hostItemId = String(hostItem.id);
+
+      await actor("bob");
+      await action("rsvp", { id: moduleActivity, status: "interested" });
+      await assert.rejects(() =>
+        action("add_beacon_note", {
+          activity_id: moduleActivity,
+          body: "I should not have access yet.",
+        }),
+      );
+      await action("rsvp", { id: moduleActivity, status: "going" });
+      assert.equal(
+        (await snapshot()).rsvps.find(
+          (item: any) => item.activity_id === moduleActivity,
+        ).status,
+        "requested",
+      );
+      await assert.rejects(() =>
+        action("add_checklist_item", {
+          activity_id: moduleActivity,
+          text: "Not approved yet",
+        }),
+      );
+      await assert.rejects(() =>
+        db.query(
+          "insert into public.beacon_notes(activity_id,author_id,body) values($1,auth.uid(),'Direct write')",
+          [moduleActivity],
+        ),
+      );
+
+      await actor("carol");
+      assert.equal(
+        (await snapshot()).beacon_checklist_items.some(
+          (item: any) => item.activity_id === moduleActivity,
+        ),
+        false,
+      );
+      await assert.rejects(() =>
+        action("toggle_checklist_item", {
+          id: hostItemId,
+          completed: true,
+        }),
+      );
+      await assert.rejects(() =>
+        action("add_beacon_note", {
+          activity_id: moduleActivity,
+          body: "A viewer cannot write.",
+        }),
+      );
+
+      await actor("alice");
+      await action("approve_rsvp", { id: moduleActivity, user_id: ids.bob });
+      await actor("bob");
+      const retry = "77777777-7777-4777-8777-777777777771";
+      const bobItem = {
+        activity_id: moduleActivity,
+        text: "Check with the host",
+        id: "77777777-7777-4777-8777-777777777770",
+      };
+      const first = await action("add_checklist_item", bobItem, retry);
+      const again = await action("add_checklist_item", bobItem, retry);
+      assert.equal(first.id, again.id);
+      assert.equal(
+        (await snapshot()).beacon_checklist_items.filter(
+          (item: any) => item.id === bobItem.id,
+        ).length,
+        1,
+      );
+      const bobNote = await action("add_beacon_note", {
+        activity_id: moduleActivity,
+        body: "The entrance is on the west side.",
+      });
+      const bobNoteId = String(bobNote.id);
+      await assert.rejects(() =>
+        action("add_checklist_item", {
+          activity_id: moduleActivity,
+          text: " ",
+        }),
+      );
+      await assert.rejects(() =>
+        action("add_checklist_item", {
+          activity_id: moduleActivity,
+          text: "x".repeat(161),
+        }),
+      );
+      await assert.rejects(() =>
+        action("add_beacon_note", {
+          activity_id: moduleActivity,
+          body: "x".repeat(1001),
+        }),
+      );
+      await action("toggle_checklist_item", {
+        id: hostItemId,
+        completed: true,
+      });
+      await action("toggle_checklist_item", {
+        id: bobItem.id,
+        completed: true,
+      });
+      await action(
+        "add_checklist_item",
+        bobItem,
+        "77777777-7777-4777-8777-777777777772",
+      );
+      assert.equal(
+        (await snapshot()).beacon_checklist_items.find(
+          (item: any) => item.id === bobItem.id,
+        ).completed,
+        true,
+      );
+      await assert.rejects(() =>
+        action("delete_checklist_item", { id: hostItemId }),
+      );
+      await action("delete_checklist_item", { id: bobItem.id });
+
+      await actor("alice");
+      await action("remove_rsvp", {
+        id: moduleActivity,
+        user_id: ids.bob,
+      });
+      await actor("bob");
+      assert.equal(
+        (await snapshot()).beacon_notes.some(
+          (item: any) => item.activity_id === moduleActivity,
+        ),
+        false,
+      );
+      await assert.rejects(() =>
+        action("add_beacon_note", {
+          activity_id: moduleActivity,
+          body: "Access was revoked.",
+        }),
+      );
+      await actor("alice");
+      await action("invite_activity", {
+        id: moduleActivity,
+        user_id: ids.bob,
+      });
+      await actor("bob");
+      await action("rsvp", { id: moduleActivity, status: "going" });
+
+      await actor("alice");
+      await action("activity_status", {
+        id: moduleActivity,
+        status: "completed",
+      });
+      await actor("bob");
+      assert.equal(
+        (await snapshot()).beacon_notes.some((item: any) => item.id === bobNoteId),
+        true,
+      );
+      await action("add_beacon_note", {
+        activity_id: moduleActivity,
+        body: "A memory added after the beacon.",
+      });
+      await assert.rejects(() =>
+        action("add_checklist_item", {
+          activity_id: moduleActivity,
+          text: "The checklist is closed",
+        }),
+      );
+      await assert.rejects(() =>
+        action("toggle_checklist_item", {
+          id: hostItemId,
+          completed: false,
+        }),
+      );
+      await action("delete_beacon_note", { id: bobNoteId });
+
+      await actor("alice");
+      await action("activity_status", {
+        id: moduleActivity,
+        status: "cancelled",
+      });
+      await actor("bob");
+      assert.equal(
+        (await snapshot()).beacon_checklist_items.some(
+          (item: any) => item.activity_id === moduleActivity,
+        ),
+        true,
+      );
+      await assert.rejects(() =>
+        action("add_beacon_note", {
+          activity_id: moduleActivity,
+          body: "Cancelled beacons are immutable.",
+        }),
+      );
+      const cancelledNote = (await snapshot()).beacon_notes.find(
+        (item: any) => item.activity_id === moduleActivity,
+      );
+      await assert.rejects(() =>
+        action("delete_beacon_note", { id: cancelledNote.id }),
+      );
+    },
+  );
+  await t.test(
+    "beacon module validation and per-beacon item limits are transactional",
+    async () => {
+      await actor("alice");
+      const capActivity = String(
+        (await makeActivity({
+          mode: "solo",
+          audience: "private",
+          audience_id: null,
+        })).id,
+      );
+      for (let index = 0; index < 50; index++) {
+        await action("add_checklist_item", {
+          activity_id: capActivity,
+          text: `Item ${index + 1}`,
+        });
+        await action("add_beacon_note", {
+          activity_id: capActivity,
+          body: `Note ${index + 1}`,
+        });
+      }
+      await assert.rejects(() =>
+        action("add_checklist_item", {
+          activity_id: capActivity,
+          text: "Item 51",
+        }),
+      );
+      await assert.rejects(() =>
+        action("add_beacon_note", {
+          activity_id: capActivity,
+          body: "Note 51",
+        }),
+      );
+      await root();
+      assert.equal(
+        (
+          await db.query<{ count: number }>(
+            "select count(*)::int count from public.beacon_checklist_items where activity_id=$1",
+            [capActivity],
+          )
+        ).rows[0].count,
+        50,
+      );
+      assert.equal(
+        (
+          await db.query<{ count: number }>(
+            "select count(*)::int count from public.beacon_notes where activity_id=$1",
+            [capActivity],
+          )
+        ).rows[0].count,
+        50,
+      );
+    },
+  );
+  await t.test(
+    "shared journal edits are revision-safe and private folders never grant beacon access",
+    async () => {
+      await actor("alice");
+      const sharedActivity = String(
+        (await makeActivity({
+          title: "Shared library beacon",
+          mode: "squad",
+          audience: "friends",
+        })).id,
+      );
+      const privateActivity = String(
+        (await makeActivity({
+          title: "Private library beacon",
+          mode: "solo",
+          audience: "private",
+          audience_id: null,
+        })).id,
+      );
+      const emptyActivity = String(
+        (await makeActivity({
+          title: "Empty journal resource",
+          mode: "squad",
+          audience: "friends",
+        })).id,
+      );
+      const sharedNote = await action("add_beacon_note", {
+        activity_id: sharedActivity,
+        body: "Meet at the west entrance.",
+      });
+      const sharedNoteId = String(sharedNote.id);
+      await action("add_checklist_item", {
+        activity_id: sharedActivity,
+        text: "Bring water",
+      });
+      await action("add_beacon_note", {
+        activity_id: privateActivity,
+        body: "Private note",
+      });
+
+      const journalFolderId = "88888888-8888-4888-8888-888888888881",
+        checklistFolderId = "88888888-8888-4888-8888-888888888882",
+        secondJournalFolderId = "88888888-8888-4888-8888-888888888883";
+      const folderPayload = {
+        id: journalFolderId,
+        kind: "journal",
+        name: "Routes",
+      };
+      const createdFolder = await action(
+        "create_library_folder",
+        folderPayload,
+        "88888888-8888-4888-8888-888888888884",
+      );
+      const folderRetry = await action(
+        "create_library_folder",
+        folderPayload,
+        "88888888-8888-4888-8888-888888888885",
+      );
+      assert.equal(createdFolder.id, folderRetry.id);
+      await action("create_library_folder", {
+        id: checklistFolderId,
+        kind: "checklist",
+        name: "Packing list",
+      });
+      await action("create_library_folder", {
+        id: secondJournalFolderId,
+        kind: "journal",
+        name: "Memories",
+      });
+      await action("move_library_item", {
+        kind: "journal",
+        activity_id: sharedActivity,
+        folder_id: journalFolderId,
+      });
+      await action("move_library_item", {
+        kind: "checklist",
+        activity_id: sharedActivity,
+        folder_id: checklistFolderId,
+      });
+      await assert.rejects(() =>
+        action("move_library_item", {
+          kind: "journal",
+          activity_id: sharedActivity,
+          folder_id: checklistFolderId,
+        }),
+      );
+      await action("move_library_item", {
+        kind: "journal",
+        activity_id: sharedActivity,
+        folder_id: secondJournalFolderId,
+      });
+      await action("move_library_item", {
+        kind: "journal",
+        activity_id: emptyActivity,
+        folder_id: journalFolderId,
+      });
+      assert.equal(
+        (await snapshot()).library_folder_items.some(
+          (item: any) => item.owner_id === ids.alice && item.kind === "journal" && item.activity_id === emptyActivity,
+        ),
+        true,
+      );
+      assert.equal(
+        (
+          await db.query<{ count: number }>(
+            "select count(*)::int count from public.beacon_notes where activity_id=$1",
+            [emptyActivity],
+          )
+        ).rows[0].count,
+        0,
+      );
+      let ownSnapshot = await snapshot();
+      assert.equal(
+        ownSnapshot.library_folder_items.filter(
+          (item: any) => item.owner_id === ids.alice && item.kind === "journal" && item.activity_id === sharedActivity,
+        ).length,
+        1,
+      );
+      assert.equal(
+        ownSnapshot.library_folder_items.find(
+          (item: any) => item.owner_id === ids.alice && item.kind === "journal" && item.activity_id === sharedActivity,
+        ).folder_id,
+        secondJournalFolderId,
+      );
+
+      const edited = await action("edit_beacon_note", {
+        id: sharedNoteId,
+        body: "Meet at the west entrance by the mural.",
+        expected_revision: 0,
+      });
+      assert.equal(edited.revision, 1);
+      const editRetry = await action(
+        "edit_beacon_note",
+        {
+          id: sharedNoteId,
+          body: "Meet at the west entrance by the mural.",
+          expected_revision: 0,
+        },
+        "88888888-8888-4888-8888-888888888886",
+      );
+      assert.equal(editRetry.revision, 1);
+      await assert.rejects(() =>
+        action("edit_beacon_note", {
+          id: sharedNoteId,
+          body: "A stale edit must not win.",
+          expected_revision: 0,
+        }),
+      );
+      ownSnapshot = await snapshot();
+      assert.equal(
+        ownSnapshot.beacon_notes.find((note: any) => note.id === sharedNoteId).body,
+        "Meet at the west entrance by the mural.",
+      );
+
+      await actor("bob");
+      assert.deepEqual((await snapshot()).library_folders, []);
+      await assert.rejects(() =>
+        action("move_library_item", {
+          kind: "journal",
+          activity_id: privateActivity,
+          folder_id: "88888888-8888-4888-8888-888888888887",
+        }),
+      );
+      await action("rsvp", { id: sharedActivity, status: "going" });
+      const bobVisible = await snapshot();
+      assert.equal(
+        bobVisible.activities.some((activity: any) => activity.id === sharedActivity),
+        true,
+      );
+      assert.equal(
+        bobVisible.beacon_notes.some((note: any) => note.id === sharedNoteId),
+        true,
+      );
+      assert.deepEqual(bobVisible.library_folders, []);
+      await assert.rejects(() =>
+        action("edit_beacon_note", {
+          id: sharedNoteId,
+          body: "Only the author edits.",
+          expected_revision: 1,
+        }),
+      );
+      const bobFolderId = "88888888-8888-4888-8888-888888888888";
+      await action("create_library_folder", {
+        id: bobFolderId,
+        kind: "journal",
+        name: "My notes",
+      });
+      await action("move_library_item", {
+        kind: "journal",
+        activity_id: sharedActivity,
+        folder_id: bobFolderId,
+      });
+      const bobSnapshot = await snapshot();
+      assert.deepEqual(
+        bobSnapshot.library_folders.map((folder: any) => folder.id),
+        [bobFolderId],
+      );
+      assert.equal(
+        bobSnapshot.library_folder_items.filter(
+          (item: any) => item.kind === "journal" && item.activity_id === sharedActivity,
+        ).length,
+        1,
+      );
+      await assert.rejects(() =>
+        db.query(
+          "insert into public.library_folder_items(owner_id,kind,activity_id,folder_id) values(auth.uid(),'journal',$1,$2)",
+          [sharedActivity, bobFolderId],
+        ),
+      );
+
+      await actor("alice");
+      await action("rename_library_folder", {
+        id: secondJournalFolderId,
+        kind: "journal",
+        name: "Memories",
+      });
+      await assert.rejects(() =>
+        action("rename_library_folder", {
+          id: bobFolderId,
+          kind: "journal",
+          name: "Not mine",
+        }),
+      );
+      await action("remove_rsvp", { id: sharedActivity, user_id: ids.bob });
+      await actor("bob");
+      const afterAccessRevoked = await snapshot();
+      assert.equal(
+        afterAccessRevoked.activities.some((activity: any) => activity.id === sharedActivity),
+        false,
+      );
+      assert.equal(
+        afterAccessRevoked.beacon_notes.some((note: any) => note.id === sharedNoteId),
+        false,
+      );
+      assert.equal(
+        afterAccessRevoked.library_folder_items.some(
+          (item: any) => item.activity_id === sharedActivity,
+        ),
+        false,
+      );
+      await root();
+      assert.equal(
+        (
+          await db.query<{ count: number }>(
+            "select count(*)::int count from public.library_folder_items where owner_id=$1 and kind='journal' and activity_id=$2",
+            [ids.bob, sharedActivity],
+          )
+        ).rows[0].count,
+        1,
+      );
+      await actor("alice");
+      await action("activity_status", { id: sharedActivity, status: "completed" });
+      const completedEdit = await action("edit_beacon_note", {
+        id: sharedNoteId,
+        body: "Final memory after the beacon.",
+        expected_revision: 1,
+      });
+      assert.equal(completedEdit.revision, 2);
+      await action("activity_status", { id: sharedActivity, status: "cancelled" });
+      await assert.rejects(() =>
+        action("edit_beacon_note", {
+          id: sharedNoteId,
+          body: "Cancelled means immutable.",
+          expected_revision: 2,
+        }),
+      );
+      await action("delete_library_folder", { id: secondJournalFolderId });
+      const contentAfterDelete = await snapshot();
+      assert.equal(
+        contentAfterDelete.beacon_notes.some((note: any) => note.id === sharedNoteId),
+        true,
+      );
+      assert.equal(
+        contentAfterDelete.library_folder_items.some(
+          (item: any) => item.owner_id === ids.alice && item.kind === "journal" && item.activity_id === sharedActivity,
+        ),
+        false,
+      );
+      const duplicateFolderName = await action("create_library_folder", {
+        kind: "journal",
+        name: "routes",
+      });
+      assert.equal(duplicateFolderName.id, journalFolderId);
+      await assert.rejects(() =>
+        action("create_library_folder", {
+          kind: "journal",
+          name: "x".repeat(41),
+        }),
+      );
+      for (let index = 0; index < 29; index++) {
+        await action("create_library_folder", {
+          id: `99999999-9999-4999-8999-${String(index).padStart(12, "0")}`,
+          kind: "checklist",
+          name: `Extra ${index + 1}`,
+        });
+      }
+      await assert.rejects(() =>
+        action("create_library_folder", {
+          kind: "checklist",
+          name: "Folder 31",
+        }),
       );
     },
   );
@@ -313,7 +1935,10 @@ test("database migration and access-control acceptance scenarios", async (t) => 
       await actor("alice");
       await action("remove_rsvp", { id: activity, user_id: ids.bob });
       await actor("bob");
-      assert.equal((await snapshot()).activities.length, 0);
+      assert.equal(
+        (await snapshot()).activities.some((item: any) => item.id === activity),
+        false,
+      );
     },
   );
   await t.test(
@@ -362,8 +1987,9 @@ test("database migration and access-control acceptance scenarios", async (t) => 
     "squad membership requires an invitation and revocation removes shared access",
     async () => {
       await actor("alice");
-      await action("create_squad", { name: "Training" });
-      squad = (await snapshot()).squads[0].id;
+      squad = String(
+        (await action("create_squad", { name: "Training" })).squad_id,
+      );
       await makeActivity({ audience: "squad", audience_id: squad });
       await actor("carol");
       await assert.rejects(() =>
@@ -720,6 +2346,39 @@ test("database migration and access-control acceptance scenarios", async (t) => 
         () => action("friend_request", { username: "carol" }),
         /Too many requests/,
       );
+    },
+  );
+
+  await t.test(
+    "peer blocks preserve third-party invitations while owner blocks revoke them",
+    async () => {
+      await actor("carol");
+      await action("friend_request", { username: "bob" });
+      await actor("bob");
+      const friendshipId = String((await snapshot()).friendships.find(
+        (item: any) => item.sender_id === ids.carol && item.recipient_id === ids.bob,
+      )?.id);
+      await action("accept_friend", { id: friendshipId });
+      await actor("carol");
+      const privateBeacon = String((await makeActivity({ audience: "private" })).activity_id);
+      await action("invite_activity", { id: privateBeacon, user_id: ids.bob });
+      await actor("teen");
+      await action("block", { id: ids.bob });
+      await actor("bob");
+      assert.equal((await snapshot()).activities.some((item: any) => item.id === privateBeacon), true);
+      await actor("carol");
+      await action("block", { id: ids.bob });
+      await actor("bob");
+      assert.equal((await snapshot()).activities.some((item: any) => item.id === privateBeacon), false);
+      await root();
+      await db.query("delete from public.blocks where (blocker_id=$1 and blocked_id=$2) or (blocker_id=$2 and blocked_id=$1)", [ids.teen, ids.bob]);
+      await db.query("delete from public.blocks where blocker_id=$1 and blocked_id=$2", [ids.carol, ids.bob]);
+      await db.query("delete from public.activities where id=$1", [privateBeacon]);
+      await db.query("delete from public.friendships where id=$1", [friendshipId]);
+      await db.query("delete from public.notices where actor_id=any($1::uuid[]) and recipient_id=any($2::uuid[])", [
+        [ids.carol, ids.bob],
+        [ids.carol, ids.bob],
+      ]);
     },
   );
 

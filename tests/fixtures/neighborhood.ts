@@ -1,5 +1,5 @@
-import { emptyData, type Data } from "../../src/types";
-import { localDate } from "../../src/domain";
+import { emptyData, type Data } from "@/src/shared/types";
+import { localDate } from "@/src/shared/domain";
 const DEMO_ID = "demo-you";
 export function makeDemo(): Data {
   const d = emptyData(),
@@ -10,6 +10,9 @@ export function makeDemo(): Data {
     username,
     bio,
     interests: ["Fitness", "Creative"],
+    identity_tags: [],
+    aspiration_goals: [],
+    onboarding_survey_status: "completed" as const,
     featured_activity_id: null,
     hide_featured: false,
     timezone: "America/Chicago",
@@ -155,6 +158,9 @@ export function makeDemo(): Data {
     status: "scheduled" as const,
     goal_id: null,
     habit_id: null,
+    plan_id: null,
+    plan_step_index: null,
+    aspiration_ids: [],
     audience: audience_id ? ("squad" as const) : ("friends" as const),
     audience_id,
   });
@@ -319,6 +325,9 @@ export function makeDemo(): Data {
       audience_id: null,
       goal_id: null,
       habit_id: null,
+      plan_id: null,
+      plan_step_index: null,
+      aspiration_ids: [],
       target_count: solo ? null : 6,
     });
     const latitude = 41.878 + (i % 5) * 0.004,

@@ -64,7 +64,7 @@
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
     "lint": "eslint app src components --max-warnings=0",
-    "test": "tsx --test tests/domain.test.ts tests/database.test.ts tests/widgets.test.ts",
+    "test": "tsx --test tests/domain.test.ts tests/plans.test.ts tests/aspirations.test.ts tests/templates.test.ts tests/beaconModules.test.ts tests/beaconControls.test.ts tests/focusTimer.test.ts tests/library.test.ts tests/planningThreads.test.ts tests/planningDemo.test.ts tests/planningThreads.database.test.ts tests/snapshotNormalization.test.ts tests/discoveryOrganizations.test.ts tests/database.test.ts tests/widgets.test.ts tests/themes.test.ts",
     "test:e2e": "playwright test",
     "export:web": "expo export --platform web"
   },

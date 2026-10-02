@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
-import { supabase } from "@/src/supabase";
-import { Action, Button, Field, Screen, Txt } from "@/src/ui";
+import { supabase } from "@/src/shared/supabase";
+import { Action, Button, Field, Screen, Txt } from "@/src/shared/ui";
 export default function Callback() {
   const params = useLocalSearchParams<{
       code?: string;

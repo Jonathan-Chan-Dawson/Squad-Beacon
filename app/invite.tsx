@@ -1,7 +1,7 @@
 import React from "react";
 import { router, useLocalSearchParams } from "expo-router";
-import { useBeacon } from "@/src/store";
-import { Action, Button, Screen, Txt } from "@/src/ui";
+import { useBeacon } from "@/src/shared/store";
+import { Action, Button, Screen, Txt } from "@/src/shared/ui";
 export default function Invite() {
   const { username } = useLocalSearchParams<{ username: string }>(),
     { userId, act, data } = useBeacon();

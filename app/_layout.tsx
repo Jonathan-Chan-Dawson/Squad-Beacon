@@ -1,16 +1,17 @@
-import { useNotificationHandling } from "@/src/notifications";
+import { useNotificationHandling } from "@/src/platform/notifications";
 import React from "react";
-import { PreferencesProvider, usePreferences } from "@/src/preferences";
+import { PreferencesProvider, usePreferences } from "@/src/shared/preferences";
 import { Stack, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import "react-native-reanimated";
-import "@/src/device";
-import { BeaconProvider, useBeacon } from "@/src/store";
-import { Auth, Onboard } from "@/src/Auth";
-import { Loading, Screen, Action, Txt } from "@/src/ui";
-import { WidgetPreferencesProvider } from "@/src/widgets/preferences";
-import { WidgetSync } from "@/src/widgets/WidgetRuntime";
+import "@/src/platform/device";
+import { BeaconProvider, useBeacon } from "@/src/shared/store";
+import { Auth, Onboard } from "@/src/features/auth/Auth";
+import { ProfileSurvey } from "@/src/features/profile/ProfileSurvey";
+import { Loading, Screen, Action, Txt } from "@/src/shared/ui";
+import { WidgetPreferencesProvider } from "@/src/features/widgets/preferences";
+import { WidgetSync } from "@/src/features/widgets/WidgetRuntime";
 export { ErrorBoundary } from "expo-router";
 function ThemedStatusBar() {
   const { theme } = usePreferences();
@@ -41,6 +42,9 @@ function Navigation() {
         </Screen>
       );
     if (!data.profiles.some((p) => p.id === userId)) return <Onboard />;
+    const profile = data.profiles.find((p) => p.id === userId)!;
+    if (profile.onboarding_survey_status === "pending")
+      return <ProfileSurvey profile={profile} activities={data.activities} />;
   }
   return (
     <Stack screenOptions={{ headerShown: false }}>

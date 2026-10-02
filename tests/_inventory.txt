@@ -1,0 +1,10 @@
+Test map
+
+- *.test.ts: domain, aspiration, beacon controls/modules, focus timer, library, planning, plans, snapshot normalization, templates, themes, and widget unit coverage.
+- database.test.ts and planningThreads.database.test.ts: PGlite-backed migration/RLS/action coverage; the planning suite applies migrations through 004.
+- planningDemo.test.ts: demo store planning action behavior.
+- browser/: Playwright journeys in library.spec.ts, pilot.spec.ts, and planning.spec.ts.
+- fixtures/neighborhood.ts: reusable deterministic demo/test profiles and fixture data.
+- README.md: test setup and execution notes.
+
+Tests should exercise product flows through public routes/actions and preserve existing suites when adding coverage.

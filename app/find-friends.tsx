@@ -2,10 +2,10 @@ import React, { useState } from "react";
 import { Text, View } from "react-native";
 import { router } from "expo-router";
 import { UserPlus, FlaskConical } from "lucide-react-native";
-import { useBeacon } from "@/src/store";
-import { friendIds } from "@/src/domain";
-import { ProfileAvatar } from "@/src/ProfileAvatar";
-import { Action, Button, Field, Screen, Txt, useTheme } from "@/src/ui";
+import { useBeacon } from "@/src/shared/store";
+import { friendIds } from "@/src/shared/domain";
+import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
+import { Action, Button, Field, Screen, Txt, useTheme } from "@/src/shared/ui";
 export default function FindFriends() {
   const { data, userId, demo, act } = useBeacon(),
     { colors, styles } = useTheme(),

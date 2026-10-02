@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { Text, View } from "react-native";
-import { useBeacon } from "@/src/store";
-import { friendIds } from "@/src/domain";
-import { startDeviceLocation, stopDeviceLocation } from "@/src/device";
-import { Action, Button, Chips, Empty, Screen, Txt, useTheme } from "@/src/ui";
+import { useBeacon } from "@/src/shared/store";
+import { friendIds } from "@/src/shared/domain";
+import { startDeviceLocation, stopDeviceLocation } from "@/src/platform/device";
+import { Action, Button, Chips, Empty, Screen, Txt, useTheme } from "@/src/shared/ui";
 export default function LocationScreen() {
   const { styles, colors } = useTheme();
 

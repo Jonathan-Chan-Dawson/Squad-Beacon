@@ -4,10 +4,10 @@ import {
   deriveWidgetPayload,
   WIDGET_FRESHNESS_MS,
   widgetTimelineDates,
-} from "../src/widgets/derive";
-import { defaultWidgetPreferences } from "../src/widgets/types";
-import { emptyData } from "../src/types";
-import { isWidgetAdviceEligible } from "../src/widgets/adviceEligibility";
+} from "@/src/features/widgets/derive";
+import { defaultWidgetPreferences } from "@/src/features/widgets/types";
+import { emptyData } from "@/src/shared/types";
+import { isWidgetAdviceEligible } from "@/src/features/widgets/adviceEligibility";
 
 const now = new Date("2026-09-30T16:00:00.000Z");
 function fixture() {

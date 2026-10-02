@@ -5,10 +5,11 @@ import {
   featuredActivity,
   locationIsFresh,
   localDate,
+  activityWhen,
   validateActivity,
-} from "../src/domain";
-import { makeDemo } from "../src/demo";
-import type { Habit, Checkin } from "../src/types";
+} from "@/src/shared/domain";
+import { makeDemo } from "@/src/shared/demo";
+import type { Habit, Checkin } from "@/src/shared/types";
 const habit: Habit = {
   id: "h",
   owner_id: "u",
@@ -105,6 +106,26 @@ test("expired and five-minute-old locations are not live", () => {
     true,
   );
 });
+test("beacon time labels stay relative nearby and readable across days", () => {
+  const now = new Date(2026, 9, 1, 12, 0);
+  const event = (startsAt: Date) =>
+    ({
+      status: "scheduled",
+      starts_at: startsAt.toISOString(),
+      ends_at: new Date(+startsAt + 60 * 60 * 1000).toISOString(),
+    }) as import("@/src/shared/types").Activity;
+
+  assert.equal(
+    activityWhen(event(new Date(+now + 20 * 60000)), now),
+    "Starts in 20 min",
+  );
+  assert.equal(
+    activityWhen(event(new Date(+now - 5 * 60000)), now),
+    "Ends in 55 min",
+  );
+  assert.match(activityWhen(event(new Date(2026, 9, 1, 19)), now), /^Today/);
+  assert.match(activityWhen(event(new Date(2026, 9, 2, 16, 30)), now), /^Tomorrow/);
+});
 test("featured activity cannot expose a pin absent from the authorized collection", () => {
   const d = makeDemo(),
     p = { ...d.profiles[0], featured_activity_id: "secret" };
@@ -131,7 +152,7 @@ test("activity validation rejects invalid time, links, and coordinates", () => {
 });
 
 test("repeat suggestions use only your completed activities and rank repeats first", async () => {
-  const { repeatSuggestions } = await import("../src/templates");
+  const { repeatSuggestions } = await import("../src/shared/templates");
   const data = makeDemo();
   const base = data.activities[0];
   const completed = { ...base, owner_id: "me", status: "completed" as const };

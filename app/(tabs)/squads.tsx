@@ -1,1 +1,1 @@
-export { default } from "@/src/screens/SquadsScreen";
+export { default } from "@/src/features/people/screens/SquadsScreen";

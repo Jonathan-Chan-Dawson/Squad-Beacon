@@ -1,1 +1,1 @@
-export { default } from "@/src/screens/WidgetStudioScreen";
+export { default } from "@/src/features/widgets/WidgetStudioScreen";

@@ -1,10 +1,11 @@
 import React, { useState } from "react";
 import { Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import { useBeacon } from "@/src/store";
-import { featuredActivity, friendIds } from "@/src/domain";
-import { ActivityCard } from "@/src/ActivityCard";
-import { ProfileAvatar } from "@/src/ProfileAvatar";
+import { useBeacon } from "@/src/shared/store";
+import { featuredActivity, friendIds } from "@/src/shared/domain";
+import { ActivityCard } from "@/src/features/beacons/ActivityCard";
+import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
+import type { AspirationGoal } from "@/src/features/profile/ProfileSurvey";
 import {
   Action,
   Button,
@@ -14,7 +15,7 @@ import {
   Sheet,
   Txt,
   useTheme,
-} from "@/src/ui";
+} from "@/src/shared/ui";
 export default function Person() {
   const { styles } = useTheme();
 
@@ -43,9 +44,55 @@ export default function Person() {
       <View style={styles.card}>
         <ProfileAvatar profile={person} size={76} />
         <Txt>{person.bio}</Txt>
-        <Txt muted>{person.interests.join(" · ")}</Txt>
+        {!!person.identity_tags?.length && (
+          <View style={{ gap: 6 }}>
+            <Text style={styles.label}>IDENTITY</Text>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+              {person.identity_tags.slice(0, 6).map((tag) => (
+                <Text key={tag} style={[styles.chip, styles.chipText]}>
+                  {tag}
+                </Text>
+              ))}
+              {person.identity_tags.length > 6 && (
+                <Txt muted>+{person.identity_tags.length - 6} more</Txt>
+              )}
+            </View>
+          </View>
+        )}
+        {!!person.interests.length && (
+          <View style={{ gap: 6 }}>
+            <Text style={styles.label}>INTERESTS</Text>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+              {person.interests.slice(0, 8).map((interest) => (
+                <Text key={interest} style={[styles.chip, styles.chipText]}>
+                  {interest}
+                </Text>
+              ))}
+              {person.interests.length > 8 && (
+                <Txt muted>+{person.interests.length - 8} more</Txt>
+              )}
+            </View>
+          </View>
+        )}
       </View>
       {featured && <ActivityCard activity={featured} />}
+      {!!person.aspiration_goals?.length && (
+        <View style={styles.card}>
+          <Text style={styles.h2}>Goals I’m making time for</Text>
+          {person.aspiration_goals.map((aspiration: AspirationGoal) => {
+            return (
+              <View key={aspiration.id} style={{ gap: 4 }}>
+                <Text style={styles.body}>
+                  {aspiration.title} · {aspiration.category}
+                </Text>
+                <Txt muted>
+                  Aiming for {aspiration.target_per_week} linked beacons per week
+                </Txt>
+              </View>
+            );
+          })}
+        </View>
+      )}
       {[
         person.home,
         person.birthday_note,

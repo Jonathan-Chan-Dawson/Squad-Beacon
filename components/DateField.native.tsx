@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { View } from "react-native";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { Button, Txt } from "@/src/ui";
+import { Button, Txt } from "@/src/shared/ui";
 export default function DateField({
   label,
   value,

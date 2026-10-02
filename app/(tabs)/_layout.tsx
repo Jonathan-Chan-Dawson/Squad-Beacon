@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { Tabs, router } from "expo-router";
 import { Map, Radio, Users, UserRound, Plus } from "lucide-react-native";
-import { Button, Sheet, useTheme } from "@/src/ui";
+import { Button, Sheet, useTheme } from "@/src/shared/ui";
 const items = [
   { name: "index", label: "Map", Icon: Map },
   { name: "activities", label: "Beacons", Icon: Radio },

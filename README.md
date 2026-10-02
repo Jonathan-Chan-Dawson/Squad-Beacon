@@ -51,6 +51,7 @@ Open http://127.0.0.1:4173. Web includes an interactive OpenStreetMap map. Nativ
 ## Implemented pilot
 
 - Four tabs: Map, Beacons (Now / Upcoming / Past), Squads, and Profile. A raised circular Create button sits in the center; Inbox stays at the top right.
+- Plans schedule a set of beacons in an IANA timezone. Plans can be personal or shared with a squad; squad templates are member-readable and admin-managed.
 - Compact Normal/Advanced creation, useful starter templates, completed-plan repeat suggestions, and optional crew targets.
 - One-tap In/Maybe/Out, host approval only when selected, status-to-beacon conversion, and real written memories on completed plans.
 - Explicit contact-picker invitations via SMS draft; contacts are never uploaded.
@@ -66,12 +67,12 @@ Open http://127.0.0.1:4173. Web includes an interactive OpenStreetMap map. Nativ
 
 Premium, paid subscriptions, ads, points, stranger discovery, recurring events, calendar integration and challenges remain deferred as agreed. All pilot features are free.
 
-Notification handling and native contacts setup: [docs/NOTIFICATIONS.md](docs/NOTIFICATIONS.md). Apply the new `202609290001_simple_beacons.sql` migration and redeploy the push worker for crew targets, status conversion, and notification deep links. Rebuild the native app for expo-contacts.
+Notification handling and native contacts setup: [docs/NOTIFICATIONS.md](docs/NOTIFICATIONS.md). Apply the `202609290001_simple_beacons.sql` migration and redeploy the push worker for crew targets, status conversion, and notification deep links. Apply `202610010001_plans_profile_survey.sql` to enable Plans, squad plan templates, aspiration links, and the profile survey in connected accounts. Apply `202610010002_beacon_modules.sql` for collaborative beacon checklists and shared notes; apply `202610010003_shared_libraries.sql` for revision-safe author note edits and private per-user library folders; apply `202610010004_planning_threads.sql` and `202610010005_beacon_controls.sql` for planning threads, capacity/role/arrival controls, tool switches, and persistent invitations. Folders organize a participant's view and never grant access to a beacon. Turning a tool off pauses new writes but keeps authorized history readable. An invitation remains separate from Going and survives I'm Out until the host removes it. Existing profiles are marked as survey-skipped; new accounts start pending. `npx supabase db push` applies pending migrations; no remote deployment is performed by this workspace task. Rebuild the native app for expo-contacts.
 
 ## Connect a real backend
 
 1. Create a Supabase project in your chosen US region. Copy `.env.example` to `.env`; set `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. Never put a service-role key in the mobile app.
-2. Install/use the Supabase CLI (`npx supabase`). Run `npx supabase login`, `npx supabase link --project-ref YOUR_REF`, then `npx supabase db push`. Apply all three migrations before serving clients.
+2. Install/use the Supabase CLI (`npx supabase`). Run `npx supabase login`, `npx supabase link --project-ref YOUR_REF`, then `npx supabase db push`. Apply all migrations in `supabase/migrations` before serving clients.
 3. Require confirmed email, a minimum ten-character password, and production SMTP. Configure Resend with a verified sending domain in Supabase Auth. The default Supabase sender is not a production email service.
 4. Add `squadbeacon://auth/callback` to Auth redirect URLs. The app handles PKCE `code` links and `token_hash` links with `type=signup` or `type=recovery`. For verification across devices, customize the Supabase email templates to use the token-hash callback. Browser auth redirects need the deployed web origin added explicitly.
 5. Deploy `delete-account` and `push-worker` with `npx supabase functions deploy FUNCTION_NAME`. Both verify requests inside their handlers: deletion validates the bearer token with Auth; the worker requires its secret header. Do not remove those checks when using `verify_jwt=false`.

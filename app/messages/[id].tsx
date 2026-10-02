@@ -2,10 +2,10 @@ import React from "react";
 import { KeyboardAvoidingView, Platform, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams } from "expo-router";
-import { useBeacon } from "@/src/store";
-import { friendIds } from "@/src/domain";
-import { ChatThread } from "@/src/ChatThread";
-import { BackButton, Txt, useTheme } from "@/src/ui";
+import { useBeacon } from "@/src/shared/store";
+import { friendIds } from "@/src/shared/domain";
+import { ChatThread } from "@/src/features/messages/ChatThread";
+import { BackButton, Txt, useTheme } from "@/src/shared/ui";
 export default function Messages() {
   const { colors, styles } = useTheme();
 
