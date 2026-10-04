@@ -192,12 +192,6 @@ export default function SquadsScreen() {
         <View style={{ gap: 10 }}>
           <View style={styles.between}>
             <Text style={styles.h2}>Friends</Text>
-            <Button
-              compact
-              secondary
-              title="+ Add by username"
-              onPress={() => open("friend")}
-            />
           </View>
           {friendRequests.map((request) => (
             <View key={request.id} style={[styles.card, { padding: 12 }]}>
@@ -270,21 +264,23 @@ export default function SquadsScreen() {
                   })
                 }
                 style={({ pressed }) => ({
-                  flex: 1.6,
-                  minWidth: 100,
+                  flexShrink: 0,
+                  minWidth: 88,
                   minHeight: 44,
-                  paddingHorizontal: 10,
+                  paddingHorizontal: 8,
                   borderRadius: 14,
                   flexDirection: "row",
                   alignItems: "center",
                   justifyContent: "center",
                   gap: 5,
-                  backgroundColor: colors.ink,
+                  backgroundColor: colors.lime,
+                  borderWidth: 1,
+                  borderColor: colors.green,
                   opacity: pressed ? 0.78 : 1,
                 })}
               >
-                <MessageCircle size={15} color={colors.white} />
-                <Text style={{ color: colors.white, fontSize: 12, fontWeight: "700" }}>
+                <MessageCircle size={15} color={colors.ink} />
+                <Text style={{ color: colors.ink, fontSize: 12, fontWeight: "700" }}>
                   Message
                 </Text>
               </Pressable>

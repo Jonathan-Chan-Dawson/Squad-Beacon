@@ -37,6 +37,7 @@ test("palette text, controls, and Auth hero meet contrast targets in every theme
     assert.ok(contrast(palette.green, palette.bg) >= 4.5, `${name} accent text`);
     assert.ok(contrast(palette.green, palette.white) >= 4.5, `${name} accent on cards`);
     assert.ok(contrast(palette.white, palette.ink) >= 4.5, `${name} primary button text`);
+    assert.ok(contrast(palette.ink, palette.lime) >= 4.5, `${name} compact action text`);
     assert.ok(contrast(palette.heroText, palette.heroBg) >= 4.5, `${name} Auth hero text`);
     assert.ok(contrast(palette.heroAccent, palette.heroBg) >= 3, `${name} Auth hero icon`);
     assert.ok(contrast(palette.green, palette.lime) >= 3, `${name} accent icon on lime`);

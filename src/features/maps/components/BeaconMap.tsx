@@ -9,6 +9,7 @@ import type {
   LocationSession,
   Profile,
 } from "@/src/shared/types";
+import type { MapPointGroup } from "@/src/features/maps/cluster";
 export interface MapProps {
   onAnchor?: (point: { x: number; y: number } | null) => void;
   fullScreen?: boolean;
@@ -21,6 +22,9 @@ export interface MapProps {
   profiles: Profile[];
   onActivity: (id: string) => void;
   onPerson: (id: string) => void;
+  onCluster?: (cluster: MapPointGroup) => void;
+  onMapTap?: () => void;
+  onViewportChange?: () => void;
   onPick?: (latitude: number, longitude: number) => void;
   selected?: { latitude: number; longitude: number } | null;
 }

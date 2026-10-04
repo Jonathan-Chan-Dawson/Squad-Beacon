@@ -9,6 +9,10 @@ import type { MapProps } from "@/src/features/maps/components/BeaconMap";
 import { locationIsFresh } from "@/src/shared/domain";
 import { usePreferences } from "@/src/shared/preferences";
 import { useTheme } from "@/src/shared/ui";
+import {
+  clusterMapPoints,
+  markerVisualSize,
+} from "@/src/features/maps/cluster";
 export default function BeaconMap(props: MapProps) {
   const { colors } = useTheme();
 
@@ -19,6 +23,7 @@ export default function BeaconMap(props: MapProps) {
     latest = useRef(props),
     fitted = useRef(false);
   const [ready, setReady] = useState(false);
+  const [viewVersion, setViewVersion] = useState(0);
   const { showAvatars } = usePreferences();
   useEffect(() => {
     latest.current = props;
@@ -46,8 +51,17 @@ export default function BeaconMap(props: MapProps) {
           p ? m.latLngToContainerPoint([p.latitude, p.longitude]) : null,
         );
       };
-      m.on("move zoom resize", updateAnchor);
-      m.on("click", (e) => latest.current.onPick?.(e.latlng.lat, e.latlng.lng));
+      m.on("move", updateAnchor);
+      m.on("moveend zoomend resize", () => {
+        updateAnchor();
+        latest.current.onViewportChange?.();
+        setViewVersion((version) => version + 1);
+      });
+      m.on("click", (e) => {
+        if (latest.current.onPick)
+          latest.current.onPick(e.latlng.lat, e.latlng.lng);
+        else latest.current.onMapTap?.();
+      });
       setReady(true);
     });
     const resize = new ResizeObserver(() => map.current?.invalidateSize());
@@ -70,6 +84,7 @@ export default function BeaconMap(props: MapProps) {
     controlsTop = 12,
     onActivity,
     onPerson,
+    onCluster,
   } = props;
   useEffect(() => {
     const L = library.current,
@@ -89,20 +104,34 @@ export default function BeaconMap(props: MapProps) {
       tone = colors.green,
     ) => {
       const node = document.createElement("button");
+      const visualSize = markerVisualSize(
+        friend ? "person" : "beacon",
+        map.current?.getZoom() ?? 13,
+      );
       node.type = "button";
       if (friend) {
         const img = document.createElement("img");
         img.src =
           "data:image/svg+xml;charset=utf-8," +
           encodeURIComponent(miniAvatarSvg(seed));
-        img.width = 48;
-        img.height = 48;
+        img.width = Math.max(16, visualSize - 4);
+        img.height = Math.max(16, visualSize - 4);
         img.alt = "";
         node.append(img);
-      } else node.textContent = text;
+      }
       node.setAttribute("aria-label", label);
       node.title = label;
-      node.style.cssText = `border:2px solid ${friend ? colors.white : tone};border-radius:${friend ? "50%" : "16px"};background:${colors.white};color:${colors.ink};padding:0;width:${friend ? 54 : 44}px;height:${friend ? 54 : 44}px;display:flex;align-items:center;justify-content:center;font:600 22px system-ui;box-shadow:0 3px 10px #172c2940;cursor:pointer;`;
+      node.style.cssText = `border:0;border-radius:50%;background:transparent;color:${colors.ink};padding:0;width:44px;height:44px;display:flex;align-items:center;justify-content:center;font:600 16px system-ui;cursor:pointer;`;
+      const visual = friend
+        ? (node.firstElementChild as HTMLElement)
+        : document.createElement("span");
+      if (!friend) {
+        visual.textContent = text;
+        visual.style.cssText = `border:2px solid ${tone};border-radius:12px;background:${colors.white};width:${visualSize}px;height:${visualSize}px;display:flex;align-items:center;justify-content:center;box-shadow:0 3px 10px #172c2940;`;
+        node.append(visual);
+      } else {
+        visual.style.cssText = `border:2px solid ${colors.white};border-radius:50%;width:${visualSize}px;height:${visualSize}px;box-shadow:0 3px 10px #172c2940;`;
+      }
 
       L.DomEvent.disableClickPropagation(node);
       node.onclick = click;
@@ -110,17 +139,101 @@ export default function BeaconMap(props: MapProps) {
         icon: L.divIcon({
           html: node,
           className: "beacon-marker",
-          iconSize: [friend ? 54 : 44, friend ? 54 : 44],
-          iconAnchor: [24, 22],
+          iconSize: [44, 44],
+          iconAnchor: [22, 22],
         }),
         title: label,
         keyboard: false,
       }).addTo(group);
       coordinates.push([lat, lng]);
     };
+    const size = m.getSize();
+    const center = m.getCenter();
+    const clusterPoints = [
+      ...places.flatMap((place) => {
+        const activity = activities.find(
+          (item) => item.id === place.activity_id,
+        );
+        return activity && place.latitude != null && place.longitude != null
+          ? [
+              {
+                id: `beacon:${place.activity_id}`,
+                kind: "beacon" as const,
+                latitude: place.latitude,
+                longitude: place.longitude,
+              },
+            ]
+          : [];
+      }),
+      ...(showAvatars
+        ? locations.flatMap((location) => {
+            const profile = profiles.find(
+              (item) => item.id === location.owner_id,
+            );
+            return profile &&
+              locationIsFresh(location) &&
+              location.latitude != null &&
+              location.longitude != null
+              ? [
+                  {
+                    id: `person:${location.owner_id}`,
+                    kind: "person" as const,
+                    latitude: location.latitude,
+                    longitude: location.longitude,
+                  },
+                ]
+              : [];
+          })
+        : []),
+    ];
+    const groups = clusterMapPoints(clusterPoints, {
+      centerLatitude: center.lat,
+      centerLongitude: center.lng,
+      zoom: m.getZoom(),
+      width: size.x,
+      height: size.y,
+    });
+    const clustered = new Set(
+      groups
+        .filter((group) => group.members.length > 1)
+        .flatMap((group) => group.members.map((member) => member.id)),
+    );
+    groups
+      .filter((cluster) => cluster.members.length > 1)
+      .forEach((cluster) => {
+        const beaconCount = cluster.members.filter(
+          (member) => member.kind === "beacon",
+        ).length;
+        const personCount = cluster.members.length - beaconCount;
+        const node = document.createElement("button");
+        node.type = "button";
+        node.textContent = String(cluster.members.length);
+        node.setAttribute(
+          "aria-label",
+          `Map cluster: ${beaconCount} beacons, ${personCount} people`,
+        );
+        node.style.cssText = `border:3px solid ${colors.lime};border-radius:50%;background:${colors.ink};color:${colors.white};width:44px;height:44px;display:flex;align-items:center;justify-content:center;font:800 14px system-ui;box-shadow:0 3px 10px #172c2940;cursor:pointer;`;
+        L.DomEvent.disableClickPropagation(node);
+        node.onclick = () => onCluster?.(cluster);
+        L.marker([cluster.latitude, cluster.longitude], {
+          icon: L.divIcon({
+            html: node,
+            className: "beacon-marker",
+            iconSize: [44, 44],
+            iconAnchor: [22, 22],
+          }),
+          keyboard: true,
+        }).addTo(group);
+        coordinates.push([cluster.latitude, cluster.longitude]);
+      });
     places.forEach((p) => {
       const a = activities.find((a) => a.id === p.activity_id);
-      if (a && p.latitude != null && p.longitude != null)
+      if (
+        a &&
+        p.latitude != null &&
+        p.longitude != null &&
+        !clustered.has(`beacon:${p.activity_id}`)
+      )
         marker(
           p.latitude,
           p.longitude,
@@ -141,7 +254,9 @@ export default function BeaconMap(props: MapProps) {
     });
     if (showAvatars)
       locations
-        .filter((l) => locationIsFresh(l))
+        .filter(
+          (l) => locationIsFresh(l) && !clustered.has(`person:${l.owner_id}`),
+        )
         .forEach((l) => {
           const p = profiles.find((p) => p.id === l.owner_id);
           if (p && l.latitude != null && l.longitude != null)
@@ -166,15 +281,23 @@ export default function BeaconMap(props: MapProps) {
           className: "beacon-marker",
         }),
       }).addTo(group);
-    if (!fitted.current && coordinates.length) {
-      m.fitBounds(L.latLngBounds(coordinates), {
-        padding: [70, 100],
-        maxZoom: 15,
-      });
+    if (!fitted.current && clusterPoints.length) {
+      m.fitBounds(
+        L.latLngBounds(
+          clusterPoints.map(
+            (point) => [point.latitude, point.longitude] as Leaflet.LatLngTuple,
+          ),
+        ),
+        {
+          padding: [70, 100],
+          maxZoom: 15,
+        },
+      );
       fitted.current = true;
     }
   }, [
     ready,
+    viewVersion,
     colors,
     activities,
     places,
@@ -184,12 +307,13 @@ export default function BeaconMap(props: MapProps) {
     showAvatars,
     onActivity,
     onPerson,
+    onCluster,
   ]);
   const lat = focused?.latitude,
     lng = focused?.longitude;
   useEffect(() => {
     if (ready && lat != null && lng != null)
-      map.current?.flyTo([lat, lng], 15, { duration: 0.5 });
+      map.current?.flyTo([lat, lng], 16, { duration: 0.5 });
   }, [ready, lat, lng]);
   function fit() {
     const L = library.current;

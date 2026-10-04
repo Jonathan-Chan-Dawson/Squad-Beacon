@@ -1,7 +1,8 @@
 import React from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { Zap, CalendarDays, Camera } from "lucide-react-native";
 import { useTheme } from "@/src/shared/ui";
+import { MotionPressable } from "@/src/shared/MotionPressable";
 export function PeriodTabs({
   value,
   onChange,
@@ -25,7 +26,7 @@ export function PeriodTabs({
         { name: "Upcoming", Icon: CalendarDays },
         { name: "Past", Icon: Camera },
       ].map(({ name, Icon }) => (
-        <Pressable
+        <MotionPressable
           key={name}
           accessibilityRole="button"
           accessibilityLabel={name}
@@ -55,7 +56,7 @@ export function PeriodTabs({
           >
             {name}
           </Text>
-        </Pressable>
+        </MotionPressable>
       ))}
     </View>
   );

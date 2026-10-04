@@ -125,6 +125,7 @@ test("planning migration enforces visibility, eligibility, one vote, safe resolu
     "202610010003_shared_libraries.sql",
     "202610010004_planning_threads.sql",
     "202610010005_beacon_controls.sql",
+    "202610030001_profile_privacy.sql",
   ])
     await applyMigration(migration);
 

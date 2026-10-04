@@ -4,12 +4,13 @@ import {
   habitStats,
   featuredActivity,
   locationIsFresh,
+  friendAvailabilityState,
   localDate,
   activityWhen,
   validateActivity,
 } from "@/src/shared/domain";
 import { makeDemo } from "@/src/shared/demo";
-import type { Habit, Checkin } from "@/src/shared/types";
+import type { Activity, Habit, Checkin } from "@/src/shared/types";
 const habit: Habit = {
   id: "h",
   owner_id: "u",
@@ -106,6 +107,33 @@ test("expired and five-minute-old locations are not live", () => {
     true,
   );
 });
+test("friend availability uses only explicit live solo status and a 30-minute threshold", () => {
+  const now = Date.parse("2026-10-03T18:00:00Z");
+  const liveSolo = (available: boolean, remainingMinutes: number) =>
+    ({
+      status: "scheduled",
+      mode: "solo",
+      available,
+      starts_at: new Date(now - 10 * 60000).toISOString(),
+      ends_at: new Date(now + remainingMinutes * 60000).toISOString(),
+    }) as Activity;
+
+  assert.equal(friendAvailabilityState(liveSolo(true, 31), now), "available");
+  assert.equal(friendAvailabilityState(liveSolo(true, 30), now), "ending-soon");
+  assert.equal(friendAvailabilityState(liveSolo(false, 20), now), "unavailable");
+  assert.equal(
+    friendAvailabilityState({ ...liveSolo(true, 20), mode: "squad" }, now),
+    "unknown",
+  );
+  assert.equal(friendAvailabilityState(undefined, now), "unknown");
+  assert.equal(
+    friendAvailabilityState(
+      { ...liveSolo(false, 20), starts_at: new Date(now + 1).toISOString() },
+      now,
+    ),
+    "unknown",
+  );
+});
 test("beacon time labels stay relative nearby and readable across days", () => {
   const now = new Date(2026, 9, 1, 12, 0);
   const event = (startsAt: Date) =>
@@ -132,6 +160,35 @@ test("featured activity cannot expose a pin absent from the authorized collectio
   assert.equal(featuredActivity(p, []), undefined);
   assert.equal(
     featuredActivity({ ...p, hide_featured: true }, d.activities),
+    undefined,
+  );
+});
+test("featured activity honors the privacy-filtered projection without automatic fallback", () => {
+  const d = makeDemo(),
+    p = d.profiles.find((profile) => profile.id === "demo-you")!;
+  assert.equal(
+    featuredActivity(
+      {
+        ...p,
+        viewer_can_view_full_profile: true,
+        viewer_featured_activity_id: d.activities[0].id,
+        featured_activity_id: null,
+      },
+      d.activities,
+    )?.id,
+    d.activities[0].id,
+  );
+  assert.equal(
+    featuredActivity(
+      {
+        ...p,
+        viewer_can_view_full_profile: true,
+        viewer_featured_activity_id: null,
+        featured_activity_id: d.activities[0].id,
+        hide_featured: false,
+      },
+      d.activities,
+    ),
     undefined,
   );
 });

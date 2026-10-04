@@ -238,11 +238,11 @@ test("council proposal recipes inherit the locked audience and start after the d
   assert.equal(Date.parse(draft.starts_at) > Date.parse(council.deadline_at), true);
   assert.equal(Date.parse(draft.ends_at) - Date.parse(draft.starts_at), 90 * 60 * 1000);
   assert.throws(
-    () => validateCouncilProposal(council, { ...draft, starts_at: council.deadline_at }),
+    () => validateCouncilProposal(council, { ...draft, starts_at: council.deadline_at }, now),
     /start after the decision deadline/,
   );
   assert.throws(
-    () => validateCouncilProposal(council, { ...draft, audience: "friends", audience_id: null }),
+    () => validateCouncilProposal(council, { ...draft, audience: "friends", audience_id: null }, now),
     /Keep every option in this decision's audience/,
   );
 });

@@ -16,7 +16,7 @@ This review covers the latest `Squad Beacon (1).txt` and the attached UI/UX exec
 | Beacon controls and invitation continuity | Advanced capacity/tool settings, manual arrival/check-in, and paused-tool history are integrated. Durable invitations survive I'm Out and allow re-entry; manager removal revokes that grant. Database and browser coverage pass. |
 | Pings, Vote/Draw, and Beacon Plans | Ping responses/conversion, searchable editable Vote/Draw proposals, option approval, deterministic vote fallback, persisted draw resolution, retries, and Beacon Plans exist. The feed now removes Full/Compact and uses one ActivityCard. |
 | Plan conflict handling | Detects overlaps and suggests alternate local times. It still does not create an “Ask the group” Vote/Draw draft. |
-| Selected states and relative activity time | Shared chips and directory/period controls show a visible check plus selected accessibility state. Compact cards use Starts in / Ends in or day/time wording, show Virtual when meeting data says it is online, and distinguish the passive priority marker from a Beacon favorite action. |
+| Selected states and relative activity time | Current/Upcoming/Past, Friends Now, and directory single-choice controls rely on contrast plus `accessibilityState.selected`, without redundant checkmarks; multi-select chips keep checks. Compact cards use Starts in / Ends in or day/time wording, show Virtual when meeting data says it is online, and distinguish the passive priority marker from a Beacon favorite action. |
 
 ## Related gaps still needing product and implementation work
 
@@ -31,9 +31,10 @@ This review covers the latest `Squad Beacon (1).txt` and the attached UI/UX exec
 | Vote/Draw and conflict proposals | Planning threads, approval, voting/draw resolution, safe materialization, and database tests now exist. User-facing copy says Vote/Draw, while internal action names/routes retain legacy council identifiers. Plan conflict UI still only surfaces alternate-time suggestions and needs an actual group decision draft. |
 | Expanded beacon experiences | Checklists, notes, and a local focus timer are implemented. 005 stores optional external music links and decoration settings, but the app does not stream audio or create linked media reels/experiences; completed activity memories remain simpler than media reels. |
 | Beacon attendance states, arrival/check-in, proximity-based presence, and layered beacon admins | Manual attendance UI and server-side role permissions are tested. Role assignment/revocation pickers and co-owner/admin admission UI remain unfinished. Proximity-based check-in is not implemented, and location sharing stays independent. |
-| Multi-beacon map condensation by location/category | Map can filter by Plan and category; clustered/condensed multi-beacon presentation is not implemented here. |
+| Multi-beacon map condensation by location/category | Native/web maps now cluster nearby Beacons and people as zoom changes, with mixed-cluster drill-in and visible participant rows. Plan/category filters remain available; native device acceptance is still needed. |
 | Custom Bitmoji-like avatar construction | The app has a mini avatar picker and optional photo; it is not a full avatar editor. |
 | Birthday date display and public/private profile field controls | Birth date is kept private for age eligibility; only an optional birthday note is shown. Per-field profile visibility controls need a separate design. |
+| Custom full-profile visibility | Settings now supports Public, Friends, and selected people/squads/private lists. Profile fields, photos, live location, friend status, and widgets follow current visibility and blocks. Organization access awaits organization membership support. |
 
 ## Product boundaries
 
@@ -42,7 +43,9 @@ Beacon Plans are scheduled collections of beacons rather than renamed vacations.
 For the complete phase-by-phase status, remaining dependencies, paths, and
 priorities, see `REMAINING_UI_CHANGES.md`.
 
-Checkpoint validation: 110 unit/database tests, 18 browser tests, typecheck,
-lint, and fresh web/Android exports passed. Android export is bundle
-validation, not a native binary/device test. Migrations remain local; no
-remote Supabase deployment was performed.
+Latest bounded UI validation: targeted typecheck, targeted ESLint, and the two
+focused Friends Now browser tests passed. The full unit run still has one
+unrelated stale planning-message assertion to reconcile; full-suite and fresh
+export status remain with root QA. Android export verifies a bundle, not native
+binary/device behavior. Migrations remain local; no remote deployment was
+performed.

@@ -18,10 +18,14 @@ import {
   canWriteBeaconModule,
 } from "@/src/features/beacons/permissions";
 import {
+  beaconControlValuesFromActivity,
   canSetStrictCapacity,
+  defaultBeaconControlValues,
   validateBeaconControlValues,
   type BeaconControlValues,
 } from "@/src/features/beacons/controls";
+import { applyDemoModuleCollectionAction } from "@/src/features/beacons/moduleCollections";
+import { applyDemoBeaconMediaTeamAction } from "@/src/features/beacons/models";
 import type {
   BeaconDraft,
   Data,
@@ -49,6 +53,7 @@ export function makeDemo(): Data {
     createdAt = new Date().toISOString(),
     activityId = "demo-tools",
     startsAt = new Date(Date.now() + 86400000).toISOString();
+  const now = Date.now();
   data.viewer_id = DEMO_ID;
   data.is_demo = true;
   data.activities.push({
@@ -68,6 +73,16 @@ export function makeDemo(): Data {
     plan_id: null,
     plan_step_index: null,
     aspiration_ids: [],
+    enable_chat: true,
+    enable_checklist: true,
+    enable_journal: true,
+    enable_experiences: true,
+    enable_focus: true,
+    enable_reactions: true,
+    enable_comments: true,
+    enable_scoreboard: false,
+    enable_music: false,
+    checklist_edit_policy: "participants",
     audience: "squad",
     audience_id: "boxing",
   });
@@ -91,7 +106,10 @@ export function makeDemo(): Data {
       author_id: DEMO_ID,
       text: "Bring a water bottle",
       completed: false,
+      section_id: null,
+      assignee_id: null,
       created_at: createdAt,
+      updated_at: createdAt,
     },
     {
       id: "demo-checklist-wraps",
@@ -99,7 +117,10 @@ export function makeDemo(): Data {
       author_id: "jordan",
       text: "Pick a route everyone likes",
       completed: false,
+      section_id: null,
+      assignee_id: null,
       created_at: createdAt,
+      updated_at: createdAt,
     },
   ];
   data.beacon_notes = [
@@ -107,7 +128,9 @@ export function makeDemo(): Data {
       id: "demo-note-tools",
       activity_id: activityId,
       author_id: "jordan",
+      section_heading: "Route notes",
       body: "The lakefront route is open and easy to follow.",
+      visibility: "shared",
       revision: 0,
       created_at: createdAt,
       updated_at: createdAt,
@@ -149,6 +172,176 @@ export function makeDemo(): Data {
     created_at: pingCreatedAt,
     resolved_at: null,
   });
+  const sampleDraft = (
+    title: string,
+    category: BeaconDraft["category"],
+    offsetHours: number,
+  ): BeaconDraft => {
+    const starts = now + offsetHours * 3600000;
+    return {
+      title,
+      description: "A demo crew meetup shaped by everyone’s ideas.",
+      category,
+      mode: "squad",
+      starts_at: new Date(starts).toISOString(),
+      ends_at: new Date(starts + 90 * 60000).toISOString(),
+      timezone: "America/Chicago",
+      approval_required: false,
+      audience: "friends",
+      audience_id: null,
+      target_count: null,
+      label: "",
+      online_url: null,
+      latitude: null,
+      longitude: null,
+      aspiration_ids: [],
+    };
+  };
+  const makeIncomingPing = (
+    id: string,
+    ownerId: string,
+    title: string,
+    body: string,
+    deadlineHours: number,
+    startHours: number,
+  ) => ({
+    id,
+    owner_id: ownerId,
+    coowner_ids: [],
+    kind: "ping" as const,
+    title,
+    body,
+    audience: "friends" as const,
+    audience_id: null,
+    deadline_at: new Date(now + deadlineHours * 3600000).toISOString(),
+    status: "open" as const,
+    payload: sampleDraft(title.replace(/\?$/, ""), "Social", startHours),
+    winner_proposal_id: null,
+    replaced_from_proposal_id: null,
+    materialized_activity_id: null,
+    created_at: createdAt,
+    resolved_at: null,
+  });
+  data.planning_threads.push(
+    makeIncomingPing(
+      "demo-ping-jordan",
+      "jordan",
+      "Coffee and a bookstore?",
+      "There’s a new shop downtown. Want to check it out this weekend?",
+      36,
+      84,
+    ),
+    makeIncomingPing(
+      "demo-ping-sam",
+      "sam",
+      "Sunset walk, anyone?",
+      "I’ll be by the lake after work if anyone wants to join.",
+      48,
+      96,
+    ),
+  );
+
+  const voteDeadline = new Date(now + 18 * 3600000).toISOString();
+  data.planning_threads.push({
+    id: "demo-vote-weekend",
+    owner_id: "maya",
+    coowner_ids: [],
+    kind: "vote",
+    title: "Which weekend plan sounds best?",
+    body: "Choose the option you’d be excited to do.",
+    audience: "friends",
+    audience_id: null,
+    deadline_at: voteDeadline,
+    status: "open",
+    payload: null,
+    winner_proposal_id: null,
+    replaced_from_proposal_id: null,
+    materialized_activity_id: null,
+    created_at: createdAt,
+    resolved_at: null,
+  });
+  data.planning_proposals.push({
+    id: "demo-vote-option-walk",
+    thread_id: "demo-vote-weekend",
+    author_id: "maya",
+    payload: sampleDraft("Lakefront picnic walk", "Social", 48),
+    approved: true,
+    disqualified_at: null,
+    created_at: createdAt,
+    activity_id: null,
+  }, {
+    id: "demo-vote-option-market",
+    thread_id: "demo-vote-weekend",
+    author_id: "jordan",
+    payload: sampleDraft("Farmers market and lunch", "Social", 60),
+    approved: true,
+    disqualified_at: null,
+    created_at: createdAt,
+    activity_id: null,
+  });
+
+  const drawActivityId = "demo-draw-beacon",
+    drawProposalId = "demo-draw-winner",
+    drawPayload = sampleDraft("A surprise crew meetup", "Social", 120),
+    drawCreatedAt = new Date(now - 2 * 3600000).toISOString();
+  drawPayload.label = "Lakefront meetup spot (demo)";
+  drawPayload.latitude = 41.891;
+  drawPayload.longitude = -87.61;
+  data.activities.push({
+    id: drawActivityId,
+    owner_id: "jordan",
+    title: drawPayload.title,
+    description: drawPayload.description,
+    category: drawPayload.category,
+    mode: drawPayload.mode,
+    starts_at: drawPayload.starts_at,
+    ends_at: drawPayload.ends_at,
+    timezone: drawPayload.timezone,
+    approval_required: drawPayload.approval_required,
+    status: "scheduled",
+    goal_id: null,
+    habit_id: null,
+    plan_id: null,
+    plan_step_index: null,
+    aspiration_ids: [],
+    audience: drawPayload.audience,
+    audience_id: drawPayload.audience_id,
+  });
+  data.places.push({
+    activity_id: drawActivityId,
+    label: drawPayload.label,
+    latitude: drawPayload.latitude,
+    longitude: drawPayload.longitude,
+    online_url: null,
+  });
+  data.planning_threads.push({
+    id: "demo-draw-result",
+    owner_id: "jordan",
+    coowner_ids: [],
+    kind: "draw",
+    title: "Crew’s surprise meetup",
+    body: "The draw picked one of the approved ideas.",
+    audience: "friends",
+    audience_id: null,
+    deadline_at: new Date(now - 3600000).toISOString(),
+    status: "resolved",
+    payload: null,
+    winner_proposal_id: drawProposalId,
+    replaced_from_proposal_id: null,
+    materialized_activity_id: drawActivityId,
+    created_at: drawCreatedAt,
+    resolved_at: createdAt,
+  });
+  data.planning_proposals.push({
+    id: drawProposalId,
+    thread_id: "demo-draw-result",
+    author_id: "jordan",
+    payload: drawPayload,
+    approved: true,
+    disqualified_at: null,
+    created_at: drawCreatedAt,
+    activity_id: drawActivityId,
+  });
   return data;
 }
 export function demoAction(previous: Data, action: string, p: Payload): Data {
@@ -157,6 +350,70 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
     uid = DEMO_ID;
   const newId = () => "demo-" + Math.random().toString(36).slice(2);
   const currentProfile = d.profiles.find((profile) => profile.id === uid)!;
+  if (applyDemoBeaconMediaTeamAction(d, action, p, uid)) return d;
+  if (applyDemoModuleCollectionAction(d, action, p, uid, newId)) return d;
+  if (action === "save_profile_privacy") {
+    const visibility = p.profile_visibility,
+      personIds = p.person_ids ?? [],
+      squadIds = p.squad_ids ?? [],
+      listIds = p.list_ids ?? [],
+      arrays = [personIds, squadIds, listIds];
+    if (
+      (visibility !== "public" && visibility !== "friends" && visibility !== "custom") ||
+      arrays.some((value) => !Array.isArray(value) || value.some((id) => typeof id !== "string"))
+    )
+      throw new Error("Choose a valid profile audience.");
+    const [people, squads, lists] = arrays as string[][];
+    if (people.length > 200 || squads.length > 50 || lists.length > 100)
+      throw new Error("Your custom profile audience is too large.");
+    if (
+      [people, squads, lists].some((items) => new Set(items).size !== items.length)
+    )
+      throw new Error("Choose each audience member once.");
+    if (visibility !== "custom" && arrays.some((value) => (value as unknown[]).length > 0))
+      throw new Error("Custom audience selections are only used in Custom mode.");
+    if (
+      people.some(
+        (personId) =>
+          personId === uid ||
+          !d.profiles.some((profile) => profile.id === personId) ||
+          d.blocks.some(
+            (block) =>
+              (block.blocker_id === uid && block.blocked_id === personId) ||
+              (block.blocker_id === personId && block.blocked_id === uid),
+          ),
+      )
+    )
+      throw new Error("Choose valid, unblocked people.");
+    if (
+      squads.some(
+        (squadId) =>
+          !d.squad_members.some(
+            (member) => member.squad_id === squadId && member.user_id === uid,
+          ),
+      )
+    )
+      throw new Error("Choose squads you currently belong to.");
+    if (
+      lists.some(
+        (listId) =>
+          !d.lists.some((list) => list.id === listId && list.owner_id === uid),
+      )
+    )
+      throw new Error("Choose your own private friend lists.");
+    currentProfile.profile_visibility = visibility;
+    d.profile_visibility_grants = d.profile_visibility_grants.filter(
+      (grant) => grant.owner_id !== uid,
+    );
+    if (visibility === "custom") {
+      d.profile_visibility_grants.push(
+        ...people.map((target_id) => ({ owner_id: uid, kind: "person" as const, target_id })),
+        ...squads.map((target_id) => ({ owner_id: uid, kind: "squad" as const, target_id })),
+        ...lists.map((target_id) => ({ owner_id: uid, kind: "list" as const, target_id })),
+      );
+    }
+    return d;
+  }
   const isSquadMember = (squadId: string) =>
     d.squad_members.some(
       (member) => member.squad_id === squadId && member.user_id === uid,
@@ -189,20 +446,7 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
           (friendship.recipient_id === uid && friendship.sender_id === personId)),
     );
   const currentControlValues = (activity: Data["activities"][number]) =>
-    validateBeaconControlValues({
-      capacity_limit: activity.capacity_limit ?? null,
-      capacity_policy: activity.capacity_policy ?? "soft",
-      manual_closed: activity.manual_closed ?? false,
-      enable_chat: activity.enable_chat ?? true,
-      enable_checklist: activity.enable_checklist ?? true,
-      enable_journal: activity.enable_journal ?? true,
-      enable_experiences: activity.enable_experiences ?? true,
-      enable_focus: activity.enable_focus ?? true,
-      enable_reactions: activity.enable_reactions ?? true,
-      music_url: activity.music_url ?? null,
-      decoration_emoji: activity.decoration_emoji ?? null,
-      decoration_accent: activity.decoration_accent ?? null,
-    });
+    beaconControlValuesFromActivity(activity);
   if (action === "set_beacon_controls") {
     const activity = d.activities.find((item) => item.id === (p.activity_id ?? id));
     if (!activity || !canManageBeaconSettings(d, activity, uid))
@@ -725,6 +969,14 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
     if (!Number.isInteger(minutes) || minutes < 5 || minutes > 1440)
       throw new Error("Choose a duration from 5 to 1440 minutes.");
     const existing = d.templates.find((t) => t.id === id && t.owner_id === uid);
+    const moduleDefaults = p.module_defaults == null
+      ? existing?.module_defaults ?? null
+      : p.module_defaults as Record<string, unknown>;
+    if (moduleDefaults) {
+      const known = ["enable_chat", "enable_checklist", "enable_journal", "enable_experiences", "enable_focus", "enable_scoreboard", "enable_comments", "enable_music"];
+      if (Object.keys(moduleDefaults).some((key) => !known.includes(key)) || Object.values(moduleDefaults).some((value) => typeof value !== "boolean"))
+        throw new Error("Choose valid template module preferences.");
+    }
     const template = {
       id: existing?.id ?? newId(),
       owner_id: uid,
@@ -736,6 +988,7 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
       label: String(p.label ?? ""),
       target_count: p.target_count == null ? null : Number(p.target_count),
       approval_required: !!p.approval_required,
+      module_defaults: moduleDefaults,
     };
     if (existing) Object.assign(existing, template);
     else d.templates.push(template);
@@ -809,6 +1062,8 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
           activity_id: activityId,
           author_id: uid,
           body: value,
+          section_heading: "",
+          visibility: "shared",
           revision: 0,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
@@ -838,7 +1093,10 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
           author_id: uid,
           text: value,
           completed: false,
+          section_id: null,
+          assignee_id: null,
           created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
         });
       }
     }
@@ -956,6 +1214,7 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
         owner_id: uid,
         kind,
         name,
+        parent_id: null,
         created_at: now,
         updated_at: now,
       });
@@ -1182,19 +1441,25 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
   }
   if (action === "create_activity") {
     validateActivity(p);
+    const defaults = defaultBeaconControlValues();
     const controls = validateBeaconControlValues({
-      capacity_limit: p.capacity_limit ?? null,
-      capacity_policy: p.capacity_policy ?? "soft",
-      manual_closed: p.manual_closed ?? false,
-      enable_chat: p.enable_chat ?? true,
-      enable_checklist: p.enable_checklist ?? true,
-      enable_journal: p.enable_journal ?? true,
-      enable_experiences: p.enable_experiences ?? true,
-      enable_focus: p.enable_focus ?? true,
-      enable_reactions: p.enable_reactions ?? true,
-      music_url: p.music_url ?? null,
-      decoration_emoji: p.decoration_emoji ?? null,
-      decoration_accent: p.decoration_accent ?? null,
+      ...defaults,
+      capacity_limit: p.capacity_limit ?? defaults.capacity_limit,
+      capacity_policy: p.capacity_policy ?? defaults.capacity_policy,
+      manual_closed: p.manual_closed ?? defaults.manual_closed,
+      enable_chat: p.enable_chat ?? defaults.enable_chat,
+      enable_checklist: p.enable_checklist ?? defaults.enable_checklist,
+      enable_journal: p.enable_journal ?? defaults.enable_journal,
+      enable_experiences: p.enable_experiences ?? defaults.enable_experiences,
+      enable_focus: p.enable_focus ?? defaults.enable_focus,
+      enable_reactions: p.enable_reactions ?? defaults.enable_reactions,
+      enable_comments: p.enable_comments ?? defaults.enable_comments,
+      enable_scoreboard: p.enable_scoreboard ?? defaults.enable_scoreboard,
+      enable_music: p.enable_music ?? defaults.enable_music,
+      checklist_edit_policy: p.checklist_edit_policy ?? defaults.checklist_edit_policy,
+      music_url: p.music_url ?? defaults.music_url,
+      decoration_emoji: p.decoration_emoji ?? defaults.decoration_emoji,
+      decoration_accent: p.decoration_accent ?? defaults.decoration_accent,
     });
     const aid = newId();
     d.activities.push({
@@ -1339,6 +1604,9 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
       throw new Error("Invite an accepted friend to an active beacon.");
     if (existing && ["going", "requested", "invited"].includes(existing.status))
       return d;
+    d.activity_exclusions = d.activity_exclusions.filter(
+      (entry) => !(entry.activity_id === id && entry.user_id === targetId),
+    );
     d.rsvps = d.rsvps.filter(
       (item) => !(item.activity_id === id && item.user_id === targetId),
     );
@@ -1381,11 +1649,15 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
     d.beacon_invitation_grants = d.beacon_invitation_grants.filter(
       (item) => !(item.activity_id === id && item.user_id === targetId),
     );
+    if (!d.activity_exclusions.some(
+      (entry) => entry.activity_id === id && entry.user_id === targetId,
+    ))
+      d.activity_exclusions.push({ activity_id: id, user_id: targetId });
   }
   if (action === "comment") {
     const activity = d.activities.find((item) => item.id === id);
-    if (!activity || !canWriteBeaconModule(d, activity, uid, "experiences"))
-      throw new Error("Experiences are paused or unavailable for this beacon.");
+    if (!activity || !canWriteBeaconModule(d, activity, uid, "comments"))
+      throw new Error("Comments are paused or unavailable for this beacon.");
     d.comments.push({
       id: newId(),
       activity_id: id,

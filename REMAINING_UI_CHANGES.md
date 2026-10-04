@@ -15,8 +15,8 @@ or a native binary build. Local migrations have not been remotely deployed.
   feature folders, data/domain boundaries, and prior shared implementations
   were reviewed before this checkpoint. Preserve the current app/ route
   wrappers and established src/features, src/shared, and src/platform
-  organization. Paths: _inventory.txt, app/_inventory.txt, src/_inventory.txt,
-  src/features/_inventory.txt.
+  organization. Paths: _inventory.md, app/_inventory.md, src/_inventory.md,
+  src/features/_inventory.md.
 
 ## Phase 1 — Component architecture
 
@@ -47,11 +47,11 @@ or a native binary build. Local migrations have not been remotely deployed.
 
 ## Phase 2 — Shared design system
 
-- **Selected controls — In progress; High.** Chips, directory filters, and
-  Current/Upcoming/Past now pair a visible check mark with selected
-  accessibility state. Validate native/web rendering and all multiselects;
-  audit controls implemented locally outside these primitives for equivalent
-  visible and accessible state. Paths: src/shared/ui.tsx,
+- **Selected controls — Implemented; broader audit remains.** Activities period
+  tabs, Friends Now filters, and directory tabs use selected contrast and
+  accessibility state without redundant checks. Multi-select interests and
+  custom privacy audiences retain meaningful checks. Audit other local controls
+  as their screens change. Paths: src/shared/ui.tsx,
   src/features/people/DirectoryControls.tsx,
   src/features/beacons/screens/ActivitiesScreen.tsx,
   src/features/plans/PlansScreen.tsx.
@@ -160,10 +160,13 @@ or a native binary build. Local migrations have not been remotely deployed.
   place, or select a map point and carry it into Beacon creation. Paths:
   src/features/maps/screens/MapScreen.tsx,
   src/features/maps/components/BeaconMap.tsx, app/create.tsx.
-- **Clustering, marker sizing, and drill-in — Partial; High.** Map markers and
-  Beacon tooltip/detail exist; verify explicit avatar/Beacon clusters,
-  mixed-cluster drill-in, and marker-size hierarchy rather than treating a
-  filter as clustering. Paths:
+- **Clustering, marker sizing, and drill-in — Implemented.** Native and web
+  use shared screen-space clustering as zoom changes. Smaller avatar markers
+  remain below Beacon size. Mixed clusters expand into Beacons with visible
+  participants and People; map taps dismiss popups, and viewer-scoped route
+  handling prevents old links from restoring dismissed or revoked selections.
+  Native device acceptance remains. Paths:
+  src/features/maps/cluster.ts,
   src/features/maps/components/BeaconMap.tsx,
   src/features/maps/MapTooltip.tsx, src/features/maps/MapPanel.tsx.
 - **Directions and person quick actions — Not complete; High.** Physical
@@ -182,6 +185,13 @@ or a native binary build. Local migrations have not been remotely deployed.
   confirm screen and widget clocks on native/web. Paths:
   src/features/beacons/screens/ActivitiesScreen.tsx,
   src/features/planning/PlanningInbox.tsx, src/shared/domain.ts.
+- **Friend status presentation — Implemented.** Compact rows show a clock/time
+  caption, fresh authorized-location pin, and an avatar availability badge:
+  green for explicitly available, yellow within 30 minutes of ending, red for
+  explicitly unavailable. Missing/private status stays neutral. Widget feeds
+  apply the same full-profile visibility gate and reject mismatched viewers.
+  Paths: src/features/beacons/screens/ActivitiesScreen.tsx,
+  src/features/widgets/derive.ts, src/shared/domain.ts.
 - **Current status priority/editing — Partial; High.** Friend preview and
   Find Friends work, but editing the user's status directly here and
   prioritizing people inside the user's Beacon need completion. Paths:
@@ -251,6 +261,16 @@ or a native binary build. Local migrations have not been remotely deployed.
   a full avatar builder and per-field public profile visibility controls do
   not. Birthday/age information remains private. Paths:
   src/features/profile/, src/shared/types.ts.
+- **Full profile privacy — Implemented; organizations pending.** Settings
+  offers Public (existing authenticated discovery), accepted Friends, or Custom
+  selected people/current squad members/owner-list members. Server projections
+  distinguish minimal authorized identity from full profile fields. Direct
+  sensitive-column reads, private photos, and GPS reads obey the current
+  audience and mutual blocks. Organization selection depends on real
+  organization membership support; per-field profile privacy remains separate.
+  Paths: app/settings.tsx, src/features/profile/privacy.ts,
+  src/features/profile/screens/ProfilePrivacySettings.tsx,
+  supabase/migrations/202610030001_profile_privacy.sql.
 
 ## Phase 13 — Onboarding and authentication
 

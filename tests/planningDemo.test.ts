@@ -47,6 +47,29 @@ test("demo includes a friend ping and supports a response", () => {
   });
 });
 
+test("demo has multiple incoming pings, a vote, and a resolved draw linked to its beacon", () => {
+  const data = makeDemo();
+  assert.ok(
+    data.planning_threads.filter(
+      (thread) => thread.kind === "ping" && thread.owner_id !== DEMO_ID,
+    ).length >= 3,
+  );
+  const vote = data.planning_threads.find(
+      (thread) => thread.id === "demo-vote-weekend",
+    ),
+    draw = data.planning_threads.find(
+      (thread) => thread.id === "demo-draw-result",
+    );
+  assert.equal(vote?.kind, "vote");
+  assert.ok(data.planning_proposals.some((proposal) => proposal.thread_id === vote?.id));
+  assert.equal(draw?.status, "resolved");
+  assert.ok(
+    data.activities.some(
+      (activity) => activity.id === draw?.materialized_activity_id,
+    ),
+  );
+});
+
 test("demo converts pings and resolves a vote council deterministically without votes", () => {
   const initial = makeDemo(),
     deadline = new Date(Date.now() + 60 * 60 * 1000).toISOString(),

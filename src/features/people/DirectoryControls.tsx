@@ -1,5 +1,5 @@
 import React from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import {
   LayoutGrid,
   LockKeyhole,
@@ -9,6 +9,7 @@ import {
   UsersRound,
 } from "lucide-react-native";
 import { useTheme } from "@/src/shared/ui";
+import { MotionPressable } from "@/src/shared/MotionPressable";
 
 export type DirectoryFilter = "All" | "Squads" | "Friends" | "Private lists";
 
@@ -42,7 +43,7 @@ export function DirectoryControls({
       {options.map(({ label, Icon }) => {
         const selected = label === value;
         return (
-          <Pressable
+          <MotionPressable
             key={label}
             accessibilityRole="button"
             accessibilityLabel={label}
@@ -73,10 +74,9 @@ export function DirectoryControls({
                 color: selected ? colors.white : colors.muted,
               }}
             >
-              {selected ? "\u2713 " : ""}
               {label === "Private lists" ? "Lists" : label}
             </Text>
-          </Pressable>
+          </MotionPressable>
         );
       })}
     </View>
@@ -99,7 +99,7 @@ export function DirectoryActions({
   return (
     <View style={{ flexDirection: "row", gap: 8 }}>
       {actions.map(({ label, Icon, onPress }) => (
-        <Pressable
+        <MotionPressable
           key={label}
           accessibilityRole="button"
           accessibilityLabel={label}
@@ -123,7 +123,7 @@ export function DirectoryActions({
           <Text style={[styles.body, { fontSize: 13, fontWeight: "700" }]}>
             {label}
           </Text>
-        </Pressable>
+        </MotionPressable>
       ))}
     </View>
   );

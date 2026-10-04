@@ -212,6 +212,22 @@ export default function ProfileScreen() {
           />
         )}
       </View>
+      <View style={[styles.card, { gap: 8 }]}>
+        <Text style={styles.h2}>Your library</Text>
+        <Txt muted>Private journal entries and editable checklist copies.</Txt>
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+          <Button
+            title={`Journals (${data.beacon_notes.filter((note) => note.author_id === userId).length})`}
+            secondary
+            onPress={() => router.push({ pathname: "/library", params: { kind: "journal" } } as Href)}
+          />
+          <Button
+            title={`Lists (${data.library_saved_checklists.filter((list) => list.owner_id === userId).length})`}
+            secondary
+            onPress={() => router.push({ pathname: "/library", params: { kind: "checklist" } } as Href)}
+          />
+        </View>
+      </View>
       <View style={styles.card}>
         <View style={styles.row}>
           <ShieldCheck color={colors.green} />
@@ -221,6 +237,11 @@ export default function ProfileScreen() {
           Location is off unless you explicitly share it. Your birth date is
           private. Only an optional birthday note is shown on your profile.
         </Txt>
+        <Button
+          title="Manage profile visibility"
+          secondary
+          onPress={() => router.push("/settings" as Href)}
+        />
         <Button
           title="Manage temporary location"
           secondary

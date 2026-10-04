@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { openBeaconFromMap } from "./mapHelpers";
 async function demo(page: Page) {
   await page.goto("/");
   await page.getByRole("button", { name: /Explore the demo/ }).click();
@@ -37,7 +38,12 @@ test("Squads is a unified people and groups directory", async ({ page }) => {
     page.getByRole("button", { name: "Open profile Maya Chen" }),
   ).toHaveCount(0);
   await page.getByRole("button", { name: "Friends", exact: true }).click();
-  await expect(page.getByText("\u2713 Friends", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Friends", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("\u2713 Friends", { exact: true })).toHaveCount(
+    0,
+  );
   await expect(
     page.getByRole("button", { name: "Open profile Maya Chen" }),
   ).toBeVisible();
@@ -55,7 +61,9 @@ test("friend conversation opens from the main row and profile stays separate", a
 }) => {
   await demo(page);
   await page.getByRole("tab", { name: "Squads", exact: true }).click();
-  await page.getByRole("button", { name: "Message Maya Chen", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Message Maya Chen", exact: true })
+    .click();
   await expect(page).toHaveURL(/\/messages\/maya$/);
   await expect(page.getByLabel("Message", { exact: true })).toBeVisible();
   await page.goBack();
@@ -72,22 +80,57 @@ test("four tabs, Current friends, favorites, joining and map chat", async ({
   await expect(page.getByTestId("full-map-screen")).toBeVisible();
   await page.getByRole("tab", { name: "Beacons", exact: true }).click();
   await expect(page.getByText("Friends Now", { exact: true })).toBeVisible();
-  await expect(page.getByText("\u2713 Current", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Current", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("\u2713 Current", { exact: true })).toHaveCount(
+    0,
+  );
   await expect(page.getByText(/Free til/).first()).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Favorites", exact: true }),
   ).toHaveCount(0);
-  for (const utility of ["Beacon Plans", "My templates", "Library", "Pings & Decisions"])
-    await expect(page.getByRole("button", { name: utility, exact: true })).toHaveCount(0);
-  await page.getByRole("button", { name: "Starred Friends", exact: true }).click();
-  await expect(page.getByText("\u2713 Starred Friends", { exact: true })).toBeVisible();
+  for (const utility of [
+    "Beacon Plans",
+    "My templates",
+    "Library",
+    "Pings & Decisions",
+  ])
+    await expect(
+      page.getByRole("button", { name: utility, exact: true }),
+    ).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Starred Friends", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Starred Friends", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("\u2713 Starred Friends", { exact: true }),
+  ).toHaveCount(0);
   await page.getByRole("button", { name: "Everyone", exact: true }).click();
   await page.getByRole("button", { name: "Upcoming", exact: true }).click();
-  await expect(page.getByText("\u2713 Upcoming", { exact: true })).toBeVisible();
-  for (const utility of ["Beacon Plans", "Favorites", "My templates", "Library", "Pings & Decisions"])
-    await expect(page.getByRole("button", { name: utility, exact: true })).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Upcoming", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("\u2713 Upcoming", { exact: true })).toHaveCount(
+    0,
+  );
+  for (const utility of [
+    "Beacon Plans",
+    "Favorites",
+    "My templates",
+    "Library",
+    "Pings & Decisions",
+  ])
+    await expect(
+      page.getByRole("button", { name: utility, exact: true }),
+    ).toHaveCount(0);
   await page.getByRole("button", { name: "Past", exact: true }).click();
-  await expect(page.getByText("\u2713 Past", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Past", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("\u2713 Past", { exact: true })).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: "Favorites", exact: true }),
   ).toBeVisible();
@@ -115,12 +158,20 @@ test("four tabs, Current friends, favorites, joining and map chat", async ({
   await priorityMarker.click();
   await expect(page).toHaveURL(feedUrl);
   await beaconCard.getByRole("button", { name: "I'm In", exact: true }).click();
-  await expect(page).toHaveURL(/\/activities$/);
+  await expect(
+    beaconCard.getByText("You're in. See you there!", { exact: true }),
+  ).toBeVisible();
   await expect(page.getByText("Friends Now", { exact: true })).toBeVisible();
-  await beaconCard.getByRole("button", { name: "I'm Out", exact: true }).click();
-  await expect(page).toHaveURL(/\/activities$/);
+  await beaconCard
+    .getByRole("button", { name: "I'm Out", exact: true })
+    .click();
+  await expect(
+    beaconCard.getByText("You're in. See you there!", { exact: true }),
+  ).toHaveCount(0);
   await beaconCard.getByRole("button", { name: "I'm In", exact: true }).click();
-  await expect(page).toHaveURL(/\/activities$/);
+  await expect(
+    beaconCard.getByText("You're in. See you there!", { exact: true }),
+  ).toBeVisible();
   await beaconTitle.click();
   await expect(page.getByTestId("map-tooltip")).toBeVisible();
   await expect(page.getByTestId("map-panel")).toHaveCount(0);
@@ -132,8 +183,14 @@ test("four tabs, Current friends, favorites, joining and map chat", async ({
   await expect(page.getByText("On my way!", { exact: true })).toBeVisible();
   await page.getByRole("tab", { name: "Overview", exact: true }).click();
   await page.getByRole("button", { name: "I'm Out", exact: true }).click();
+  await expect(page.getByRole("tab", { name: "Chat", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "I'm In", exact: true }).click();
+  await expect(
+    page.getByText("You're in. See you there!", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Chat", exact: true })).toBeVisible();
   await page.getByRole("tab", { name: "Chat", exact: true }).click();
-  await expect(page.getByText("A room for the crew")).toBeVisible();
+  await expect(page.getByText("On my way!", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Back to map tooltip" }).click();
   await page.getByRole("button", { name: /^Inbox/ }).click();
   await expect(page.getByText("Your inbox", { exact: true })).toBeVisible();
@@ -187,9 +244,14 @@ test("template library searches editable recipes with mapped categories and dura
   await expect(page.getByLabel("What are you doing?")).toHaveValue(
     "Birdwatching",
   );
-  await expect(page.getByRole("button", { name: "90 min", exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "90 min", exact: true }),
+  ).toBeVisible();
   await expect(page.getByLabel("Which trail or route?")).toBeVisible();
-  await expect(page.getByText("OPTIONAL TOOL IDEAS", { exact: true })).toBeVisible();
+  await expect(
+    page.getByText("READY WITH", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText(/Chat.*Checklist.*Beacon Note/)).toBeVisible();
 });
 test("status availability and removed goals", async ({ page }) => {
   await demo(page);
@@ -224,10 +286,16 @@ for (const width of [320, 390])
     }
     await page.getByRole("tab", { name: "Beacons", exact: true }).click();
     await expect(
-      page.getByRole("button", { name: "View A few rounds. Good company. details" }),
+      page.getByRole("button", {
+        name: "View A few rounds. Good company. details",
+      }),
     ).toBeVisible();
-    await expect(page.getByRole("button", { name: "Full", exact: true })).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Compact", exact: true })).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Full", exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Compact", exact: true }),
+    ).toHaveCount(0);
     await page.screenshot({ path: `test-results/current-card-${width}.png` });
     await create(page);
     await expect(
@@ -236,12 +304,7 @@ for (const width of [320, 390])
   });
 test("map pin opens inline details", async ({ page }) => {
   await demo(page);
-  await page
-    .getByRole("button", {
-      name: "Map: A few rounds. Good company.",
-      exact: true,
-    })
-    .click();
+  await openBeaconFromMap(page, "A few rounds. Good company.");
   await expect(page.getByTestId("map-tooltip")).toBeVisible();
   await expect(page.getByTestId("map-panel")).toHaveCount(0);
   await page.getByRole("button", { name: "Maybe", exact: true }).click();
@@ -332,9 +395,13 @@ test("compact Beacons controls stay usable at narrow widths in every theme", asy
     await page.getByRole("tab", { name: "Profile", exact: true }).click();
     await page.getByRole("button", { name: theme, exact: true }).click();
     await page.getByRole("tab", { name: "Beacons", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Current", exact: true })).toBeVisible();
     await expect(
-      page.getByRole("button", { name: "View A few rounds. Good company. details" }),
+      page.getByRole("button", { name: "Current", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", {
+        name: "View A few rounds. Good company. details",
+      }),
     ).toBeVisible();
     for (const width of [320, 390]) {
       await page.setViewportSize({ width, height: 740 });
@@ -343,7 +410,9 @@ test("compact Beacons controls stay usable at narrow widths in every theme", asy
           () => document.documentElement.scrollWidth <= innerWidth,
         ),
       ).toBe(true);
-      await expect(page.getByText("Friends Now", { exact: true })).toBeVisible();
+      await expect(
+        page.getByText("Friends Now", { exact: true }),
+      ).toBeVisible();
     }
   }
 });

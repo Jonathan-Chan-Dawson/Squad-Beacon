@@ -1,5 +1,6 @@
 import { friendIds } from "@/src/shared/domain";
 import type { Data, Activity } from "@/src/shared/types";
+import { canViewProfile } from "@/src/features/profile/privacy";
 import {
   defaultWidgetPreferences,
   type BeaconFeed,
@@ -13,6 +14,13 @@ import {
 
 const circleKeys: CircleKey[] = ["circle1", "circle2", "circle3"];
 export const WIDGET_FRESHNESS_MS = 15 * 60 * 1000;
+
+function canWidgetShowPerson(data: Data, viewerId: string, personId: string) {
+  return (
+    data.viewer_id === viewerId &&
+    (personId === viewerId || canViewProfile(data, personId, viewerId))
+  );
+}
 
 function sourceFriendIds(
   data: Data,
@@ -66,6 +74,7 @@ function friendStatus(
       activity.status === "scheduled" &&
       Date.parse(activity.starts_at) <= now &&
       Date.parse(activity.ends_at) > now &&
+      canWidgetShowPerson(data, userId, activity.owner_id) &&
       canViewerSeeActivity(data, userId, activity),
   );
   const activity =
@@ -100,7 +109,12 @@ function makeFriendFeed(
   const ordered = [...new Set(friendIdsToShow)]
     .map((id) => {
       const profile = data.profiles.find((item) => item.id === id);
-      if (!profile || id === userId) return null;
+      if (
+        !profile ||
+        id === userId ||
+        !canViewProfile(data, profile, userId)
+      )
+        return null;
       const { activity, free } = friendStatus(data, userId, id, now);
       return { profile, activity, free };
     })
@@ -174,6 +188,7 @@ function circleBeaconFeed(
       if (
         activity.status !== "scheduled" ||
         Date.parse(activity.ends_at) <= now ||
+        !canWidgetShowPerson(data, userId, activity.owner_id) ||
         !canViewerSeeActivity(data, userId, activity)
       )
         return false;
@@ -185,6 +200,7 @@ function circleBeaconFeed(
             rsvp.activity_id === activity.id &&
             rsvp.status === "going" &&
             rsvp.approved &&
+            canWidgetShowPerson(data, userId, rsvp.user_id) &&
             (friends.has(rsvp.user_id) || squadMemberIds.has(rsvp.user_id)),
         );
       return inCircle;
@@ -241,7 +257,8 @@ export function deriveWidgetPayload(
   const timestamp = +now;
   const updatedEpoch = +fetchedAt;
   const stale = timestamp >= updatedEpoch + WIDGET_FRESHNESS_MS;
-  if (stale)
+  const snapshotMatchesViewer = data.viewer_id === userId;
+  if (stale || !snapshotMatchesViewer)
     return {
       updatedEpoch,
       stale: true,
@@ -354,9 +371,14 @@ export function widgetTimelineDates(
   const lower = +now;
   const upper = lower + WIDGET_FRESHNESS_MS;
   const dates = new Set<number>([lower]);
+  if (data.viewer_id !== userId) {
+    dates.add(upper);
+    return [...dates].sort((a, b) => a - b).map((value) => new Date(value));
+  }
   data.activities.forEach((activity) => {
     if (
       activity.status !== "scheduled" ||
+      !canWidgetShowPerson(data, userId, activity.owner_id) ||
       !canViewerSeeActivity(data, userId, activity)
     )
       return;

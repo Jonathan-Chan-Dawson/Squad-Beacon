@@ -26,11 +26,23 @@ export function canReadBeaconActivity(
   if (activity.owner_id === userId) return true;
   if (isBlocked(data, activity.owner_id, userId)) return false;
   if (
+    data.activity_exclusions.some(
+      (entry) => entry.activity_id === activity.id && entry.user_id === userId,
+    )
+  )
+    return false;
+  if (
     data.rsvps.some(
       (rsvp) =>
         rsvp.activity_id === activity.id &&
         rsvp.user_id === userId &&
         rsvp.approved,
+    )
+  )
+    return true;
+  if (
+    data.beacon_invitation_grants.some(
+      (grant) => grant.activity_id === activity.id && grant.user_id === userId,
     )
   )
     return true;
@@ -96,7 +108,15 @@ export function canEditBeaconChecklist(
   activity: Activity,
   userId: string,
 ) {
-  return activity.status === "scheduled" && canUseBeaconModules(data, activity, userId);
+  if (activity.status !== "scheduled" || !canUseBeaconModules(data, activity, userId))
+    return false;
+  if (activity.checklist_edit_policy !== "managers") return true;
+  return activity.owner_id === userId || data.beacon_roles.some(
+    (role) =>
+      role.activity_id === activity.id &&
+      role.user_id === userId &&
+      (role.role === "coowner" || role.role === "admin"),
+  );
 }
 
 /** Completed beacons can keep collecting memory notes; cancelled ones cannot. */
@@ -118,6 +138,24 @@ export function canReadBeaconModuleEntry(
   return (
     canUseBeaconModules(data, activity, userId) &&
     !isBlocked(data, authorId, userId)
+  );
+}
+
+/** Private Beacon Notes are only readable by their author, even from stale demo data. */
+export function canReadBeaconNote(
+  data: Data,
+  note: Data["beacon_notes"][number],
+  userId: string,
+) {
+  if (data.viewer_id != null && data.viewer_id !== userId) return false;
+  const current = data.beacon_notes.find((item) => item.id === note.id);
+  if (!current || current.author_id !== note.author_id) return false;
+  if (current.visibility === "private") return current.author_id === userId;
+  if (!current.activity_id) return current.author_id === userId;
+  const activity = data.activities.find((item) => item.id === current.activity_id);
+  return !!(
+    activity &&
+    canReadBeaconModuleEntry(data, activity, current.author_id, userId)
   );
 }
 

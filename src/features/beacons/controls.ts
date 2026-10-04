@@ -33,6 +33,10 @@ export interface BeaconControlValues {
   enable_experiences: boolean;
   enable_focus: boolean;
   enable_reactions: boolean;
+  enable_comments: boolean;
+  enable_scoreboard: boolean;
+  enable_music: boolean;
+  checklist_edit_policy: "participants" | "managers";
   music_url: string | null;
   decoration_emoji: DecorationEmoji | null;
   decoration_accent: DecorationAccent | null;
@@ -44,11 +48,15 @@ export function defaultBeaconControlValues(): BeaconControlValues {
     capacity_policy: "soft",
     manual_closed: false,
     enable_chat: true,
-    enable_checklist: true,
-    enable_journal: true,
-    enable_experiences: true,
-    enable_focus: true,
+    enable_checklist: false,
+    enable_journal: false,
+    enable_experiences: false,
+    enable_focus: false,
     enable_reactions: true,
+    enable_comments: true,
+    enable_scoreboard: false,
+    enable_music: false,
+    checklist_edit_policy: "participants",
     music_url: null,
     decoration_emoji: null,
     decoration_accent: null,
@@ -61,6 +69,19 @@ export function beaconControlValuesFromActivity(
   return validateBeaconControlValues({
     ...defaultBeaconControlValues(),
     ...activity,
+    // Missing values in pre-module snapshots mean legacy behavior, not a new
+    // Beacon's OFF-by-default recommendation.
+    enable_chat: activity.enable_chat ?? true,
+    enable_checklist: activity.enable_checklist ?? true,
+    enable_journal: activity.enable_journal ?? true,
+    enable_experiences: activity.enable_experiences ?? true,
+    enable_focus: activity.enable_focus ?? true,
+    enable_reactions: activity.enable_reactions ?? true,
+    enable_comments:
+      activity.enable_comments ?? activity.enable_experiences ?? true,
+    enable_scoreboard: activity.enable_scoreboard ?? false,
+    enable_music: activity.enable_music ?? !!activity.music_url,
+    checklist_edit_policy: activity.checklist_edit_policy ?? "participants",
   });
 }
 
@@ -125,6 +146,9 @@ export function validateBeaconControlValues(
     "enable_experiences",
     "enable_focus",
     "enable_reactions",
+    "enable_comments",
+    "enable_scoreboard",
+    "enable_music",
   ] as const;
   for (const field of boolFields)
     if (typeof value[field] !== "boolean")
@@ -135,6 +159,11 @@ export function validateBeaconControlValues(
   const accent = value.decoration_accent;
   if (accent !== null && !(DECORATION_ACCENTS as readonly unknown[]).includes(accent))
     throw new Error("Choose one of the available beacon colors.");
+  if (
+    value.checklist_edit_policy !== "participants" &&
+    value.checklist_edit_policy !== "managers"
+  )
+    throw new Error("Choose who can edit the checklist.");
   return {
     capacity_limit: capacityLimit as number | null,
     capacity_policy: capacityPolicy,
@@ -145,6 +174,10 @@ export function validateBeaconControlValues(
     enable_experiences: value.enable_experiences as boolean,
     enable_focus: value.enable_focus as boolean,
     enable_reactions: value.enable_reactions as boolean,
+    enable_comments: value.enable_comments as boolean,
+    enable_scoreboard: value.enable_scoreboard as boolean,
+    enable_music: value.enable_music as boolean,
+    checklist_edit_policy: value.checklist_edit_policy,
     music_url: validateMusicUrl(value.music_url),
     decoration_emoji: emoji as DecorationEmoji | null,
     decoration_accent: accent as DecorationAccent | null,

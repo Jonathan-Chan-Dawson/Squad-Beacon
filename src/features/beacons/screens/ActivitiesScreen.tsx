@@ -6,18 +6,27 @@ import { Pressable, Text, View } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import {
   CalendarDays,
+  Check,
   Clock3,
   History,
+  MapPin,
   MessageSquareText,
   SlidersHorizontal,
   Star,
+  X,
   Zap,
 } from "lucide-react-native";
 import { useBeacon } from "@/src/shared/store";
 import { useNow } from "@/src/shared/useNow";
-import { friendIds } from "@/src/shared/domain";
+import {
+  friendAvailabilityState,
+  friendIds,
+  locationIsFresh,
+} from "@/src/shared/domain";
+import { canViewProfile } from "@/src/features/profile/privacy";
 import { browseBeacons, type Period, type SortOrder } from "@/src/shared/browsing";
 import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
+import { MotionPressable } from "@/src/shared/MotionPressable";
 import {
   Action,
   Button,
@@ -59,7 +68,7 @@ function ActivityPeriodTabs({
       {options.map(({ label, Icon }) => {
         const selected = label === value;
         return (
-          <Pressable
+          <MotionPressable
             key={label}
             accessibilityRole="button"
             accessibilityLabel={label}
@@ -89,10 +98,9 @@ function ActivityPeriodTabs({
                 color: selected ? colors.white : colors.muted,
               }}
             >
-              {selected ? "\u2713 " : ""}
               {label}
             </Text>
-          </Pressable>
+          </MotionPressable>
         );
       })}
     </View>
@@ -124,7 +132,16 @@ export default function ActivitiesScreen() {
     ),
     favoriteCount = data.favorites.filter(
       (item) => item.owner_id === userId,
-    ).length;
+    ).length,
+    savedBeacons = data.beacon_favorites
+      .filter(
+        (item) =>
+          item.owner_id === userId &&
+          data.activities.some((activity) => activity.id === item.activity_id),
+      )
+      .map((item) => data.activities.find((activity) => activity.id === item.activity_id)!)
+      .sort((left, right) => right.starts_at.localeCompare(left.starts_at)),
+    savedBeaconCount = savedBeacons.length;
   useFocusEffect(
     useCallback(() => {
       if (params.filter === "Past") setPeriod("Past");
@@ -144,24 +161,38 @@ export default function ActivitiesScreen() {
   const people = data.profiles
     .filter((p) => friends.includes(p.id))
     .map((person) => {
-      const activity =
-        live
-          .filter((a) => a.owner_id === person.id && a.mode === "solo")
-          .sort((a, b) => b.starts_at.localeCompare(a.starts_at))[0] ??
-        live.find(
-          (a) =>
-            a.owner_id === person.id ||
-            data.rsvps.some(
-              (r) =>
-                r.activity_id === a.id &&
-                r.user_id === person.id &&
-                r.status === "going",
-            ),
+      const canView = canViewProfile(data, person, userId!);
+      const activity = canView
+        ? live
+            .filter((a) => a.owner_id === person.id && a.mode === "solo")
+            .sort((a, b) => b.starts_at.localeCompare(a.starts_at))[0] ??
+          live.find(
+            (a) =>
+              a.owner_id === person.id ||
+              data.rsvps.some(
+                (r) =>
+                  r.activity_id === a.id &&
+                  r.user_id === person.id &&
+                  r.status === "going",
+              ),
+          )
+        : undefined;
+      const availability = friendAvailabilityState(activity, now);
+      const location =
+        canView &&
+        data.locations.find(
+          (item) =>
+            item.owner_id === person.id &&
+            locationIsFresh(item, new Date(now)),
         );
       return {
         person,
+        canView,
         activity,
-        free: activity?.mode === "solo" && activity.available === true,
+        availability,
+        location,
+        free:
+          availability === "available" || availability === "ending-soon",
       };
     })
     .sort(
@@ -214,6 +245,11 @@ export default function ActivitiesScreen() {
     activities.sort(
       (a, b) => priority(b) - priority(a) || a.ends_at.localeCompare(b.ends_at),
     );
+  const activeFilterCount =
+    Number(!!query.trim()) +
+    Number(category !== "All categories") +
+    Number(joined) +
+    Number(sort !== "Soonest");
   const open = (id: string) =>
     router.push({ pathname: "/(tabs)", params: { beacon: id } });
   const time = (value: string) =>
@@ -221,51 +257,166 @@ export default function ActivitiesScreen() {
       hour: "numeric",
       minute: "2-digit",
     });
-  const personTile = ({ person, activity, free }: (typeof people)[number]) => (
-    <Pressable
-      key={person.id}
-      accessibilityRole="button"
-      accessibilityLabel={`See ${person.name} now`}
-      onPress={() => {
-        setAllFriends(false);
-        router.push({
-          pathname: "/(tabs)",
-          params: { person: person.id, beacon: activity?.id ?? "" },
-        });
-      }}
-      style={({ pressed }) => ({
-        height: 54,
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 11,
-        paddingRight: 12,
-        borderRadius: 18,
-        overflow: "hidden",
-        backgroundColor: free ? colors.lime : colors.white,
-        borderWidth: 1,
-        borderColor: colors.line,
-        opacity: pressed ? 0.72 : 1,
-      })}
-    >
-      <ProfileAvatar profile={person} size={54} />
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <Text numberOfLines={1} style={[styles.body, { fontWeight: "700" }]}>
-          {person.name}
-        </Text>
-        <Text
-          numberOfLines={1}
-          style={[styles.muted, free && { color: colors.green }]}
-        >
-          {free
-            ? `Free til ${time(activity!.ends_at)} | ${activity!.title}`
-            : (activity?.title ?? "No status shared")}
-        </Text>
-      </View>
-      {favorite("friend", person.id) && (
-        <Star size={16} color={colors.green} fill={colors.lime} />
-      )}
-    </Pressable>
-  );
+  const personTile = ({
+    person,
+    canView,
+    activity,
+    availability,
+    location,
+    free,
+  }: (typeof people)[number]) => {
+    const displayName = canView ? person.name : "Friend";
+    const availabilityText =
+      availability === "available"
+        ? "Available"
+        : availability === "ending-soon"
+          ? "Ending soon"
+          : availability === "unavailable"
+            ? "Unavailable"
+              : activity
+                ? "At a beacon"
+                : "No status shared";
+    const availabilityColor =
+      availability === "available"
+        ? "#22C55E"
+        : availability === "ending-soon"
+          ? "#F5C542"
+          : availability === "unavailable"
+            ? "#EF4444"
+            : colors.muted;
+    const timeLabel = activity
+      ? availability === "available" || availability === "ending-soon"
+        ? `Available until ${time(activity.ends_at)}`
+        : availability === "unavailable"
+          ? `Status through ${time(activity.ends_at)}`
+          : `Beacon ends ${time(activity.ends_at)}`
+      : undefined;
+    const caption = activity
+      ? [
+          availability === "available" || availability === "ending-soon"
+            ? `Free til ${time(activity.ends_at)}`
+            : availability === "unavailable"
+              ? `Until ${time(activity.ends_at)}`
+              : `Ends ${time(activity.ends_at)}`,
+          activity.title,
+        ]
+            .join(" · ")
+      : "No status shared";
+    const rowLabel = [
+      `See ${displayName} now`,
+      availabilityText,
+      caption,
+      location ? "Location shared" : undefined,
+    ]
+      .filter(Boolean)
+      .join(". ");
+
+    return (
+      <Pressable
+        key={person.id}
+        accessibilityRole="button"
+        accessibilityLabel={rowLabel}
+        onPress={() => {
+          setAllFriends(false);
+          router.push({
+            pathname: "/(tabs)",
+            params: { person: person.id, beacon: activity?.id ?? "" },
+          });
+        }}
+        style={({ pressed }) => ({
+          minHeight: 64,
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 10,
+          paddingVertical: 4,
+          paddingRight: 12,
+          borderRadius: 18,
+          overflow: "hidden",
+          backgroundColor: free ? colors.lime : colors.white,
+          borderWidth: 1,
+          borderColor: colors.line,
+          opacity: pressed ? 0.72 : 1,
+        })}
+      >
+        <View style={{ width: 54, height: 54 }}>
+          <ProfileAvatar profile={canView ? person : undefined} size={54} />
+          {availability !== "unknown" && (
+            <View
+              testID={`availability-badge-${person.id}`}
+              accessible
+              accessibilityRole="image"
+              accessibilityLabel={`Availability: ${availabilityText}`}
+              style={{
+                position: "absolute",
+                top: 1,
+                right: 1,
+                width: 18,
+                height: 18,
+                borderRadius: 9,
+                borderWidth: 2,
+                borderColor: colors.white,
+                backgroundColor: availabilityColor,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              {availability === "available" ? (
+                <Check size={9} color="#FFFFFF" strokeWidth={3} />
+              ) : availability === "ending-soon" ? (
+                <Clock3 size={9} color="#173D32" strokeWidth={3} />
+              ) : (
+                <X size={9} color="#FFFFFF" strokeWidth={3} />
+              )}
+            </View>
+          )}
+        </View>
+        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+          <Text numberOfLines={1} style={[styles.body, { fontWeight: "700" }]}>
+            {displayName}
+          </Text>
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 4,
+              minWidth: 0,
+            }}
+          >
+            {timeLabel && (
+              <Clock3
+                size={12}
+                color={colors.muted}
+                accessibilityLabel={`Time: ${timeLabel}`}
+                accessible
+              />
+            )}
+            <Text
+              numberOfLines={1}
+              style={[
+                styles.muted,
+                { flex: 1, minWidth: 0, fontSize: 11, lineHeight: 15 },
+                free && { color: colors.green },
+                availability === "unavailable" && { color: colors.red },
+              ]}
+            >
+              {caption}
+            </Text>
+            {location && (
+              <MapPin
+                size={14}
+                color={colors.green}
+                accessibilityLabel="Location shared"
+                accessible
+              />
+            )}
+          </View>
+        </View>
+        {favorite("friend", person.id) && (
+          <Star size={16} color={colors.green} fill={colors.lime} />
+        )}
+      </Pressable>
+    );
+  };
   return (
     <Screen title="Activities" eyebrow="A little time together">
       <ActivityPeriodTabs value={period} onChange={setPeriod} />
@@ -337,6 +488,7 @@ export default function ActivitiesScreen() {
             options={["Everyone", "Free to hang", "Starred Friends"]}
             value={peopleFilter}
             onChange={setPeopleFilter}
+            showSelectedCheckmark={false}
           />
           {people.length ? (
             <View style={{ gap: 8 }}>
@@ -389,6 +541,7 @@ export default function ActivitiesScreen() {
           <LibraryToolkit
             planCount={personalPlans.length}
             favoriteCount={favoriteCount}
+            savedBeaconCount={savedBeaconCount}
             templateCount={ownTemplates.length}
             onPlans={() => router.push("/plans")}
             onFavorites={() => setFavorites(true)}
@@ -420,18 +573,47 @@ export default function ActivitiesScreen() {
               ? "Beacon history"
               : "Coming up"}
         </Text>
-        <Pressable
+        <MotionPressable
           accessibilityRole="button"
-          accessibilityLabel="Filter activities"
+          accessibilityLabel="Filter"
+          accessibilityState={{ selected: activeFilterCount > 0 }}
           onPress={() => setFilters(true)}
-          style={[styles.row, { padding: 12 }]}
+          style={({ pressed }) => ({
+            minHeight: 44,
+            paddingHorizontal: 11,
+            borderRadius: 14,
+            borderWidth: 1,
+            borderColor: activeFilterCount ? colors.green : colors.line,
+            backgroundColor: colors.white,
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 7,
+            opacity: pressed ? 0.78 : 1,
+          })}
         >
-          <Text style={styles.label}>
+          <Text style={[styles.label, { color: colors.ink }]}>
             Filter
-            {query || category !== "All categories" || joined ? " (on)" : ""}
           </Text>
-          <SlidersHorizontal size={18} color={colors.green} />
-        </Pressable>
+          {activeFilterCount > 0 ? (
+            <View
+              testID="activity-filter-count"
+              style={{
+                minWidth: 20,
+                height: 20,
+                paddingHorizontal: 5,
+                borderRadius: 10,
+                alignItems: "center",
+                justifyContent: "center",
+                backgroundColor: colors.lime,
+              }}
+            >
+              <Text style={{ color: colors.ink, fontSize: 11, fontWeight: "800" }}>
+                {activeFilterCount}
+              </Text>
+            </View>
+          ) : null}
+          <SlidersHorizontal size={17} color={activeFilterCount ? colors.green : colors.muted} />
+        </MotionPressable>
       </View>
       {activities.map((activity) => (
         <ActivityCard
@@ -472,32 +654,43 @@ export default function ActivitiesScreen() {
           onChangeText={setQuery}
           placeholder="Activity, friend, or place"
         />
-        <Chips
-          options={[
-            "All categories",
-            "Fitness",
-            "Study",
-            "Gaming",
-            "Creative",
-            "Social",
-            "Other",
-          ]}
-          value={category}
-          onChange={setCategory}
-        />
-        <Chips
-          options={["Everyone", "I'm going"]}
-          value={joined ? "I'm going" : "Everyone"}
-          onChange={(v) => setJoined(v === "I'm going")}
-        />
-        <Txt muted>Sort by</Txt>
-        <Chips
-          options={
-            ["Soonest", "Most momentum", "Latest first", "A to Z"] as const
-          }
-          value={sort}
-          onChange={setSort}
-        />
+        <View style={{ gap: 6 }}>
+          <Text style={styles.label}>Category</Text>
+          <Chips
+            options={[
+              "All categories",
+              "Fitness",
+              "Study",
+              "Gaming",
+              "Creative",
+              "Social",
+              "Other",
+            ]}
+            value={category}
+            onChange={setCategory}
+            showSelectedCheckmark={false}
+          />
+        </View>
+        <View style={{ gap: 6 }}>
+          <Text style={styles.label}>Participation</Text>
+          <Chips
+            options={["Everyone", "I'm going"]}
+            value={joined ? "I'm going" : "Everyone"}
+            onChange={(v) => setJoined(v === "I'm going")}
+            showSelectedCheckmark={false}
+          />
+        </View>
+        <View style={{ gap: 6 }}>
+          <Text style={styles.label}>Sort</Text>
+          <Chips
+            options={
+              ["Soonest", "Most momentum", "Latest first", "A to Z"] as const
+            }
+            value={sort}
+            onChange={setSort}
+            showSelectedCheckmark={false}
+          />
+        </View>
         <Txt muted>
           Current puts favorites first with the default sort. Free friends always
           lead Friends Now.
@@ -527,7 +720,9 @@ export default function ActivitiesScreen() {
         <View style={{ gap: 8 }}>
           {people
             .filter((p) =>
-              p.person.name.toLowerCase().includes(peopleSearch.toLowerCase()),
+              (p.canView ? p.person.name : "Friend")
+                .toLowerCase()
+                .includes(peopleSearch.toLowerCase()),
             )
             .map(personTile)}
         </View>
@@ -590,6 +785,33 @@ export default function ActivitiesScreen() {
               }
             />
           ))}
+        <Text style={styles.h2}>Saved Beacons</Text>
+        {!savedBeacons.length ? (
+          <Txt muted>Save a Beacon from its Overview to keep it easy to find.</Txt>
+        ) : null}
+        {savedBeacons.map((activity) => (
+          <View key={activity.id} style={[styles.row, { gap: 8 }]}>
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <Text numberOfLines={1} style={styles.body}>{activity.title}</Text>
+              <Text numberOfLines={1} style={styles.muted}>{activity.category} · {activity.status}</Text>
+            </View>
+            <Button
+              compact
+              secondary
+              title="Open"
+              onPress={() => {
+                setFavorites(false);
+                open(activity.id);
+              }}
+            />
+            <Button
+              compact
+              secondary
+              title="Remove"
+              onPress={() => void act("save_beacon", { activity_id: activity.id, saved: false })}
+            />
+          </View>
+        ))}
         <Button title="Done" onPress={() => setFavorites(false)} />
       </Sheet>
       <Sheet

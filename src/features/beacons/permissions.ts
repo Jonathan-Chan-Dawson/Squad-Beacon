@@ -7,8 +7,11 @@ export type BeaconModuleName =
   | "checklist"
   | "journal"
   | "experiences"
+  | "comments"
   | "focus"
-  | "reactions";
+  | "reactions"
+  | "scoreboard"
+  | "music";
 
 function isBlocked(data: Data, left: string, right: string) {
   return data.blocks.some(
@@ -191,11 +194,15 @@ export function isBeaconModuleEnabled(
   activity: Activity,
   module: BeaconModuleName,
 ) {
-  const property: Record<BeaconModuleName, keyof Activity> = {
+  if (module === "scoreboard") return activity.enable_scoreboard === true;
+  if (module === "music")
+    return activity.enable_music ?? !!activity.music_url;
+  const property: Record<Exclude<BeaconModuleName, "scoreboard" | "music">, keyof Activity> = {
     chat: "enable_chat",
     checklist: "enable_checklist",
     journal: "enable_journal",
     experiences: "enable_experiences",
+    comments: "enable_comments",
     focus: "enable_focus",
     reactions: "enable_reactions",
   };

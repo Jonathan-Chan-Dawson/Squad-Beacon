@@ -22,6 +22,7 @@ import { useBeacon } from "@/src/shared/store";
 import type { Audience } from "@/src/shared/types";
 import { usePreferences } from "@/src/shared/preferences";
 import { themes, themeNames, type ThemeName } from "@/src/shared/themes";
+import { MotionPressable } from "@/src/shared/MotionPressable";
 export const colors = themes.Mint;
 const makeStyles = (colors: typeof themes.Mint) =>
   StyleSheet.create({
@@ -154,7 +155,7 @@ export function Button({
   const { styles, colors } = useTheme();
 
   return (
-    <Pressable
+    <MotionPressable
       accessibilityRole="button"
       accessibilityLabel={title}
       disabled={disabled}
@@ -170,7 +171,6 @@ export function Button({
         disabled && { opacity: 0.5, elevation: 0 },
         pressed && {
           opacity: 0.82,
-          transform: [{ scale: 0.985 }],
           elevation: 0,
         },
       ]}
@@ -184,7 +184,7 @@ export function Button({
       >
         {title}
       </Text>
-    </Pressable>
+    </MotionPressable>
   );
 }
 export function Action({
@@ -252,20 +252,24 @@ export function Chips<T extends string>({
   value,
   onChange,
   accessibilityPrefix,
+  showSelectedCheckmark = false,
 }: {
   options: readonly T[];
   value: T;
   onChange: (value: T) => void;
   accessibilityPrefix?: string;
+  showSelectedCheckmark?: boolean;
 }) {
   const { styles, colors } = useTheme();
 
   return (
     <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
       {options.map((o) => (
-        <Pressable
+        <MotionPressable
           accessibilityRole="button"
-          accessibilityLabel={accessibilityPrefix ? `${accessibilityPrefix}: ${o}` : o}
+          accessibilityLabel={
+            accessibilityPrefix ? `${accessibilityPrefix}: ${o}` : o
+          }
           accessibilityState={{ selected: value === o }}
           key={o}
           onPress={() => onChange(o)}
@@ -280,10 +284,10 @@ export function Chips<T extends string>({
           <Text
             style={[styles.chipText, value === o && { color: colors.white }]}
           >
-            {value === o ? "\u2713 " : ""}
+            {showSelectedCheckmark && value === o ? "\u2713 " : ""}
             {o}
           </Text>
-        </Pressable>
+        </MotionPressable>
       ))}
     </View>
   );

@@ -1,3 +1,9 @@
+import type {
+  BeaconMemory,
+  BeaconTeam,
+  BeaconTeamMember,
+} from "@/src/features/beacons/models";
+
 export type ID = string;
 export type Audience = "private" | "friends" | "list" | "squad";
 export type Mode = "solo" | "squad" | "invite";
@@ -10,6 +16,11 @@ export interface AspirationGoal {
   target_per_week: number;
 }
 export interface Profile {
+  profile_visibility?: "public" | "friends" | "custom";
+  /** Server-computed for this snapshot viewer; never accepted as a write field. */
+  viewer_can_view_full_profile?: boolean;
+  /** A privacy-filtered featured beacon id for non-owner profile projections. */
+  viewer_featured_activity_id?: ID | null;
   avatar_seed?: number;
   avatar_style?: "illustrated" | "photo";
   home?: string;
@@ -118,6 +129,11 @@ export interface Activity extends Shared {
   enable_experiences?: boolean;
   enable_focus?: boolean;
   enable_reactions?: boolean;
+  enable_comments?: boolean;
+  enable_scoreboard?: boolean;
+  scoreboard_max_team_size?: number | null;
+  enable_music?: boolean;
+  checklist_edit_policy?: "participants" | "managers";
   music_url?: string | null;
   decoration_emoji?: string | null;
   decoration_accent?: string | null;
@@ -237,6 +253,17 @@ export interface PersonalTemplate {
   label: string;
   target_count: number | null;
   approval_required: boolean;
+  module_defaults?: Partial<BeaconModuleDefaults> | null;
+}
+export interface BeaconModuleDefaults {
+  enable_chat: boolean;
+  enable_checklist: boolean;
+  enable_journal: boolean;
+  enable_experiences: boolean;
+  enable_focus: boolean;
+  enable_scoreboard: boolean;
+  enable_comments: boolean;
+  enable_music: boolean;
 }
 export interface Message {
   id: ID;
@@ -252,23 +279,67 @@ export interface BeaconChecklistItem {
   author_id: ID;
   text: string;
   completed: boolean;
+  section_id: ID | null;
+  assignee_id: ID | null;
+  created_at: string;
+  updated_at: string;
+}
+export interface BeaconChecklistSection {
+  id: ID;
+  activity_id: ID;
+  title: string;
+  position: number;
   created_at: string;
 }
 export interface BeaconNote {
   id: ID;
-  activity_id: ID;
+  activity_id: ID | null;
   author_id: ID;
+  section_heading: string;
   body: string;
+  visibility: "private" | "shared";
   revision: number;
   created_at: string;
   updated_at: string;
 }
 export type LibraryKind = "journal" | "checklist";
+export interface ChecklistCopySection {
+  id: ID;
+  title: string;
+  position: number;
+}
+export interface ChecklistCopyItem {
+  id: ID;
+  text: string;
+  completed: boolean;
+  section_id: ID | null;
+  assignee_id: ID | null;
+}
+export interface LibrarySavedChecklist {
+  id: ID;
+  owner_id: ID;
+  source_activity_id: ID | null;
+  title: string;
+  sections: ChecklistCopySection[];
+  items: ChecklistCopyItem[];
+  revision: number;
+  created_at: string;
+  updated_at: string;
+}
+/** resource_id names a private beacon note for journal, saved checklist for checklist. */
+export interface LibraryResourceFolder {
+  owner_id: ID;
+  kind: LibraryKind;
+  resource_id: ID;
+  folder_id: ID;
+  updated_at: string;
+}
 export interface LibraryFolder {
   id: ID;
   owner_id: ID;
   kind: LibraryKind;
   name: string;
+  parent_id: ID | null;
   created_at: string;
   updated_at: string;
 }
@@ -278,6 +349,11 @@ export interface LibraryFolderItem {
   activity_id: ID;
   folder_id: ID;
   updated_at: string;
+}
+export interface BeaconFavorite {
+  owner_id: ID;
+  activity_id: ID;
+  created_at: string;
 }
 export type PlanningThreadKind = "ping" | "vote" | "draw";
 export type PlanningThreadStatus =
@@ -361,7 +437,16 @@ export interface BeaconInvitationGrant {
   invited_by: ID;
   created_at: string;
 }
+export interface ProfileVisibilityGrant {
+  owner_id: ID;
+  kind: "person" | "squad" | "list";
+  target_id: ID;
+}
 export interface Data {
+  beacon_teams: BeaconTeam[];
+  beacon_team_members: BeaconTeamMember[];
+  beacon_memories: BeaconMemory[];
+  beacon_favorites: BeaconFavorite[];
   favorites: {
     owner_id: string;
     kind: "friend" | "squad";
@@ -372,7 +457,10 @@ export interface Data {
   plan_templates: PlanTemplate[];
   messages: Message[];
   beacon_checklist_items: BeaconChecklistItem[];
+  beacon_checklist_sections: BeaconChecklistSection[];
   beacon_notes: BeaconNote[];
+  library_saved_checklists: LibrarySavedChecklist[];
+  library_resource_folders: LibraryResourceFolder[];
   library_folders: LibraryFolder[];
   library_folder_items: LibraryFolderItem[];
   planning_threads: PlanningThread[];
@@ -382,11 +470,15 @@ export interface Data {
   beacon_roles: BeaconRole[];
   beacon_attendance: BeaconAttendance[];
   beacon_invitation_grants: BeaconInvitationGrant[];
+  /** Private selection data; the signed-in snapshot only returns the viewer's own rows. */
+  profile_visibility_grants: ProfileVisibilityGrant[];
 
   is_moderator?: boolean;
   is_demo?: boolean;
   viewer_id?: ID | null;
   location_recipients?: string[];
+  /** Demo-only mirror of server-private kicked-attendee exclusions. */
+  activity_exclusions: { activity_id: ID; user_id: ID }[];
   profiles: Profile[];
   friendships: Friendship[];
   lists: FriendList[];
@@ -410,13 +502,20 @@ export interface Data {
 }
 export type Payload = Record<string, unknown>;
 export const emptyData = (): Data => ({
+  beacon_teams: [],
+  beacon_team_members: [],
+  beacon_memories: [],
+  beacon_favorites: [],
   favorites: [],
   templates: [],
   plans: [],
   plan_templates: [],
   messages: [],
   beacon_checklist_items: [],
+  beacon_checklist_sections: [],
   beacon_notes: [],
+  library_saved_checklists: [],
+  library_resource_folders: [],
   library_folders: [],
   library_folder_items: [],
   planning_threads: [],
@@ -426,8 +525,10 @@ export const emptyData = (): Data => ({
   beacon_roles: [],
   beacon_attendance: [],
   beacon_invitation_grants: [],
+  profile_visibility_grants: [],
   is_demo: false,
   viewer_id: null,
+  activity_exclusions: [],
   profiles: [],
   friendships: [],
   lists: [],
@@ -457,6 +558,7 @@ export function normalizeData(value: Partial<Data> | null | undefined): Data {
   data.profiles = (Array.isArray(data.profiles) ? data.profiles : []).map(
     (profile) => ({
       ...profile,
+      profile_visibility: profile.profile_visibility ?? "public",
       interests: Array.isArray(profile.interests) ? profile.interests : [],
       identity_tags: Array.isArray(profile.identity_tags)
         ? profile.identity_tags
@@ -486,6 +588,19 @@ export function normalizeData(value: Partial<Data> | null | undefined): Data {
       enable_experiences: activity.enable_experiences ?? true,
       enable_focus: activity.enable_focus ?? true,
       enable_reactions: activity.enable_reactions ?? true,
+      enable_comments:
+        activity.enable_comments ?? activity.enable_experiences ?? true,
+      enable_scoreboard: activity.enable_scoreboard ?? false,
+      enable_music: activity.enable_music ?? !!activity.music_url,
+      scoreboard_max_team_size:
+        activity.scoreboard_max_team_size == null
+          ? null
+          : Number.isInteger(activity.scoreboard_max_team_size) &&
+              activity.scoreboard_max_team_size >= 1 &&
+              activity.scoreboard_max_team_size <= 24
+            ? activity.scoreboard_max_team_size
+            : null,
+      checklist_edit_policy: activity.checklist_edit_policy ?? "participants",
       music_url: activity.music_url ?? null,
       decoration_emoji: activity.decoration_emoji ?? null,
       decoration_accent: activity.decoration_accent ?? null,
@@ -508,25 +623,69 @@ export function normalizeData(value: Partial<Data> | null | undefined): Data {
             }]
           : [];
       });
+  data.profile_visibility_grants = Array.isArray(data.profile_visibility_grants)
+    ? data.profile_visibility_grants
+    : [];
+  data.activity_exclusions = Array.isArray(data.activity_exclusions)
+    ? data.activity_exclusions
+    : [];
   data.plans = Array.isArray(data.plans) ? data.plans : [];
   data.plan_templates = Array.isArray(data.plan_templates)
     ? data.plan_templates
     : [];
   data.beacon_checklist_items = Array.isArray(data.beacon_checklist_items)
-    ? data.beacon_checklist_items
+    ? data.beacon_checklist_items.map((item) => ({
+        ...item,
+        section_id: item.section_id ?? null,
+        assignee_id: item.assignee_id ?? null,
+        updated_at: item.updated_at ?? item.created_at,
+      }))
+    : [];
+  data.beacon_checklist_sections = Array.isArray(data.beacon_checklist_sections)
+    ? data.beacon_checklist_sections
     : [];
   data.beacon_notes = (Array.isArray(data.beacon_notes) ? data.beacon_notes : []).map(
     (note) => ({
       ...note,
+      section_heading: note.section_heading ?? "",
+      // Existing rows were shared notes; new inserts explicitly default private.
+      visibility: note.visibility ?? "shared",
       revision: Number.isInteger(note.revision) ? note.revision : 0,
       updated_at: note.updated_at ?? note.created_at,
     }),
   );
   data.library_folders = Array.isArray(data.library_folders)
-    ? data.library_folders
+    ? data.library_folders.map((folder) => ({
+        ...folder,
+        parent_id: folder.parent_id ?? null,
+      }))
     : [];
   data.library_folder_items = Array.isArray(data.library_folder_items)
     ? data.library_folder_items
+    : [];
+  data.library_saved_checklists = Array.isArray(data.library_saved_checklists)
+    ? data.library_saved_checklists
+    : [];
+  data.library_resource_folders = Array.isArray(data.library_resource_folders)
+    ? data.library_resource_folders
+    : [];
+  data.beacon_favorites = Array.isArray(data.beacon_favorites)
+    ? data.beacon_favorites
+    : [];
+  data.beacon_teams = Array.isArray(data.beacon_teams)
+    ? data.beacon_teams.map((team) => ({
+        ...team,
+        member_count:
+          Number.isInteger(team.member_count) && (team.member_count ?? -1) >= 0
+            ? team.member_count
+            : undefined,
+      }))
+    : [];
+  data.beacon_team_members = Array.isArray(data.beacon_team_members)
+    ? data.beacon_team_members
+    : [];
+  data.beacon_memories = Array.isArray(data.beacon_memories)
+    ? data.beacon_memories
     : [];
   data.planning_threads = (
     Array.isArray(data.planning_threads) ? data.planning_threads : []

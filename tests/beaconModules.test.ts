@@ -133,7 +133,7 @@ test("demo module actions preserve completed retries and freeze cancelled notes"
   cancelled.activities[hostedIndex] = { ...hosted, status: "cancelled" };
   assert.throws(
     () => demoAction(cancelled, "delete_beacon_note", { id: "demo-note" }),
-    /unavailable or cannot be deleted/,
+    /Beacon Journal is read-only or unavailable/,
   );
 });
 
@@ -150,7 +150,9 @@ test("demo pauses writes without deleting authorized module history", () => {
     checklist = paused.beacon_checklist_items.find(
       (item) => item.activity_id === hosted.id,
     ),
-    note = paused.beacon_notes.find((item) => item.activity_id === hosted.id);
+    note = paused.beacon_notes.find(
+      (item) => item.activity_id === hosted.id && item.author_id === DEMO_ID,
+    );
   assert.ok(checklist);
   assert.ok(note);
   const activityIndex = paused.activities.findIndex(
@@ -174,7 +176,7 @@ test("demo pauses writes without deleting authorized module history", () => {
       activity_id: hosted.id,
       text: "A new task",
     }),
-    /Join this beacon before using its tools/,
+    /checklist is unavailable or cannot be changed/,
   );
   assert.throws(
     () => demoAction(paused, "toggle_checklist_item", {
@@ -189,7 +191,7 @@ test("demo pauses writes without deleting authorized module history", () => {
       body: "Editing while paused is disabled.",
       expected_revision: note.revision,
     }),
-    /journal is paused/,
+    /Beacon Journal is paused or unavailable/,
   );
   assert.equal(paused.beacon_checklist_items.some((item) => item.id === checklist.id), true);
   assert.equal(paused.beacon_notes.some((item) => item.id === note.id), true);

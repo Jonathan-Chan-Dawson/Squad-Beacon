@@ -10,16 +10,16 @@ Project entry and configuration:
 - REMAINING_UI_CHANGES.md: blueprint checkpoint status, remaining work, priorities, and dependencies.
 
 Authored product areas:
-- app/: Expo Router route files; see app/_inventory.txt.
-- src/: shared contracts, feature implementations, and platform adapters; see src/_inventory.txt.
+- app/: Expo Router route files; see app/_inventory.md.
+- src/: shared contracts, feature implementations, and platform adapters; see src/_inventory.md.
 - components/: Expo-shared inputs and starter components. Platform-specific siblings stay together.
 - constants/: app-wide static constants.
-- assets/: app icons, splash artwork, and fonts; see assets/_inventory.txt.
+- assets/: app icons, splash artwork, and fonts; see assets/_inventory.md.
 - public/: static web support files.
-- tests/: unit, database, and browser tests; see tests/_inventory.txt.
-- supabase/: migrations, edge functions, and database schedule SQL; see supabase/_inventory.txt.
-- docs/: product, device, notification, and UI guidance; see docs/_inventory.txt.
-- scripts/: local tooling; see scripts/_inventory.txt.
+- tests/: unit, database, and browser tests; see tests/_inventory.md.
+- supabase/: migrations, edge functions, and database schedule SQL; see supabase/_inventory.md.
+- docs/: product, device, notification, and UI guidance; see docs/_inventory.md.
+- scripts/: local tooling; see scripts/_inventory.md.
 
 Native/configuration boundaries:
 - android/: native Android project and build configuration; intentionally left in place.

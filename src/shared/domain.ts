@@ -68,6 +68,15 @@ export function featuredActivity(
   activities: Activity[],
   now = new Date(),
 ) {
+  if (
+    profile.viewer_can_view_full_profile === true &&
+    Object.prototype.hasOwnProperty.call(profile, "viewer_featured_activity_id")
+  ) {
+    if (!profile.viewer_featured_activity_id) return undefined;
+    return activities.find(
+      (activity) => activity.id === profile.viewer_featured_activity_id,
+    );
+  }
   if (profile.hide_featured) return undefined;
   const own = activities.filter(
     (a) => a.owner_id === profile.id && a.status !== "cancelled",
@@ -98,6 +107,27 @@ export function locationIsFresh(
     !!location.updated_at &&
     +now - Date.parse(location.updated_at) < 300000
   );
+}
+export type FriendAvailabilityState =
+  | "available"
+  | "ending-soon"
+  | "unavailable"
+  | "unknown";
+
+/** Derive a status only from an explicit, currently live solo availability beacon. */
+export function friendAvailabilityState(
+  activity: Activity | undefined,
+  now = Date.now(),
+): FriendAvailabilityState {
+  if (!activity || activity.status !== "scheduled" || activity.mode !== "solo")
+    return "unknown";
+  const start = Date.parse(activity.starts_at);
+  const end = Date.parse(activity.ends_at);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start > now || end <= now)
+    return "unknown";
+  if (activity.available === false) return "unavailable";
+  if (activity.available !== true) return "unknown";
+  return end - now <= 30 * 60 * 1000 ? "ending-soon" : "available";
 }
 export function activityWhen(activity: Activity, now = new Date()) {
   if (activity.status === "cancelled") return "Cancelled";

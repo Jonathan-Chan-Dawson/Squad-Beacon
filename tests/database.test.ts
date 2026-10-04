@@ -12,9 +12,12 @@ const ids = {
   teen: "44444444-4444-4444-8444-444444444444",
 };
 async function actor(name: keyof typeof ids) {
+  await actorId(ids[name]);
+}
+async function actorId(id: string) {
   await db.exec("reset role; set role authenticated;");
   await db.query("select set_config('request.jwt.claim.sub',$1,false)", [
-    ids[name],
+    id,
   ]);
 }
 async function root() {
@@ -45,11 +48,11 @@ test("database migration and access-control acceptance scenarios", async (t) => 
  grant execute on function auth.uid() to authenticated,anon,service_role;
  create schema storage;
  create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
- create table storage.objects(id uuid primary key default gen_random_uuid(),bucket_id text,name text);
+ create table storage.objects(id uuid primary key default gen_random_uuid(),bucket_id text,name text,metadata jsonb not null default '{}'::jsonb);
  alter table storage.objects enable row level security;
  grant usage on schema storage to authenticated;
  grant select,insert,update,delete on storage.objects to authenticated;
- create function storage.foldername(text) returns text[] language sql as $$select (string_to_array($1,'/'))[1:1]$$;
+ create function storage.foldername(text) returns text[] language sql as $$select (string_to_array($1,'/'))[1:array_length(string_to_array($1,'/'),1)-1]$$;
  create publication supabase_realtime;
  `);
   for (const name of [
@@ -142,6 +145,33 @@ test("database migration and access-control acceptance scenarios", async (t) => 
     await db.exec(controlsMigration);
   } catch (e) {
     throw new Error("Migration 202610010005_beacon_controls.sql: " + (e as Error).message);
+  }
+  const profilePrivacyMigration = readFileSync(
+    new URL("../supabase/migrations/202610030001_profile_privacy.sql", import.meta.url),
+    "utf8",
+  ).replace("create extension if not exists pgcrypto;", "");
+  try {
+    await db.exec(profilePrivacyMigration);
+  } catch (e) {
+    throw new Error("Migration 202610030001_profile_privacy.sql: " + (e as Error).message);
+  }
+  const moduleCollectionsMigration = readFileSync(
+    new URL("../supabase/migrations/202610030002_beacon_module_collections.sql", import.meta.url),
+    "utf8",
+  ).replace("create extension if not exists pgcrypto;", "");
+  try {
+    await db.exec(moduleCollectionsMigration);
+  } catch (e) {
+    throw new Error("Migration 202610030002_beacon_module_collections.sql: " + (e as Error).message);
+  }
+  const mediaTeamsMigration = readFileSync(
+    new URL("../supabase/migrations/202610030003_beacon_media_teams.sql", import.meta.url),
+    "utf8",
+  ).replace("create extension if not exists pgcrypto;", "");
+  try {
+    await db.exec(mediaTeamsMigration);
+  } catch (e) {
+    throw new Error("Migration 202610030003_beacon_media_teams.sql: " + (e as Error).message);
   }
   await root();
   const invitationBackfill = await db.query<{ user_id: string; invited_by: string }>(
@@ -326,6 +356,13 @@ test("database migration and access-control acceptance scenarios", async (t) => 
       category: "Fitness",
       mode: "squad",
       audience: "friends",
+      // Most historical module acceptance cases model Beacons created before
+      // optional tools defaulted off; opt in explicitly for those fixtures.
+      enable_checklist: true,
+      enable_journal: true,
+      enable_experiences: true,
+      enable_comments: true,
+      enable_focus: true,
       starts_at: start,
       ends_at: end,
       timezone: "America/Chicago",
@@ -334,6 +371,35 @@ test("database migration and access-control acceptance scenarios", async (t) => 
       longitude: -87.6,
       ...extra,
     });
+  await t.test(
+    "new Beacons default optional modules off without changing legacy flags",
+    async () => {
+      await actor("alice");
+      const created = await action("create_activity", {
+        title: "Fresh defaults",
+        category: "Social",
+        mode: "solo",
+        audience: "private",
+        starts_at: start,
+        ends_at: end,
+        timezone: "America/Chicago",
+      });
+      const saved = (await snapshot()).activities.find(
+        (activity: any) => activity.id === created.id,
+      );
+      assert.equal(saved.enable_chat, true);
+      assert.equal(saved.enable_reactions, true);
+      assert.equal(saved.enable_comments, true);
+      assert.equal(saved.enable_scoreboard, false);
+      assert.equal(saved.enable_music, false);
+      assert.equal(saved.enable_checklist, false);
+      assert.equal(saved.enable_journal, false);
+      assert.equal(saved.enable_experiences, false);
+      assert.equal(saved.enable_focus, false);
+      await root();
+      await db.query("delete from public.activities where id=$1", [created.id]);
+    },
+  );
   await t.test(
     "templates and favorites are private; chat requires participation",
     async () => {
@@ -466,6 +532,210 @@ test("database migration and access-control acceptance scenarios", async (t) => 
       await assert.rejects(() =>
         makeActivity({ aspiration_ids: ["someone-elses-goal"] }),
       );
+    },
+  );
+  await t.test(
+    "profile privacy gates full snapshots, GPS, avatars, custom grants, and private attendee identity",
+    async () => {
+      const strangerId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        strangerUsername = "privacy_stranger";
+      await root();
+      await db.query("insert into auth.users values($1,now())", [strangerId]);
+      await db.query(
+        "insert into public.profiles(id,username,name,bio) values($1,$2,'Privacy stranger','Do not disclose')",
+        [strangerId, strangerUsername],
+      );
+      const squad = (await db.query<{ id: string }>(
+        "insert into public.squads(owner_id,name) values($1,'Privacy crew') returning id",
+        [ids.alice],
+      )).rows[0].id,
+        foreignSquad = (await db.query<{ id: string }>(
+          "insert into public.squads(owner_id,name) values($1,'Foreign privacy crew') returning id",
+          [ids.bob],
+        )).rows[0].id,
+        list = (await db.query<{ id: string }>(
+          "insert into public.lists(owner_id,name) values($1,'Privacy audience') returning id",
+          [ids.alice],
+        )).rows[0].id,
+        foreignList = (await db.query<{ id: string }>(
+          "insert into public.lists(owner_id,name) values($1,'Foreign privacy list') returning id",
+          [ids.bob],
+        )).rows[0].id;
+      await db.query(
+        "insert into public.squad_members(squad_id,user_id,role) values($1,$2,'owner'),($1,$3,'member'),($4,$3,'owner')",
+        [squad, ids.alice, ids.bob, foreignSquad],
+      );
+      await db.query(
+        "insert into public.list_members(list_id,user_id) values($1,$2)",
+        [list, strangerId],
+      );
+
+      await actor("bob");
+      let aliceProfile = (await snapshot()).profiles.find(
+        (profile: any) => profile.id === ids.alice,
+      );
+      assert.equal(aliceProfile.viewer_can_view_full_profile, true);
+      assert.equal(aliceProfile.bio, "");
+      for (const key of [
+        "profile_visibility",
+        "default_audience",
+        "timezone",
+        "quiet_start",
+        "quiet_end",
+        "onboarding_survey_status",
+        "featured_activity_id",
+        "hide_featured",
+      ]) assert.equal(Object.hasOwn(aliceProfile, key), false, `${key} leaked`);
+      assert.deepEqual((await snapshot()).profile_visibility_grants, []);
+      assert.equal(
+        (await db.query("select id,username,name from public.profiles where id=$1", [ids.alice])).rows.length,
+        1,
+      );
+      await assert.rejects(() => db.query("select bio from public.profiles where id=$1", [ids.alice]));
+
+      await actorId(strangerId);
+      assert.equal(
+        (await snapshot()).profiles.some((profile: any) => profile.id === ids.alice),
+        false,
+      );
+      assert.equal(
+        (await db.query("select id,username,name from public.profiles where id=$1", [ids.alice])).rows.length,
+        0,
+      );
+
+      await actor("alice");
+      await action("save_profile_privacy", {
+        profile_visibility: "friends",
+        person_ids: [],
+        squad_ids: [],
+        list_ids: [],
+      });
+      await actor("bob");
+      aliceProfile = (await snapshot()).profiles.find(
+        (profile: any) => profile.id === ids.alice,
+      );
+      assert.equal(aliceProfile.viewer_can_view_full_profile, true);
+      assert.equal(aliceProfile.profile_visibility, undefined);
+      await actor("carol");
+      assert.equal(
+        (await snapshot()).profiles.some((profile: any) => profile.id === ids.alice),
+        false,
+      );
+
+      await actor("alice");
+      await action("save_profile_privacy", {
+        profile_visibility: "custom",
+        person_ids: [ids.carol],
+        squad_ids: [squad],
+        list_ids: [list],
+      });
+      await assert.rejects(() => db.query(
+        "insert into private.profile_visibility_people(owner_id,person_id) values($1,$2)",
+        [ids.alice, ids.teen],
+      ));
+      await assert.rejects(() => db.query("select * from private.profile_visibility_people"));
+      await assert.rejects(() => action("save_profile_privacy", {
+        profile_visibility: "custom", person_ids: [], squad_ids: [foreignSquad], list_ids: [],
+      }));
+      await assert.rejects(() => action("save_profile_privacy", {
+        profile_visibility: "custom", person_ids: [], squad_ids: [], list_ids: [foreignList],
+      }));
+
+      for (const [viewer, expected] of [
+        ["bob", true],
+        ["carol", true],
+      ] as const) {
+        await actor(viewer);
+        const projection = (await snapshot()).profiles.find(
+          (profile: any) => profile.id === ids.alice,
+        );
+        assert.equal(projection?.viewer_can_view_full_profile, expected);
+      }
+      await actorId(strangerId);
+      assert.equal(
+        (await snapshot()).profiles.find((profile: any) => profile.id === ids.alice)
+          ?.viewer_can_view_full_profile,
+        true,
+      );
+      assert.deepEqual((await snapshot()).profile_visibility_grants, []);
+
+      await root();
+      await db.query("delete from public.squad_members where squad_id=$1 and user_id=$2", [squad, ids.alice]);
+      await actor("bob");
+      aliceProfile = (await snapshot()).profiles.find(
+        (profile: any) => profile.id === ids.alice,
+      );
+      assert.equal(aliceProfile?.viewer_can_view_full_profile, false, "owner leaving selected squad must revoke access");
+      assert.equal(aliceProfile?.bio, undefined);
+      await root();
+      await db.query("insert into public.squad_members(squad_id,user_id,role) values($1,$2,'owner')", [squad, ids.alice]);
+      await db.query("delete from public.list_members where list_id=$1 and user_id=$2", [list, strangerId]);
+      await actorId(strangerId);
+      assert.equal(
+        (await snapshot()).profiles.some((profile: any) => profile.id === ids.alice),
+        false,
+        "selected list access must end immediately when membership is revoked",
+      );
+
+      await root();
+      await db.query("insert into public.blocks(blocker_id,blocked_id) values($1,$2)", [ids.alice, ids.carol]);
+      await actor("carol");
+      assert.equal((await snapshot()).profiles.some((profile: any) => profile.id === ids.alice), false);
+      await root();
+      await db.query("delete from public.blocks where blocker_id=$1 and blocked_id=$2", [ids.alice, ids.carol]);
+      await db.query("insert into public.blocks(blocker_id,blocked_id) values($1,$2)", [ids.carol, ids.alice]);
+      await actor("carol");
+      assert.equal((await snapshot()).profiles.some((profile: any) => profile.id === ids.alice), false);
+      await root();
+      await db.query("delete from public.blocks where blocker_id=$1 and blocked_id=$2", [ids.carol, ids.alice]);
+
+      await actor("alice");
+      await action("save_profile_privacy", {
+        profile_visibility: "friends", person_ids: [], squad_ids: [], list_ids: [],
+      });
+      await root();
+      const locationId = (await db.query<{ id: string }>(
+        "insert into public.locations(owner_id,expires_at,latitude,longitude,updated_at) values($1,now()+interval '1 hour',41.8,-87.6,now()) returning id",
+        [ids.alice],
+      )).rows[0].id;
+      await db.query("insert into private.location_recipients(session_id,user_id) values($1,$2)", [locationId, ids.bob]);
+      await actor("bob");
+      assert.equal((await snapshot()).locations.length, 1);
+      await actor("alice");
+      await action("save_profile_privacy", {
+        profile_visibility: "custom", person_ids: [ids.carol], squad_ids: [], list_ids: [],
+      });
+      await actor("bob");
+      assert.equal((await snapshot()).locations.length, 0, "profile restriction must immediately hide explicitly shared GPS");
+
+      await root();
+      await db.query("insert into storage.objects(bucket_id,name) values('avatars',$1)", [ids.alice + "/avatar.jpg"]);
+      await actor("bob");
+      assert.equal((await db.query("select * from storage.objects where bucket_id='avatars'")).rows.length, 0);
+      await root();
+      const privateActivity = (await db.query<{ id: string }>(
+        "insert into public.activities(owner_id,title,category,mode,starts_at,ends_at,timezone,audience,approval_required) values($1,'Private attendee identity','Social','invite',now()+interval '1 day',now()+interval '2 days','UTC','private',true) returning id",
+        [ids.alice],
+      )).rows[0].id;
+      await db.query("insert into public.rsvps(activity_id,user_id,status,approved) values($1,$2,'going',true)", [privateActivity, ids.bob]);
+      await actorId(strangerId);
+      assert.equal(
+        (await snapshot()).profiles.some((profile: any) => profile.id === ids.bob),
+        false,
+        "private beacon attendee identity must not be visible to an outsider",
+      );
+
+      await root();
+      await db.query("delete from public.activities where id=$1", [privateActivity]);
+      await db.query("delete from public.locations where id=$1", [locationId]);
+      await db.query("delete from storage.objects where bucket_id='avatars' and name=$1", [ids.alice + "/avatar.jpg"]);
+      await db.query("delete from public.squads where id in($1,$2)", [squad, foreignSquad]);
+      await db.query("delete from public.lists where id in($1,$2)", [list, foreignList]);
+      await db.query("update public.profiles set profile_visibility='public' where id=$1", [ids.alice]);
+      await db.query("delete from private.profile_visibility_people where owner_id=$1", [ids.alice]);
+      await db.query("delete from private.profile_visibility_squads where owner_id=$1", [ids.alice]);
+      await db.query("delete from private.profile_visibility_lists where owner_id=$1", [ids.alice]);
+      await db.query("delete from public.profiles where id=$1", [strangerId]);
     },
   );
   await t.test(
@@ -1150,6 +1420,102 @@ test("database migration and access-control acceptance scenarios", async (t) => 
     },
   );
   await t.test(
+    "team snapshots count private-profile members without leaking identities or Memory storage",
+    async () => {
+      await actor("alice");
+      const created = await makeActivity({ enable_experiences: true });
+      const activityId = String(created.id);
+      await action("save_beacon_scoreboard", {
+        activity_id: activityId,
+        enabled: true,
+        max_team_size: 4,
+      });
+      const team = await action("create_beacon_team", {
+        activity_id: activityId,
+        name: "Blue",
+      });
+      const teamId = String(team.id);
+
+      await actor("bob");
+      await action("save_profile_privacy", {
+        profile_visibility: "custom",
+        person_ids: [],
+        squad_ids: [],
+        list_ids: [],
+      });
+      await action("rsvp", { id: activityId, status: "going" });
+      await action("join_beacon_team", { team_id: teamId });
+      const objectPath = `${activityId}/${ids.bob}/aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaab.jpg`;
+      await db.query(
+        "insert into storage.objects(bucket_id,name,metadata) values('beacon-memories',$1,$2::jsonb)",
+        [objectPath, JSON.stringify({ mimetype: "image/jpeg", size: 4096 })],
+      );
+      const memory = await action("create_beacon_memory", {
+        activity_id: activityId,
+        id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+        object_path: objectPath,
+        media_type: "image",
+        caption: "A private-author test image",
+      });
+
+      await actor("alice");
+      const ownerSnapshot = await snapshot();
+      const projectedTeam = ownerSnapshot.beacon_teams.find(
+        (item: any) => item.id === teamId,
+      );
+      assert.equal(projectedTeam?.member_count, 1);
+      assert.equal(
+        ownerSnapshot.beacon_team_members.some(
+          (item: any) => item.team_id === teamId && item.user_id === ids.bob,
+        ),
+        false,
+        "RLS hides the private member row while the aggregate remains accurate",
+      );
+      assert.equal(
+        ownerSnapshot.beacon_memories.some((item: any) => item.id === memory.id),
+        false,
+      );
+      assert.deepEqual(
+        (await db.query(
+          "select name from storage.objects where bucket_id='beacon-memories' and name=$1",
+          [objectPath],
+        )).rows,
+        [],
+        "a Beacon host cannot read a hidden author's private media object",
+      );
+
+      await actor("bob");
+      const deletion = await action("delete_beacon_memory", {
+        id: memory.id,
+      });
+      assert.equal(deletion.object_path, objectPath);
+      assert.equal(
+        (await db.query(
+          "select count(*)::int count from storage.objects where bucket_id='beacon-memories' and name=$1",
+          [objectPath],
+        )).rows[0].count,
+        1,
+        "the database removes the media record but leaves blob cleanup to the Storage client",
+      );
+      // Simulate the separately-authorized Storage API DELETE after the
+      // database action has tombstoned/removed the metadata row.
+      await db.query(
+        "delete from storage.objects where bucket_id='beacon-memories' and name=$1",
+        [objectPath],
+      );
+      // Restore the demo account's privacy context and remove the activity; the
+      // orphaned test object is isolated to this disposable PGlite database.
+      await action("save_profile_privacy", {
+        profile_visibility: "public",
+        person_ids: [],
+        squad_ids: [],
+        list_ids: [],
+      });
+      await root();
+      await db.query("delete from public.activities where id=$1", [activityId]);
+    },
+  );
+  await t.test(
     "paused tools keep history readable but reject new writes independently",
     async () => {
       await actor("alice");
@@ -1161,6 +1527,7 @@ test("database migration and access-control acceptance scenarios", async (t) => 
         hostNote = await action("add_beacon_note", {
           activity_id: moduleBeacon,
           body: "Meet outside.",
+          visibility: "shared",
         });
       controlActivityIds.push(moduleBeacon);
       await actor("bob");
@@ -1210,15 +1577,21 @@ test("database migration and access-control acceptance scenarios", async (t) => 
         id: moduleBeacon,
         enable_journal: false,
         enable_experiences: false,
+        enable_comments: false,
         enable_reactions: false,
         enable_focus: false,
       });
+      assert.equal(
+        (await snapshot()).activities.find((item: any) => item.id === moduleBeacon)
+          .enable_journal,
+        false,
+      );
       await actor("bob");
       await assert.rejects(() =>
         action("edit_beacon_note", {
           id: bobNote.id,
           body: "Edit after pause.",
-          expected_revision: 1,
+          expected_revision: 0,
         }),
       );
       await assert.rejects(() =>
@@ -1486,10 +1859,14 @@ test("database migration and access-control acceptance scenarios", async (t) => 
         ).completed,
         true,
       );
-      await assert.rejects(() =>
-        action("delete_checklist_item", { id: hostItemId }),
+      await action("delete_checklist_item", { id: hostItemId });
+      assert.equal(
+        (await snapshot()).beacon_checklist_items.some(
+          (item: any) => item.id === hostItemId,
+        ),
+        false,
       );
-      await action("delete_checklist_item", { id: bobItem.id });
+      // Keep Bob's item to verify cancelled Beacons retain checklist history.
 
       await actor("alice");
       await action("remove_rsvp", {
@@ -1497,11 +1874,18 @@ test("database migration and access-control acceptance scenarios", async (t) => 
         user_id: ids.bob,
       });
       await actor("bob");
+      const afterRemoval = await snapshot();
       assert.equal(
-        (await snapshot()).beacon_notes.some(
-          (item: any) => item.activity_id === moduleActivity,
-        ),
-        false,
+        afterRemoval.beacon_notes.some((item: any) => item.id === bobNoteId),
+        true,
+        "a private Journal entry remains in its author's library after Beacon access is revoked",
+      );
+      await assert.rejects(() =>
+        action("edit_beacon_note", {
+          id: bobNoteId,
+          body: "Cannot write to a revoked Beacon.",
+          expected_revision: 0,
+        }),
       );
       await assert.rejects(() =>
         action("add_beacon_note", {
@@ -1654,6 +2038,7 @@ test("database migration and access-control acceptance scenarios", async (t) => 
       const sharedNote = await action("add_beacon_note", {
         activity_id: sharedActivity,
         body: "Meet at the west entrance.",
+        visibility: "shared",
       });
       const sharedNoteId = String(sharedNote.id);
       await action("add_checklist_item", {

@@ -11,6 +11,7 @@ import { useTheme } from "@/src/shared/ui";
 type LibraryToolkitProps = {
   planCount: number;
   favoriteCount: number;
+  savedBeaconCount: number;
   templateCount: number;
   onPlans: () => void;
   onFavorites: () => void;
@@ -20,6 +21,7 @@ type LibraryToolkitProps = {
 export function LibraryToolkit({
   planCount,
   favoriteCount,
+  savedBeaconCount,
   templateCount,
   onPlans,
   onFavorites,
@@ -79,7 +81,7 @@ export function LibraryToolkit({
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Favorites"
-          accessibilityHint={`${favoriteCount} favorite friends and squads. Manage favorites.`}
+          accessibilityHint={`${favoriteCount} favorite friends and squads and ${savedBeaconCount} saved Beacons. Manage favorites.`}
           onPress={onFavorites}
           style={({ pressed }) => ({
             flex: 1,
@@ -101,7 +103,7 @@ export function LibraryToolkit({
               Favorites
             </Text>
             <Text numberOfLines={1} style={styles.muted}>
-              {favoriteCount} people & squads
+              {favoriteCount + savedBeaconCount} saved
             </Text>
           </View>
         </Pressable>

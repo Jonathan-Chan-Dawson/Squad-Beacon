@@ -14,6 +14,10 @@ import { useTheme } from "@/src/shared/ui";
 import { usePreferences } from "@/src/shared/preferences";
 import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
 import type { MapProps } from "@/src/features/maps/components/BeaconMap";
+import {
+  clusterMapPoints,
+  markerVisualSize,
+} from "@/src/features/maps/cluster";
 export default function BeaconMap({
   activities,
   places,
@@ -28,12 +32,23 @@ export default function BeaconMap({
   panelHeight = 0,
   focused,
   onAnchor,
+  onCluster,
+  onMapTap,
+  onViewportChange,
 }: MapProps) {
   const { colors } = useTheme();
 
   const map = useRef<MapView>(null);
   const projectionBusy = useRef(false);
   const [ready, setReady] = useState(false);
+  const [region, setRegion] = useState({
+    latitude: 41.885,
+    longitude: -87.642,
+    latitudeDelta: 0.045,
+    longitudeDelta: 0.045,
+  });
+  const [mapSize, setMapSize] = useState({ width: 0, height: 0 });
+  const didInitialFit = useRef(false);
   const [satellite, setSatellite] = useState(false);
   const { height } = useWindowDimensions();
   const { showAvatars } = usePreferences();
@@ -49,13 +64,15 @@ export default function BeaconMap({
   }));
   const coordinates = JSON.stringify(points);
   useEffect(() => {
-    if (!ready || onPick) return;
+    if (!ready || onPick || didInitialFit.current) return;
     const next = JSON.parse(coordinates);
-    if (next.length)
+    if (next.length) {
+      didInitialFit.current = true;
       map.current?.fitToCoordinates(next, {
         edgePadding: { top: 70, left: 50, bottom: 70, right: 50 },
         animated: true,
       });
+    }
   }, [coordinates, ready, onPick]);
   const focusedLat = focused?.latitude,
     focusedLng = focused?.longitude;
@@ -65,8 +82,8 @@ export default function BeaconMap({
         {
           latitude: focusedLat,
           longitude: focusedLng,
-          latitudeDelta: 0.012,
-          longitudeDelta: 0.012,
+          latitudeDelta: 0.006,
+          longitudeDelta: 0.006,
         },
         500,
       );
@@ -96,8 +113,46 @@ export default function BeaconMap({
     }
   }
   const first = selected ?? pins[0] ?? { latitude: 41.885, longitude: -87.642 };
+  const mapPoints = [
+    ...pins.map((place) => ({
+      id: `beacon:${place.activity_id}`,
+      kind: "beacon" as const,
+      latitude: place.latitude!,
+      longitude: place.longitude!,
+    })),
+    ...(showAvatars
+      ? locations
+          .filter(
+            (location) =>
+              locationIsFresh(location) &&
+              location.latitude != null &&
+              location.longitude != null,
+          )
+          .map((location) => ({
+            id: `person:${location.owner_id}`,
+            kind: "person" as const,
+            latitude: location.latitude!,
+            longitude: location.longitude!,
+          }))
+      : []),
+  ];
+  const groups = clusterMapPoints(mapPoints, {
+    centerLatitude: region.latitude,
+    centerLongitude: region.longitude,
+    zoom: Math.log2(
+      (360 * Math.max(1, mapSize.width)) / (256 * region.longitudeDelta),
+    ),
+    width: mapSize.width,
+    height: mapSize.height,
+  });
   return (
     <View
+      onLayout={(event) =>
+        setMapSize({
+          width: event.nativeEvent.layout.width,
+          height: event.nativeEvent.layout.height,
+        })
+      }
       style={{
         height: fullScreen
           ? "100%"
@@ -112,7 +167,11 @@ export default function BeaconMap({
       <MapView
         ref={map}
         onMapReady={() => setReady(true)}
-        onRegionChangeComplete={updateAnchor}
+        onRegionChangeComplete={(nextRegion) => {
+          setRegion(nextRegion);
+          onViewportChange?.();
+          void updateAnchor();
+        }}
         onRegionChange={updateAnchor}
         userInterfaceStyle={colors.bg === "#151C30" ? "dark" : "light"}
         customMapStyle={[
@@ -180,68 +239,215 @@ export default function BeaconMap({
                   e.nativeEvent.coordinate.latitude,
                   e.nativeEvent.coordinate.longitude,
                 )
-            : undefined
+            : () => onMapTap?.()
         }
         showsUserLocation={false}
       >
-        {pins.map((p) => (
-          <Marker
-            key={p.activity_id}
-            coordinate={{ latitude: p.latitude!, longitude: p.longitude! }}
-            accessibilityLabel={
-              activities.find((a) => a.id === p.activity_id)?.title
-            }
-            description={"Meeting place · " + p.label}
-            tracksViewChanges
-            pinColor={colors.green}
-            onPress={() => {
-              if (!onPick) onActivity(p.activity_id);
-            }}
-          >
-            <View
-              style={{
-                padding: 5,
-                borderRadius: 22,
-                backgroundColor: colors.white,
-                borderWidth: 2,
-                borderColor: colors.green,
-              }}
-            >
-              <ActivityBadge
-                category={
-                  activities.find((a) => a.id === p.activity_id)!.category
-                }
-                size={34}
-              />
-            </View>
-          </Marker>
-        ))}
-        {locations
-          .filter((l) => locationIsFresh(l))
-          .filter((l) => l.latitude != null && l.longitude != null)
-          .map((l) => (
+        {groups
+          .filter((group) => group.members.length > 1)
+          .map((group) => {
+            const beacons = group.members.filter(
+              (member) => member.kind === "beacon",
+            ).length;
+            const people = group.members.length - beacons;
+            return (
+              <Marker
+                key={group.id}
+                anchor={{ x: 0.5, y: 0.5 }}
+                coordinate={{
+                  latitude: group.latitude,
+                  longitude: group.longitude,
+                }}
+                accessibilityLabel={`Map cluster: ${beacons} beacons, ${people} people`}
+                onPress={(event) => {
+                  event.stopPropagation();
+                  onCluster?.(group);
+                }}
+              >
+                <View
+                  style={{
+                    width: 48,
+                    height: 48,
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <View
+                    style={{
+                      minWidth: 38,
+                      height: 38,
+                      paddingHorizontal: 8,
+                      borderRadius: 20,
+                      backgroundColor: colors.ink,
+                      borderWidth: 3,
+                      borderColor: colors.lime,
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: colors.white,
+                        fontWeight: "800",
+                        fontSize: 14,
+                      }}
+                    >
+                      {group.members.length}
+                    </Text>
+                  </View>
+                </View>
+              </Marker>
+            );
+          })}
+        {pins
+          .filter((p) =>
+            groups.every(
+              (group) =>
+                group.members.length === 1 ||
+                !group.members.some(
+                  (member) => member.id === `beacon:${p.activity_id}`,
+                ),
+            ),
+          )
+          .map((p) => (
             <Marker
-              key={l.id}
-              coordinate={{ latitude: l.latitude!, longitude: l.longitude! }}
-              onPress={() => onPerson(l.owner_id)}
+              key={p.activity_id}
+              anchor={{ x: 0.5, y: 0.5 }}
+              coordinate={{ latitude: p.latitude!, longitude: p.longitude! }}
+              accessibilityLabel={
+                activities.find((a) => a.id === p.activity_id)?.title
+              }
+              description={"Meeting place · " + p.label}
+              tracksViewChanges
+              pinColor={colors.green}
+              onPress={(event) => {
+                event.stopPropagation();
+                if (!onPick) onActivity(p.activity_id);
+              }}
             >
               <View
                 style={{
-                  backgroundColor: colors.lime,
-                  borderRadius: 22,
-                  borderColor: colors.green,
-                  borderWidth: 3,
-                  padding: 9,
+                  width: 44,
+                  height: 44,
+                  alignItems: "center",
+                  justifyContent: "center",
                 }}
               >
-                {showAvatars ? (
-                  <ProfileAvatar
-                    profile={profiles.find((p) => p.id === l.owner_id)}
-                    size={52}
+                <View
+                  style={{
+                    width: markerVisualSize(
+                      "beacon",
+                      Math.log2(
+                        (360 * Math.max(1, mapSize.width)) /
+                          (256 * region.longitudeDelta),
+                      ),
+                    ),
+                    height: markerVisualSize(
+                      "beacon",
+                      Math.log2(
+                        (360 * Math.max(1, mapSize.width)) /
+                          (256 * region.longitudeDelta),
+                      ),
+                    ),
+                    borderRadius:
+                      markerVisualSize(
+                        "beacon",
+                        Math.log2(
+                          (360 * Math.max(1, mapSize.width)) /
+                            (256 * region.longitudeDelta),
+                        ),
+                      ) / 2,
+                    backgroundColor: colors.white,
+                    borderWidth: 2,
+                    borderColor: colors.green,
+                  }}
+                >
+                  <ActivityBadge
+                    category={
+                      activities.find((a) => a.id === p.activity_id)!.category
+                    }
+                    size={markerVisualSize(
+                      "beacon",
+                      Math.log2(
+                        (360 * Math.max(1, mapSize.width)) /
+                          (256 * region.longitudeDelta),
+                      ) - 1,
+                    )}
                   />
-                ) : (
-                  <Text style={{ fontWeight: "700" }}>●</Text>
-                )}
+                </View>
+              </View>
+            </Marker>
+          ))}
+        {locations
+          .filter((l) => locationIsFresh(l))
+          .filter((l) => l.latitude != null && l.longitude != null)
+          .filter((l) =>
+            groups.every(
+              (group) =>
+                group.members.length === 1 ||
+                !group.members.some(
+                  (member) => member.id === `person:${l.owner_id}`,
+                ),
+            ),
+          )
+          .map((l) => (
+            <Marker
+              key={l.id}
+              anchor={{ x: 0.5, y: 0.5 }}
+              coordinate={{ latitude: l.latitude!, longitude: l.longitude! }}
+              onPress={(event) => {
+                event.stopPropagation();
+                onPerson(l.owner_id);
+              }}
+            >
+              <View
+                style={{
+                  width: 44,
+                  height: 44,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <View
+                  style={{
+                    width: markerVisualSize(
+                      "person",
+                      Math.log2(
+                        (360 * Math.max(1, mapSize.width)) /
+                          (256 * region.longitudeDelta),
+                      ),
+                    ),
+                    height: markerVisualSize(
+                      "person",
+                      Math.log2(
+                        (360 * Math.max(1, mapSize.width)) /
+                          (256 * region.longitudeDelta),
+                      ),
+                    ),
+                    borderRadius: 18,
+                    backgroundColor: colors.lime,
+                    borderColor: colors.green,
+                    borderWidth: 2,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    overflow: "hidden",
+                  }}
+                >
+                  {showAvatars ? (
+                    <ProfileAvatar
+                      profile={profiles.find((p) => p.id === l.owner_id)}
+                      size={markerVisualSize(
+                        "person",
+                        Math.log2(
+                          (360 * Math.max(1, mapSize.width)) /
+                            (256 * region.longitudeDelta),
+                        ) - 1,
+                      )}
+                    />
+                  ) : (
+                    <Text style={{ fontWeight: "700" }}>●</Text>
+                  )}
+                </View>
               </View>
             </Marker>
           ))}

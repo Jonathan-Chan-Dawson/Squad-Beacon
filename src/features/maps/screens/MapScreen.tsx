@@ -1,8 +1,9 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  ScrollView,
   Text,
   View,
   useWindowDimensions,
@@ -18,12 +19,23 @@ import { MapPanel } from "@/src/features/maps/MapPanel";
 import { usePreferences } from "@/src/shared/preferences";
 import { themeNames } from "@/src/shared/themes";
 import { AvatarToggle } from "@/src/features/profile/AvatarToggle";
-import { Button, Chips, InboxButton, Sheet, Txt, useTheme } from "@/src/shared/ui";
-import { friendIds, locationIsFresh } from "@/src/shared/domain";
+import {
+  Button,
+  Chips,
+  InboxButton,
+  Sheet,
+  Txt,
+  useTheme,
+} from "@/src/shared/ui";
+import { activityWhen, friendIds, locationIsFresh } from "@/src/shared/domain";
+import { crew } from "@/src/shared/browsing";
+import { canViewProfile } from "@/src/features/profile/privacy";
+import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
+import type { MapPointGroup } from "@/src/features/maps/cluster";
 export default function MapScreen() {
   const { colors, styles } = useTheme();
 
-  const { theme, setTheme } = usePreferences();
+  const { theme, setTheme, showAvatars } = usePreferences();
   const { data, userId } = useBeacon();
   const params = useLocalSearchParams<{ beacon?: string; person?: string }>();
   const insets = useSafeAreaInsets(),
@@ -39,21 +51,81 @@ export default function MapScreen() {
     [selected, setSelected] = useState<string | null>(null),
     [person, setPerson] = useState<string | null>(null),
     [expanded, setExpanded] = useState(false);
+  const [cluster, setCluster] = useState<MapPointGroup | null>(null);
+  const [expandedBeacon, setExpandedBeacon] = useState<string | null>(null);
+  const processedRouteSelection = useRef<string | null>(null);
+  const snapshotReady = !!userId && data.viewer_id === userId;
   useFocusEffect(
     useCallback(() => {
-      if (params.beacon) {
-        setDetails(false);
-        setSelected(params.beacon);
+      if (!snapshotReady) return;
+      const staleParams: { beacon?: undefined; person?: undefined } = {};
+      if (person && !canViewProfile(data, person, userId)) {
         setPerson(null);
+        setDetails(false);
+        if (params.person === person) staleParams.person = undefined;
+      }
+      if (
+        selected &&
+        !data.activities.some((activity) => activity.id === selected)
+      ) {
+        setSelected(null);
+        setDetails(false);
+        if (params.beacon === selected) staleParams.beacon = undefined;
+      }
+      if (Object.keys(staleParams).length) router.setParams(staleParams);
+
+      const routeSelection = JSON.stringify([
+        userId,
+        params.beacon ?? "",
+        params.person ?? "",
+      ]);
+      if (processedRouteSelection.current === routeSelection) return;
+      processedRouteSelection.current = routeSelection;
+      const hasBeaconParam = params.beacon != null;
+      const hasPersonParam = params.person != null;
+      if (!hasBeaconParam && !hasPersonParam) return;
+
+      const validBeacon =
+        !!params.beacon &&
+        data.activities.some((activity) => activity.id === params.beacon);
+      const validPerson =
+        !!params.person && canViewProfile(data, params.person, userId);
+      if (validBeacon || validPerson) {
+        setCluster(null);
+        setExpandedBeacon(null);
+        setDetails(false);
+        setSelected(validBeacon ? params.beacon! : null);
+        setPerson(validPerson ? params.person! : null);
         setExpanded(false);
+      } else {
+        if (params.beacon && selected === params.beacon) setSelected(null);
+        if (params.person && person === params.person) setPerson(null);
       }
-      if (params.person) {
-        setPerson(params.person);
-        if (!params.beacon) setSelected(null);
-      }
-    }, [params.beacon, params.person]),
+
+      const staleRouteParams: { beacon?: undefined; person?: undefined } = {};
+      if (hasBeaconParam && !validBeacon) staleRouteParams.beacon = undefined;
+      if (hasPersonParam && !validPerson) staleRouteParams.person = undefined;
+      if (Object.keys(staleRouteParams).length)
+        router.setParams(staleRouteParams);
+    }, [
+      data,
+      params.beacon,
+      params.person,
+      person,
+      selected,
+      snapshotReady,
+      userId,
+    ]),
   );
   const friends = friendIds(data, userId!);
+  function clearRouteSelection() {
+    processedRouteSelection.current = JSON.stringify([
+      userId,
+      params.beacon ?? "",
+      params.person ?? "",
+    ]);
+    router.setParams({ beacon: undefined, person: undefined });
+  }
   const activities = data.activities
     .filter((a) => a.status === "scheduled" && Date.parse(a.ends_at) > now)
     .filter(
@@ -74,18 +146,24 @@ export default function MapScreen() {
     );
   const planFilterOptions = data.plans.map((plan) => {
     const sameTitle = data.plans.filter((other) => other.title === plan.title);
-    const sameDate = sameTitle.filter((other) => other.start_date === plan.start_date);
+    const sameDate = sameTitle.filter(
+      (other) => other.start_date === plan.start_date,
+    );
     return {
       id: plan.id,
-      label: sameTitle.length === 1
-        ? plan.title
-        : `${plan.title} · ${plan.start_date}${sameDate.length > 1 ? ` · ${plan.id.slice(0, 8)}` : ""}`,
+      label:
+        sameTitle.length === 1
+          ? plan.title
+          : `${plan.title} · ${plan.start_date}${sameDate.length > 1 ? ` · ${plan.id.slice(0, 8)}` : ""}`,
     };
   });
   const focusedBeacon = data.activities.find((a) => a.id === selected);
   const focusedPlace = data.places.find((p) => p.activity_id === selected);
   const focusedPerson = data.locations.find(
-    (l) => l.owner_id === person && locationIsFresh(l),
+    (l) =>
+      l.owner_id === person &&
+      locationIsFresh(l) &&
+      canViewProfile(data, l.owner_id, userId!),
   );
   const point = selected ? focusedPlace : focusedPerson;
   const focused =
@@ -96,14 +174,46 @@ export default function MapScreen() {
   const panelHeight = Math.min(480, height * 0.53);
   const locations = data.locations.filter(
     (l) =>
-      audience === "Everyone" ||
-      (audience === "Friends"
-        ? friends.includes(l.owner_id)
-        : data.squad_members.some(
-            (m) => m.user_id === l.owner_id && m.squad_id === audience,
-          )),
+      (audience === "Everyone" ||
+        (audience === "Friends"
+          ? friends.includes(l.owner_id)
+          : data.squad_members.some(
+              (m) => m.user_id === l.owner_id && m.squad_id === audience,
+            ))) &&
+      canViewProfile(data, l.owner_id, userId!),
   );
+  const visibleCluster = cluster
+    ? {
+        ...cluster,
+        members: cluster.members.filter((member) => {
+          if (member.kind === "person")
+            return (
+              showAvatars &&
+              locations.some(
+                (location) =>
+                  location.owner_id === member.id.slice("person:".length) &&
+                  locationIsFresh(location, new Date(now)),
+              )
+            );
+          const id = member.id.slice("beacon:".length);
+          return (
+            activities.some((activity) => activity.id === id) &&
+            data.places.some(
+              (place) =>
+                place.activity_id === id &&
+                place.latitude != null &&
+                place.longitude != null,
+            )
+          );
+        }),
+      }
+    : null;
+  const activeCluster =
+    visibleCluster && visibleCluster.members.length > 1 ? visibleCluster : null;
   function chooseBeacon(id: string) {
+    clearRouteSelection();
+    setCluster(null);
+    setExpandedBeacon(null);
     setDetails(false);
     setAnchor(null);
     setSelected(id);
@@ -111,6 +221,10 @@ export default function MapScreen() {
     setExpanded(false);
   }
   function choosePerson(id: string) {
+    if (!canViewProfile(data, id, userId!)) return;
+    clearRouteSelection();
+    setCluster(null);
+    setExpandedBeacon(null);
     setDetails(false);
     setAnchor(null);
     setPerson(id);
@@ -148,6 +262,28 @@ export default function MapScreen() {
         profiles={data.profiles}
         onActivity={chooseBeacon}
         onPerson={choosePerson}
+        onCluster={(nextCluster) => {
+          clearRouteSelection();
+          setDetails(false);
+          setExpanded(false);
+          setSelected(null);
+          setPerson(null);
+          setExpandedBeacon(null);
+          setCluster(nextCluster);
+        }}
+        onMapTap={() => {
+          clearRouteSelection();
+          setDetails(false);
+          setExpanded(false);
+          setSelected(null);
+          setPerson(null);
+          setCluster(null);
+          router.setParams({ beacon: undefined, person: undefined });
+        }}
+        onViewportChange={() => {
+          setCluster(null);
+          setExpandedBeacon(null);
+        }}
       />
       <View
         pointerEvents="box-none"
@@ -174,7 +310,9 @@ export default function MapScreen() {
             }}
           >
             <Text style={styles.h2}>Map</Text>
-            <Text style={styles.muted}>{activities.length} beacons · {data.plans.length} plans</Text>
+            <Text style={styles.muted}>
+              {activities.length} beacons · {data.plans.length} plans
+            </Text>
           </Pressable>
         </View>
         <Pressable
@@ -300,9 +438,9 @@ export default function MapScreen() {
               setExpanded(false);
             }}
             onClose={() => {
+              clearRouteSelection();
               setSelected(null);
               setPerson(null);
-              router.setParams({ beacon: undefined, person: undefined });
             }}
           />
         </View>
@@ -331,6 +469,185 @@ export default function MapScreen() {
           />
         </View>
       )}
+      {activeCluster && (
+        <View
+          testID="map-cluster-panel"
+          style={{
+            position: "absolute",
+            left: 10,
+            right: 10,
+            bottom: 10,
+            maxHeight: Math.min(height * 0.62, 500),
+            backgroundColor: colors.white,
+            borderColor: colors.line,
+            borderWidth: 1,
+            borderRadius: 24,
+            padding: 14,
+            gap: 8,
+            boxShadow: "0 8px 28px #142e3033",
+          }}
+        >
+          <View style={styles.between}>
+            <View>
+              <Text style={styles.label}>NEARBY</Text>
+              <Text style={styles.h2}>
+                {
+                  activeCluster.members.filter(
+                    (member) => member.kind === "beacon",
+                  ).length
+                }{" "}
+                Beacons ·{" "}
+                {
+                  activeCluster.members.filter(
+                    (member) => member.kind === "person",
+                  ).length
+                }{" "}
+                People
+              </Text>
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Close map cluster"
+              onPress={() => setCluster(null)}
+              style={{ padding: 8 }}
+            >
+              <Text style={styles.label}>CLOSE</Text>
+            </Pressable>
+          </View>
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ gap: 8, paddingBottom: 4 }}
+          >
+            {!!activeCluster.members.some(
+              (member) => member.kind === "beacon",
+            ) && (
+              <>
+                <Text style={styles.label}>BEACONS</Text>
+                {activeCluster.members
+                  .filter((member) => member.kind === "beacon")
+                  .map((member) => {
+                    const activity = data.activities.find(
+                      (item) => item.id === member.id.slice("beacon:".length),
+                    );
+                    if (!activity) return null;
+                    const isExpanded = expandedBeacon === activity.id;
+                    const visibleGoing = crew(data, activity).filter(
+                      ({ person: profile, status }) =>
+                        (status === "Going" || status === "Hosting") &&
+                        canViewProfile(data, profile, userId!),
+                    );
+                    return (
+                      <View
+                        key={member.id}
+                        style={[styles.card, { padding: 10, gap: 8 }]}
+                      >
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`${isExpanded ? "Collapse" : "Expand"} ${activity.title} in map cluster`}
+                          accessibilityState={{ expanded: isExpanded }}
+                          onPress={() =>
+                            setExpandedBeacon(isExpanded ? null : activity.id)
+                          }
+                          style={styles.between}
+                        >
+                          <View style={{ flex: 1 }}>
+                            <Text style={styles.body}>{activity.title}</Text>
+                            <Text style={styles.muted} numberOfLines={1}>
+                              {activityWhen(activity)} ·{" "}
+                              {data.places.find(
+                                (place) => place.activity_id === activity.id,
+                              )?.label || "Place to be decided"}
+                            </Text>
+                          </View>
+                          <Text style={styles.label}>
+                            {isExpanded ? "HIDE PEOPLE" : "PEOPLE"}
+                          </Text>
+                        </Pressable>
+                        {isExpanded && (
+                          <>
+                            {visibleGoing.map(({ person: profile, status }) => (
+                              <Pressable
+                                key={profile.id}
+                                accessibilityRole="button"
+                                accessibilityLabel={`View ${profile.name} on map`}
+                                onPress={() => {
+                                  setCluster(null);
+                                  choosePerson(profile.id);
+                                }}
+                                style={styles.row}
+                              >
+                                <ProfileAvatar profile={profile} size={30} />
+                                <Text style={styles.body}>{profile.name}</Text>
+                                <Text style={styles.muted}>{status}</Text>
+                              </Pressable>
+                            ))}
+                            {!visibleGoing.length && (
+                              <Txt muted>
+                                No visible people have joined yet.
+                              </Txt>
+                            )}
+                            <Button
+                              title="Open Beacon"
+                              secondary
+                              onPress={() => {
+                                setCluster(null);
+                                chooseBeacon(activity.id);
+                              }}
+                            />
+                          </>
+                        )}
+                      </View>
+                    );
+                  })}
+              </>
+            )}
+            {!!activeCluster.members.some(
+              (member) => member.kind === "person",
+            ) && (
+              <>
+                <Text style={styles.label}>PEOPLE</Text>
+                {activeCluster.members
+                  .filter((member) => member.kind === "person")
+                  .map((member) => {
+                    const id = member.id.slice("person:".length);
+                    const profile = data.profiles.find(
+                      (candidate) => candidate.id === id,
+                    );
+                    if (!profile || !canViewProfile(data, profile, userId!))
+                      return null;
+                    const statusBeacon = data.activities.find(
+                      (activity) =>
+                        activity.owner_id === id &&
+                        activity.status === "scheduled" &&
+                        Date.parse(activity.starts_at) <= now &&
+                        Date.parse(activity.ends_at) > now,
+                    );
+                    return (
+                      <Pressable
+                        key={member.id}
+                        accessibilityRole="button"
+                        accessibilityLabel={`View ${profile.name} on map`}
+                        onPress={() => {
+                          setCluster(null);
+                          choosePerson(id);
+                        }}
+                        style={[styles.row, styles.card, { padding: 8 }]}
+                      >
+                        <ProfileAvatar profile={profile} size={30} />
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.body}>{profile.name}</Text>
+                          <Text style={styles.muted}>
+                            {statusBeacon?.title ?? "Sharing location"}
+                          </Text>
+                        </View>
+                      </Pressable>
+                    );
+                  })}
+              </>
+            )}
+          </ScrollView>
+        </View>
+      )}
       <Sheet
         title="Your kind of map"
         visible={filters}
@@ -356,11 +673,26 @@ export default function MapScreen() {
         />
         <Text style={styles.h2}>Plan</Text>
         <Chips
-          options={["All plans", ...planFilterOptions.map((plan) => plan.label)]}
-          value={planFilterOptions.find((plan) => plan.id === planFilter)?.label ?? "All plans"}
-          onChange={(label) => setPlanFilter(planFilterOptions.find((plan) => plan.label === label)?.id ?? "All plans")}
+          options={[
+            "All plans",
+            ...planFilterOptions.map((plan) => plan.label),
+          ]}
+          value={
+            planFilterOptions.find((plan) => plan.id === planFilter)?.label ??
+            "All plans"
+          }
+          onChange={(label) =>
+            setPlanFilter(
+              planFilterOptions.find((plan) => plan.label === label)?.id ??
+                "All plans",
+            )
+          }
         />
-        <Button title="Open plans" secondary onPress={() => router.push("/plans")} />
+        <Button
+          title="Open plans"
+          secondary
+          onPress={() => router.push("/plans")}
+        />
         <Chips
           options={["Everyone", "Friends"]}
           value={audience}
@@ -375,11 +707,7 @@ export default function MapScreen() {
           />
         ))}
         <Text style={styles.h2}>Map mood</Text>
-        <Chips
-          options={themeNames}
-          value={theme}
-          onChange={setTheme}
-        />
+        <Chips options={themeNames} value={theme} onChange={setTheme} />
         <AvatarToggle />
         <Txt muted>
           Pins are meeting places. Avatars appear only for fresh locations

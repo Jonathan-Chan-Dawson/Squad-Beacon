@@ -5,6 +5,8 @@ import { useBeacon } from "@/src/shared/store";
 import { useNow } from "@/src/shared/useNow";
 import { Action, Txt, useTheme } from "@/src/shared/ui";
 import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
+import { canViewProfile } from "@/src/features/profile/privacy";
+import { canReadPlanningThread } from "@/src/features/planning/domain";
 export function MapTooltip({
   beaconId,
   personId,
@@ -22,7 +24,13 @@ export function MapTooltip({
     { colors, styles } = useTheme(),
     now = useNow();
   const a = data.activities.find((a) => a.id === beaconId),
-    person = data.profiles.find((p) => p.id === (personId ?? a?.owner_id)),
+    personCandidate = data.profiles.find(
+      (p) => p.id === (personId ?? a?.owner_id),
+    ),
+    person =
+      personCandidate && canViewProfile(data, personCandidate, userId!)
+        ? personCandidate
+        : undefined,
     r = data.rsvps.find(
       (r) => r.activity_id === beaconId && r.user_id === userId,
     );
@@ -32,6 +40,15 @@ export function MapTooltip({
     a.owner_id !== userId &&
     a.status === "scheduled" &&
     Date.parse(a.ends_at) > now;
+  const decisionThread =
+    a && userId && data.viewer_id === userId
+      ? data.planning_threads.find(
+          (thread) =>
+            (thread.kind === "vote" || thread.kind === "draw") &&
+            thread.materialized_activity_id === a.id &&
+            canReadPlanningThread(data, thread, userId),
+        )
+      : undefined;
   return (
     <View
       style={{
@@ -58,7 +75,10 @@ export function MapTooltip({
       <View style={styles.row}>
         <ProfileAvatar profile={person} size={38} />
         <View style={{ flex: 1 }}>
-          <Text style={styles.label}>{person?.name ?? "Your beacon"}</Text>
+          <Text style={styles.label}>
+            {person?.name ??
+              (a?.owner_id === userId ? "Your beacon" : "Beacon host")}
+          </Text>
           <Text numberOfLines={2} style={[styles.h2, { fontSize: 16 }]}>
             {a?.title ?? "Say hello. Make a plan."}
           </Text>
@@ -81,6 +101,11 @@ export function MapTooltip({
               (a.available ? "Free to hang" : a.category)}
           </Text>
         </View>
+      )}
+      {decisionThread && (
+        <Text style={[styles.muted, { fontSize: 12 }]}>
+          Chosen by {decisionThread.kind === "vote" ? "Vote" : "Draw"}
+        </Text>
       )}
       {joinable && (
         <View style={{ flexDirection: "row", gap: 5 }}>

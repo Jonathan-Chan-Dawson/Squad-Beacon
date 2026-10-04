@@ -47,7 +47,11 @@ test("catalog recipes have unique deterministic ids and valid mapped data", () =
     assert.ok(Number.isInteger(item.minutes) && item.minutes >= 5 && item.minutes <= 1440);
     assert.ok(item.description?.trim());
     assert.ok(item.prepPrompts?.length);
-    assert.ok(item.suggestedTools?.every((tool) => ["checklist", "notes", "focus"].includes(tool)));
+    assert.ok(
+      item.suggestedTools?.every((tool) =>
+        ["chat", "checklist", "notes", "focus", "memories", "music", "scoreboard"].includes(tool),
+      ),
+    );
   }
 });
 
@@ -77,6 +81,28 @@ test("recipe overrides map cross-category ideas and choose usable durations", ()
   assert.equal(recipe("routine-repeating", "Morning Walk").minutes, 30);
   assert.equal(recipe("food-dining", "Coffee").minutes, 30);
   assert.ok(groups.get("routine-repeating")!.description.includes("does not schedule recurrence"));
+});
+
+test("module recommendations reuse one catalog and cover the brief's core recipes", () => {
+  assert.deepEqual(recipe("study-learning", "General Study").suggestedTools, [
+    "chat",
+    "focus",
+    "checklist",
+    "notes",
+  ]);
+  assert.deepEqual(recipe("sports-fitness", "Basketball").suggestedTools, [
+    "chat",
+    "memories",
+    "scoreboard",
+  ]);
+  assert.ok(recipe("food-dining", "Dinner").suggestedTools?.includes("chat"));
+  assert.ok(recipe("nature-outdoors", "Camping").suggestedTools?.includes("memories"));
+  assert.deepEqual(recipe("travel-trip", "Road Trip").suggestedTools, [
+    "chat",
+    "checklist",
+    "notes",
+    "memories",
+  ]);
 });
 
 test("template durations stay relative to the effective start until custom end is chosen", () => {

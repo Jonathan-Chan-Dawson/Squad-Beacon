@@ -29,12 +29,13 @@ import BeaconMap from "@/src/features/maps/components/BeaconMap";
 import DateField from "@/components/DateField";
 import { BeaconSettings } from "@/src/features/beacons/BeaconSettings";
 import {
+  beaconControlValuesFromActivity,
   defaultBeaconControlValues,
   validateBeaconControlValues,
   type BeaconControlValues,
 } from "@/src/features/beacons/controls";
 import { useBeacon } from "@/src/shared/store";
-import type { Audience, Category } from "@/src/shared/types";
+import type { Audience, BeaconModuleDefaults, Category } from "@/src/shared/types";
 import { validateActivity } from "@/src/shared/domain";
 import {
   durationMinutesForLabel,
@@ -84,10 +85,28 @@ const templateGroupIcons: Record<string, LucideIcon> = {
 };
 
 const suggestedToolNames: Record<SuggestedTool, string> = {
+  chat: "Chat",
   checklist: "Checklist",
-  notes: "Notes",
-  focus: "Focus timer",
+  notes: "Beacon Note",
+  focus: "Timer",
+  memories: "Beacon Memories",
+  music: "Music",
+  scoreboard: "Teams / Scoreboard",
 };
+function moduleDefaultsFromControls(
+  controls: BeaconControlValues,
+): BeaconModuleDefaults {
+  return {
+    enable_chat: controls.enable_chat,
+    enable_checklist: controls.enable_checklist,
+    enable_journal: controls.enable_journal,
+    enable_experiences: controls.enable_experiences,
+    enable_focus: controls.enable_focus,
+    enable_scoreboard: controls.enable_scoreboard,
+    enable_comments: controls.enable_comments,
+    enable_music: controls.enable_music,
+  };
+}
 export default function CreateActivity() {
   const { colors, styles } = useTheme();
 
@@ -99,6 +118,7 @@ export default function CreateActivity() {
     template?: string;
     editTemplate?: string;
     saveTemplate?: string;
+    savedChecklist?: string;
   }>();
   const controlsRouteKey = JSON.stringify([
     params.kind ?? null,
@@ -175,7 +195,14 @@ export default function CreateActivity() {
   const [beaconControlDraft, setBeaconControlDraft] = useState<{
     routeKey: string;
     value: BeaconControlValues;
-  }>(() => ({ routeKey: controlsRouteKey, value: defaultBeaconControlValues() }));
+  }>(() => ({
+    routeKey: controlsRouteKey,
+    value: saved?.module_defaults
+      ? { ...defaultBeaconControlValues(), ...saved.module_defaults }
+      : previous
+        ? beaconControlValuesFromActivity(previous)
+        : defaultBeaconControlValues(),
+  }));
   const beaconControls = beaconControlDraft.routeKey === controlsRouteKey
     ? beaconControlDraft.value
     : defaultBeaconControlValues();
@@ -189,10 +216,24 @@ export default function CreateActivity() {
     setTitle(t.title);
     setCategory(t.category);
     setDescription(t.description ?? "");
-    setSelectedRecipe(t.prepPrompts?.length ? t : null);
+    setSelectedRecipe(t);
     setPrepAnswers(t.prepPrompts?.map(() => "") ?? []);
     setDuration(formatDurationLabel(t.minutes));
     setEnds(new Date(Date.parse(starts) + t.minutes * 60000).toISOString());
+    const modules = new Set(t.suggestedTools ?? []);
+    const moduleDefaults = {
+      enable_chat: modules.size === 0 || modules.has("chat"),
+      enable_checklist: modules.has("checklist"),
+      enable_journal: modules.has("notes"),
+      enable_focus: modules.has("focus"),
+      enable_experiences: modules.has("memories"),
+      enable_scoreboard: modules.has("scoreboard"),
+      enable_music: modules.has("music"),
+    };
+    setBeaconControls({
+      ...beaconControls,
+      ...moduleDefaults,
+    } as BeaconControlValues);
   }
   function descriptionWithPrep() {
     const answers = (selectedRecipe?.prepPrompts ?? []).flatMap(
@@ -234,6 +275,7 @@ export default function CreateActivity() {
       label: label.trim(),
       target_count: target.trim() ? Number(target) : null,
       approval_required: approval === "Host approval",
+      module_defaults: moduleDefaultsFromControls(beaconControls),
     });
     router.replace({
       pathname: "/(tabs)/activities",
@@ -269,6 +311,7 @@ export default function CreateActivity() {
       latitude: placeType === "In person" ? (pin?.latitude ?? null) : null,
       longitude: placeType === "In person" ? (pin?.longitude ?? null) : null,
       ...(controls ?? {}),
+      ...(params.savedChecklist ? { saved_checklist_id: params.savedChecklist } : {}),
     };
     if (
       payload.target_count != null &&
@@ -453,15 +496,15 @@ export default function CreateActivity() {
       )}
       {kind !== "Status" && !!selectedRecipe?.suggestedTools?.length && (
         <View style={[styles.card, { padding: 13, gap: 5 }]}>
-          <Text style={styles.label}>OPTIONAL TOOL IDEAS</Text>
+          <Text style={styles.label}>READY WITH</Text>
           <Text style={[styles.body, { fontWeight: "700" }]}>
             {selectedRecipe.suggestedTools
               .map((tool) => suggestedToolNames[tool])
               .join(" · ")}
           </Text>
           <Txt muted>
-            Suggestions only. Nothing is turned on automatically; find these
-            tools in the beacon after publishing.
+            These module defaults are ready for this recipe. Adjust them in
+            Advanced options before publishing.
           </Txt>
         </View>
       )}
@@ -590,12 +633,15 @@ export default function CreateActivity() {
               onChange={setApproval}
             />
           )}
-          {kind !== "Status" && !templateEditor && (
+          {kind !== "Status" && (
             <BeaconSettings
-              key={controlsRouteKey}
+              key={`${controlsRouteKey}-${templateEditor ? "template" : "beacon"}`}
               value={beaconControls}
               onChange={setBeaconControls}
-              description="Template ideas don't save these controls. Each new beacon uses the choices shown here."
+              templateMode={templateEditor}
+              description={templateEditor
+                ? "These module defaults are saved with your template. You can still change them for each new Beacon."
+                : "Recipe recommendations can be changed here before you publish. Each new Beacon uses the choices shown."}
             />
           )}
           <Chips

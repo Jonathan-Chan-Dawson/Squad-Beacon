@@ -12,6 +12,8 @@ import { isWidgetAdviceEligible } from "@/src/features/widgets/adviceEligibility
 const now = new Date("2026-09-30T16:00:00.000Z");
 function fixture() {
   const data = emptyData();
+  data.viewer_id = "me";
+  data.is_demo = true;
   data.profiles = [
     {
       id: "me",
@@ -304,6 +306,59 @@ test("next beacon can include the viewer's private plan while friend status neve
   const payload = deriveWidgetPayload(fixture(), "me", preferences, now);
   assert.equal(payload.nextBeacon?.title, "Studio night");
   assert.equal(payload.allFriends.friends[0]?.detail, "Coffee");
+});
+
+test("friend widgets omit status and beacon titles when profile privacy denies access", () => {
+  const data = fixture();
+  data.profiles.find((item) => item.id === "friend")!.profile_visibility =
+    "custom";
+  const preferences = defaultWidgetPreferences();
+  preferences.privacy = "full";
+  preferences.circles.circle1 = { kind: "friend", id: "friend" };
+
+  const payload = deriveWidgetPayload(data, "me", preferences, now);
+
+  assert.equal(payload.allFriends.totalCount, 0);
+  assert.equal(payload.circles.circle1.totalCount, 0);
+  assert.equal(payload.circleBeacons.circle1.beacons.length, 0);
+  assert.equal(payload.nextBeacon?.title, "Studio night");
+});
+
+test("friend widgets honor profile blocks even when an activity row is otherwise audience-visible", () => {
+  const data = fixture();
+  data.blocks = [{ blocker_id: "me", blocked_id: "friend" }];
+  const preferences = defaultWidgetPreferences();
+  preferences.privacy = "full";
+  preferences.circles.circle1 = { kind: "friend", id: "friend" };
+
+  // The widget's activity audience check still allows the accepted-friend
+  // beacon row; profile privacy is a separate gate and must suppress it.
+  assert.equal(data.activities.some((item) => item.id === "live"), true);
+  const payload = deriveWidgetPayload(data, "me", preferences, now);
+
+  assert.equal(payload.allFriends.totalCount, 0);
+  assert.equal(payload.circles.circle1.totalCount, 0);
+  assert.equal(payload.circleBeacons.circle1.beacons.length, 0);
+  assert.equal(payload.nextBeacon?.title, "Studio night");
+});
+
+test("widget payload and timeline fail closed when the snapshot belongs to another viewer", () => {
+  const data = fixture();
+  data.viewer_id = "other-account";
+  const preferences = defaultWidgetPreferences();
+  preferences.privacy = "full";
+
+  const payload = deriveWidgetPayload(data, "me", preferences, now);
+
+  assert.equal(payload.stale, true);
+  assert.equal(payload.allFriends.totalCount, 0);
+  assert.equal(payload.circles.circle1.totalCount, 0);
+  assert.equal(payload.circleBeacons.circle1.beacons.length, 0);
+  assert.equal(payload.nextBeacon, null);
+  assert.deepEqual(
+    widgetTimelineDates(data, "me", now).map(Number),
+    [+now, +now + WIDGET_FRESHNESS_MS],
+  );
 });
 
 test("widget timeline has authorized status boundaries within the freshness window", () => {

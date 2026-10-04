@@ -3,6 +3,7 @@
 # dependencies
 node_modules/
 .claude/
+.codex/
 
 # Expo
 .expo/
@@ -11,6 +12,7 @@ build/
 web-build/
 coverage/
 expo-env.d.ts
+/.tmp-status-*
 
 # Native
 .kotlin/

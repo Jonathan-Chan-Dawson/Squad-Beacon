@@ -3,3 +3,4 @@ Profile feature
 - screens/ProfileScreen.tsx: profile and account preferences.
 - ProfileAvatar.tsx, AvatarToggle.tsx, avatar.ts, avatarArt.ts: avatar display, selection, and presentation.
 - ProfileSurvey.tsx and aspirations.ts: profile survey and optional aspiration helpers.
+- privacy.ts and screens/ProfilePrivacySettings.tsx: viewer-specific full-profile privacy gates and account settings controls.

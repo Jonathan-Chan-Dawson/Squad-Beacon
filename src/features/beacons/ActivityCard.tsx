@@ -2,7 +2,6 @@ import React from "react";
 import { Pressable, Text, View } from "react-native";
 import { router } from "expo-router";
 import {
-  ArrowUpRight,
   ArrowUp,
   Clock3,
   MapPin,
@@ -90,7 +89,24 @@ export function ActivityCard({
               {owner?.name ?? "Squad member"} {"\u00b7"} {activity.category}
             </Text>
           </View>
-          <ArrowUpRight size={18} color={colors.green} />
+          <View
+            pointerEvents="none"
+            style={{
+              minHeight: 30,
+              flexShrink: 0,
+              alignItems: "center",
+              justifyContent: "center",
+              paddingHorizontal: 10,
+              borderRadius: 15,
+              borderWidth: 1,
+              borderColor: colors.green,
+              backgroundColor: colors.lime,
+            }}
+          >
+            <Text style={{ color: colors.ink, fontSize: 12, fontWeight: "700" }}>
+              View
+            </Text>
+          </View>
         </Pressable>
         {highlighted ? (
           <View

@@ -3,6 +3,7 @@ import { Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useBeacon } from "@/src/shared/store";
 import { featuredActivity, friendIds } from "@/src/shared/domain";
+import { canViewProfile } from "@/src/features/profile/privacy";
 import { ActivityCard } from "@/src/features/beacons/ActivityCard";
 import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
 import type { AspirationGoal } from "@/src/features/profile/ProfileSurvey";
@@ -38,6 +39,97 @@ export default function Person() {
         />
       </Screen>
     );
+  const canViewFullProfile = canViewProfile(data, person, userId);
+  if (!canViewFullProfile) {
+    const isFriend = !!userId && friendIds(data, userId).includes(id);
+    return (
+      <Screen title={person.name} eyebrow="PROFILE DETAILS PRIVATE" create={false}>
+        <View style={styles.card}>
+          <ProfileAvatar profile={person} size={76} />
+          <Text style={styles.title}>{person.name}</Text>
+          <Txt muted>@{person.username}</Txt>
+          <Txt muted>
+            They keep their profile details private. You can still connect directly.
+          </Txt>
+        </View>
+        {id !== userId &&
+          (isFriend ? (
+            <Button
+              title="Message"
+              onPress={() =>
+                router.push({ pathname: "/messages/[id]", params: { id } })
+              }
+            />
+          ) : (
+            <Action
+              title="Add friend"
+              run={() => act("friend_request", { username: person.username })}
+            />
+          ))}
+        {id !== userId && (
+          <>
+            <Button
+              secondary
+              title="Report account"
+              onPress={() => setReport(true)}
+            />
+            <Button
+              secondary
+              title="Block account"
+              onPress={() => setBlock(true)}
+            />
+            {isFriend && (
+              <Action
+                secondary
+                title="Remove friendship"
+                run={() => act("remove_friend", { user_id: id })}
+              />
+            )}
+          </>
+        )}
+        <Button secondary title="Back" onPress={() => router.back()} />
+        <Sheet
+          title="Report account"
+          visible={report}
+          onClose={() => setReport(false)}
+        >
+          <Field
+            label="What happened?"
+            value={reason}
+            onChangeText={setReason}
+            multiline
+          />
+          <Action
+            title="Send report"
+            run={async () => {
+              if (reason.trim().length < 5)
+                throw new Error("Please include a little more detail.");
+              await act("report", { id, reason });
+              setReport(false);
+            }}
+          />
+        </Sheet>
+        <Sheet
+          title={`Block ${person.name}?`}
+          visible={block}
+          onClose={() => setBlock(false)}
+        >
+          <Txt>
+            This ends your friendship and direct sharing. Their comments and
+            location will be hidden, including in shared squads.
+          </Txt>
+          <Action
+            title="Confirm block"
+            run={async () => {
+              await act("block", { id });
+              setBlock(false);
+              router.replace("/(tabs)/squads");
+            }}
+          />
+        </Sheet>
+      </Screen>
+    );
+  }
   const featured = featuredActivity(person, data.activities);
   return (
     <Screen title={person.name} eyebrow={"@" + person.username} create={false}>
