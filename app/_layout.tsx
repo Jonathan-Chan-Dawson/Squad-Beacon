@@ -12,10 +12,11 @@ import { ProfileSurvey } from "@/src/features/profile/ProfileSurvey";
 import { Loading, Screen, Action, Txt } from "@/src/shared/ui";
 import { WidgetPreferencesProvider } from "@/src/features/widgets/preferences";
 import { WidgetSync } from "@/src/features/widgets/WidgetRuntime";
+import { ExplorationProvider } from "@/src/shared/exploration";
 export { ErrorBoundary } from "expo-router";
 function ThemedStatusBar() {
-  const { theme } = usePreferences();
-  return <StatusBar style={theme === "Midnight" ? "light" : "dark"} />;
+  const { resolvedAppearance } = usePreferences();
+  return <StatusBar style={resolvedAppearance === "dark" ? "light" : "dark"} />;
 }
 function Navigation() {
   const { userId, loading, data, error, refresh } = useBeacon(),
@@ -56,11 +57,13 @@ function Navigation() {
 function AppRuntime() {
   const { userId } = useBeacon();
   return (
-    <WidgetPreferencesProvider accountId={userId}>
-      <WidgetSync />
-      <ThemedStatusBar />
-      <Navigation />
-    </WidgetPreferencesProvider>
+    <ExplorationProvider key={userId ?? "signed-out"}>
+      <WidgetPreferencesProvider accountId={userId}>
+        <WidgetSync />
+        <ThemedStatusBar />
+        <Navigation />
+      </WidgetPreferencesProvider>
+    </ExplorationProvider>
   );
 }
 export default function RootLayout() {

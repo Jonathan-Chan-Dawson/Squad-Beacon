@@ -40,16 +40,23 @@ test("single-choice navigation omits checks while multi-select keeps its check i
   await page.getByRole("tab", { name: "Beacons", exact: true }).click();
   await expect(page.getByText("✓ Current", { exact: true })).toHaveCount(0);
   await expect(page.getByText("✓ Everyone", { exact: true })).toHaveCount(0);
-  await page.getByRole("button", { name: "Starred Friends", exact: true }).click();
-  await expect(page.getByText("✓ Starred Friends", { exact: true })).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Starred Friends", exact: true })
+    .click();
+  await expect(
+    page.getByText("✓ Starred Friends", { exact: true }),
+  ).toHaveCount(0);
   await page.getByRole("button", { name: "Free to hang", exact: true }).click();
-  await expect(page.getByText("✓ Free to hang", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("✓ Free to hang", { exact: true })).toHaveCount(
+    0,
+  );
   await page.getByRole("button", { name: "Upcoming", exact: true }).click();
   await expect(page.getByText("✓ Upcoming", { exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Past", exact: true }).click();
   await expect(page.getByText("✓ Past", { exact: true })).toHaveCount(0);
 
   await page.getByRole("tab", { name: "Squads", exact: true }).click();
+  await page.getByRole("button", { name: "Search conversations", exact: true }).click();
   await page.getByRole("button", { name: "Friends", exact: true }).click();
   await expect(page.getByText("✓ Friends", { exact: true })).toHaveCount(0);
 
@@ -57,7 +64,9 @@ test("single-choice navigation omits checks while multi-select keeps its check i
   await page.getByRole("button", { name: "Retake profile survey" }).click();
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await page.getByLabel("Search interests").fill("Day hiking");
-  await page.getByRole("button", { name: "Choose Day hiking", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Choose Day hiking", exact: true })
+    .click();
   const selectedInterest = page.getByRole("button", {
     name: "Remove Day hiking",
     exact: true,

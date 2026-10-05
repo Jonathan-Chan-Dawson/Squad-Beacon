@@ -52,6 +52,29 @@
         {
           "widgets": [
             {
+              "name": "QuickCreateWidget",
+              "displayName": "Quick Create",
+              "description": "Start a Beacon, share your status, or make a Beacon Plan in the app.",
+              "ios": {
+                "supportedFamilies": ["systemSmall", "systemMedium"],
+                "configuration": {
+                  "title": "Your shortcut",
+                  "parameters": {
+                    "kind": {
+                      "title": "Open",
+                      "type": "enum",
+                      "default": "beacon",
+                      "values": [
+                        { "name": "Beacon", "value": "beacon" },
+                        { "name": "Beacon Plan", "value": "plan" },
+                        { "name": "Status", "value": "status" }
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            {
               "name": "FriendsNowWidget",
               "displayName": "Friends Now",
               "description": "See who is free and which friends have an active beacon.",

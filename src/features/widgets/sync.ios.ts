@@ -1,11 +1,18 @@
 import * as SecureStore from "expo-secure-store";
-import { deriveWidgetPayload, widgetTimelineDates } from "@/src/features/widgets/derive";
-import type { WidgetPayload, WidgetPreferences } from "@/src/features/widgets/types";
+import {
+  deriveWidgetPayload,
+  widgetTimelineDates,
+} from "@/src/features/widgets/derive";
+import type {
+  WidgetPayload,
+  WidgetPreferences,
+} from "@/src/features/widgets/types";
 import type { Data } from "@/src/shared/types";
 import FriendsNowWidget from "@/src/features/widgets/FriendsNowWidget";
 import SquadBeaconsWidget from "@/src/features/widgets/SquadBeaconsWidget";
 import NextBeaconWidget from "@/src/features/widgets/NextBeaconWidget";
 import CirclePulseWidget from "@/src/features/widgets/CirclePulseWidget";
+import QuickCreateWidget from "@/src/features/widgets/QuickCreateWidget";
 
 const accountKey = "beacon.widgets.active-account";
 const emptyPayload: WidgetPayload = {
@@ -57,6 +64,8 @@ function enqueue(action: () => Promise<void>) {
   return queue;
 }
 function clearSnapshots() {
+  // Launchers never cache anyone's personal data and remain safe when status is Off.
+  QuickCreateWidget.updateSnapshot({});
   FriendsNowWidget.updateSnapshot(emptyPayload);
   SquadBeaconsWidget.updateSnapshot(emptyPayload);
   NextBeaconWidget.updateSnapshot(emptyPayload);
@@ -89,6 +98,7 @@ export function syncWidgetPayload(
   preferences: WidgetPreferences,
 ) {
   return enqueue(async () => {
+    QuickCreateWidget.updateSnapshot({});
     if (!preferences.enabled) {
       clearSnapshots();
       return;

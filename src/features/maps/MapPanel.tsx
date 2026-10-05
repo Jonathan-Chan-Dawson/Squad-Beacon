@@ -22,6 +22,7 @@ import { ChatThread } from "@/src/features/messages/ChatThread";
 import { canChat, crew } from "@/src/shared/browsing";
 import { isBeaconModuleEnabled } from "@/src/features/beacons/permissions";
 import { canUseBeaconModules } from "@/src/features/beacons/beaconModules";
+import { canReadBeaconMeetingDetails } from "@/src/features/maps/filtering";
 import { activityWhen, friendIds } from "@/src/shared/domain";
 import { Action, Button, Field, Txt, useTheme } from "@/src/shared/ui";
 export function MapPanel({
@@ -31,6 +32,7 @@ export function MapPanel({
   onClose,
   expanded,
   onExpand,
+  initialTab = "Overview",
 }: {
   beaconId: string | null;
   personId: string | null;
@@ -38,12 +40,13 @@ export function MapPanel({
   onClose: () => void;
   expanded: boolean;
   onExpand: (value: boolean) => void;
+  initialTab?: "Overview" | "People" | "Chat";
 }) {
   const { styles, colors } = useTheme();
 
   const { data, userId, act } = useBeacon();
   const now = useNow();
-  const [tab, setTab] = useState("Overview"),
+  const [tab, setTab] = useState(initialTab),
     [comment, setComment] = useState("");
   const a = data.activities.find((a) => a.id === beaconId);
   const personCandidate = data.profiles.find((p) => p.id === personId);
@@ -51,7 +54,9 @@ export function MapPanel({
     personCandidate && userId && canViewProfile(data, personCandidate, userId)
       ? personCandidate
       : undefined;
-  const place = data.places.find((p) => p.activity_id === beaconId);
+  const place = a && userId && canReadBeaconMeetingDetails(data, a, userId)
+    ? data.places.find((p) => p.activity_id === beaconId)
+    : undefined;
   const eligible = a && canChat(data, a, userId!);
   const mine = a?.owner_id === userId;
   const canComment =
@@ -138,7 +143,7 @@ export function MapPanel({
               accessibilityLabel={t}
               accessibilityState={{ selected: activeTab === t }}
               onPress={() => {
-                setTab(t);
+                setTab(t as "Overview" | "People" | "Chat");
                 if (t === "Chat") onExpand(true);
               }}
               style={{

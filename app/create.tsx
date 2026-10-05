@@ -28,6 +28,7 @@ import {
 import BeaconMap from "@/src/features/maps/components/BeaconMap";
 import DateField from "@/components/DateField";
 import { BeaconSettings } from "@/src/features/beacons/BeaconSettings";
+import { ActivityBadge } from "@/src/features/beacons/ActivityBadge";
 import {
   beaconControlValuesFromActivity,
   defaultBeaconControlValues,
@@ -35,7 +36,16 @@ import {
   type BeaconControlValues,
 } from "@/src/features/beacons/controls";
 import { useBeacon } from "@/src/shared/store";
-import type { Audience, BeaconModuleDefaults, Category } from "@/src/shared/types";
+import { useNow } from "@/src/shared/useNow";
+import { canOpenSquadProfile } from "@/src/features/people/squadProfile";
+import { canReadSpace, activeSpaceRole } from "@/src/features/spaces/domain";
+import { canReadOrganization, activeOrganizationRole } from "@/src/features/organizations/domain";
+import type { SocialEntityType } from "@/src/features/social/types";
+import type {
+  Audience,
+  BeaconModuleDefaults,
+  Category,
+} from "@/src/shared/types";
 import { validateActivity } from "@/src/shared/domain";
 import {
   durationMinutesForLabel,
@@ -111,9 +121,15 @@ export default function CreateActivity() {
   const { colors, styles } = useTheme();
 
   const { data, userId, act } = useBeacon();
+  const currentTime = useNow();
   const params = useLocalSearchParams<{
     kind?: string;
     squadId?: string;
+    spaceId?: string;
+    organizationId?: string;
+    latitude?: string;
+    longitude?: string;
+    placeLabel?: string;
     repeat?: string;
     template?: string;
     editTemplate?: string;
@@ -123,6 +139,8 @@ export default function CreateActivity() {
   const controlsRouteKey = JSON.stringify([
     params.kind ?? null,
     params.squadId ?? null,
+    params.spaceId ?? null,
+    params.organizationId ?? null,
     params.repeat ?? null,
     params.template ?? null,
     params.editTemplate ?? null,
@@ -134,10 +152,51 @@ export default function CreateActivity() {
   const templateEditor =
     params.editTemplate === "yes" || params.saveTemplate === "yes";
   const previous = data.activities.find((a) => a.id === params.repeat);
-  const aspirations = data.profiles.find((p) => p.id === userId)?.aspiration_goals ?? [];
-  const currentAspirationIds = new Set(aspirations.map((aspiration) => aspiration.id));
+  const associationCandidates = userId && data.viewer_id === userId
+    ? [
+        ...data.squads
+          .filter((squad) => canOpenSquadProfile(data, squad.id, userId))
+          .map((squad) => ({ entity_type: "squad" as const, entity_id: squad.id, name: squad.name })),
+        ...data.spaces
+          .filter((space) => canReadSpace(data, space.id, userId) && !!activeSpaceRole(space, data.space_members, userId))
+          .map((space) => ({ entity_type: "space" as const, entity_id: space.id, name: space.name })),
+        ...data.organizations
+          .filter((organization) => canReadOrganization(data, organization.id, userId) && !!activeOrganizationRole(organization, data.organization_members, userId))
+          .map((organization) => ({ entity_type: "organization" as const, entity_id: organization.id, name: organization.name })),
+      ].sort((first, second) => first.name.localeCompare(second.name))
+    : [];
+  const associationRouteSeed = params.organizationId
+    ? { entity_type: "organization" as const, entity_id: params.organizationId }
+    : params.spaceId
+      ? { entity_type: "space" as const, entity_id: params.spaceId }
+      : params.squadId
+        ? { entity_type: "squad" as const, entity_id: params.squadId }
+        : null;
+  const associationRouteKey = JSON.stringify([
+    params.squadId ?? null,
+    params.spaceId ?? null,
+    params.organizationId ?? null,
+  ]);
+  const [associationDraft, setAssociationDraft] = useState<{
+    routeKey: string;
+    value: { entity_type: SocialEntityType; entity_id: string } | null;
+  }>(() => ({ routeKey: associationRouteKey, value: associationRouteSeed }));
+  const selectedAssociation = associationDraft.routeKey === associationRouteKey
+    ? associationDraft.value
+    : associationRouteSeed;
+  const selectedAssociationRow = selectedAssociation
+    ? associationCandidates.find((row) => row.entity_type === selectedAssociation.entity_type && row.entity_id === selectedAssociation.entity_id)
+    : undefined;
+  const aspirations =
+    data.profiles.find((p) => p.id === userId)?.aspiration_goals ?? [];
+  const currentAspirationIds = new Set(
+    aspirations.map((aspiration) => aspiration.id),
+  );
   const [timing, setTiming] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [templateBrowser, setTemplateBrowser] = useState(false);
+  const [associationOpen, setAssociationOpen] = useState(false);
+  const [associationSearch, setAssociationSearch] = useState("");
   const [templateSearch, setTemplateSearch] = useState("");
   const [templateGroup, setTemplateGroup] = useState<string | null>(null);
   const [selectedRecipe, setSelectedRecipe] = useState<BeaconTemplate | null>(
@@ -164,13 +223,15 @@ export default function CreateActivity() {
     saved?.category ?? previous?.category ?? "Social",
   );
   const [audience, setAudience] = useState<Audience>(
-    params.kind === "squad"
-      ? "squad"
-      : (data.profiles.find((p) => p.id === userId)?.default_audience ??
+    params.organizationId
+      ? "organization"
+      : params.kind === "squad"
+        ? "squad"
+        : (data.profiles.find((p) => p.id === userId)?.default_audience ??
           "friends"),
   );
   const [audienceId, setAudienceId] = useState<string | null>(
-    params.squadId ?? null,
+    params.organizationId ?? params.squadId ?? null,
   );
   const [target, setTarget] = useState(
     saved?.target_count ? String(saved.target_count) : "",
@@ -179,18 +240,30 @@ export default function CreateActivity() {
     saved?.approval_required ? "Host approval" : "Open joining",
   );
   const [when, setWhen] = useState("Now"),
-    [duration, setDuration] = useState(formatDurationLabel(saved?.minutes ?? 60));
+    [duration, setDuration] = useState(
+      formatDurationLabel(saved?.minutes ?? 60),
+    );
   const [starts, setStarts] = useState(() => new Date().toISOString());
   const [ends, setEnds] = useState(() =>
     new Date(Date.now() + (saved?.minutes ?? 60) * 60000).toISOString(),
   );
-  const [label, setLabel] = useState(saved?.label ?? "");
+  const [label, setLabel] = useState(params.placeLabel ?? saved?.label ?? "");
   const [placeType, setPlaceType] = useState("In person"),
     [url, setUrl] = useState("");
   const [pin, setPin] = useState<{
     latitude: number;
     longitude: number;
-  } | null>(null);
+  } | null>(() => {
+    if (params.latitude == null || params.longitude == null) return null;
+    const latitude = Number(params.latitude),
+      longitude = Number(params.longitude);
+    return Number.isFinite(latitude) &&
+      Number.isFinite(longitude) &&
+      Math.abs(latitude) <= 90 &&
+      Math.abs(longitude) <= 180
+      ? { latitude, longitude }
+      : null;
+  });
   const [showPin, setShowPin] = useState(false);
   const [beaconControlDraft, setBeaconControlDraft] = useState<{
     routeKey: string;
@@ -203,13 +276,16 @@ export default function CreateActivity() {
         ? beaconControlValuesFromActivity(previous)
         : defaultBeaconControlValues(),
   }));
-  const beaconControls = beaconControlDraft.routeKey === controlsRouteKey
-    ? beaconControlDraft.value
-    : defaultBeaconControlValues();
+  const beaconControls =
+    beaconControlDraft.routeKey === controlsRouteKey
+      ? beaconControlDraft.value
+      : defaultBeaconControlValues();
   const setBeaconControls = (value: BeaconControlValues) =>
     setBeaconControlDraft({ routeKey: controlsRouteKey, value });
   const [aspirationIds, setAspirationIds] = useState<string[]>(() =>
-    (previous?.aspiration_ids ?? []).filter((id) => currentAspirationIds.has(id)),
+    (previous?.aspiration_ids ?? []).filter((id) =>
+      currentAspirationIds.has(id),
+    ),
   );
   const suggestions = repeatSuggestions(data.activities, userId!);
   function applyTemplate(t: BeaconTemplate) {
@@ -246,9 +322,9 @@ export default function CreateActivity() {
   }
   function effectiveStartAt() {
     return when === "Now"
-      ? Date.now()
+      ? currentTime
       : when === "In 30 min"
-        ? Date.now() + 1800000
+        ? currentTime + 1800000
         : Date.parse(starts);
   }
   function chooseCustomEnd() {
@@ -285,9 +361,10 @@ export default function CreateActivity() {
   async function publish() {
     const start = effectiveStartAt();
     const finalDescription = descriptionWithPrep();
-    const controls = kind === "Status"
-      ? null
-      : validateBeaconControlValues({ ...beaconControls });
+    const controls =
+      kind === "Status"
+        ? null
+        : validateBeaconControlValues({ ...beaconControls });
     if (finalDescription.length > 2000)
       throw new Error(
         `Combined details are ${finalDescription.length}/2000 characters. Shorten the description or template answers before publishing.`,
@@ -303,15 +380,22 @@ export default function CreateActivity() {
       timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       audience,
       audience_id: audienceId,
+      ...(selectedAssociationRow
+        ? { social_entity_type: selectedAssociationRow.entity_type, social_entity_id: selectedAssociationRow.entity_id }
+        : {}),
       target_count: kind === "Status" || !target.trim() ? null : Number(target),
       approval_required: kind !== "Status" && approval === "Host approval",
-      aspiration_ids: aspirationIds.filter((id) => currentAspirationIds.has(id)),
+      aspiration_ids: aspirationIds.filter((id) =>
+        currentAspirationIds.has(id),
+      ),
       label: label.trim(),
       online_url: placeType === "Online" ? url : null,
       latitude: placeType === "In person" ? (pin?.latitude ?? null) : null,
       longitude: placeType === "In person" ? (pin?.longitude ?? null) : null,
       ...(controls ?? {}),
-      ...(params.savedChecklist ? { saved_checklist_id: params.savedChecklist } : {}),
+      ...(params.savedChecklist
+        ? { saved_checklist_id: params.savedChecklist }
+        : {}),
     };
     if (
       payload.target_count != null &&
@@ -321,10 +405,23 @@ export default function CreateActivity() {
     )
       throw new Error("Choose a crew target from 2 to 100, or leave it blank.");
     validateActivity(payload);
-    if ((audience === "list" || audience === "squad") && !audienceId)
+    if (
+      (audience === "list" ||
+        audience === "squad" ||
+        audience === "organization") &&
+      !audienceId
+    )
       throw new Error("Choose who to share with first.");
-    await act("create_activity", payload);
-    router.replace("/(tabs)");
+    if (selectedAssociation && !selectedAssociationRow)
+      throw new Error("That community is no longer available for this Beacon. Clear the association or choose another community.");
+    const result = await act("create_activity", payload);
+    router.replace({
+      pathname: "/(tabs)",
+      params: {
+        ...(typeof result.id === "string" ? { beacon: result.id } : {}),
+        created: "yes",
+      },
+    });
   }
   const activeTemplateGroup = beaconTemplateGroups.find(
       (group) => group.id === templateGroup,
@@ -336,9 +433,7 @@ export default function CreateActivity() {
     templateResultGroups = beaconTemplateGroups
       .map((group) => ({
         group,
-        recipes: recipeResults.filter(
-          (recipe) => recipe.groupId === group.id,
-        ),
+        recipes: recipeResults.filter((recipe) => recipe.groupId === group.id),
       }))
       .filter((group) => group.recipes.length > 0);
   const standardDurations = ["30 min", "1 hour", "2 hours"];
@@ -409,10 +504,11 @@ export default function CreateActivity() {
       }
     >
       <View style={styles.between}>
-        <Chips
-          options={["Normal", "Advanced"]}
-          value={view}
-          onChange={setView}
+        <Button
+          compact
+          secondary
+          title={view === "Advanced" ? "Hide more options" : "More options"}
+          onPress={() => setView(view === "Advanced" ? "Normal" : "Advanced")}
         />
         <Text style={styles.label}>{kind}</Text>
       </View>
@@ -434,7 +530,7 @@ export default function CreateActivity() {
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={{ gap: 8 }}
       >
-        {[...suggestions, ...templates].map((t) => (
+        {[...suggestions.slice(0, 2), ...templates.slice(0, 5)].map((t) => (
           <Button
             key={t.id ?? t.sourceId ?? t.label}
             compact
@@ -571,18 +667,110 @@ export default function CreateActivity() {
           setAudienceId(id);
         }}
       />
-      {kind !== "Status" && <View style={styles.card}>
-        <Text style={styles.h2}>Connect to an aspiration</Text>
-        {aspirations.length ? aspirations.map((aspiration) => {
-          const selected = aspirationIds.includes(aspiration.id);
-          return <Button
-            key={aspiration.id}
-            title={`${selected ? "✓ " : ""}${aspiration.title} · ${aspiration.target_per_week}/week`}
-            secondary={!selected}
-            onPress={() => setAspirationIds((current) => selected ? current.filter((id) => id !== aspiration.id) : [...current, aspiration.id])}
-          />;
-        }) : <Txt muted>Add aspirations in your profile to connect them to beacons.</Txt>}
-      </View>}
+      {kind !== "Status" ? (
+        <View style={[styles.card, { gap: 7 }]}>
+          <Text style={styles.label}>COMMUNITY CONTEXT</Text>
+          <Txt muted>This optional association is separate from the audience and does not change who can see or join the Beacon.</Txt>
+          <Button
+            compact
+            secondary
+            title={selectedAssociationRow ? `Associated with ${selectedAssociationRow.name}` : "Choose a community"}
+            onPress={() => setAssociationOpen(true)}
+          />
+        </View>
+      ) : null}
+      <Sheet
+        title="Associate with a community"
+        visible={associationOpen}
+        onClose={() => setAssociationOpen(false)}
+      >
+        <Txt muted>Association organizes community activity; the Beacon’s audience remains unchanged.</Txt>
+        <Button
+          compact
+          secondary
+          title="No community association"
+          onPress={() => {
+            setAssociationDraft({ routeKey: associationRouteKey, value: null });
+            setAssociationOpen(false);
+          }}
+        />
+        <Field
+          label="Search communities you belong to"
+          placeholder="Squad, Space, or Organization"
+          value={associationSearch}
+          onChangeText={setAssociationSearch}
+        />
+        {associationCandidates
+          .filter((row) => `${row.name} ${row.entity_type}`.toLowerCase().includes(associationSearch.trim().toLowerCase()))
+          .map((row) => (
+            <Button
+              key={`${row.entity_type}:${row.entity_id}`}
+              compact
+              secondary
+              title={`${row.entity_type === "organization" ? "Organization" : row.entity_type === "space" ? "Space" : "Squad"} · ${row.name}`}
+              onPress={() => {
+                setAssociationDraft({ routeKey: associationRouteKey, value: { entity_type: row.entity_type, entity_id: row.entity_id } });
+                setAssociationOpen(false);
+                setAssociationSearch("");
+              }}
+            />
+          ))}
+        {!associationCandidates.length ? <Empty title="No communities available" body="You can associate Beacons with communities you currently belong to." /> : null}
+      </Sheet>
+      <Chips
+        options={["In person", "Online"]}
+        value={placeType}
+        onChange={setPlaceType}
+        showSelectedCheckmark={false}
+      />
+      {placeType === "Online" ? (
+        <Field
+          label="HTTPS link"
+          value={url}
+          onChangeText={setUrl}
+          autoCapitalize="none"
+          keyboardType="url"
+        />
+      ) : null}
+      {kind !== "Status" ? (
+        <View style={{ gap: 6 }}>
+          <Text style={styles.label}>JOINING</Text>
+          <Chips
+            options={["Open joining", "Host approval"]}
+            value={approval}
+            onChange={setApproval}
+            showSelectedCheckmark={false}
+          />
+        </View>
+      ) : null}
+      {view === "Advanced" && kind !== "Status" && aspirations.length > 0 && (
+        <View style={styles.card}>
+          <Text style={styles.h2}>Connect to an aspiration</Text>
+          {aspirations.length ? (
+            aspirations.map((aspiration) => {
+              const selected = aspirationIds.includes(aspiration.id);
+              return (
+                <Button
+                  key={aspiration.id}
+                  title={`${selected ? "✓ " : ""}${aspiration.title} · ${aspiration.target_per_week}/week`}
+                  secondary={!selected}
+                  onPress={() =>
+                    setAspirationIds((current) =>
+                      selected
+                        ? current.filter((id) => id !== aspiration.id)
+                        : [...current, aspiration.id],
+                    )
+                  }
+                />
+              );
+            })
+          ) : (
+            <Txt muted>
+              Add aspirations in your profile to connect them to beacons.
+            </Txt>
+          )}
+        </View>
+      )}
       <Txt muted>
         {kind === "Status"
           ? "Just your update. Switch to Beacon whenever you want company."
@@ -627,37 +815,19 @@ export default function CreateActivity() {
             onChange={setCategory}
           />
           {kind !== "Status" && (
-            <Chips
-              options={["Open joining", "Host approval"]}
-              value={approval}
-              onChange={setApproval}
-            />
-          )}
-          {kind !== "Status" && (
             <BeaconSettings
               key={`${controlsRouteKey}-${templateEditor ? "template" : "beacon"}`}
               value={beaconControls}
               onChange={setBeaconControls}
               templateMode={templateEditor}
-              description={templateEditor
-                ? "These module defaults are saved with your template. You can still change them for each new Beacon."
-                : "Recipe recommendations can be changed here before you publish. Each new Beacon uses the choices shown."}
+              description={
+                templateEditor
+                  ? "These module defaults are saved with your template. You can still change them for each new Beacon."
+                  : "Recipe recommendations can be changed here before you publish. Each new Beacon uses the choices shown."
+              }
             />
           )}
-          <Chips
-            options={["In person", "Online"]}
-            value={placeType}
-            onChange={setPlaceType}
-          />
-          {placeType === "Online" ? (
-            <Field
-              label="HTTPS link"
-              value={url}
-              onChangeText={setUrl}
-              autoCapitalize="none"
-              keyboardType="url"
-            />
-          ) : (
+          {placeType === "In person" && (
             <>
               <Button
                 secondary
@@ -723,8 +893,61 @@ export default function CreateActivity() {
       )}
       {duration === "Custom" && view === "Normal" && (
         <Txt muted>
-          Custom end: {new Date(ends).toLocaleString()}. Edit in Advanced.
+          Custom end: {new Date(ends).toLocaleString()}. Edit in More options.
         </Txt>
+      )}
+      {!templateEditor && (
+        <View style={{ gap: 8 }}>
+          <Button
+            compact
+            secondary
+            title={previewOpen ? "Hide preview" : "Preview my Beacon"}
+            onPress={() => setPreviewOpen(!previewOpen)}
+          />
+          {previewOpen && (
+            <View
+              style={[
+                styles.card,
+                { gap: 8, borderLeftWidth: 3, borderLeftColor: colors.green },
+              ]}
+            >
+              <View style={styles.row}>
+                <ActivityBadge category={category} size={36} />
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text numberOfLines={2} style={styles.h2}>
+                    {title.trim() || "Your next little plan"}
+                  </Text>
+                  <Text style={styles.label}>
+                    {kind === "Status" ? "STATUS" : category.toUpperCase()} ·{" "}
+                    {audience}
+                  </Text>
+                </View>
+              </View>
+              <Txt muted>
+                {placeType === "Online"
+                  ? "Virtual"
+                  : label.trim() || "Place to be decided"}
+              </Txt>
+              {selectedAssociationRow ? <Txt muted>Community context · {selectedAssociationRow.name}</Txt> : null}
+              <Txt muted>
+                {when === "Pick time" && Number.isFinite(Date.parse(starts))
+                  ? new Date(starts).toLocaleString()
+                  : when}{" "}
+                · {duration}
+              </Txt>
+              {kind !== "Status" && (
+                <Txt muted>
+                  {approval === "Host approval"
+                    ? "Request to join"
+                    : "Open joining"}
+                  {beaconControls.capacity_limit != null
+                    ? ` · ${beaconControls.capacity_limit} seats (${beaconControls.capacity_policy})`
+                    : ""}
+                </Txt>
+              )}
+            </View>
+          )}
+        </View>
       )}
       <Sheet
         title={activeTemplateGroup?.title ?? "Beacon template library"}
@@ -752,12 +975,16 @@ export default function CreateActivity() {
             }}
           >
             <ArrowLeft size={16} color={colors.green} />
-            <Text style={[styles.body, { fontWeight: "700" }]}>All categories</Text>
+            <Text style={[styles.body, { fontWeight: "700" }]}>
+              All categories
+            </Text>
           </Pressable>
         )}
         {!templateGroup && !templateSearch.trim() ? (
           <>
-            <Txt muted>Choose one of 18 categories to see ready-to-edit ideas.</Txt>
+            <Txt muted>
+              Choose one of 18 categories to see ready-to-edit ideas.
+            </Txt>
             {beaconTemplateGroups.map((group) => {
               const Icon = templateGroupIcons[group.id] ?? Sparkles;
               return (
@@ -796,7 +1023,8 @@ export default function CreateActivity() {
           <>
             {templateSearch.trim() && (
               <Txt muted>
-                {recipeResults.length} matching {recipeResults.length === 1 ? "idea" : "ideas"}
+                {recipeResults.length} matching{" "}
+                {recipeResults.length === 1 ? "idea" : "ideas"}
               </Txt>
             )}
             {!templateResultGroups.length ? (

@@ -13,6 +13,15 @@ import { supabase, rpc, clearPendingRequests } from "@/src/shared/supabase";
 import { DEMO_ID, demoAction, makeDemo } from "@/src/shared/demo";
 import { Data, Payload, emptyData, normalizeData } from "@/src/shared/types";
 import { clearPush, stopDeviceLocation } from "@/src/platform/device";
+import {
+  normalizeSocialDirectoryQuery,
+  searchSocialDirectoryInData,
+  type SocialDirectoryQuery,
+} from "@/src/features/social/directory";
+import {
+  parseSocialDirectoryRows,
+  type SocialDirectorySummary,
+} from "@/src/features/social/types";
 type Store = {
   data: Data;
   userId: string | null;
@@ -22,6 +31,7 @@ type Store = {
   session: Session | null;
   refresh: () => Promise<void>;
   act: (action: string, payload?: Payload) => Promise<Record<string, unknown>>;
+  searchDirectory: (input: SocialDirectoryQuery) => Promise<SocialDirectorySummary[]>;
   startDemo: () => void;
   signOut: () => Promise<void>;
 };
@@ -78,6 +88,30 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
     }
     setLoading(false);
   }, [session, demo]);
+  const searchDirectory = useCallback(async (input: SocialDirectoryQuery) => {
+    const query = normalizeSocialDirectoryQuery(input);
+    if (!query) return [];
+    if (demo) return searchSocialDirectoryInData(data, DEMO_ID, query);
+    if (!session || !supabase || data.viewer_id !== session.user.id) return [];
+    const viewerId = session.user.id;
+    const generation = epoch.current;
+    const { data: rows, error: failure } = await supabase.rpc("social_directory_search", {
+      p_query: query.query,
+      p_entity_type: query.entityType ?? "all",
+      p_page_size: query.pageSize ?? 20,
+      p_page_offset: query.pageOffset ?? 0,
+      p_parent_type: query.parentType ?? null,
+      p_parent_id: query.parentId ?? null,
+    });
+    const { data: currentAuth } = await supabase.auth.getSession();
+    if (
+      generation !== epoch.current ||
+      currentAuth.session?.user.id !== viewerId ||
+      !session || session.user.id !== viewerId
+    ) return [];
+    if (failure) throw new Error(failure.message);
+    return parseSocialDirectoryRows(rows);
+  }, [data, demo, session]);
   useEffect(() => {
     if (demo || !session || !supabase) return;
     // Refresh crosses an async database boundary; state changes happen after the response.
@@ -96,6 +130,17 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
           schema: "public",
           table: "notices",
           filter: "recipient_id=eq." + session.user.id,
+        },
+        () => {
+          void refresh();
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "group_messages",
         },
         () => {
           void refresh();
@@ -123,11 +168,101 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
       if (demo) {
         const next = demoAction(data, action, payload);
         setData(next);
+        if (action === "create_space") {
+          const space = next.spaces.find(
+            (item) => !data.spaces.some((old) => old.id === item.id),
+          );
+          return space ? { id: space.id, space_id: space.id } : {};
+        }
+        if (action === "create_space_from_squads") {
+          const space = next.spaces.find((item) => !data.spaces.some((old) => old.id === item.id));
+          return space ? { id: space.id, space_id: space.id, linked_squad_count: next.space_squads.filter((row) => row.space_id === space.id).length } : {};
+        }
+        if (action === "organize_squad_into_space") {
+          const space = next.spaces.find((item) => !data.spaces.some((old) => old.id === item.id));
+          if (!space) return {};
+          const sourceSquadId = String(payload.squad_id ?? "");
+          return {
+            id: space.id,
+            space_id: space.id,
+            source_squad_id: sourceSquadId,
+            copied_member_count: next.space_members.filter((row) => row.space_id === space.id && row.user_id !== space.owner_id).length,
+            skipped_member_count: Math.max(0, data.squad_members.filter((row) => row.squad_id === sourceSquadId && row.user_id !== space.owner_id).length - next.space_members.filter((row) => row.space_id === space.id && row.user_id !== space.owner_id).length),
+          };
+        }
+        if (action === "create_organization") {
+          const organization = next.organizations.find(
+            (item) => !data.organizations.some((old) => old.id === item.id),
+          );
+          return organization
+            ? { id: organization.id, organization_id: organization.id }
+            : {};
+        }
+        if (action === "create_activity") {
+          const activity = next.activities.find(
+            (item) => !data.activities.some((old) => old.id === item.id),
+          );
+          return activity ? { id: activity.id } : {};
+        }
+        if (action === "create_plan" || action === "run_routine_once") {
+          const plan = next.plans.find(
+            (item) => !data.plans.some((old) => old.id === item.id),
+          );
+          return plan
+            ? { id: plan.id, plan_id: plan.id, occurrence_plan_id: plan.id }
+            : {};
+        }
+        if (action === "create_routine") {
+          const routine = next.plan_routines.find(
+            (item) => !data.plan_routines.some((old) => old.id === item.id),
+          );
+          return routine
+            ? {
+                id: routine.id,
+                plan_id: routine.plan_id,
+                next_occurrence_on: routine.next_occurrence_on,
+              }
+            : {};
+        }
+        if (action === "send_group_message") {
+          const message = next.group_messages.find(
+            (item) => !data.group_messages.some((old) => old.id === item.id),
+          );
+          return message
+            ? {
+                id: message.id,
+                scope: message.scope,
+                organization_id: message.organization_id,
+                squad_id: message.squad_id,
+                created_at: message.created_at,
+              }
+            : {};
+        }
+        if (action === "mark_group_chat_read") {
+          const scope = payload.scope;
+          const row = next.group_message_reads.find(
+            (item) =>
+              item.user_id === next.viewer_id &&
+              item.scope === scope &&
+              (scope === "organization"
+                ? item.organization_id === payload.organization_id
+                : item.squad_id === payload.squad_id),
+          );
+          return row
+            ? {
+                scope: row.scope,
+                organization_id: row.organization_id,
+                squad_id: row.squad_id,
+                read_at: row.last_read_at,
+              }
+            : {};
+        }
         if (action === "create_planning_thread") {
           const thread =
             next.planning_threads.find((item) => item.id === payload.id) ??
             next.planning_threads.find(
-              (item) => !data.planning_threads.some((old) => old.id === item.id),
+              (item) =>
+                !data.planning_threads.some((old) => old.id === item.id),
             );
           return thread ? { id: thread.id, status: thread.status } : {};
         }
@@ -147,7 +282,8 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
           const proposal =
             next.planning_proposals.find((item) => item.id === payload.id) ??
             next.planning_proposals.find(
-              (item) => !data.planning_proposals.some((old) => old.id === item.id),
+              (item) =>
+                !data.planning_proposals.some((old) => old.id === item.id),
             );
           return proposal
             ? { id: proposal.id, thread_id: proposal.thread_id }
@@ -209,6 +345,7 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
         error,
         refresh,
         act,
+        searchDirectory,
         startDemo: () => {
           epoch.current++;
           setDemo(true);

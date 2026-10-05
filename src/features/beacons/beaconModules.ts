@@ -31,6 +31,25 @@ export function canReadBeaconActivity(
     )
   )
     return false;
+  if (activity.audience === "organization") {
+    const organization = data.organizations.find(
+      (item) => item.id === activity.audience_id,
+    );
+    if (!organization || isBlocked(data, organization.owner_id, userId))
+      return false;
+    const isActiveMember = (memberId: string) =>
+      organization.owner_id === memberId ||
+      (data.organization_members.some(
+        (member) =>
+          member.organization_id === organization.id &&
+          member.user_id === memberId &&
+          member.status === "active",
+      ) &&
+        !data.organization_bans.some(
+          (ban) => ban.organization_id === organization.id && ban.user_id === memberId,
+        ));
+    return isActiveMember(activity.owner_id) && isActiveMember(userId);
+  }
   if (
     data.rsvps.some(
       (rsvp) =>

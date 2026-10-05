@@ -227,9 +227,9 @@ test("repeat suggestions use only your completed activities and rank repeats fir
   assert.match(suggestions[0].label, /^Your usual:/);
 });
 
-test("testing neighborhood has friends, discoverable people, and expiring locations", () => {
+test("testing neighborhood has friends, social growth fixtures, and expiring locations", () => {
   const d = makeDemo();
-  assert.equal(d.profiles.length, 36);
+  assert.equal(d.profiles.length, 70);
   assert.equal(d.friendships.filter((f) => f.status === "accepted").length, 23);
   assert.equal(
     d.profiles.filter(
@@ -237,7 +237,7 @@ test("testing neighborhood has friends, discoverable people, and expiring locati
         p.id !== "demo-you" &&
         !d.friendships.some((f) => f.recipient_id === p.id),
     ).length,
-    12,
+    46,
   );
   assert.ok(d.activities.some((a) => a.available && a.mode === "solo"));
   assert.ok(

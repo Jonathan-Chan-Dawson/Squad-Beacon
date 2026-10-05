@@ -8,7 +8,10 @@ import {
   padding,
   widgetURL,
 } from "@expo/ui/swift-ui/modifiers";
-import type { FriendStatusFeed, WidgetPayload } from "@/src/features/widgets/types";
+import type {
+  FriendStatusFeed,
+  WidgetPayload,
+} from "@/src/features/widgets/types";
 
 type Configuration = { circle?: string };
 
@@ -190,10 +193,19 @@ function FriendsNowWidget(
             <Text
               modifiers={[
                 font({ size: 14, weight: "bold" }),
-                foregroundStyle(friend.free ? "#28775C" : "#A7B7A8"),
+                foregroundStyle(
+                  friend.availability === "ending-soon"
+                    ? "#97700C"
+                    : friend.availability === "unavailable"
+                      ? "#AD3E3E"
+                      : friend.free
+                        ? "#28775C"
+                        : "#A7B7A8",
+                ),
               ]}
             >
-              {friend.free ? "●" : friend.active ? "◉" : "○"}
+              {friend.initials ??
+                (friend.free ? "●" : friend.active ? "◉" : "○")}
             </Text>
             <VStack alignment="leading" spacing={1}>
               <Text

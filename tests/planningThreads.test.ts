@@ -29,6 +29,9 @@ const accessData = (overrides: Partial<PlanningAccessData> = {}) =>
     list_members: [],
     squad_members: [],
     squads: [],
+    organizations: [],
+    organization_members: [],
+    organization_bans: [],
     ...overrides,
   }) as PlanningAccessData;
 
@@ -119,6 +122,24 @@ test("beacon draft and thread validators enforce schema, audience, and deadline 
       ),
     /start after the decision deadline/,
   );
+  const organizationPing = { ...draft, audience: "organization" as const, audience_id: "org-1" };
+  assert.doesNotThrow(() => validateBeaconDraft(organizationPing));
+  assert.doesNotThrow(() =>
+    validatePlanningThreadDraft(
+      "ping",
+      organizationPing.title,
+      "Organization planning.",
+      "organization",
+      "org-1",
+      "2026-10-02T18:00:00.000Z",
+      Date.parse("2026-10-01T12:00:00.000Z"),
+      organizationPing,
+    ),
+  );
+  assert.throws(
+    () => validatePlanningThreadDraft("vote", "Choose", "", "organization", null, "2026-10-02T18:00:00Z"),
+    /organization for this audience/i,
+  );
 });
 
 test("private, friend, list, and squad audiences enforce membership and blocks", () => {
@@ -164,6 +185,60 @@ test("private, friend, list, and squad audiences enforce membership and blocks",
   assert.equal(canManagePlanningThread(thread(), "owner"), true);
   assert.equal(canManagePlanningThread(thread(), "coowner"), true);
   assert.equal(canManagePlanningThread(thread(), "viewer"), false);
+});
+
+test("organization planning access requires active unblocked owner and viewer membership", () => {
+  const organization = {
+    id: "org-1",
+    owner_id: "org-owner",
+    name: "Trail Crew",
+    description: "",
+    created_at: "2026-09-01T00:00:00Z",
+  };
+  const activeMembers = [
+    { organization_id: "org-1", user_id: "thread-owner", role: "elder" as const, status: "active" as const, invited_by: "org-owner", created_at: "2026-09-02T00:00:00Z" },
+    { organization_id: "org-1", user_id: "viewer", role: "member" as const, status: "active" as const, invited_by: "thread-owner", created_at: "2026-09-03T00:00:00Z" },
+    { organization_id: "org-1", user_id: "pending", role: "member" as const, status: "invited" as const, invited_by: "thread-owner", created_at: "2026-09-04T00:00:00Z" },
+  ];
+  const organizationThread = thread({
+    owner_id: "thread-owner",
+    audience: "organization",
+    audience_id: "org-1",
+  });
+  const data = accessData({ organizations: [organization], organization_members: activeMembers });
+  assert.equal(canReadPlanningThread(data, organizationThread, "viewer"), true);
+  assert.equal(canReadPlanningThread(data, organizationThread, "org-owner"), true);
+  assert.equal(canReadPlanningThread(data, organizationThread, "pending"), false);
+  assert.equal(canReadPlanningThread(data, organizationThread, "outsider"), false);
+
+  const viewerRevoked = accessData({
+    organizations: [organization],
+    organization_members: activeMembers.filter((member) => member.user_id !== "viewer"),
+  });
+  assert.equal(canReadPlanningThread(viewerRevoked, organizationThread, "viewer"), false);
+  const ownerRevoked = accessData({
+    organizations: [organization],
+    organization_members: activeMembers.filter((member) => member.user_id !== "thread-owner"),
+  });
+  assert.equal(canReadPlanningThread(ownerRevoked, organizationThread, "viewer"), false);
+  const viewerBanned = accessData({
+    organizations: [organization],
+    organization_members: activeMembers,
+    organization_bans: [{ organization_id: "org-1", user_id: "viewer", banned_by: "thread-owner", reason: "", former_role: "member", created_at: "2026-09-05T00:00:00Z" }],
+  });
+  assert.equal(canReadPlanningThread(viewerBanned, organizationThread, "viewer"), false);
+  const ownerBanned = accessData({
+    organizations: [organization],
+    organization_members: activeMembers,
+    organization_bans: [{ organization_id: "org-1", user_id: "thread-owner", banned_by: "org-owner", reason: "", former_role: "elder", created_at: "2026-09-05T00:00:00Z" }],
+  });
+  assert.equal(canReadPlanningThread(ownerBanned, organizationThread, "viewer"), false);
+  const ownerBlocked = accessData({
+    organizations: [organization],
+    organization_members: activeMembers,
+    blocks: [{ blocker_id: "viewer", blocked_id: "org-owner" }],
+  });
+  assert.equal(canReadPlanningThread(ownerBlocked, organizationThread, "viewer"), false);
 });
 
 test("responses close at the deadline and councils require an approved option", () => {

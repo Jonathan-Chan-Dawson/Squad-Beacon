@@ -8,92 +8,125 @@ export default function HelpScreen() {
   const { styles } = useTheme();
 
   return (
-    <Screen
-      title="A friendly field guide"
-      eyebrow="HELP & TUTORIAL"
-      create={false}
-    >
+    <Screen title="A friendly field guide" eyebrow="HELP & TUTORIAL" create={false}>
       <Txt muted>
-        A few quick pointers for making plans, finding your people, and staying
-        in control of what you share.
+        Quick pointers for finding your people, making plans, and choosing what
+        to share.
       </Txt>
 
-      <View style={styles.card}>
-        <Text style={styles.h2}>1. Find your people</Text>
+      <View style={[styles.card, { gap: 8 }]}>
+        <Text style={styles.h2}>Now, Beacons & Starred Friends</Text>
         <Txt>
-          Start with a profile, then connect with people you know. Accepted
-          friends can see friend-only beacons and appear in your friends list.
-          Invitations are in Squads and in your inbox.
+          The Map shows nearby shared Beacons. Activities separates what’s
+          happening Now, what’s Upcoming, and what’s Past. Friends Now helps you
+          see who is free; Starred Friends keeps selected people easy to find.
+          Open a Beacon to see details and RSVP.
         </Txt>
         <Button
-          title="Find friends"
-          onPress={() => router.push("/find-friends" as Href)}
-        />
-      </View>
-
-      <View style={styles.card}>
-        <Text style={styles.h2}>2. Friends, squads & private lists</Text>
-        <Txt>
-          Friends are your one-to-one connections. Squads keep a crew, its
-          members, and its shared plans together. Private lists are smaller,
-          hand-picked circles for sharing a beacon with just the people you
-          choose.
-        </Txt>
-        <Button
-          title="Open friends & squads"
+          title="Open Activities"
           secondary
-          onPress={() => router.push("/(tabs)/squads" as Href)}
+          onPress={() => router.push("/(tabs)/activities" as Href)}
         />
+        <Button title="Open the Map" onPress={() => router.push("/(tabs)" as Href)} />
       </View>
 
-      <View style={styles.card}>
-        <Text style={styles.h2}>3. Make a beacon</Text>
+      <View style={[styles.card, { gap: 8 }]}>
+        <Text style={styles.h2}>Make a Beacon</Text>
         <Txt>
-          A beacon is a plan people can join: add the when and what, then choose
-          friends, a squad, a private list, or just yourself as its audience.
-          Invitees can RSVP so everyone knows who is in.
+          Add the when and what, choose who can see it, then invite people so
+          they can RSVP.
         </Txt>
         <Button
-          title="Create a beacon"
+          title="Create a Beacon"
           onPress={() =>
             router.push({ pathname: "/create", params: { kind: "beacon" } })
           }
         />
       </View>
 
-      <View style={styles.card}>
-        <Text style={styles.h2}>4. Map, RSVPs & messages</Text>
+      <View style={[styles.card, { gap: 8 }]}>
+        <Text style={styles.h2}>Pings, Votes & Draws</Text>
         <Txt>
-          The map is the home for nearby shared plans. Open a beacon to see its
-          details and RSVP. Use the inbox for updates and direct conversations;
-          messages also live on a friend’s profile.
+          A Ping checks interest in one suggested Beacon. A Vote compares
+          options, and a Draw picks among them. Open a response to see the plan
+          and take the next step.
         </Txt>
         <Button
-          title="Open the map"
+          title="Open Pings & Decisions"
+          onPress={() => router.push("/councils" as Href)}
+        />
+      </View>
+
+      <View style={[styles.card, { gap: 8 }]}>
+        <Text style={styles.h2}>Beacon Plans & Routines</Text>
+        <Txt>
+          A Beacon Plan keeps related scheduled Beacons together as a multi-day
+          itinerary. Join a Squad Beacon Plan separately from RSVP: each Beacon
+          still has its own response. A Routine repeats a Beacon Plan on chosen
+          weekdays, reusing its Beacon times and places for each new occurrence.
+          Its server schedule must be deployed for automatic creation and reminder
+          notices; device push delivery also depends on notification permission.
+        </Txt>
+        <Button
+          title="Open Beacon Plans"
           secondary
-          onPress={() => router.push("/(tabs)" as Href)}
+          onPress={() => router.push("/plans" as Href)}
         />
         <Button
-          title="Open your inbox"
+          title="Open Routines"
+          secondary
+          onPress={() => router.push("/routines" as Href)}
+        />
+        <Button
+          title="Browse Beacon Plan templates"
           secondary
           onPress={() =>
-            router.push({ pathname: "/(tabs)", params: { inbox: "yes" } })
+            router.push({ pathname: "/plans", params: { templates: "yes" } })
           }
         />
       </View>
 
-      <View style={styles.card}>
-        <Text style={styles.h2}>5. Privacy & location</Text>
+      <View style={[styles.card, { gap: 8 }]}>
+        <Text style={styles.h2}>Friends, Squads & Organizations</Text>
         <Txt>
-          Your location is off unless you explicitly start sharing it for a
-          session. Choose an audience for each beacon, and stop location sharing
-          whenever you like from Profile. Squad Beacon is not an emergency or
-          safety-monitoring service.
+          Friends are one-to-one connections. Squads bring a crew and its
+          conversations together. Organizations provide a home for multiple
+          Squads. Private Lists let you choose a smaller audience for a Beacon.
+        </Txt>
+        <Button
+          title="Open Squads"
+          secondary
+          onPress={() => router.push("/(tabs)/squads" as Href)}
+        />
+        <Button
+          title="Find friends"
+          secondary
+          onPress={() => router.push("/find-friends" as Href)}
+        />
+      </View>
+
+      <View style={[styles.card, { gap: 8 }]}>
+        <Text style={styles.h2}>Sonar, privacy & Beacon tools</Text>
+        <Txt>
+          Sonar is optional temporary location sharing: choose accepted friends
+          and a duration. It stays off otherwise, ends automatically, and does
+          not keep location history. Stop a session from its location screen.
+          Sonar is not an emergency or safety-monitoring service.
+        </Txt>
+        <Txt>
+          Beacon tools such as Notes, checklists, and Memories appear when the
+          Beacon host enables them. Beacon Memories remain linked to their
+          source Beacon.
         </Txt>
         <Button
           title="Manage temporary location"
           secondary
           onPress={() => router.push("/location" as Href)}
+        />
+        <Button
+          title="Profile visibility & settings"
+          secondary
+          onPress={() => router.push("/settings" as Href)}
         />
         <Button
           title="Privacy, safety & support"
@@ -102,13 +135,13 @@ export default function HelpScreen() {
         />
       </View>
 
-      <View style={styles.card}>
-        <Text style={styles.h2}>6. Optional iOS widgets</Text>
+      <View style={[styles.card, { gap: 8 }]}>
+        <Text style={styles.h2}>Widget Studio</Text>
         <Txt>
-          Add friend status or a circle summary to your Home Screen from Widget
-          Studio. Widgets are off until you opt in and start discreet. They need
-          an iOS development build or installed app; they are not available in
-          Expo Go, Android, or web. Lock Screen summaries always stay discreet.
+          Set up optional Friends Now or circle widgets. They start Off and
+          Discreet and are available in an iOS development build or installed
+          app, not Expo Go, Android, or web. Lock Screen widgets keep generic
+          labels and counts.
         </Txt>
         <Button
           title="Open Widget Studio"
@@ -116,19 +149,17 @@ export default function HelpScreen() {
         />
       </View>
 
-      <View style={styles.card}>
-        <Text style={styles.h2}>7. Missing an update?</Text>
+      <View style={[styles.card, { gap: 8 }]}>
+        <Text style={styles.h2}>Need help?</Text>
         <Txt>
-          Reopen the app while online to refresh your plans and inbox. If push
-          alerts are missing, check your device’s notification settings and
-          enable them from Profile. This guide will never ask for notification
-          permission. For account, privacy, or safety questions, use the support
-          details in Privacy, safety & support.
+          Push access and quiet hours are in Settings. For an account, privacy,
+          or safety question, use the support details under Privacy, safety &
+          support.
         </Txt>
         <Button
-          title="Open Profile settings"
+          title="Open Settings"
           secondary
-          onPress={() => router.push("/(tabs)/profile" as Href)}
+          onPress={() => router.push("/settings" as Href)}
         />
         <Button
           title="Contact support & read policies"

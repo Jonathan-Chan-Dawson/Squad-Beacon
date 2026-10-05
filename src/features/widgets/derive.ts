@@ -1,6 +1,7 @@
-import { friendIds } from "@/src/shared/domain";
+import { friendIds, friendAvailabilityState } from "@/src/shared/domain";
 import type { Data, Activity } from "@/src/shared/types";
 import { canViewProfile } from "@/src/features/profile/privacy";
+import { canReadBeaconActivity } from "@/src/features/beacons/beaconModules";
 import {
   defaultWidgetPreferences,
   type BeaconFeed,
@@ -30,6 +31,15 @@ function sourceFriendIds(
 ): string[] {
   if (!isValidCircleSource(data, userId, accepted, source)) return [];
   if (source.kind === "all") return [...accepted];
+  if (source.kind === "starred")
+    return data.favorites
+      .filter(
+        (row) =>
+          row.owner_id === userId &&
+          row.kind === "friend" &&
+          accepted.has(row.target_id),
+      )
+      .map((row) => row.target_id);
   if (source.kind === "friend")
     return accepted.has(source.id) ? [source.id] : [];
   if (source.kind === "squad")
@@ -49,7 +59,7 @@ function isValidCircleSource(
   accepted: Set<string>,
   source: CircleSource,
 ) {
-  if (source.kind === "all") return true;
+  if (source.kind === "all" || source.kind === "starred") return true;
   if (source.kind === "friend") return accepted.has(source.id);
   if (source.kind === "squad")
     return (
@@ -109,11 +119,7 @@ function makeFriendFeed(
   const ordered = [...new Set(friendIdsToShow)]
     .map((id) => {
       const profile = data.profiles.find((item) => item.id === id);
-      if (
-        !profile ||
-        id === userId ||
-        !canViewProfile(data, profile, userId)
-      )
+      if (!profile || id === userId || !canViewProfile(data, profile, userId))
         return null;
       const { activity, free } = friendStatus(data, userId, id, now);
       return { profile, activity, free };
@@ -127,7 +133,25 @@ function makeFriendFeed(
     );
   const friends = ordered.map((item, index) => ({
     name: privacy === "full" ? item.profile.name : `Friend ${index + 1}`,
-    status: item.free ? "Free now" : item.activity ? "At a beacon" : "Quiet",
+    initials:
+      privacy === "full"
+        ? item.profile.name
+            .split(/\s+/)
+            .map((word) => word[0])
+            .slice(0, 2)
+            .join("")
+        : "•",
+    availability: friendAvailabilityState(item.activity, now),
+    status:
+      friendAvailabilityState(item.activity, now) === "ending-soon"
+        ? "Free — ending soon"
+        : friendAvailabilityState(item.activity, now) === "unavailable"
+          ? "Unavailable"
+          : item.free
+            ? "Free now"
+            : item.activity
+              ? "At a beacon"
+              : "Quiet",
     detail:
       privacy === "full" && item.activity
         ? item.activity.title
@@ -149,19 +173,7 @@ function makeFriendFeed(
 }
 
 function canViewerSeeActivity(data: Data, userId: string, activity: Activity) {
-  if (activity.owner_id === userId) return true;
-  if (activity.audience === "private") return false;
-  if (activity.audience === "friends")
-    return friendIds(data, userId).includes(activity.owner_id);
-  if (activity.audience === "squad")
-    return data.squad_members.some(
-      (member) =>
-        member.user_id === userId && member.squad_id === activity.audience_id,
-    );
-  return data.list_members.some(
-    (member) =>
-      member.user_id === userId && member.list_id === activity.audience_id,
-  );
+  return canReadBeaconActivity(data, activity, userId);
 }
 
 function circleBeaconFeed(

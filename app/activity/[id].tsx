@@ -16,9 +16,7 @@ import { BeaconTools } from "@/src/features/beacons/BeaconTools";
 import { BeaconMemories } from "@/src/features/beacons/BeaconMemories";
 import { BeaconScoreboard } from "@/src/features/beacons/BeaconScoreboard";
 import { AttendanceControls } from "@/src/features/beacons/AttendanceControls";
-import {
-  beaconSettingsDraftKey,
-} from "@/src/features/beacons/controls";
+import { beaconSettingsDraftKey } from "@/src/features/beacons/controls";
 import {
   canAdmitBeaconParticipants,
   canManageBeaconSettings,
@@ -26,6 +24,7 @@ import {
 } from "@/src/features/beacons/permissions";
 import { canUseBeaconModules } from "@/src/features/beacons/beaconModules";
 import { ChatThread } from "@/src/features/messages/ChatThread";
+import { canReadPlanningThread } from "@/src/features/planning/domain";
 import { canViewProfile } from "@/src/features/profile/privacy";
 import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
 import { useBeacon } from "@/src/shared/store";
@@ -65,14 +64,20 @@ function activityHasMore(activity: Activity, canManage: boolean) {
 
 export default function ActivityDetail() {
   const { colors, styles } = useTheme();
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, tab: initialTab } = useLocalSearchParams<{
+    id: string;
+    tab?: string;
+  }>();
   const { data, userId, act } = useBeacon();
   const activityId = Array.isArray(id) ? id[0] : id;
   const activity = data.activities.find((item) => item.id === activityId);
   const now = useNow();
-  const [selectedTab, setSelectedTab] = useState<{ activityId: string; tab: DetailTab }>({
+  const [selectedTab, setSelectedTab] = useState<{
+    activityId: string;
+    tab: DetailTab;
+  }>({
     activityId: activityId ?? "",
-    tab: "Overview",
+    tab: initialTab === "chat" ? "Chat" : "Overview",
   });
   const [comment, setComment] = useState("");
   const [edit, setEdit] = useState(false);
@@ -97,7 +102,9 @@ export default function ActivityDetail() {
     );
   }
 
-  const owner = data.profiles.find((profile) => profile.id === activity.owner_id);
+  const owner = data.profiles.find(
+    (profile) => profile.id === activity.owner_id,
+  );
   const ownerVisible =
     !!owner &&
     !!userId &&
@@ -107,18 +114,25 @@ export default function ActivityDetail() {
   const plan = activity.plan_id
     ? data.plans.find((item) => item.id === activity.plan_id)
     : undefined;
+  const decision =
+    userId && data.viewer_id === userId
+      ? data.planning_threads.find(
+          (thread) =>
+            (thread.kind === "vote" || thread.kind === "draw") &&
+            thread.materialized_activity_id === activity.id &&
+            canReadPlanningThread(data, thread, userId),
+        )
+      : undefined;
   const aspirations = ownerVisible
     ? (owner?.aspiration_goals ?? []).filter((goal) =>
         activity.aspiration_ids.includes(goal.id),
       )
     : [];
   const mine = activity.owner_id === userId;
-  const canManage =
-    !!userId && canManageBeaconSettings(data, activity, userId);
+  const canManage = !!userId && canManageBeaconSettings(data, activity, userId);
   const canAdmit =
     !!userId && canAdmitBeaconParticipants(data, activity, userId);
-  const canAccess =
-    !!userId && canUseBeaconModules(data, activity, userId);
+  const canAccess = !!userId && canUseBeaconModules(data, activity, userId);
   const open =
     activity.status === "scheduled" && Date.parse(activity.ends_at) > now;
   const chatEnabled = isBeaconModuleEnabled(activity, "chat");
@@ -142,10 +156,7 @@ export default function ActivityDetail() {
   const friends = userId ? friendIds(data, userId) : [];
   const commentsEnabled = activity.enable_comments !== false;
   const canComment =
-    commentsEnabled &&
-    activity.status !== "cancelled" &&
-    !!userId &&
-    canAccess;
+    commentsEnabled && activity.status !== "cancelled" && !!userId && canAccess;
   const comments = data.comments
     .filter((item) => item.activity_id === activity.id)
     .sort((left, right) => left.created_at.localeCompare(right.created_at));
@@ -289,6 +300,19 @@ export default function ActivityDetail() {
                 }
               />
             ) : null}
+            {decision && (
+              <Button
+                compact
+                secondary
+                title={`View ${decision.kind === "vote" ? "Vote" : "Draw"} decision`}
+                onPress={() =>
+                  router.push({
+                    pathname: "/council/[id]",
+                    params: { id: decision.id },
+                  })
+                }
+              />
+            )}
             {aspirations.length > 0 ? (
               <Txt muted>
                 For: {aspirations.map((goal) => goal.title).join(" · ")}
@@ -400,7 +424,7 @@ export default function ActivityDetail() {
                     >
                       <Text style={styles.muted}>
                         {authorVisible
-                          ? author?.name ?? "You"
+                          ? (author?.name ?? "You")
                           : "Beacon participant"}{" "}
                         ·{" "}
                         {new Date(item.created_at).toLocaleTimeString([], {
@@ -454,10 +478,12 @@ export default function ActivityDetail() {
             <Text style={styles.h2}>People</Text>
             <Txt muted>
               {activity.accepted_seat_count ?? goingCount + 1} going ·{" "}
-              {rsvps.filter((rsvp) => rsvp.status === "requested").length} awaiting approval
+              {rsvps.filter((rsvp) => rsvp.status === "requested").length}{" "}
+              awaiting approval
             </Txt>
             <Txt muted>
-              Names and profile details appear only when that person has shared them with you.
+              Names and profile details appear only when that person has shared
+              them with you.
             </Txt>
           </View>
           {visibleRsvps.map((rsvp) => {
@@ -470,7 +496,7 @@ export default function ActivityDetail() {
               (rsvp.user_id === userId ||
                 canViewProfile(data, profile, userId));
             const displayName = profileVisible
-              ? profile?.name ?? "You"
+              ? (profile?.name ?? "You")
               : "Beacon participant";
             return (
               <View key={rsvp.user_id} style={[styles.card, { gap: 8 }]}>
@@ -507,7 +533,10 @@ export default function ActivityDetail() {
                 {canAdmit && rsvp.status === "requested" ? (
                   <Action
                     secondary
-                    title={"Approve " + (profileVisible ? displayName : "participant")}
+                    title={
+                      "Approve " +
+                      (profileVisible ? displayName : "participant")
+                    }
                     run={() =>
                       act("approve_rsvp", {
                         id: activity.id,
@@ -519,7 +548,9 @@ export default function ActivityDetail() {
                 {canManage && rsvp.user_id !== userId ? (
                   <Action
                     secondary
-                    title={"Remove " + (profileVisible ? displayName : "participant")}
+                    title={
+                      "Remove " + (profileVisible ? displayName : "participant")
+                    }
                     run={() =>
                       act("remove_rsvp", {
                         id: activity.id,
@@ -563,7 +594,10 @@ export default function ActivityDetail() {
       )}
 
       {activeTab === "Chat" && chatEnabled && canAccess ? (
-        <ChatThread key={activity.id + ":" + (userId ?? "viewer")} activityId={activity.id} />
+        <ChatThread
+          key={activity.id + ":" + (userId ?? "viewer")}
+          activityId={activity.id}
+        />
       ) : null}
 
       {activeTab === "More" && moreEnabled && canAccess ? (
@@ -571,16 +605,25 @@ export default function ActivityDetail() {
           {isBeaconModuleEnabled(activity, "checklist") ||
           isBeaconModuleEnabled(activity, "journal") ||
           isBeaconModuleEnabled(activity, "focus") ? (
-            <BeaconTools key={activity.id + ":" + (userId ?? "viewer")} activity={activity} />
+            <BeaconTools
+              key={activity.id + ":" + (userId ?? "viewer")}
+              activity={activity}
+            />
           ) : null}
           {isBeaconModuleEnabled(activity, "experiences") ? (
             <View style={styles.card}>
-              <BeaconMemories key={activity.id + ":" + (userId ?? "viewer")} activity={activity} />
+              <BeaconMemories
+                key={activity.id + ":" + (userId ?? "viewer")}
+                activity={activity}
+              />
             </View>
           ) : null}
           {isBeaconModuleEnabled(activity, "scoreboard") ? (
             <View style={styles.card}>
-              <BeaconScoreboard key={activity.id + ":" + (userId ?? "viewer")} activity={activity} />
+              <BeaconScoreboard
+                key={activity.id + ":" + (userId ?? "viewer")}
+                activity={activity}
+              />
             </View>
           ) : null}
           {isBeaconModuleEnabled(activity, "music") && activity.music_url ? (
@@ -589,7 +632,9 @@ export default function ActivityDetail() {
                 <Music2 size={19} color={colors.green} />
                 <Text style={styles.h2}>Music link</Text>
               </View>
-              <Txt muted>Opens in your music app. Audio is not played here.</Txt>
+              <Txt muted>
+                Opens in your music app. Audio is not played here.
+              </Txt>
               <Button
                 title="Open music link"
                 onPress={() => void Linking.openURL(activity.music_url!)}
@@ -653,7 +698,11 @@ export default function ActivityDetail() {
         />
       ) : null}
 
-      <Sheet title="Update the Beacon" visible={edit} onClose={() => setEdit(false)}>
+      <Sheet
+        title="Update the Beacon"
+        visible={edit}
+        onClose={() => setEdit(false)}
+      >
         <Field label="Title" value={title} onChangeText={setTitle} />
         <DateField label="Starts" value={starts} onChange={setStarts} />
         <DateField label="Ends" value={ends} onChange={setEnds} />
@@ -671,7 +720,11 @@ export default function ActivityDetail() {
           }}
         />
       </Sheet>
-      <Sheet title="Report Beacon" visible={report} onClose={() => setReport(false)}>
+      <Sheet
+        title="Report Beacon"
+        visible={report}
+        onClose={() => setReport(false)}
+      >
         <Field
           label="What happened? Include relevant context."
           value={reason}

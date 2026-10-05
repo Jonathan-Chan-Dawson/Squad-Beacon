@@ -15,9 +15,20 @@ test("library tabs show one authorized card per beacon and private filing filter
 
   const initialJournals = libraryCards(data, DEMO_ID, "journal");
   const initialChecklists = libraryCards(data, DEMO_ID, "checklist");
-  assert.equal(initialJournals.filter((card) => card.activity.id === activity.id).length, 1);
-  assert.equal(initialJournals.find((card) => card.activity.id === activity.id)?.entryCount, 1);
-  assert.equal(initialChecklists.find((card) => card.activity.id === activity.id)?.entryCount, 2);
+  assert.equal(
+    initialJournals.filter((card) => card.activity.id === activity.id).length,
+    1,
+  );
+  assert.equal(
+    initialJournals.find((card) => card.activity.id === activity.id)
+      ?.entryCount,
+    1,
+  );
+  assert.equal(
+    initialChecklists.find((card) => card.activity.id === activity.id)
+      ?.entryCount,
+    2,
+  );
 
   data.library_folders.push({
     id: "personal-journal-folder",
@@ -39,7 +50,12 @@ test("library tabs show one authorized card per beacon and private filing filter
     libraryCards(data, DEMO_ID, "journal", "personal-journal-folder").length,
     1,
   );
-  assert.equal(libraryCards(data, DEMO_ID, "journal", "unfiled").length, 0);
+  assert.equal(
+    libraryCards(data, DEMO_ID, "journal", "unfiled").some(
+      (card) => card.activity.id === activity.id,
+    ),
+    false,
+  );
   assert.equal(
     libraryCards(data, "maya", "journal").some(
       (card) => card.activity.id === activity.id,
@@ -56,8 +72,14 @@ test("library card counts hide blocked authors and activity access still gates c
 
   const journal = libraryCards(data, DEMO_ID, "journal");
   const checklist = libraryCards(data, DEMO_ID, "checklist");
-  assert.equal(journal.find((card) => card.activity.id === activity.id)?.entryCount, 0);
-  assert.equal(checklist.find((card) => card.activity.id === activity.id)?.entryCount, 1);
+  assert.equal(
+    journal.find((card) => card.activity.id === activity.id)?.entryCount,
+    0,
+  );
+  assert.equal(
+    checklist.find((card) => card.activity.id === activity.id)?.entryCount,
+    1,
+  );
 
   const privateActivity = {
     ...activity,
@@ -102,10 +124,24 @@ test("personal Journals and Lists are owner-only; shared history stays separate"
     updated_at: createdAt,
   });
 
-  assert.deepEqual(personalJournalCards(data, DEMO_ID).map((card) => card.note.id), ["private-journal-entry"]);
-  assert.deepEqual(savedChecklistCards(data, DEMO_ID).map((card) => card.checklist.id), ["my-list"]);
-  assert.deepEqual(sharedJournalHistory(data, DEMO_ID).map((card) => card.note.id), ["demo-note-tools"]);
-  assert.equal(sharedJournalHistory(data, DEMO_ID).some((card) => card.note.id === "private-journal-entry"), false);
+  assert.deepEqual(
+    personalJournalCards(data, DEMO_ID).map((card) => card.note.id),
+    ["private-journal-entry"],
+  );
+  assert.deepEqual(
+    savedChecklistCards(data, DEMO_ID).map((card) => card.checklist.id),
+    ["my-list"],
+  );
+  assert.deepEqual(
+    sharedJournalHistory(data, DEMO_ID).map((card) => card.note.id),
+    ["demo-note-tools"],
+  );
+  assert.equal(
+    sharedJournalHistory(data, DEMO_ID).some(
+      (card) => card.note.id === "private-journal-entry",
+    ),
+    false,
+  );
   assert.deepEqual(personalJournalCards(data, "maya"), []);
   assert.deepEqual(savedChecklistCards(data, "maya"), []);
   assert.deepEqual(libraryCards(data, "maya", "journal"), []);

@@ -204,6 +204,45 @@ test("widget circles contain only accepted friends and honor friend/squad/list s
   assert.equal(payload.allFriends.friends[0]?.detail, "Coffee");
 });
 
+test("starred widget circles reuse favorites without exposing pending or blocked people", () => {
+  const data = fixture();
+  data.favorites = [
+    { owner_id: "me", kind: "friend", target_id: "friend" },
+    { owner_id: "me", kind: "friend", target_id: "stranger" },
+    { owner_id: "stranger", kind: "friend", target_id: "me" },
+  ];
+  const preferences = defaultWidgetPreferences();
+  preferences.privacy = "full";
+  preferences.circles.circle1 = { kind: "starred" };
+  const feed = deriveWidgetPayload(data, "me", preferences, now).circles
+    .circle1;
+  assert.equal(feed.totalCount, 1);
+  assert.equal(feed.friends[0]?.initials, "A");
+  assert.equal(feed.friends[0]?.availability, "available");
+  data.blocks = [{ blocker_id: "friend", blocked_id: "me" }];
+  assert.equal(
+    deriveWidgetPayload(data, "me", preferences, now).circles.circle1
+      .totalCount,
+    0,
+  );
+});
+
+test("widget availability follows live status timing and discreet mode masks initials", () => {
+  const data = fixture();
+  const preferences = defaultWidgetPreferences();
+  preferences.privacy = "full";
+  const ending = deriveWidgetPayload(
+    data,
+    "me",
+    preferences,
+    new Date("2026-09-30T16:55:00Z"),
+  );
+  assert.equal(ending.allFriends.friends[0]?.availability, "ending-soon");
+  preferences.privacy = "discreet";
+  const discreet = deriveWidgetPayload(data, "me", preferences, now);
+  assert.equal(discreet.allFriends.friends[0]?.initials, "•");
+});
+
 test("discreet display masks friend names and beacon titles, and payload omits coordinates", () => {
   const preferences = defaultWidgetPreferences();
   preferences.privacy = "discreet";
@@ -222,6 +261,51 @@ test("widget preferences are off and discreet until the user opts in", () => {
   const preferences = defaultWidgetPreferences();
   assert.equal(preferences.enabled, false);
   assert.equal(preferences.privacy, "discreet");
+});
+
+test("widgets use canonical Beacon access for organization membership and removals", () => {
+  const data = fixture();
+  const preferences = defaultWidgetPreferences();
+  preferences.privacy = "full";
+  data.activities.find((item) => item.id === "live")!.audience = "organization";
+  data.activities.find((item) => item.id === "live")!.audience_id = "org";
+  data.organizations = [
+    {
+      id: "org",
+      owner_id: "friend",
+      name: "Crew",
+      description: "",
+      created_at: now.toISOString(),
+    },
+  ];
+  data.organization_members = [
+    {
+      organization_id: "org",
+      user_id: "me",
+      role: "member",
+      status: "active",
+      invited_by: "friend",
+      created_at: now.toISOString(),
+    },
+  ];
+  assert.equal(
+    deriveWidgetPayload(data, "me", preferences, now).allFriends.friends[0]
+      ?.detail,
+    "Coffee",
+  );
+  data.organization_members[0].status = "invited";
+  assert.notEqual(
+    deriveWidgetPayload(data, "me", preferences, now).allFriends.friends[0]
+      ?.detail,
+    "Coffee",
+  );
+  data.organization_members[0].status = "active";
+  data.activity_exclusions.push({ activity_id: "live", user_id: "me" });
+  assert.notEqual(
+    deriveWidgetPayload(data, "me", preferences, now).allFriends.friends[0]
+      ?.detail,
+    "Coffee",
+  );
 });
 
 test("widget advice is eligible only for a ready, opted-out iOS account with friends or a squad", () => {
@@ -333,7 +417,10 @@ test("friend widgets honor profile blocks even when an activity row is otherwise
 
   // The widget's activity audience check still allows the accepted-friend
   // beacon row; profile privacy is a separate gate and must suppress it.
-  assert.equal(data.activities.some((item) => item.id === "live"), true);
+  assert.equal(
+    data.activities.some((item) => item.id === "live"),
+    true,
+  );
   const payload = deriveWidgetPayload(data, "me", preferences, now);
 
   assert.equal(payload.allFriends.totalCount, 0);
@@ -355,10 +442,10 @@ test("widget payload and timeline fail closed when the snapshot belongs to anoth
   assert.equal(payload.circles.circle1.totalCount, 0);
   assert.equal(payload.circleBeacons.circle1.beacons.length, 0);
   assert.equal(payload.nextBeacon, null);
-  assert.deepEqual(
-    widgetTimelineDates(data, "me", now).map(Number),
-    [+now, +now + WIDGET_FRESHNESS_MS],
-  );
+  assert.deepEqual(widgetTimelineDates(data, "me", now).map(Number), [
+    +now,
+    +now + WIDGET_FRESHNESS_MS,
+  ]);
 });
 
 test("widget timeline has authorized status boundaries within the freshness window", () => {

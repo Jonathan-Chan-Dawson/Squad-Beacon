@@ -1,6 +1,6 @@
 import { ActivityCard } from "@/src/features/beacons/ActivityCard";
+import { canReadBeaconActivity } from "@/src/features/beacons/beaconModules";
 import { LibraryToolkit } from "@/src/features/library/LibraryToolkit";
-import { PlanningInbox } from "@/src/features/planning/PlanningInbox";
 import React, { useCallback, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
@@ -13,10 +13,16 @@ import {
   MessageSquareText,
   SlidersHorizontal,
   Star,
+  Pencil,
   X,
   Zap,
 } from "lucide-react-native";
 import { useBeacon } from "@/src/shared/store";
+import {
+  matchesExplorationArea,
+  useExploration,
+} from "@/src/shared/exploration";
+import type { Category } from "@/src/shared/types";
 import { useNow } from "@/src/shared/useNow";
 import {
   friendAvailabilityState,
@@ -24,15 +30,25 @@ import {
   locationIsFresh,
 } from "@/src/shared/domain";
 import { canViewProfile } from "@/src/features/profile/privacy";
-import { browseBeacons, type Period, type SortOrder } from "@/src/shared/browsing";
+import {
+  browseBeacons,
+  type Period,
+  type SortOrder,
+} from "@/src/shared/browsing";
 import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
 import { MotionPressable } from "@/src/shared/MotionPressable";
+import { friendPriority } from "@/src/features/people/priority";
+import { matchesSearch } from "@/src/shared/search";
+import { pendingSocialCount } from "@/src/features/people/communication";
+import { matchesBeaconFilters } from "@/src/features/maps/filtering";
+import DateField from "@/components/DateField";
 import {
   Action,
   Button,
   Chips,
   Empty,
   Field,
+  IconButton,
   Screen,
   Sheet,
   Txt,
@@ -40,6 +56,57 @@ import {
 } from "@/src/shared/ui";
 
 type ActivityPeriod = "Current" | "Upcoming" | "Past";
+
+function FriendStar({
+  personId,
+  name,
+  starred,
+}: {
+  personId: string;
+  name: string;
+  starred: boolean;
+}) {
+  const { colors, styles } = useTheme();
+  const { act } = useBeacon();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  return (
+    <View>
+      <IconButton
+        label={`${starred ? "Unstar" : "Star"} ${name}`}
+        selected={starred}
+        disabled={busy}
+        onPress={() => {
+          setBusy(true);
+          setError("");
+          void act("favorite", { id: personId, kind: "friend", add: !starred })
+            .catch((failure: unknown) =>
+              setError(
+                failure instanceof Error
+                  ? failure.message
+                  : "Could not update star.",
+              ),
+            )
+            .finally(() => setBusy(false));
+        }}
+      >
+        <Star
+          size={18}
+          color={starred ? colors.green : colors.muted}
+          fill={starred ? colors.green : "transparent"}
+        />
+      </IconButton>
+      {error ? (
+        <Text
+          accessibilityRole="alert"
+          style={[styles.error, { maxWidth: 110 }]}
+        >
+          {error}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
 
 function ActivityPeriodTabs({
   value,
@@ -98,7 +165,7 @@ function ActivityPeriodTabs({
                 color: selected ? colors.white : colors.muted,
               }}
             >
-              {label}
+              {label === "Current" ? "Now" : label}
             </Text>
           </MotionPressable>
         );
@@ -108,9 +175,10 @@ function ActivityPeriodTabs({
 }
 
 export default function ActivitiesScreen() {
-  const { styles, colors } = useTheme();
+  const { styles, colors, resolvedAppearance } = useTheme();
 
   const { data, userId, act } = useBeacon();
+  const exploration = useExploration();
   const params = useLocalSearchParams<{ filter?: string }>();
   const now = useNow();
   const [period, setPeriod] = useState<ActivityPeriod>("Current"),
@@ -120,10 +188,24 @@ export default function ActivitiesScreen() {
     [templates, setTemplates] = useState(false);
   const [peopleFilter, setPeopleFilter] = useState("Everyone"),
     [peopleSearch, setPeopleSearch] = useState("");
-  const [query, setQuery] = useState(""),
-    [category, setCategory] = useState("All categories"),
-    [joined, setJoined] = useState(false),
+  const [pastQuery, setPastQuery] = useState("");
+  const [pastCategory, setPastCategory] = useState("All categories");
+  const query = period === "Past" ? pastQuery : exploration.query;
+  const category =
+    period === "Past" ? pastCategory : exploration.filters.category;
+  const setQuery = period === "Past" ? setPastQuery : exploration.setQuery;
+  const setCategory = (value: string) =>
+    period === "Past"
+      ? setPastCategory(value)
+      : exploration.setFilters({
+          ...exploration.filters,
+          category: value as Category | "All categories",
+        });
+  const [joined, setJoined] = useState(false),
     [sort, setSort] = useState<SortOrder>("Soonest");
+  const [statusEdit, setStatusEdit] = useState(false),
+    [statusTitle, setStatusTitle] = useState(""),
+    [statusEnd, setStatusEnd] = useState("");
   const ownTemplates = data.templates.filter(
       (template) => template.owner_id === userId,
     ),
@@ -139,7 +221,9 @@ export default function ActivitiesScreen() {
           item.owner_id === userId &&
           data.activities.some((activity) => activity.id === item.activity_id),
       )
-      .map((item) => data.activities.find((activity) => activity.id === item.activity_id)!)
+      .map((item) =>
+        data.activities.find((activity) => activity.id === item.activity_id)!,
+      )
       .sort((left, right) => right.starts_at.localeCompare(left.starts_at)),
     savedBeaconCount = savedBeacons.length;
   useFocusEffect(
@@ -158,12 +242,44 @@ export default function ActivitiesScreen() {
       Date.parse(a.starts_at) <= now &&
       Date.parse(a.ends_at) > now,
   );
+  const ownStatus = live.find(
+    (activity) => activity.owner_id === userId && activity.mode === "solo",
+  );
+  const joinedLiveIds = new Set(
+    live
+      .filter(
+        (activity) =>
+          activity.mode !== "solo" &&
+          (activity.owner_id === userId ||
+            data.rsvps.some(
+              (rsvp) =>
+                rsvp.activity_id === activity.id &&
+                rsvp.user_id === userId &&
+                rsvp.status === "going",
+            )),
+      )
+      .map((activity) => activity.id),
+  );
+  const closeListIds = new Set(
+    data.lists
+      .filter(
+        (list) =>
+          list.owner_id === userId &&
+          list.name.toLowerCase() === "close friends",
+      )
+      .map((list) => list.id),
+  );
+  const closeIds = new Set(
+    data.list_members
+      .filter((member) => closeListIds.has(member.list_id))
+      .map((member) => member.user_id),
+  );
   const people = data.profiles
     .filter((p) => friends.includes(p.id))
     .map((person) => {
       const canView = canViewProfile(data, person, userId!);
       const activity = canView
-        ? live
+        ? (live
             .filter((a) => a.owner_id === person.id && a.mode === "solo")
             .sort((a, b) => b.starts_at.localeCompare(a.starts_at))[0] ??
           live.find(
@@ -175,15 +291,14 @@ export default function ActivitiesScreen() {
                   r.user_id === person.id &&
                   r.status === "going",
               ),
-          )
+          ))
         : undefined;
       const availability = friendAvailabilityState(activity, now);
       const location =
         canView &&
         data.locations.find(
           (item) =>
-            item.owner_id === person.id &&
-            locationIsFresh(item, new Date(now)),
+            item.owner_id === person.id && locationIsFresh(item, new Date(now)),
         );
       return {
         person,
@@ -191,16 +306,23 @@ export default function ActivitiesScreen() {
         activity,
         availability,
         location,
-        free:
-          availability === "available" || availability === "ending-soon",
+        free: availability === "available" || availability === "ending-soon",
       };
     })
     .sort(
       (a, b) =>
-        Number(b.free) - Number(a.free) ||
-        Number(favorite("friend", b.person.id)) -
-          Number(favorite("friend", a.person.id)) ||
-        a.person.name.localeCompare(b.person.name),
+        friendPriority({
+          together: !!a.activity && joinedLiveIds.has(a.activity.id),
+          free: a.free,
+          starred: favorite("friend", a.person.id),
+          close: closeIds.has(a.person.id),
+        }) -
+          friendPriority({
+            together: !!b.activity && joinedLiveIds.has(b.activity.id),
+            free: b.free,
+            starred: favorite("friend", b.person.id),
+            close: closeIds.has(b.person.id),
+          }) || a.person.name.localeCompare(b.person.name),
     );
   const activities = browseBeacons(
     data,
@@ -210,11 +332,29 @@ export default function ActivitiesScreen() {
       sort,
       query,
       category,
-      audience: "Everyone",
+      audience: period === "Past" ? "Everyone" : exploration.filters.audience,
       joined,
     },
     now,
-  ).filter((a) => a.mode !== "solo");
+  ).filter((activity) => {
+    if (!canReadBeaconActivity(data, activity, userId!)) return false;
+    if (activity.mode === "solo") return false;
+    if (period === "Past") return true;
+    if (
+      exploration.filters.planId &&
+      activity.plan_id !== exploration.filters.planId
+    )
+      return false;
+    const place = data.places.find((row) => row.activity_id === activity.id);
+    const coordinate =
+      place &&
+      typeof place.latitude === "number" &&
+      typeof place.longitude === "number"
+        ? { latitude: place.latitude, longitude: place.longitude }
+        : null;
+    return matchesExplorationArea(exploration.area, coordinate) &&
+      (period !== "Upcoming" || matchesBeaconFilters(data, activity, userId, exploration.filters, now, { includeBaseFilters: false }));
+  });
   const recentlyEnded =
     period === "Past"
       ? activities
@@ -273,9 +413,9 @@ export default function ActivitiesScreen() {
           ? "Ending soon"
           : availability === "unavailable"
             ? "Unavailable"
-              : activity
-                ? "At a beacon"
-                : "No status shared";
+            : activity
+              ? "At a beacon"
+              : "No status shared";
     const availabilityColor =
       availability === "available"
         ? "#22C55E"
@@ -299,8 +439,7 @@ export default function ActivitiesScreen() {
               ? `Until ${time(activity.ends_at)}`
               : `Ends ${time(activity.ends_at)}`,
           activity.title,
-        ]
-            .join(" · ")
+        ].join(" · ")
       : "No status shared";
     const rowLabel = [
       `See ${displayName} now`,
@@ -312,19 +451,10 @@ export default function ActivitiesScreen() {
       .join(". ");
 
     return (
-      <Pressable
+      <View
         key={person.id}
-        accessibilityRole="button"
-        accessibilityLabel={rowLabel}
-        onPress={() => {
-          setAllFriends(false);
-          router.push({
-            pathname: "/(tabs)",
-            params: { person: person.id, beacon: activity?.id ?? "" },
-          });
-        }}
-        style={({ pressed }) => ({
-          minHeight: 64,
+        style={{
+          minHeight: 62,
           flexDirection: "row",
           alignItems: "center",
           gap: 10,
@@ -335,10 +465,20 @@ export default function ActivitiesScreen() {
           backgroundColor: free ? colors.lime : colors.white,
           borderWidth: 1,
           borderColor: colors.line,
-          opacity: pressed ? 0.72 : 1,
-        })}
+        }}
       >
-        <View style={{ width: 54, height: 54 }}>
+        <MotionPressable
+          accessibilityRole="button"
+          accessibilityLabel={`Open profile ${displayName}`}
+          onPress={() => {
+            setAllFriends(false);
+            router.push({
+              pathname: "/person/[id]",
+              params: { id: person.id },
+            });
+          }}
+          style={{ width: 54, height: 54 }}
+        >
           <ProfileAvatar profile={canView ? person : undefined} size={54} />
           {availability !== "unknown" && (
             <View
@@ -369,8 +509,25 @@ export default function ActivitiesScreen() {
               )}
             </View>
           )}
-        </View>
-        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+        </MotionPressable>
+        <MotionPressable
+          accessibilityRole="button"
+          accessibilityLabel={`Message ${displayName}. ${rowLabel}`}
+          onPress={() => {
+            setAllFriends(false);
+            router.push({
+              pathname: "/messages/[id]",
+              params: { id: person.id },
+            });
+          }}
+          style={{
+            flex: 1,
+            minWidth: 0,
+            minHeight: 48,
+            justifyContent: "center",
+            gap: 2,
+          }}
+        >
           <Text numberOfLines={1} style={[styles.body, { fontWeight: "700" }]}>
             {displayName}
           </Text>
@@ -410,16 +567,75 @@ export default function ActivitiesScreen() {
               />
             )}
           </View>
-        </View>
-        {favorite("friend", person.id) && (
-          <Star size={16} color={colors.green} fill={colors.lime} />
+        </MotionPressable>
+        {activity && activity.mode !== "solo" && (
+          <IconButton
+            label={`View ${displayName}'s beacon`}
+            onPress={() => {
+              setAllFriends(false);
+              open(activity.id);
+            }}
+          >
+            <Zap size={17} color={colors.green} />
+          </IconButton>
         )}
-      </Pressable>
+        <FriendStar
+          personId={person.id}
+          name={displayName}
+          starred={favorite("friend", person.id)}
+        />
+      </View>
     );
   };
   return (
     <Screen title="Activities" eyebrow="A little time together">
       <ActivityPeriodTabs value={period} onChange={setPeriod} />
+      {period === "Upcoming" ? (
+        <MotionPressable
+          accessibilityRole="button"
+          accessibilityLabel="Choose exploration area"
+          onPress={() =>
+            router.push({ pathname: "/(tabs)", params: { search: "yes" } })
+          }
+          style={[
+            styles.card,
+            { padding: 11, flexDirection: "row", alignItems: "center", gap: 8 },
+          ]}
+        >
+          <MapPin size={18} color={colors.green} />
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text
+              numberOfLines={1}
+              style={[styles.body, { fontWeight: "700" }]}
+            >
+              {exploration.area?.label ?? "Explore your area"}
+            </Text>
+            <Text style={styles.muted}>Choose a place on the map</Text>
+            {exploration.area?.kind === "place" &&
+            exploration.area.source === "google" ? (
+              <>
+                <Text
+                  style={{
+                    fontSize: 12,
+                    color:
+                      resolvedAppearance === "dark" ? "#FFFFFF" : "#1F1F1F",
+                  }}
+                >
+                  Google Maps
+                </Text>
+                {exploration.area.attributions?.length ? (
+                  <Text style={styles.label}>
+                    {exploration.area.attributions
+                      .map((item) => item.name)
+                      .join(" · ")}
+                  </Text>
+                ) : null}
+              </>
+            ) : null}
+          </View>
+          <Text style={styles.label}>CHANGE</Text>
+        </MotionPressable>
+      ) : null}
       {period === "Past" && recentlyEnded.length > 0 && (
         <View style={[styles.card, { gap: 8, padding: 13 }]}>
           <View style={styles.between}>
@@ -475,6 +691,49 @@ export default function ActivitiesScreen() {
       )}
       {period === "Current" && (
         <>
+          <View
+            style={[
+              styles.card,
+              {
+                padding: 12,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 10,
+              },
+            ]}
+          >
+            <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
+              <Text style={styles.label}>YOUR STATUS</Text>
+              <Text
+                numberOfLines={1}
+                style={[styles.body, { fontWeight: "700" }]}
+              >
+                {ownStatus?.title ?? "What are you up to?"}
+              </Text>
+              <Text numberOfLines={1} style={styles.muted}>
+                {ownStatus
+                  ? `Until ${time(ownStatus.ends_at)}`
+                  : "Let your people know when you're free."}
+              </Text>
+            </View>
+            <IconButton
+              label={ownStatus ? "Edit your status" : "Share your status"}
+              onPress={() => {
+                if (!ownStatus) {
+                  router.push({
+                    pathname: "/create",
+                    params: { kind: "status" },
+                  });
+                  return;
+                }
+                setStatusTitle(ownStatus.title);
+                setStatusEnd(ownStatus.ends_at);
+                setStatusEdit(true);
+              }}
+            >
+              <Pencil size={18} color={colors.green} />
+            </IconButton>
+          </View>
           <View style={styles.between}>
             <Text style={styles.h2}>Friends Now</Text>
           </View>
@@ -500,7 +759,7 @@ export default function ActivitiesScreen() {
                       ? p.free
                       : favorite("friend", p.person.id)),
                 )
-                .slice(0, 5)
+                .slice(0, 3)
                 .map(personTile)}
             </View>
           ) : (
@@ -535,7 +794,18 @@ export default function ActivitiesScreen() {
           </View>
         </>
       )}
-      {period === "Upcoming" && <PlanningInbox />}
+      {period === "Upcoming" && pendingSocialCount(data, userId, now) > 0 ? (
+        <Button
+          secondary
+          title={`${pendingSocialCount(data, userId, now)} invitations & decisions`}
+          onPress={() =>
+            router.push({
+              pathname: "/(tabs)/squads",
+              params: { tab: "Pings" },
+            })
+          }
+        />
+      ) : null}
       {period === "Past" && (
         <>
           <LibraryToolkit
@@ -553,13 +823,6 @@ export default function ActivitiesScreen() {
                 title="Library"
                 secondary
                 onPress={() => router.push("/library")}
-              />
-            </View>
-            <View style={{ flex: 1, minWidth: 150 }}>
-              <Button
-                title="Pings & Decisions"
-                secondary
-                onPress={() => router.push("/councils")}
               />
             </View>
           </View>
@@ -591,9 +854,7 @@ export default function ActivitiesScreen() {
             opacity: pressed ? 0.78 : 1,
           })}
         >
-          <Text style={[styles.label, { color: colors.ink }]}>
-            Filter
-          </Text>
+          <Text style={[styles.label, { color: colors.ink }]}>Filter</Text>
           {activeFilterCount > 0 ? (
             <View
               testID="activity-filter-count"
@@ -607,12 +868,17 @@ export default function ActivitiesScreen() {
                 backgroundColor: colors.lime,
               }}
             >
-              <Text style={{ color: colors.ink, fontSize: 11, fontWeight: "800" }}>
+              <Text
+                style={{ color: colors.ink, fontSize: 11, fontWeight: "800" }}
+              >
                 {activeFilterCount}
               </Text>
             </View>
           ) : null}
-          <SlidersHorizontal size={17} color={activeFilterCount ? colors.green : colors.muted} />
+          <SlidersHorizontal
+            size={17}
+            color={activeFilterCount ? colors.green : colors.muted}
+          />
         </MotionPressable>
       </View>
       {activities.map((activity) => (
@@ -643,6 +909,43 @@ export default function ActivitiesScreen() {
           />
         </>
       )}
+      <Sheet
+        title="Your status"
+        visible={statusEdit && !!ownStatus}
+        onClose={() => setStatusEdit(false)}
+      >
+        <Field
+          label="Status note"
+          value={statusTitle}
+          onChangeText={setStatusTitle}
+        />
+        <DateField label="Until" value={statusEnd} onChange={setStatusEnd} />
+        <Action
+          title="Save status"
+          run={async () => {
+            if (!ownStatus) throw new Error("This status has ended.");
+            await act("edit_activity", {
+              id: ownStatus.id,
+              title: statusTitle.trim(),
+              starts_at: ownStatus.starts_at,
+              ends_at: statusEnd,
+            });
+            setStatusEdit(false);
+          }}
+        />
+        <Action
+          secondary
+          title="Clear status"
+          run={async () => {
+            if (ownStatus)
+              await act("activity_status", {
+                id: ownStatus.id,
+                status: "cancelled",
+              });
+            setStatusEdit(false);
+          }}
+        />
+      </Sheet>
       <Sheet
         title="Filter activities"
         visible={filters}
@@ -692,8 +995,8 @@ export default function ActivitiesScreen() {
           />
         </View>
         <Txt muted>
-          Current puts favorites first with the default sort. Free friends always
-          lead Friends Now.
+          Current puts favorites first with the default sort. Free friends
+          always lead Friends Now.
         </Txt>
         <Button
           title="Reset filters"
@@ -720,9 +1023,7 @@ export default function ActivitiesScreen() {
         <View style={{ gap: 8 }}>
           {people
             .filter((p) =>
-              (p.canView ? p.person.name : "Friend")
-                .toLowerCase()
-                .includes(peopleSearch.toLowerCase()),
+              matchesSearch(peopleSearch, p.canView ? p.person.name : "Friend"),
             )
             .map(personTile)}
         </View>
@@ -787,13 +1088,19 @@ export default function ActivitiesScreen() {
           ))}
         <Text style={styles.h2}>Saved Beacons</Text>
         {!savedBeacons.length ? (
-          <Txt muted>Save a Beacon from its Overview to keep it easy to find.</Txt>
+          <Txt muted>
+            Save a Beacon from its Overview to keep it easy to find.
+          </Txt>
         ) : null}
         {savedBeacons.map((activity) => (
           <View key={activity.id} style={[styles.row, { gap: 8 }]}>
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text numberOfLines={1} style={styles.body}>{activity.title}</Text>
-              <Text numberOfLines={1} style={styles.muted}>{activity.category} · {activity.status}</Text>
+              <Text numberOfLines={1} style={styles.body}>
+                {activity.title}
+              </Text>
+              <Text numberOfLines={1} style={styles.muted}>
+                {activity.category} · {activity.status}
+              </Text>
             </View>
             <Button
               compact
@@ -808,7 +1115,12 @@ export default function ActivitiesScreen() {
               compact
               secondary
               title="Remove"
-              onPress={() => void act("save_beacon", { activity_id: activity.id, saved: false })}
+              onPress={() =>
+                void act("save_beacon", {
+                  activity_id: activity.id,
+                  saved: false,
+                })
+              }
             />
           </View>
         ))}
@@ -836,39 +1148,39 @@ export default function ActivitiesScreen() {
           </Txt>
         )}
         {ownTemplates.map((t) => (
-            <View key={t.id} style={styles.card}>
-              <Text style={styles.h2}>{t.name}</Text>
-              <Txt muted>
-                {t.title} | {t.minutes} min
-              </Txt>
-              <Button
-                title={`Use ${t.name}`}
-                onPress={() => {
-                  setTemplates(false);
-                  router.push({
-                    pathname: "/create",
-                    params: { template: t.id },
-                  });
-                }}
-              />
-              <Button
-                title={`Edit ${t.name}`}
-                secondary
-                onPress={() => {
-                  setTemplates(false);
-                  router.push({
-                    pathname: "/create",
-                    params: { template: t.id, editTemplate: "yes" },
-                  });
-                }}
-              />
-              <Action
-                title={`Delete ${t.name}`}
-                secondary
-                run={() => act("delete_template", { id: t.id })}
-              />
-            </View>
-          ))}
+          <View key={t.id} style={styles.card}>
+            <Text style={styles.h2}>{t.name}</Text>
+            <Txt muted>
+              {t.title} | {t.minutes} min
+            </Txt>
+            <Button
+              title={`Use ${t.name}`}
+              onPress={() => {
+                setTemplates(false);
+                router.push({
+                  pathname: "/create",
+                  params: { template: t.id },
+                });
+              }}
+            />
+            <Button
+              title={`Edit ${t.name}`}
+              secondary
+              onPress={() => {
+                setTemplates(false);
+                router.push({
+                  pathname: "/create",
+                  params: { template: t.id, editTemplate: "yes" },
+                });
+              }}
+            />
+            <Action
+              title={`Delete ${t.name}`}
+              secondary
+              run={() => act("delete_template", { id: t.id })}
+            />
+          </View>
+        ))}
       </Sheet>
     </Screen>
   );

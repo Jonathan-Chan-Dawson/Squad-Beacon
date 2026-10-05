@@ -1,3 +1,3 @@
-import ProfilePrivacySettings from "@/src/features/profile/screens/ProfilePrivacySettings";
+import SettingsScreen from "@/src/features/profile/screens/SettingsScreen";
 
-export default ProfilePrivacySettings;
+export default SettingsScreen;

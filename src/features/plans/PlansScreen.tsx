@@ -1,11 +1,12 @@
 import React, { useMemo, useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
+import { Repeat2 } from "lucide-react-native";
 import { Text, View } from "react-native";
 import { useBeacon } from "@/src/shared/store";
 import { buildPlanSchedule, suggestPlanConflicts } from "@/src/features/plans/domain";
 import { localDate } from "@/src/shared/domain";
 import type { Category, PlanStep } from "@/src/shared/types";
-import { Action, Button, Chips, Field, Screen, Sheet, Txt, useTheme } from "@/src/shared/ui";
+import { Action, Button, Chips, Field, IconButton, Screen, Sheet, Txt, useTheme } from "@/src/shared/ui";
 
 const categories: Category[] = ["Fitness", "Study", "Gaming", "Creative", "Social", "Other"];
 const today = (timezone: string) => localDate(new Date(), timezone);
@@ -27,15 +28,15 @@ const blankStep = (): PlanStep => ({
 });
 
 export default function PlansScreen() {
-  const { styles } = useTheme();
+  const { styles, colors } = useTheme();
   const { data, userId, act } = useBeacon();
-  const params = useLocalSearchParams<{ squadId?: string; templates?: string }>();
+  const params = useLocalSearchParams<{ squadId?: string; templates?: string; create?: string }>();
   const memberships = data.squad_members.filter((m) => m.user_id === userId);
   const allowedSquads = data.squads.filter((s) => memberships.some((m) => m.squad_id === s.id));
   const initialSquad = allowedSquads.some((s) => s.id === params.squadId) ? params.squadId! : "Personal";
   const [scope, setScope] = useState(initialSquad);
   const scopeId = scope === "Personal" ? null : scope;
-  const [editor, setEditor] = useState(false);
+  const [editor, setEditor] = useState(params.create === "yes");
   const [templateEditor, setTemplateEditor] = useState(false);
   const [templateId, setTemplateId] = useState("");
   const [saveTemplateId, setSaveTemplateId] = useState("");
@@ -169,7 +170,8 @@ export default function PlansScreen() {
   }, [startDate, timezone, steps]);
 
   return (
-    <Screen title="Beacon Plans" eyebrow="A set of beacons, on your schedule" create={false}>
+    <Screen title="Beacon Plans" eyebrow="A set of beacons, on your schedule" create={false}
+      headerAction={<IconButton label="Routines" onPress={() => router.push("/routines")}><Repeat2 size={20} color={colors.ink} /></IconButton>}>
       <Txt muted>Keep a multi day itinerary together. Each step becomes a scheduled beacon in the plan’s timezone.</Txt>
       {allowedSquads.length > 0 && <Chips options={scopeOptions} value={scopeValue} onChange={setScopeFromLabel} />}
       {scopeId && selectedSquad && <Txt muted>Shared with {selectedSquad.name}. Squad plan templates can be saved or changed by squad admins.</Txt>}
@@ -201,6 +203,7 @@ export default function PlansScreen() {
         })}
       </Sheet>
       <Sheet title={templateEditor ? "Plan template" : "Build a plan"} visible={editor} onClose={() => setEditor(false)}>
+        {scopeId && selectedSquad ? <Txt muted>Shared with {selectedSquad.name}</Txt> : null}
         <Field label="Plan name" value={title} onChangeText={setTitle} maxLength={100} placeholder="A weekend in the city" />
         <Field label="Description (optional)" value={description} onChangeText={setDescription} maxLength={1000} multiline />
         {!templateEditor && <Field label="Start date · YYYY-MM-DD" value={startDate} onChangeText={setStartDate} placeholder={safeToday(timezone)} />}

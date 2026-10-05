@@ -173,6 +173,20 @@ test("database migration and access-control acceptance scenarios", async (t) => 
   } catch (e) {
     throw new Error("Migration 202610030003_beacon_media_teams.sql: " + (e as Error).message);
   }
+  for (const name of [
+    "202610040001_organization_audience_type.sql",
+    "202610040002_organizations_group_chat.sql",
+  ]) {
+    const sql = readFileSync(
+      new URL("../supabase/migrations/" + name, import.meta.url),
+      "utf8",
+    ).replace("create extension if not exists pgcrypto;", "");
+    try {
+      await db.exec(sql);
+    } catch (e) {
+      throw new Error("Migration " + name + ": " + (e as Error).message);
+    }
+  }
   await root();
   const invitationBackfill = await db.query<{ user_id: string; invited_by: string }>(
     "select user_id,invited_by from public.beacon_invitation_grants where activity_id=$1",

@@ -3,6 +3,9 @@ import { Pressable, Text, View } from "react-native";
 import { Tabs, router } from "expo-router";
 import { Map, Radio, Users, UserRound, Plus } from "lucide-react-native";
 import { Button, Sheet, useTheme } from "@/src/shared/ui";
+import { useBeacon } from "@/src/shared/store";
+import { useNow } from "@/src/shared/useNow";
+import { pendingSocialCount } from "@/src/features/people/communication";
 const items = [
   { name: "index", label: "Map", Icon: Map },
   { name: "activities", label: "Beacons", Icon: Radio },
@@ -11,6 +14,8 @@ const items = [
 ];
 export default function TabLayout() {
   const { colors } = useTheme();
+  const { data, userId } = useBeacon();
+  const pending = pendingSocialCount(data, userId, useNow());
 
   const [actions, setActions] = useState(false);
   function create(kind: string) {
@@ -64,6 +69,33 @@ export default function TabLayout() {
                         size={22}
                         color={focused ? colors.green : colors.muted}
                       />
+                      {name === "squads" && pending > 0 ? (
+                        <View
+                          style={{
+                            position: "absolute",
+                            top: 0,
+                            right: "22%",
+                            minWidth: 18,
+                            height: 18,
+                            borderRadius: 9,
+                            backgroundColor: colors.green,
+                            alignItems: "center",
+                            justifyContent: "center",
+                            paddingHorizontal: 3,
+                          }}
+                        >
+                          <Text
+                            accessibilityLabel={`${pending} pending responses`}
+                            style={{
+                              color: colors.white,
+                              fontSize: 10,
+                              fontWeight: "800",
+                            }}
+                          >
+                            {pending > 99 ? "99+" : pending}
+                          </Text>
+                        </View>
+                      ) : null}
                       <Text
                         style={{
                           fontSize: 11,

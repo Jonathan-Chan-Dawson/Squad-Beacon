@@ -3,8 +3,15 @@ import { View, Text } from "react-native";
 import { useBeacon } from "@/src/shared/store";
 import { useNow } from "@/src/shared/useNow";
 import { Action, useTheme } from "@/src/shared/ui";
+import { beaconCapacity } from "@/src/features/beacons/permissions";
 import type { Activity } from "@/src/shared/types";
-export function BeaconResponse({ activity: a }: { activity: Activity }) {
+export function BeaconResponse({
+  activity: a,
+  compact = false,
+}: {
+  activity: Activity;
+  compact?: boolean;
+}) {
   const { styles } = useTheme();
 
   const { data, userId, act } = useBeacon();
@@ -22,6 +29,61 @@ export function BeaconResponse({ activity: a }: { activity: Activity }) {
   const pending = rsvp?.status === "requested";
   const approval =
     (a.approval_required || a.mode === "invite") && !rsvp?.approved;
+  if (compact) {
+    const pending = rsvp?.status === "requested";
+    const going = rsvp?.status === "going";
+    const capacity = beaconCapacity(data, a);
+    const closed = capacity.closed && !pending && !going;
+    return (
+      <View style={{ flexDirection: "row", gap: 6 }}>
+        <View style={{ flex: 1 }}>
+          <Action
+            title={
+              pending
+                ? "Pending"
+                : going
+                  ? "I'm Out"
+                  : capacity.full
+                    ? "Full"
+                    : closed
+                      ? "Closed"
+                  : approval
+                    ? "Request"
+                    : "I'm In"
+            }
+            disabled={pending || closed}
+            secondary={pending || going || closed}
+            run={() =>
+              act("rsvp", {
+                id: a.id,
+                status: going ? "withdraw" : "going",
+              })
+            }
+          />
+        </View>
+        {pending ? (
+          <View style={{ width: 112 }}>
+            <Action
+              title="Cancel request"
+              secondary
+              compact
+              run={() => act("rsvp", { id: a.id, status: "withdraw" })}
+            />
+          </View>
+        ) : !going && !closed ? (
+          <View style={{ width: 86 }}>
+            <Action
+              title="Maybe"
+              disabled={rsvp?.status === "interested"}
+              secondary
+              compact
+              run={() => act("rsvp", { id: a.id, status: "interested" })}
+            />
+          </View>
+        ) : null}
+      </View>
+    );
+  }
   return (
     <View style={{ gap: 8 }}>
       {rsvp && (

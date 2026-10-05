@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { demoAction, makeDemo, DEMO_ID } from "@/src/shared/demo";
+import { canReadPlanningThread } from "../src/features/planning/domain";
 import type { BeaconDraft } from "@/src/shared/types";
 
 function beaconDraft(title: string): BeaconDraft {
@@ -126,5 +127,76 @@ test("demo converts pings and resolves a vote council deterministically without 
   assert.equal(
     data.activities.find((activity) => activity.id === resolvedCouncil.materialized_activity_id)?.owner_id,
     DEMO_ID,
+  );
+});
+
+test("demo creates organization-audience Pings and restricts them to current organization members", () => {
+  const initial = makeDemo(),
+    organization = initial.organizations[0];
+  assert.ok(organization);
+  const payload = beaconDraft("Lakefront organization loop");
+  payload.audience = "organization";
+  payload.audience_id = organization.id;
+  const data = demoAction(initial, "create_planning_thread", {
+    id: "demo-organization-ping",
+    kind: "ping",
+    title: "Anyone free for a lakefront walk?",
+    body: "Bring a warm layer.",
+    audience: "organization",
+    audience_id: organization.id,
+    deadline_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+    coowner_ids: ["jordan"],
+    payload,
+  });
+  const created = data.planning_threads.find((thread) => thread.id === "demo-organization-ping");
+  assert.equal(created?.audience, "organization");
+  assert.equal(created?.audience_id, organization.id);
+  assert.equal(canReadPlanningThread(data, created!, "jordan"), true);
+  assert.equal(canReadPlanningThread(data, created!, "alex"), false);
+  const revoked = structuredClone(data);
+  revoked.organization_members = revoked.organization_members.filter(
+    (member) => member.user_id !== "jordan" || member.organization_id !== organization.id,
+  );
+  assert.equal(canReadPlanningThread(revoked, created!, "jordan"), false);
+});
+
+test("demo creates Squad Pings only for current unblocked Squad members", () => {
+  const initial = makeDemo();
+  const payload = beaconDraft("Boxing crew session");
+  payload.audience = "squad";
+  payload.audience_id = "boxing";
+  const request = {
+    kind: "ping",
+    title: "Who is free to train?",
+    body: "",
+    audience: "squad",
+    audience_id: "boxing",
+    deadline_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+    coowner_ids: [],
+    payload,
+  };
+  const data = demoAction(initial, "create_planning_thread", request);
+  const created = data.planning_threads.at(-1)!;
+  assert.equal(created.audience, "squad");
+  assert.equal(created.audience_id, "boxing");
+  assert.equal(canReadPlanningThread(data, created, "jordan"), true);
+
+  const removed = structuredClone(initial);
+  removed.squad_members = removed.squad_members.filter(
+    (member) => member.squad_id !== "boxing" || member.user_id !== DEMO_ID,
+  );
+  assert.throws(
+    () => demoAction(removed, "create_planning_thread", request),
+    /current Squad members/,
+  );
+
+  const blocked = structuredClone(initial);
+  blocked.blocks.push({
+    blocker_id: DEMO_ID,
+    blocked_id: blocked.squads.find((squad) => squad.id === "boxing")!.owner_id,
+  });
+  assert.throws(
+    () => demoAction(blocked, "create_planning_thread", request),
+    /current Squad members/,
   );
 });

@@ -4,8 +4,21 @@ import * as Crypto from "expo-crypto";
 import { router, useLocalSearchParams } from "expo-router";
 import { BookOpenText, ClipboardList, FolderOpen } from "lucide-react-native";
 import { useBeacon } from "@/src/shared/store";
-import type { BeaconNote, LibraryKind, LibrarySavedChecklist } from "@/src/shared/types";
-import { Button, Chips, Empty, Field, Screen, Sheet, Txt, useTheme } from "@/src/shared/ui";
+import type {
+  BeaconNote,
+  LibraryKind,
+  LibrarySavedChecklist,
+} from "@/src/shared/types";
+import {
+  Button,
+  Chips,
+  Empty,
+  Field,
+  Screen,
+  Sheet,
+  Txt,
+  useTheme,
+} from "@/src/shared/ui";
 import {
   libraryCards,
   personalJournalCards,
@@ -30,7 +43,8 @@ export function LibraryScreen() {
   const params = useLocalSearchParams<{ kind?: string }>();
   const { colors, styles } = useTheme();
   const { data, userId, act } = useBeacon();
-  const kind: LibraryKind = params.kind === "checklist" ? "checklist" : "journal";
+  const kind: LibraryKind =
+    params.kind === "checklist" ? "checklist" : "journal";
   const [filter, setFilter] = useState<LibraryFilter>("all");
   const [folderDraft, setFolderDraft] = useState("");
   const [folderDraftId, setFolderDraftId] = useState(() => Crypto.randomUUID());
@@ -39,14 +53,24 @@ export function LibraryScreen() {
   const [fileResourceId, setFileResourceId] = useState<string | null>(null);
   const [folderParentId, setFolderParentId] = useState<string | null>(null);
   const [sharedHistoryOpen, setSharedHistoryOpen] = useState(false);
+  const [openChecklistHistory, setOpenChecklistHistory] = useState<string[]>(
+    [],
+  );
   const [journalEditorOpen, setJournalEditorOpen] = useState(false);
-  const [journalEditTarget, setJournalEditTarget] = useState<BeaconNote | null>(null);
-  const [journalDraftId, setJournalDraftId] = useState(() => Crypto.randomUUID());
+  const [journalEditTarget, setJournalEditTarget] = useState<BeaconNote | null>(
+    null,
+  );
+  const [journalDraftId, setJournalDraftId] = useState(() =>
+    Crypto.randomUUID(),
+  );
   const [journalHeadingDraft, setJournalHeadingDraft] = useState("");
   const [journalBodyDraft, setJournalBodyDraft] = useState("");
-  const [journalVisibilityDraft, setJournalVisibilityDraft] = useState<"private" | "shared">("private");
+  const [journalVisibilityDraft, setJournalVisibilityDraft] = useState<
+    "private" | "shared"
+  >("private");
   const [listEditorOpen, setListEditorOpen] = useState(false);
-  const [listEditTarget, setListEditTarget] = useState<LibrarySavedChecklist | null>(null);
+  const [listEditTarget, setListEditTarget] =
+    useState<LibrarySavedChecklist | null>(null);
   const [listDraftId, setListDraftId] = useState(() => Crypto.randomUUID());
   const [listTitleDraft, setListTitleDraft] = useState("");
   const [listSectionsDraft, setListSectionsDraft] = useState("");
@@ -58,28 +82,38 @@ export function LibraryScreen() {
     .filter((folder) => folder.owner_id === userId && folder.kind === kind)
     .sort((left, right) => left.name.localeCompare(right.name));
   const selectedFolder = folders.find((folder) => folder.id === filter);
-  const historyCards = useMemo(
-    () => {
-      if (!userId) return [];
-      return kind === "checklist"
-        ? sharedChecklistHistory(data, userId, filter)
-        : libraryCards(data, userId, kind, filter).filter((card) => card.entryCount > 0);
-    },
-    [data, filter, kind, userId],
-  );
+  const historyCards = useMemo(() => {
+    if (!userId) return [];
+    return kind === "checklist"
+      ? sharedChecklistHistory(data, userId, filter)
+      : libraryCards(data, userId, kind, filter).filter(
+          (card) => card.entryCount > 0,
+        );
+  }, [data, filter, kind, userId]);
   const personalJournals = useMemo(
-    () => (userId && kind === "journal" ? personalJournalCards(data, userId, filter) : []),
+    () =>
+      userId && kind === "journal"
+        ? personalJournalCards(data, userId, filter)
+        : [],
     [data, filter, kind, userId],
   );
   const savedLists = useMemo(
-    () => (userId && kind === "checklist" ? savedChecklistCards(data, userId, filter) : []),
+    () =>
+      userId && kind === "checklist"
+        ? savedChecklistCards(data, userId, filter)
+        : [],
     [data, filter, kind, userId],
   );
   const sharedNotes = useMemo(
-    () => (userId && kind === "journal" ? sharedJournalHistory(data, userId, filter) : []),
+    () =>
+      userId && kind === "journal"
+        ? sharedJournalHistory(data, userId, filter)
+        : [],
     [data, filter, kind, userId],
   );
-  const fileActivity = data.activities.find((activity) => activity.id === fileActivityId);
+  const fileActivity = data.activities.find(
+    (activity) => activity.id === fileActivityId,
+  );
   const folderLabel = (folderId: string | null) => {
     if (!folderId) return "Unfiled";
     const names: string[] = [];
@@ -101,7 +135,11 @@ export function LibraryScreen() {
     try {
       await callback();
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : "Could not save that change.");
+      setError(
+        failure instanceof Error
+          ? failure.message
+          : "Could not save that change.",
+      );
     } finally {
       setBusy(false);
     }
@@ -135,7 +173,9 @@ export function LibraryScreen() {
   const canEditJournal = (note: BeaconNote) => {
     if (!userId || note.author_id !== userId) return false;
     if (!note.activity_id) return true;
-    const source = data.activities.find((activity) => activity.id === note.activity_id);
+    const source = data.activities.find(
+      (activity) => activity.id === note.activity_id,
+    );
     return !!(
       source &&
       isBeaconModuleEnabled(source, "journal") &&
@@ -185,11 +225,15 @@ export function LibraryScreen() {
     setListEditTarget(checklist);
     setListDraftId(checklist.id);
     setListTitleDraft(checklist.title);
-    setListSectionsDraft(checklist.sections.map((section) => section.title).join("\n"));
+    setListSectionsDraft(
+      checklist.sections.map((section) => section.title).join("\n"),
+    );
     setListItemsDraft(
       checklist.items
         .map((item) => {
-          const section = checklist.sections.find((candidate) => candidate.id === item.section_id);
+          const section = checklist.sections.find(
+            (candidate) => candidate.id === item.section_id,
+          );
           return (section ? section.title + " :: " : "") + item.text;
         })
         .join("\n"),
@@ -198,7 +242,8 @@ export function LibraryScreen() {
   };
 
   const saveList = async () => {
-    if (!userId || !listTitleDraft.trim()) throw new Error("Name this list first.");
+    if (!userId || !listTitleDraft.trim())
+      throw new Error("Name this list first.");
     const sectionNames = listSectionsDraft
       .split("\n")
       .map((title) => title.trim())
@@ -209,8 +254,13 @@ export function LibraryScreen() {
       title,
       position: index,
     }));
-    const sectionIdByName = new Map(sections.map((section) => [section.title.toLowerCase(), section.id]));
-    const itemLines = listItemsDraft.split("\n").map((line) => line.trim()).filter(Boolean);
+    const sectionIdByName = new Map(
+      sections.map((section) => [section.title.toLowerCase(), section.id]),
+    );
+    const itemLines = listItemsDraft
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
     const oldItems = listEditTarget?.items ?? [];
     const items = itemLines.map((line, index) => {
       const separator = line.indexOf(" :: ");
@@ -221,7 +271,9 @@ export function LibraryScreen() {
         id: oldItem?.id ?? Crypto.randomUUID(),
         text,
         completed: oldItem?.completed ?? false,
-        section_id: sectionName ? sectionIdByName.get(sectionName.toLowerCase()) ?? null : null,
+        section_id: sectionName
+          ? (sectionIdByName.get(sectionName.toLowerCase()) ?? null)
+          : null,
         assignee_id: oldItem?.assignee_id ?? null,
       };
     });
@@ -265,7 +317,9 @@ export function LibraryScreen() {
     <Screen title="Your library" eyebrow="PAST" create={false}>
       <View style={styles.card}>
         <Txt>
-          Your journal entries and saved lists are private to you. Shared Beacon history is kept separate. Folders only organize your view; they never change who can open a Beacon.
+          Your journal entries and saved lists are private to you. Shared Beacon
+          history is kept separate. Folders only organize your view; they never
+          change who can open a Beacon.
         </Txt>
         <View style={{ flexDirection: "row", gap: 8 }}>
           {tabs.map(({ kind: tabKind, label }) => {
@@ -292,8 +346,16 @@ export function LibraryScreen() {
                   opacity: pressed ? 0.78 : 1,
                 })}
               >
-                <Icon size={17} color={selected ? colors.white : colors.green} />
-                <Text style={{ color: selected ? colors.white : colors.ink, fontWeight: "700" }}>
+                <Icon
+                  size={17}
+                  color={selected ? colors.white : colors.green}
+                />
+                <Text
+                  style={{
+                    color: selected ? colors.white : colors.ink,
+                    fontWeight: "700",
+                  }}
+                >
                   {label}
                 </Text>
               </Pressable>
@@ -306,7 +368,10 @@ export function LibraryScreen() {
         {[
           { id: "all", label: "All" },
           { id: "unfiled", label: "Unfiled" },
-          ...folders.map((folder) => ({ id: folder.id, label: folderLabel(folder.id) })),
+          ...folders.map((folder) => ({
+            id: folder.id,
+            label: folderLabel(folder.id),
+          })),
         ].map((option) => {
           const selected = filter === option.id;
           return (
@@ -329,7 +394,13 @@ export function LibraryScreen() {
                 opacity: pressed ? 0.78 : 1,
               })}
             >
-              <Text style={{ color: selected ? colors.white : colors.muted, fontSize: 13, fontWeight: "700" }}>
+              <Text
+                style={{
+                  color: selected ? colors.white : colors.muted,
+                  fontSize: 13,
+                  fontWeight: "700",
+                }}
+              >
                 {option.label}
               </Text>
             </Pressable>
@@ -348,58 +419,122 @@ export function LibraryScreen() {
           </View>
           {personalJournals.length ? (
             personalJournals.map(({ note, activity, folderId }) => (
-              <View key={note.id} testID={`journal-entry-${note.id}`} style={[styles.card, { gap: 7, padding: 12 }]}>
+              <View
+                key={note.id}
+                testID={`journal-entry-${note.id}`}
+                style={[styles.card, { gap: 7, padding: 12 }]}
+              >
                 <View style={styles.between}>
                   <View style={{ flex: 1, gap: 3 }}>
                     <Text style={styles.label}>
-                      {note.visibility === "shared" ? "Shared with Beacon" : "Private"} · {folderLabel(folderId)}
+                      {note.visibility === "shared"
+                        ? "Shared with Beacon"
+                        : "Private"}{" "}
+                      · {folderLabel(folderId)}
                     </Text>
                     <Text style={styles.h2}>
-                      {note.section_heading?.trim() || activity?.title || "Journal entry"}
+                      {note.section_heading?.trim() ||
+                        activity?.title ||
+                        "Journal entry"}
                     </Text>
                   </View>
                   <FolderOpen size={19} color={colors.green} />
                 </View>
                 <Text style={styles.body}>{note.body}</Text>
-                <Txt muted>Updated {new Date(note.updated_at).toLocaleDateString()}</Txt>
-                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 7 }}>
+                <Txt muted>
+                  Updated {new Date(note.updated_at).toLocaleDateString()}
+                </Txt>
+                <View
+                  style={{ flexDirection: "row", flexWrap: "wrap", gap: 7 }}
+                >
                   {canEditJournal(note) ? (
-                    <Button title="Edit" compact secondary onPress={() => openEditJournal(note)} />
+                    <Button
+                      title="Edit"
+                      compact
+                      secondary
+                      onPress={() => openEditJournal(note)}
+                    />
                   ) : null}
-                  <Button title="File" compact secondary onPress={() => setFileResourceId(note.id)} />
-                  {activity && userId && canUseBeaconModules(data, activity, userId) ? (
+                  <Button
+                    title="File"
+                    compact
+                    secondary
+                    onPress={() => setFileResourceId(note.id)}
+                  />
+                  {activity &&
+                  userId &&
+                  canUseBeaconModules(data, activity, userId) ? (
                     <Button
                       title="Open Beacon"
                       compact
-                      onPress={() => router.push({ pathname: "/activity/[id]", params: { id: activity.id } })}
+                      onPress={() =>
+                        router.push({
+                          pathname: "/activity/[id]",
+                          params: { id: activity.id },
+                        })
+                      }
                     />
                   ) : null}
                 </View>
               </View>
             ))
           ) : (
-            <Empty title="No journal entries yet" body="Beacon Notes you write and private entries you add will appear here." />
+            <Empty
+              title="No journal entries yet"
+              body="Beacon Notes you write and private entries you add will appear here."
+            />
           )}
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={(sharedHistoryOpen ? "Hide" : "Show") + " shared Beacon journal history"}
+            accessibilityLabel={
+              (sharedHistoryOpen ? "Hide" : "Show") +
+              " shared Beacon journal history"
+            }
             accessibilityState={{ expanded: sharedHistoryOpen }}
             onPress={() => setSharedHistoryOpen((open) => !open)}
-            style={({ pressed }) => ({ minHeight: 44, justifyContent: "center", opacity: pressed ? 0.75 : 1 })}
+            style={({ pressed }) => ({
+              minHeight: 44,
+              justifyContent: "center",
+              opacity: pressed ? 0.75 : 1,
+            })}
           >
-            <Text style={[styles.body, { fontWeight: "700" }]}>Shared Beacon history ({sharedNotes.length})</Text>
+            <Text style={[styles.body, { fontWeight: "700" }]}>
+              Shared Beacon history ({sharedNotes.length})
+            </Text>
           </Pressable>
           {sharedHistoryOpen ? (
-            sharedNotes.length ? sharedNotes.map(({ note, activity, folderId }) => (
-              <View key={note.id} style={[styles.card, { padding: 12, gap: 5 }]}>
-                <Text style={styles.label}>{activity?.title ?? "Beacon history"} · {folderLabel(folderId)}</Text>
-                {note.section_heading ? <Text style={styles.body}>{note.section_heading}</Text> : null}
-                <Text style={styles.body}>{note.body}</Text>
-                {activity ? (
-                  <Button compact secondary title="Open Beacon" onPress={() => router.push({ pathname: "/activity/[id]", params: { id: activity.id } })} />
-                ) : null}
-              </View>
-            )) : <Txt muted>No shared journal history is available.</Txt>
+            sharedNotes.length ? (
+              sharedNotes.map(({ note, activity, folderId }) => (
+                <View
+                  key={note.id}
+                  style={[styles.card, { padding: 12, gap: 5 }]}
+                >
+                  <Text style={styles.label}>
+                    {activity?.title ?? "Beacon history"} ·{" "}
+                    {folderLabel(folderId)}
+                  </Text>
+                  {note.section_heading ? (
+                    <Text style={styles.body}>{note.section_heading}</Text>
+                  ) : null}
+                  <Text style={styles.body}>{note.body}</Text>
+                  {activity ? (
+                    <Button
+                      compact
+                      secondary
+                      title="Open Beacon"
+                      onPress={() =>
+                        router.push({
+                          pathname: "/activity/[id]",
+                          params: { id: activity.id },
+                        })
+                      }
+                    />
+                  ) : null}
+                </View>
+              ))
+            ) : (
+              <Txt muted>No shared journal history is available.</Txt>
+            )
           ) : null}
         </View>
       ) : (
@@ -411,45 +546,89 @@ export function LibraryScreen() {
             </View>
             <Button title="New list" compact onPress={openNewList} />
           </View>
-          {savedLists.length ? savedLists.map(({ checklist, folderId }) => (
-            <View key={checklist.id} testID={`saved-checklist-${checklist.id}`} style={[styles.card, { padding: 12, gap: 7 }]}>
-              <View style={styles.between}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.h2}>{checklist.title}</Text>
-                  <Txt muted>{checklist.items.length} items · {checklist.sections.length} sections · {folderLabel(folderId)}</Txt>
+          {savedLists.length ? (
+            savedLists.map(({ checklist, folderId }) => (
+              <View
+                key={checklist.id}
+                testID={`saved-checklist-${checklist.id}`}
+                style={[styles.card, { padding: 12, gap: 7 }]}
+              >
+                <View style={styles.between}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.h2}>{checklist.title}</Text>
+                    <Txt muted>
+                      {checklist.items.length} items ·{" "}
+                      {checklist.sections.length} sections ·{" "}
+                      {folderLabel(folderId)}
+                    </Txt>
+                  </View>
+                  <FolderOpen size={19} color={colors.green} />
                 </View>
-                <FolderOpen size={19} color={colors.green} />
-              </View>
-              {checklist.sections.map((section) => (
-                <View key={section.id} style={{ gap: 2 }}>
-                  <Text style={styles.label}>{section.title}</Text>
-                  {checklist.items.filter((item) => item.section_id === section.id).map((item) => (
-                    <Text key={item.id} style={styles.body}>{item.completed ? "✓ " : "• "}{item.text}</Text>
+                {checklist.sections.map((section) => (
+                  <View key={section.id} style={{ gap: 2 }}>
+                    <Text style={styles.label}>{section.title}</Text>
+                    {checklist.items
+                      .filter((item) => item.section_id === section.id)
+                      .map((item) => (
+                        <Text key={item.id} style={styles.body}>
+                          {item.completed ? "✓ " : "• "}
+                          {item.text}
+                        </Text>
+                      ))}
+                  </View>
+                ))}
+                {checklist.items
+                  .filter((item) => !item.section_id)
+                  .map((item) => (
+                    <Text key={item.id} style={styles.body}>
+                      {item.completed ? "✓ " : "• "}
+                      {item.text}
+                    </Text>
                   ))}
+                <View
+                  style={{ flexDirection: "row", flexWrap: "wrap", gap: 7 }}
+                >
+                  <Button
+                    title="Edit list"
+                    compact
+                    secondary
+                    onPress={() => openEditList(checklist)}
+                  />
+                  <Button
+                    title="File"
+                    compact
+                    secondary
+                    onPress={() => setFileResourceId(checklist.id)}
+                  />
+                  <Button
+                    title="Use for a new Beacon"
+                    compact
+                    onPress={() =>
+                      router.push({
+                        pathname: "/create",
+                        params: { savedChecklist: checklist.id },
+                      })
+                    }
+                  />
+                  <Button
+                    title="Delete list"
+                    compact
+                    secondary
+                    disabled={busy}
+                    onPress={() =>
+                      void run(async () =>
+                        act("delete_saved_checklist", { id: checklist.id }),
+                      )
+                    }
+                  />
                 </View>
-              ))}
-              {checklist.items.filter((item) => !item.section_id).map((item) => (
-                <Text key={item.id} style={styles.body}>{item.completed ? "✓ " : "• "}{item.text}</Text>
-              ))}
-              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 7 }}>
-                <Button title="Edit list" compact secondary onPress={() => openEditList(checklist)} />
-                <Button title="File" compact secondary onPress={() => setFileResourceId(checklist.id)} />
-                <Button
-                  title="Use for a new Beacon"
-                  compact
-                  onPress={() => router.push({ pathname: "/create", params: { savedChecklist: checklist.id } })}
-                />
-                <Button
-                  title="Delete list"
-                  compact
-                  secondary
-                  disabled={busy}
-                  onPress={() => void run(async () => act("delete_saved_checklist", { id: checklist.id }))}
-                />
               </View>
-            </View>
-          )) : (
-            <Empty title="No saved lists yet" body="Save a copy from a Beacon Checklist or make a new list here." />
+            ))
+          ) : (
+            <Empty
+              title="No saved lists yet"
+              body="Save a copy from a Beacon Checklist or make a new list here."
+            />
           )}
         </View>
       )}
@@ -494,51 +673,154 @@ export function LibraryScreen() {
               }
             />
           </View>
-          <Txt muted>Deleting a folder never deletes content; nested folders and their items remain available.</Txt>
+          <Txt muted>
+            Deleting a folder never deletes content; nested folders and their
+            items remain available.
+          </Txt>
         </View>
       )}
 
-      {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
+      {!!error && (
+        <Text accessibilityRole="alert" style={styles.error}>
+          {error}
+        </Text>
+      )}
 
       {historyCards.length ? (
         <View style={[styles.card, { gap: 9 }]}>
-          <Text style={styles.h2}>{kind === "journal" ? "Beacon-linked history" : "Shared Beacon checklists"}</Text>
+          <Text style={styles.h2}>
+            {kind === "journal"
+              ? "Beacon-linked history"
+              : "Shared Beacon checklists"}
+          </Text>
           <Txt muted>
             {kind === "journal"
               ? "Beacon-level folder references are separate from My Journal entries."
               : "This is shared checklist history. My Lists are private editable copies."}
           </Txt>
-        {historyCards.map(({ activity, folderId, entryCount }) => {
-          const folder = folders.find((item) => item.id === folderId);
-          return (
-            <View key={activity.id} testID={`library-card-${activity.id}`} style={styles.card}>
-              <View style={styles.between}>
-                <View style={{ flex: 1, gap: 4 }}>
-                  <Text style={styles.label}>{activity.category} · {activity.status}</Text>
-                  <Text style={styles.h2}>{activity.title}</Text>
-                  <Txt muted>
-                    {entryCount} {kind === "journal" ? (entryCount === 1 ? "entry" : "entries") : (entryCount === 1 ? "item" : "items")}
-            {folder ? ` · ${folderLabel(folder.id)}` : " · Unfiled"}
-                  </Txt>
+          {historyCards.map(({ activity, folderId, entryCount }) => {
+            const folder = folders.find((item) => item.id === folderId);
+            return (
+              <View
+                key={activity.id}
+                testID={`library-card-${activity.id}`}
+                style={styles.card}
+              >
+                <View style={styles.between}>
+                  <View style={{ flex: 1, gap: 4 }}>
+                    <Text style={styles.label}>
+                      {activity.category} · {activity.status}
+                    </Text>
+                    <Text style={styles.h2}>{activity.title}</Text>
+                    <Txt muted>
+                      {entryCount}{" "}
+                      {kind === "journal"
+                        ? entryCount === 1
+                          ? "entry"
+                          : "entries"
+                        : entryCount === 1
+                          ? "item"
+                          : "items"}
+                      {folder ? ` · ${folderLabel(folder.id)}` : " · Unfiled"}
+                    </Txt>
+                  </View>
+                  <FolderOpen size={20} color={colors.green} />
                 </View>
-                <FolderOpen size={20} color={colors.green} />
+                <View
+                  style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}
+                >
+                  {kind === "checklist" ? (
+                    <Button
+                      title={
+                        openChecklistHistory.includes(activity.id)
+                          ? "Hide checklist"
+                          : "View checklist"
+                      }
+                      compact
+                      secondary
+                      onPress={() =>
+                        setOpenChecklistHistory((current) =>
+                          current.includes(activity.id)
+                            ? current.filter((id) => id !== activity.id)
+                            : [...current, activity.id],
+                        )
+                      }
+                    />
+                  ) : null}
+                  <Button
+                    title="Open beacon"
+                    compact
+                    onPress={() =>
+                      router.push({
+                        pathname: "/activity/[id]",
+                        params: { id: activity.id },
+                      })
+                    }
+                  />
+                  <Button
+                    title="File"
+                    compact
+                    secondary
+                    onPress={() => setFileActivityId(activity.id)}
+                  />
+                </View>
+                {kind === "checklist" &&
+                openChecklistHistory.includes(activity.id) ? (
+                  <View style={{ gap: 7 }}>
+                    <Txt muted>
+                      Read-only history. Changes happen inside the Beacon when
+                      its Checklist is enabled.
+                    </Txt>
+                    {data.beacon_checklist_items
+                      .filter((item) => item.activity_id === activity.id)
+                      .sort((left, right) =>
+                        left.created_at.localeCompare(right.created_at),
+                      )
+                      .map((item) => (
+                        <View
+                          key={item.id}
+                          style={[
+                            styles.row,
+                            { alignItems: "flex-start", gap: 8 },
+                          ]}
+                        >
+                          <Text
+                            accessibilityLabel={
+                              item.completed ? "Completed" : "Not completed"
+                            }
+                            style={styles.label}
+                          >
+                            {item.completed ? "✓" : "○"}
+                          </Text>
+                          <View style={{ flex: 1, minWidth: 0 }}>
+                            {item.section_id ? (
+                              <Text style={styles.label}>
+                                {data.beacon_checklist_sections.find(
+                                  (section) =>
+                                    section.id === item.section_id &&
+                                    section.activity_id === activity.id,
+                                )?.title ?? "Section"}
+                              </Text>
+                            ) : null}
+                            <Text
+                              style={[
+                                styles.body,
+                                item.completed && {
+                                  textDecorationLine: "line-through",
+                                  color: colors.muted,
+                                },
+                              ]}
+                            >
+                              {item.text}
+                            </Text>
+                          </View>
+                        </View>
+                      ))}
+                  </View>
+                ) : null}
               </View>
-              <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
-                <Button
-                  title="Open beacon"
-                  compact
-                  onPress={() => router.push({ pathname: "/activity/[id]", params: { id: activity.id } })}
-                />
-                <Button
-                  title="File"
-                  compact
-                  secondary
-                  onPress={() => setFileActivityId(activity.id)}
-                />
-              </View>
-            </View>
-          );
-        })}
+            );
+          })}
         </View>
       ) : null}
 
@@ -551,16 +833,28 @@ export function LibraryScreen() {
             setFolderDraft(value);
             setFolderDraftId(Crypto.randomUUID());
           }}
-          placeholder={kind === "journal" ? "Weekend memories" : "Things to bring"}
+          placeholder={
+            kind === "journal" ? "Weekend memories" : "Things to bring"
+          }
           maxLength={40}
           editable={!busy}
         />
         {folders.length ? (
           <Chips
             accessibilityPrefix="Create folder inside"
-            options={["Library root", ...folders.map((folder) => folderLabel(folder.id))]}
-            value={folderParentId ? folderLabel(folderParentId) : "Library root"}
-            onChange={(name) => setFolderParentId(folders.find((folder) => folderLabel(folder.id) === name)?.id ?? null)}
+            options={[
+              "Library root",
+              ...folders.map((folder) => folderLabel(folder.id)),
+            ]}
+            value={
+              folderParentId ? folderLabel(folderParentId) : "Library root"
+            }
+            onChange={(name) =>
+              setFolderParentId(
+                folders.find((folder) => folderLabel(folder.id) === name)?.id ??
+                  null,
+              )
+            }
           />
         ) : null}
         <Button
@@ -582,30 +876,57 @@ export function LibraryScreen() {
             })
           }
         />
-        <Txt muted>Up to 30 folders per library. Beacon references, journal entries, and saved lists are filed independently.</Txt>
+        <Txt muted>
+          Up to 30 folders per library. Beacon references, journal entries, and
+          saved lists are filed independently.
+        </Txt>
       </View>
 
       <Sheet
         title={`File ${kind === "journal" ? "journal" : "checklist"}`}
         visible={!!fileActivity || !!fileResourceId}
-        onClose={() => { setFileActivityId(null); setFileResourceId(null); }}
+        onClose={() => {
+          setFileActivityId(null);
+          setFileResourceId(null);
+        }}
       >
         <Txt>
-          {fileActivity?.title ?? "This personal entry or list"} stays independent of Beacon access; folders organize only your library.
+          {fileActivity?.title ?? "This personal entry or list"} stays
+          independent of Beacon access; folders organize only your library.
         </Txt>
         {fileResourceId ? (
           <>
-            <Button title="Move to Unfiled" secondary disabled={busy} onPress={() => void moveResourceToFolder(null)} />
+            <Button
+              title="Move to Unfiled"
+              secondary
+              disabled={busy}
+              onPress={() => void moveResourceToFolder(null)}
+            />
             {folders.map((folder) => (
-              <Button key={folder.id} title={`Move to ${folderLabel(folder.id)}`} disabled={busy} onPress={() => void moveResourceToFolder(folder.id)} />
+              <Button
+                key={folder.id}
+                title={`Move to ${folderLabel(folder.id)}`}
+                disabled={busy}
+                onPress={() => void moveResourceToFolder(folder.id)}
+              />
             ))}
           </>
         ) : null}
         {fileActivityId ? (
           <>
-            <Button title="Move Beacon reference to Unfiled" secondary disabled={busy} onPress={() => void moveToFolder(fileActivityId, null)} />
+            <Button
+              title="Move Beacon reference to Unfiled"
+              secondary
+              disabled={busy}
+              onPress={() => void moveToFolder(fileActivityId, null)}
+            />
             {folders.map((folder) => (
-              <Button key={folder.id} title={`Move Beacon reference to ${folderLabel(folder.id)}`} disabled={busy} onPress={() => void moveToFolder(fileActivityId, folder.id)} />
+              <Button
+                key={folder.id}
+                title={`Move Beacon reference to ${folderLabel(folder.id)}`}
+                disabled={busy}
+                onPress={() => void moveToFolder(fileActivityId, folder.id)}
+              />
             ))}
           </>
         ) : null}
@@ -616,14 +937,46 @@ export function LibraryScreen() {
         visible={journalEditorOpen}
         onClose={() => setJournalEditorOpen(false)}
       >
-        <Field label="Heading (optional)" value={journalHeadingDraft} onChangeText={setJournalHeadingDraft} maxLength={120} editable={!busy} />
-        <Field label="Journal entry" value={journalBodyDraft} onChangeText={setJournalBodyDraft} multiline maxLength={1000} editable={!busy} />
-        {!journalEditTarget?.activity_id ? <Txt muted>New entries are private to you.</Txt> : null}
-        {journalEditTarget?.activity_id ? (
-          <Chips accessibilityPrefix="Beacon Note visibility" options={["Private", "Shared"]} value={journalVisibilityDraft === "private" ? "Private" : "Shared"} onChange={(value) => setJournalVisibilityDraft(value === "Shared" ? "shared" : "private")} />
+        <Field
+          label="Heading (optional)"
+          value={journalHeadingDraft}
+          onChangeText={setJournalHeadingDraft}
+          maxLength={120}
+          editable={!busy}
+        />
+        <Field
+          label="Journal entry"
+          value={journalBodyDraft}
+          onChangeText={setJournalBodyDraft}
+          multiline
+          maxLength={1000}
+          editable={!busy}
+        />
+        {!journalEditTarget?.activity_id ? (
+          <Txt muted>New entries are private to you.</Txt>
         ) : null}
-        {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
-        <Button title="Save entry" disabled={busy || !journalBodyDraft.trim()} onPress={() => void run(saveJournal)} />
+        {journalEditTarget?.activity_id ? (
+          <Chips
+            accessibilityPrefix="Beacon Note visibility"
+            options={["Private", "Shared"]}
+            value={journalVisibilityDraft === "private" ? "Private" : "Shared"}
+            onChange={(value) =>
+              setJournalVisibilityDraft(
+                value === "Shared" ? "shared" : "private",
+              )
+            }
+          />
+        ) : null}
+        {!!error && (
+          <Text accessibilityRole="alert" style={styles.error}>
+            {error}
+          </Text>
+        )}
+        <Button
+          title="Save entry"
+          disabled={busy || !journalBodyDraft.trim()}
+          onPress={() => void run(saveJournal)}
+        />
       </Sheet>
 
       <Sheet
@@ -631,12 +984,43 @@ export function LibraryScreen() {
         visible={listEditorOpen}
         onClose={() => setListEditorOpen(false)}
       >
-        <Field label="List name" value={listTitleDraft} onChangeText={setListTitleDraft} maxLength={80} editable={!busy} />
-        <Field label="Sections (one per line)" value={listSectionsDraft} onChangeText={setListSectionsDraft} multiline maxLength={2000} editable={!busy} />
-        <Field label="Items (one per line; optional Section :: item)" value={listItemsDraft} onChangeText={setListItemsDraft} multiline maxLength={8000} editable={!busy} />
-        <Txt muted>Each item is limited to 160 characters. Completing or editing this copy never changes the source Beacon.</Txt>
-        {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
-        <Button title="Save list" disabled={busy || !listTitleDraft.trim()} onPress={() => void run(saveList)} />
+        <Field
+          label="List name"
+          value={listTitleDraft}
+          onChangeText={setListTitleDraft}
+          maxLength={80}
+          editable={!busy}
+        />
+        <Field
+          label="Sections (one per line)"
+          value={listSectionsDraft}
+          onChangeText={setListSectionsDraft}
+          multiline
+          maxLength={2000}
+          editable={!busy}
+        />
+        <Field
+          label="Items (one per line; optional Section :: item)"
+          value={listItemsDraft}
+          onChangeText={setListItemsDraft}
+          multiline
+          maxLength={8000}
+          editable={!busy}
+        />
+        <Txt muted>
+          Each item is limited to 160 characters. Completing or editing this
+          copy never changes the source Beacon.
+        </Txt>
+        {!!error && (
+          <Text accessibilityRole="alert" style={styles.error}>
+            {error}
+          </Text>
+        )}
+        <Button
+          title="Save list"
+          disabled={busy || !listTitleDraft.trim()}
+          onPress={() => void run(saveList)}
+        />
       </Sheet>
     </Screen>
   );

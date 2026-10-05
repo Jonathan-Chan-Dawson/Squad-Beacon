@@ -3,9 +3,31 @@ import type {
   BeaconTeam,
   BeaconTeamMember,
 } from "@/src/features/beacons/models";
+import type {
+  GroupMessage,
+  GroupMessageRead,
+  Organization,
+  OrganizationBan,
+  OrganizationMember,
+  OrganizationSquad,
+} from "@/src/features/organizations/types";
+import type {
+  Space,
+  SpaceBan,
+  SpaceMember,
+  SpaceSquad,
+} from "@/src/features/spaces/types";
+import type { PlanMember, PlanRoutine } from "@/src/features/plans/routines";
+import type {
+  ActivitySocialLink,
+  OrganizationSpace,
+  SquadBan,
+  SquadJoinRequest,
+} from "@/src/features/social/types";
 
 export type ID = string;
-export type Audience = "private" | "friends" | "list" | "squad";
+export type Audience =
+  "private" | "friends" | "list" | "squad" | "organization";
 export type Mode = "solo" | "squad" | "invite";
 export type Category =
   "Fitness" | "Study" | "Gaming" | "Creative" | "Social" | "Other";
@@ -65,11 +87,16 @@ export interface Squad {
   owner_id: ID;
   name: string;
   description: string;
+  space_type?: string;
+  discoverability?: "public" | "community" | "private";
+  join_mode?: "open" | "request" | "invite";
+  invite_policy?: "admins" | "elders" | "members";
+  archived_at?: string | null;
 }
 export interface SquadMember {
   squad_id: ID;
   user_id: ID;
-  role: "owner" | "admin" | "member";
+  role: "owner" | "coowner" | "admin" | "elder" | "member";
 }
 export interface SquadInvite {
   id: ID;
@@ -357,11 +384,7 @@ export interface BeaconFavorite {
 }
 export type PlanningThreadKind = "ping" | "vote" | "draw";
 export type PlanningThreadStatus =
-  | "open"
-  | "resolved"
-  | "no_options"
-  | "expired"
-  | "cancelled";
+  "open" | "resolved" | "no_options" | "expired" | "cancelled";
 export type PlanningResponse = "interested" | "maybe" | "pass";
 export interface BeaconDraft {
   title: string;
@@ -439,10 +462,26 @@ export interface BeaconInvitationGrant {
 }
 export interface ProfileVisibilityGrant {
   owner_id: ID;
-  kind: "person" | "squad" | "list";
+  kind: "person" | "squad" | "list" | "organization";
   target_id: ID;
 }
 export interface Data {
+  plan_members: PlanMember[];
+  plan_routines: PlanRoutine[];
+  organizations: Organization[];
+  organization_members: OrganizationMember[];
+  organization_squads: OrganizationSquad[];
+  organization_spaces: OrganizationSpace[];
+  organization_bans: OrganizationBan[];
+  group_messages: GroupMessage[];
+  group_message_reads: GroupMessageRead[];
+  spaces: Space[];
+  space_members: SpaceMember[];
+  space_squads: SpaceSquad[];
+  space_bans: SpaceBan[];
+  squad_bans: SquadBan[];
+  squad_join_requests: SquadJoinRequest[];
+  activity_social_links: ActivitySocialLink[];
   beacon_teams: BeaconTeam[];
   beacon_team_members: BeaconTeamMember[];
   beacon_memories: BeaconMemory[];
@@ -502,6 +541,22 @@ export interface Data {
 }
 export type Payload = Record<string, unknown>;
 export const emptyData = (): Data => ({
+  plan_members: [],
+  plan_routines: [],
+  organizations: [],
+  organization_members: [],
+  organization_squads: [],
+  organization_spaces: [],
+  organization_bans: [],
+  group_messages: [],
+  group_message_reads: [],
+  spaces: [],
+  space_members: [],
+  space_squads: [],
+  space_bans: [],
+  squad_bans: [],
+  squad_join_requests: [],
+  activity_social_links: [],
   beacon_teams: [],
   beacon_team_members: [],
   beacon_memories: [],
@@ -555,6 +610,10 @@ export const emptyData = (): Data => ({
 export function normalizeData(value: Partial<Data> | null | undefined): Data {
   const hasInvitationGrantRows = Array.isArray(value?.beacon_invitation_grants);
   const data = { ...emptyData(), ...(value ?? {}) } as Data;
+  data.plan_members = Array.isArray(data.plan_members) ? data.plan_members : [];
+  data.plan_routines = Array.isArray(data.plan_routines)
+    ? data.plan_routines
+    : [];
   data.profiles = (Array.isArray(data.profiles) ? data.profiles : []).map(
     (profile) => ({
       ...profile,
@@ -567,8 +626,7 @@ export function normalizeData(value: Partial<Data> | null | undefined): Data {
         ? profile.aspiration_goals
         : [],
       // Pre-survey profiles already use the app and should not be gated.
-      onboarding_survey_status:
-        profile.onboarding_survey_status ?? "skipped",
+      onboarding_survey_status: profile.onboarding_survey_status ?? "skipped",
     }),
   );
   data.activities = (Array.isArray(data.activities) ? data.activities : []).map(
@@ -615,17 +673,75 @@ export function normalizeData(value: Partial<Data> | null | undefined): Data {
           (item) => item.id === rsvp.activity_id,
         );
         return activity
-          ? [{
-              activity_id: rsvp.activity_id,
-              user_id: rsvp.user_id,
-              invited_by: activity.owner_id,
-              created_at: "",
-            }]
+          ? [
+              {
+                activity_id: rsvp.activity_id,
+                user_id: rsvp.user_id,
+                invited_by: activity.owner_id,
+                created_at: "",
+              },
+            ]
           : [];
       });
   data.profile_visibility_grants = Array.isArray(data.profile_visibility_grants)
     ? data.profile_visibility_grants
     : [];
+  data.organizations = (Array.isArray(data.organizations)
+    ? data.organizations
+    : []).map((organization) => ({
+    ...organization,
+    discoverability: organization.discoverability ?? "private",
+    join_mode: organization.join_mode ?? "invite",
+    invite_policy: organization.invite_policy ?? "admins",
+    archived_at: organization.archived_at ?? null,
+  }));
+  data.organization_members = Array.isArray(data.organization_members)
+    ? data.organization_members
+    : [];
+  data.organization_squads = Array.isArray(data.organization_squads)
+    ? data.organization_squads
+    : [];
+  data.organization_spaces = Array.isArray(data.organization_spaces)
+    ? data.organization_spaces
+    : [];
+  data.organization_bans = Array.isArray(data.organization_bans)
+    ? data.organization_bans
+    : [];
+  data.group_messages = Array.isArray(data.group_messages)
+    ? data.group_messages
+    : [];
+  data.group_message_reads = Array.isArray(data.group_message_reads)
+    ? data.group_message_reads
+    : [];
+  data.spaces = (Array.isArray(data.spaces) ? data.spaces : []).map((space) => ({
+    ...space,
+    space_type: space.space_type ?? "other",
+    discoverability: space.discoverability ?? "private",
+    join_mode: space.join_mode ?? "invite",
+    invite_policy: space.invite_policy ?? "admins",
+    archived_at: space.archived_at ?? null,
+  }));
+  data.space_members = Array.isArray(data.space_members)
+    ? data.space_members
+    : [];
+  data.space_squads = Array.isArray(data.space_squads)
+    ? data.space_squads
+    : [];
+  data.space_bans = Array.isArray(data.space_bans) ? data.space_bans : [];
+  data.squad_bans = Array.isArray(data.squad_bans) ? data.squad_bans : [];
+  data.squad_join_requests = Array.isArray(data.squad_join_requests)
+    ? data.squad_join_requests
+    : [];
+  data.activity_social_links = Array.isArray(data.activity_social_links)
+    ? data.activity_social_links
+    : [];
+  data.squads = (Array.isArray(data.squads) ? data.squads : []).map((squad) => ({
+    ...squad,
+    discoverability: squad.discoverability ?? "private",
+    join_mode: squad.join_mode ?? "invite",
+    invite_policy: squad.invite_policy ?? "admins",
+    archived_at: squad.archived_at ?? null,
+  }));
   data.activity_exclusions = Array.isArray(data.activity_exclusions)
     ? data.activity_exclusions
     : [];
@@ -644,16 +760,16 @@ export function normalizeData(value: Partial<Data> | null | undefined): Data {
   data.beacon_checklist_sections = Array.isArray(data.beacon_checklist_sections)
     ? data.beacon_checklist_sections
     : [];
-  data.beacon_notes = (Array.isArray(data.beacon_notes) ? data.beacon_notes : []).map(
-    (note) => ({
-      ...note,
-      section_heading: note.section_heading ?? "",
-      // Existing rows were shared notes; new inserts explicitly default private.
-      visibility: note.visibility ?? "shared",
-      revision: Number.isInteger(note.revision) ? note.revision : 0,
-      updated_at: note.updated_at ?? note.created_at,
-    }),
-  );
+  data.beacon_notes = (
+    Array.isArray(data.beacon_notes) ? data.beacon_notes : []
+  ).map((note) => ({
+    ...note,
+    section_heading: note.section_heading ?? "",
+    // Existing rows were shared notes; new inserts explicitly default private.
+    visibility: note.visibility ?? "shared",
+    revision: Number.isInteger(note.revision) ? note.revision : 0,
+    updated_at: note.updated_at ?? note.created_at,
+  }));
   data.library_folders = Array.isArray(data.library_folders)
     ? data.library_folders.map((folder) => ({
         ...folder,
@@ -703,9 +819,7 @@ export function normalizeData(value: Partial<Data> | null | undefined): Data {
   data.planning_votes = Array.isArray(data.planning_votes)
     ? data.planning_votes
     : [];
-  data.beacon_roles = Array.isArray(data.beacon_roles)
-    ? data.beacon_roles
-    : [];
+  data.beacon_roles = Array.isArray(data.beacon_roles) ? data.beacon_roles : [];
   data.beacon_attendance = Array.isArray(data.beacon_attendance)
     ? data.beacon_attendance
     : [];

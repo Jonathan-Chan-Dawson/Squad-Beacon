@@ -1,4 +1,7 @@
 import type { Activity, Data, Profile } from "@/src/shared/types";
+import { matchesSearch } from "@/src/shared/search";
+import { friendIds } from "@/src/shared/domain";
+import { canViewProfile } from "@/src/features/profile/privacy";
 export type Period = "Active" | "Upcoming" | "Past";
 export type SortOrder = "Soonest" | "Most momentum" | "Latest first" | "A to Z";
 export function attendance(data: Data, a: Activity) {
@@ -25,6 +28,7 @@ export function browseBeacons(
   },
   now: number,
 ) {
+  const friends = friendIds(data, userId);
   return data.activities
     .filter((a) => {
       const ended = a.status !== "scheduled" || Date.parse(a.ends_at) <= now;
@@ -44,7 +48,10 @@ export function browseBeacons(
         return false;
       if (
         options.audience !== "Everyone" &&
-        a.audience !== options.audience.toLowerCase()
+        (options.audience === "Friends"
+          ? !friends.includes(a.owner_id)
+          : a.audience !== options.audience.toLowerCase() &&
+            a.audience_id !== options.audience)
       )
         return false;
       if (
@@ -60,9 +67,13 @@ export function browseBeacons(
         return false;
       const owner = data.profiles.find((p) => p.id === a.owner_id);
       const place = data.places.find((p) => p.activity_id === a.id);
-      return `${a.title} ${owner?.name ?? ""} ${place?.label ?? ""}`
-        .toLowerCase()
-        .includes(options.query.trim().toLowerCase());
+      return matchesSearch(
+        options.query,
+        a.title,
+        a.category,
+        owner && canViewProfile(data, owner, userId) ? owner.name : undefined,
+        place?.label,
+      );
     })
     .sort((a, b) => {
       if (options.sort === "Most momentum")

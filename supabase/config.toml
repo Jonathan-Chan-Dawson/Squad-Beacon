@@ -20,3 +20,5 @@ enable_confirmations = true
 verify_jwt = false
 [functions.delete-account]
 verify_jwt = false
+[functions.places-search]
+verify_jwt = false

@@ -1,4 +1,12 @@
 import type { Activity, Data, ID, Profile } from "@/src/shared/types";
+import { activeOrganizationRole } from "@/src/features/organizations/domain";
+
+function inOrganization(data: Data, organizationId: ID, userId: ID) {
+  const org = data.organizations.find((item) => item.id === organizationId);
+  return (
+    !!org && !!activeOrganizationRole(org, data.organization_members, userId)
+  );
+}
 
 function isBlocked(data: Data, left: ID, right: ID) {
   return data.blocks.some(
@@ -23,6 +31,18 @@ function inSquad(data: Data, squadId: ID, userId: ID) {
   );
 }
 
+function inSpace(data: Data, spaceId: ID, userId: ID) {
+  const space = data.spaces.find((item) => item.id === spaceId);
+  const member = data.space_members.find(
+    (row) => row.space_id === spaceId && row.user_id === userId,
+  );
+  const ownerRow = userId === space?.owner_id && member?.role === "owner";
+  const memberRow = userId !== space?.owner_id &&
+    (member?.role === "admin" || member?.role === "member");
+  return !!space && member?.status === "active" && (ownerRow || memberRow) &&
+    !isBlocked(data, space.owner_id, userId);
+}
+
 function demoCanReadActivity(data: Data, activity: Activity, viewerId: ID) {
   // Match private.can_activity: a visible audience, an approved RSVP, or an
   // explicit invitation grant is enough. Keep these as OR-ed paths so a
@@ -31,31 +51,36 @@ function demoCanReadActivity(data: Data, activity: Activity, viewerId: ID) {
   if (isBlocked(data, activity.owner_id, viewerId)) return false;
   if (
     data.activity_exclusions.some(
-      (entry) => entry.activity_id === activity.id && entry.user_id === viewerId,
+      (entry) =>
+        entry.activity_id === activity.id && entry.user_id === viewerId,
     )
   )
     return false;
   const audienceAllows =
-    activity.audience === "friends"
-      ? areFriends(data, activity.owner_id, viewerId)
-      : activity.audience === "squad"
-        ? !!activity.audience_id &&
-          inSquad(data, activity.audience_id, activity.owner_id) &&
-          inSquad(data, activity.audience_id, viewerId)
-        : activity.audience === "list"
+    activity.audience === "organization"
+      ? !!activity.audience_id &&
+        inOrganization(data, activity.audience_id, activity.owner_id) &&
+        inOrganization(data, activity.audience_id, viewerId)
+      : activity.audience === "friends"
+        ? areFriends(data, activity.owner_id, viewerId)
+        : activity.audience === "squad"
           ? !!activity.audience_id &&
-            areFriends(data, activity.owner_id, viewerId) &&
-            data.lists.some(
-              (list) =>
-                list.id === activity.audience_id &&
-                list.owner_id === activity.owner_id,
-            ) &&
-            data.list_members.some(
-              (member) =>
-                member.list_id === activity.audience_id &&
-                member.user_id === viewerId,
-            )
-          : false;
+            inSquad(data, activity.audience_id, activity.owner_id) &&
+            inSquad(data, activity.audience_id, viewerId)
+          : activity.audience === "list"
+            ? !!activity.audience_id &&
+              areFriends(data, activity.owner_id, viewerId) &&
+              data.lists.some(
+                (list) =>
+                  list.id === activity.audience_id &&
+                  list.owner_id === activity.owner_id,
+              ) &&
+              data.list_members.some(
+                (member) =>
+                  member.list_id === activity.audience_id &&
+                  member.user_id === viewerId,
+              )
+            : false;
   const approvedRsvp = data.rsvps.some(
     (rsvp) =>
       rsvp.activity_id === activity.id &&
@@ -63,8 +88,7 @@ function demoCanReadActivity(data: Data, activity: Activity, viewerId: ID) {
       rsvp.approved,
   );
   const invitation = data.beacon_invitation_grants.some(
-    (grant) =>
-      grant.activity_id === activity.id && grant.user_id === viewerId,
+    (grant) => grant.activity_id === activity.id && grant.user_id === viewerId,
   );
   return audienceAllows || approvedRsvp || invitation;
 }
@@ -84,7 +108,24 @@ function demoLegacyProfileVisibility(data: Data, profileId: ID, viewerId: ID) {
   if (
     data.squad_members.some(
       (member) =>
-        member.user_id === profileId && inSquad(data, member.squad_id, viewerId),
+        member.user_id === profileId &&
+        inSquad(data, member.squad_id, viewerId),
+    )
+  )
+    return true;
+  if (
+    data.organizations.some(
+      (org) =>
+        inOrganization(data, org.id, profileId) &&
+        inOrganization(data, org.id, viewerId),
+    )
+  )
+    return true;
+  if (
+    data.spaces.some(
+      (space) =>
+        inSpace(data, space.id, profileId) &&
+        inSpace(data, space.id, viewerId),
     )
   )
     return true;
@@ -95,14 +136,15 @@ function demoLegacyProfileVisibility(data: Data, profileId: ID, viewerId: ID) {
   );
 }
 
-function demoCustomAudienceAllows(
-  data: Data,
-  profileId: ID,
-  viewerId: ID,
-) {
+function demoCustomAudienceAllows(data: Data, profileId: ID, viewerId: ID) {
   return data.profile_visibility_grants.some((grant) => {
     if (grant.owner_id !== profileId) return false;
     if (grant.kind === "person") return grant.target_id === viewerId;
+    if (grant.kind === "organization")
+      return (
+        inOrganization(data, grant.target_id, profileId) &&
+        inOrganization(data, grant.target_id, viewerId)
+      );
     if (grant.kind === "squad")
       return (
         inSquad(data, grant.target_id, profileId) &&

@@ -20,7 +20,11 @@ function collectRuntimeIssues(page: Page) {
 async function expectNoHorizontalOverflow(page: Page) {
   expect(
     await page.evaluate(
-      () => Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) <= innerWidth,
+      () =>
+        Math.max(
+          document.documentElement.scrollWidth,
+          document.body.scrollWidth,
+        ) <= innerWidth,
     ),
   ).toBe(true);
 }
@@ -67,36 +71,64 @@ test("Current, Upcoming, Past utilities, and Squads stay compact at 390px", asyn
   await page.getByRole("tab", { name: "Beacons", exact: true }).click();
   await expect(page.getByText("Friends Now", { exact: true })).toBeVisible();
   const currentTab = page.getByRole("button", { name: "Current", exact: true });
-  const upcomingTab = page.getByRole("button", { name: "Upcoming", exact: true });
+  const upcomingTab = page.getByRole("button", {
+    name: "Upcoming",
+    exact: true,
+  });
   await expect(currentTab).toBeVisible();
   await expect(currentTab).toHaveAttribute("aria-selected", "true");
-  await expect(page.getByText("\u2713 Current", { exact: true })).toHaveCount(0);
-  const everyoneChip = page.getByRole("button", { name: "Everyone", exact: true });
-  const freeToHangChip = page.getByRole("button", { name: "Free to hang", exact: true });
+  await expect(page.getByText("\u2713 Current", { exact: true })).toHaveCount(
+    0,
+  );
+  const everyoneChip = page.getByRole("button", {
+    name: "Everyone",
+    exact: true,
+  });
+  const freeToHangChip = page.getByRole("button", {
+    name: "Free to hang",
+    exact: true,
+  });
   await expect(everyoneChip).toBeVisible();
   await expect(everyoneChip).toHaveAttribute("aria-selected", "true");
-  await expect(page.getByText("\u2713 Everyone", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("\u2713 Everyone", { exact: true })).toHaveCount(
+    0,
+  );
   await expect(freeToHangChip).toHaveAttribute("aria-selected", "false");
   await freeToHangChip.click();
   await expect(freeToHangChip).toHaveAttribute("aria-selected", "true");
   await expect(everyoneChip).toHaveAttribute("aria-selected", "false");
-  await expect(page.getByText("\u2713 Free to hang", { exact: true })).toHaveCount(0);
+  await expect(
+    page.getByText("\u2713 Free to hang", { exact: true }),
+  ).toHaveCount(0);
   await everyoneChip.click();
   await expect(everyoneChip).toHaveAttribute("aria-selected", "true");
-  for (const utility of ["Beacon Plans", "Favorites", "My templates", "Library", "Pings & Decisions"]) {
-    await expect(page.getByRole("button", { name: utility, exact: true })).toHaveCount(0);
+  for (const utility of [
+    "Beacon Plans",
+    "Favorites",
+    "My templates",
+    "Library",
+  ]) {
+    await expect(
+      page.getByRole("button", { name: utility, exact: true }),
+    ).toHaveCount(0);
   }
   await expectNoHorizontalOverflow(page);
   await page.screenshot({ path: "test-results/ui-polish-activities.png" });
 
   await page.getByRole("button", { name: "Filter", exact: true }).click();
   await page.getByRole("button", { name: "Fitness", exact: true }).click();
-  await expect(page.getByText("\u2713 Fitness", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("\u2713 Fitness", { exact: true })).toHaveCount(
+    0,
+  );
   await page.getByRole("button", { name: "Done", exact: true }).click();
   await expect(page.getByTestId("activity-filter-count")).toHaveText("1");
   await page.getByRole("button", { name: "Filter", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Fitness", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Reset filters", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Fitness", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Reset filters", exact: true })
+    .click();
   await page.getByRole("button", { name: "Done", exact: true }).click();
   await expect(page.getByTestId("activity-filter-count")).toHaveCount(0);
 
@@ -104,17 +136,33 @@ test("Current, Upcoming, Past utilities, and Squads stay compact at 390px", asyn
   await expect(page.getByText("Coming up", { exact: true })).toBeVisible();
   await expect(upcomingTab).toHaveAttribute("aria-selected", "true");
   await expect(currentTab).toHaveAttribute("aria-selected", "false");
-  await expect(page.getByText("\u2713 Upcoming", { exact: true })).toHaveCount(0);
-  for (const utility of ["Beacon Plans", "Favorites", "My templates", "Library", "Pings & Decisions"]) {
-    await expect(page.getByRole("button", { name: utility, exact: true })).toHaveCount(0);
+  await expect(page.getByText("\u2713 Upcoming", { exact: true })).toHaveCount(
+    0,
+  );
+  for (const utility of [
+    "Beacon Plans",
+    "Favorites",
+    "My templates",
+    "Library",
+  ]) {
+    await expect(
+      page.getByRole("button", { name: utility, exact: true }),
+    ).toHaveCount(0);
   }
   await expectNoHorizontalOverflow(page);
 
   await page.getByRole("button", { name: "Past", exact: true }).click();
   await expect(page.getByText("Beacon history", { exact: true })).toBeVisible();
   await expect(page.getByText("\u2713 Past", { exact: true })).toHaveCount(0);
-  for (const utility of ["Beacon Plans", "Favorites", "My templates", "Library", "Pings & Decisions"]) {
-    await expect(page.getByRole("button", { name: utility, exact: true })).toBeVisible();
+  for (const utility of [
+    "Beacon Plans",
+    "Favorites",
+    "My templates",
+    "Library",
+  ]) {
+    await expect(
+      page.getByRole("button", { name: utility, exact: true }),
+    ).toBeVisible();
   }
   await expectNoHorizontalOverflow(page);
 
@@ -127,14 +175,19 @@ test("Current, Upcoming, Past utilities, and Squads stay compact at 390px", asyn
   await viewBeacon.click();
   await expect(page.getByTestId("map-tooltip")).toBeVisible();
 
-  await page.getByRole("tab", { name: "Squads", exact: true }).click();
-  const allSections = page.getByRole("button", { name: "All", exact: true });
+  await page.getByRole("tab", { name: "Profile", exact: true }).click();
+  await page.getByRole("button", { name: "Open Friends & Lists", exact: true }).click();
+  const sectionControls = page.getByLabel("Directory sections");
+  const allSections = sectionControls.getByRole("button", {
+    name: "All",
+    exact: true,
+  });
   await expect(allSections).toBeVisible();
   await expect(allSections).toHaveAttribute("aria-selected", "true");
   await expect(page.getByText("\u2713 All", { exact: true })).toHaveCount(0);
   const sectionWidths = await Promise.all(
     ["All", "Squads", "Friends", "Private lists"].map(async (name) => {
-      const box = await page
+      const box = await sectionControls
         .getByRole("button", { name, exact: true })
         .boundingBox();
       expect(box).not.toBeNull();
@@ -142,14 +195,21 @@ test("Current, Upcoming, Past utilities, and Squads stay compact at 390px", asyn
       return box.width;
     }),
   );
-  expect(Math.max(...sectionWidths) - Math.min(...sectionWidths)).toBeLessThanOrEqual(2);
+  expect(
+    Math.max(...sectionWidths) - Math.min(...sectionWidths),
+  ).toBeLessThanOrEqual(2);
   await expectNoHorizontalOverflow(page);
   await page.screenshot({ path: "test-results/ui-polish-squads.png" });
-  const friendsSection = page.getByRole("button", { name: "Friends", exact: true });
+  const friendsSection = sectionControls.getByRole("button", {
+    name: "Friends",
+    exact: true,
+  });
   await friendsSection.click();
   await expect(friendsSection).toHaveAttribute("aria-selected", "true");
   await expect(allSections).toHaveAttribute("aria-selected", "false");
-  await expect(page.getByText("\u2713 Friends", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("\u2713 Friends", { exact: true })).toHaveCount(
+    0,
+  );
   await expectNoHorizontalOverflow(page);
   await allSections.click();
   await expect(allSections).toHaveAttribute("aria-selected", "true");
@@ -185,8 +245,12 @@ test("reduced motion keeps a shared Button at identity while hovering, pressing,
     await expectIdentityTransform(findFriends);
     const bounds = await findFriends.boundingBox();
     expect(bounds).not.toBeNull();
-    if (!bounds) throw new Error("Find friends button has no clickable bounds.");
-    await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+    if (!bounds)
+      throw new Error("Find friends button has no clickable bounds.");
+    await page.mouse.move(
+      bounds.x + bounds.width / 2,
+      bounds.y + bounds.height / 2,
+    );
     await page.mouse.down();
     await expectIdentityTransform(findFriends);
     await page.mouse.up();
@@ -220,45 +284,49 @@ test("normal press animates, then a live reduced-motion change resets scale", as
   try {
     await enterDemo(page);
     await page.getByRole("tab", { name: "Beacons", exact: true }).click();
-    const maybe = page.getByRole("button", { name: "Maybe", exact: true }).first();
-    await expect(maybe).toBeVisible();
-    await maybe.scrollIntoViewIfNeeded();
-    const bounds = await maybe.boundingBox();
+    const control = page.getByRole("button", { name: "Current", exact: true });
+    await expect(control).toBeVisible();
+    await control.scrollIntoViewIfNeeded();
+    const bounds = await control.boundingBox();
     expect(bounds).not.toBeNull();
-    if (!bounds) throw new Error("Maybe button has no clickable bounds.");
-    await page.mouse.move(bounds.x + bounds.width / 2, bounds.y + bounds.height / 2);
+    if (!bounds) throw new Error("Current tab button has no clickable bounds.");
+    await page.mouse.move(
+      bounds.x + bounds.width / 2,
+      bounds.y + bounds.height / 2,
+    );
     await page.mouse.down();
     await expect
-      .poll(() => transformScale(maybe), { timeout: 2000 })
+      .poll(() => transformScale(control), { timeout: 2000 })
       .toBeLessThan(0.999);
 
     // A normal release returns the control to identity before checking a live
-    // preference change. The Maybe action keeps the same control mounted.
+    // preference change. Current remains mounted for this interaction.
     await page.mouse.up();
-    await expect(maybe).toBeVisible();
-    await expectIdentityTransform(maybe);
-    await expect(maybe).toBeEnabled();
+    await expect(control).toBeVisible();
+    await expectIdentityTransform(control);
+    await expect(control).toBeEnabled();
 
-    const nextBounds = await maybe.boundingBox();
+    const nextBounds = await control.boundingBox();
     expect(nextBounds).not.toBeNull();
-    if (!nextBounds) throw new Error("Maybe button has no clickable bounds.");
+    if (!nextBounds)
+      throw new Error("Current tab button has no clickable bounds.");
     await page.mouse.move(
       nextBounds.x + nextBounds.width / 2,
       nextBounds.y + nextBounds.height / 2,
     );
     await page.mouse.down();
     await expect
-      .poll(() => transformScale(maybe), { timeout: 2000 })
+      .poll(() => transformScale(control), { timeout: 2000 })
       .toBeLessThan(0.999);
 
     // Changing the system preference while the pointer is down must cancel
     // the in-flight scale animation and return the same control to identity.
     await page.emulateMedia({ reducedMotion: "reduce" });
-    await expectIdentityTransform(maybe);
+    await expectIdentityTransform(control);
     await page.mouse.move(1, 1);
     await page.mouse.up();
-    await expect(maybe).toBeVisible();
-    await expectIdentityTransform(maybe);
+    await expect(control).toBeVisible();
+    await expectIdentityTransform(control);
 
     expect(issues.pageErrors).toEqual([]);
     expect(issues.textWarnings).toEqual([]);

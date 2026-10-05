@@ -50,9 +50,9 @@ Open http://127.0.0.1:4173. Web includes an interactive OpenStreetMap map. Nativ
 
 ## Implemented pilot
 
-- Four tabs: Map, Beacons (Now / Upcoming / Past), Squads, and Profile. A raised circular Create button sits in the center; Inbox stays at the top right.
+- Four tabs: Map, Beacons (Now / Upcoming / Past), Squads, and Profile. A raised circular Create button sits in the center. Notifications stays in tab headers; Profile has a Settings gear.
 - Plans schedule a set of beacons in an IANA timezone. Plans can be personal or shared with a squad; squad templates are member-readable and admin-managed.
-- Compact Normal/Advanced creation, useful starter templates, completed-plan repeat suggestions, and optional crew targets.
+- Quick creation with More options, reusable starter templates, an optional live preview, completed-plan repeat suggestions, and optional crew targets.
 - One-tap In/Maybe/Out, host approval only when selected, status-to-beacon conversion, and real written memories on completed plans.
 - Explicit contact-picker invitations via SMS draft; contacts are never uploaded.
 - Separate activity mode and audience. Solo, Squad, and Invite-only activities; Interested, Going, approval requests, host invitations/removals, comments and reactions.
@@ -120,7 +120,7 @@ npm run test:e2e
 
 The database tests execute the real migration SQL in embedded PostgreSQL (PGlite), using a small Auth/Storage schema harness. They verify RLS and transactional behavior, including direct API-equivalent unauthorized reads and writes. They do not replace hosted Supabase Auth, Storage HTTP, Realtime, Edge Function or phone testing.
 
-Browser tests exercise the demo’s Now/favorites, RSVP/chat, personal templates, profile editing, persistent Inbox and narrow-screen flows. On Windows they use installed Chrome; elsewhere they use Playwright Chromium.
+Browser tests exercise the demo’s Now/favorites, RSVP/chat, personal templates, Profile/Settings, Notifications, organizations and narrow-screen flows. On Windows they use installed Chrome; elsewhere they use Playwright Chromium.
 
 The installed dependency audit reports 15 moderate advisories (the same count reported before feature dependencies were added). Review the dependency audit before public release; no forced SDK upgrade was applied.
 
@@ -152,10 +152,26 @@ Map workspace migration: apply `supabase/migrations/202609290002_map_workspace.s
 
 ## Playful neighborhood update
 
-- Friends Now includes larger illustrated cards, Free/Starred filters, roster search and a demo-only Find Friends flow (36 fictional profiles; no real accounts created).
+- Friends Now uses compact vertical status rows with direct stars, message/profile targets and Free/Starred filters. Demo Find Friends uses fictional profiles; no real accounts are created.
 - Test fixture data lives in `tests/fixtures/neighborhood.ts`; test instructions live in `tests/README.md`.
-- Profile > Style my mini customizes a built-in SVG character (216 combinations). Uploaded photos remain supported. Apply `202609290003_mini_avatars.sql` to persist choices for real accounts.
-- Mint, Sunset and Midnight themes persist on this device. Change them in Profile or Map filters.
+- Tap your Profile avatar to style the built-in SVG character (216 combinations). Uploaded photos remain supported in Edit profile. Apply `202609290003_mini_avatars.sql` to persist choices for real accounts.
+- Mint, Sunset, Midnight, Ocean and Berry each have light/dark versions, with Midnight/Dark as the fresh-install default. Settings → Appearance saves the palette and Device/Light/Dark choice separately. Device follows system changes; legacy saved themes retain their former appearance.
 - Map selection opens an inline RSVP tooltip positioned relative to the map coordinate. Details opens a separate translucent workspace with Overview, People, Comments and Chat. No native callout or modal is used for RSVP.
 
 Avatar art is generated locally from a bounded numeric seed; this is an original simple illustration system, not a Snapchat/Bitmoji integration. Web map avatars are illustrated; private uploaded photos remain in app profile views. Live-location illustrations still respect permission and freshness checks. Theme transparency is a tinted overlay, not a native blur effect.
+
+## Spaces, Organizations and Routines
+
+Squads centers Chats and Communities. Search and chat filters appear only when requested. Actionable Pings sit above conversations with direct responses; Squad Pings jump to their source-linked card in Squad chat. Invitations and further decisions use a compact secondary sheet.
+
+Spaces are independent lightweight homes for Squads. Create one with a name, then invite accepted friends and connect Squads you manage. Space invitations require acceptance. Space membership never enrolls people in a Squad or reveals private Squad links, rosters or chat. Organizations remain independent and provide the richer role hierarchy, invitations/bans, linked Squads and shared chat. Neither community membership nor profile access grants GPS sharing.
+
+Apply `202610040006_spaces.sql` after the existing October 4 migrations to enable Spaces for connected accounts. Its RLS, action dispatcher and snapshot changes are covered locally; no hosted migration is applied automatically. Chat photo/GIF attachments and direct location messages are not offered until their storage and permission contracts exist.
+
+The final social architecture adds independent discoverability, joining and invitation settings; shared community roles; authenticated paginated discovery; join-request review; and Organization → Space → Squad links. Community cards open a quick preview before the full profile. Public discovery returns safe summaries, never private chat, rosters, profile grants or coordinates.
+
+Apply `202610040007_social_architecture.sql` after `202610040006_spaces.sql` for these connected-account contracts. Existing communities retain private/invite-only defaults. Organizing a Squad into a Space preserves the original Squad and its history; copying eligible members requires explicit confirmation. Grouping multiple Squads only adds links. Beacon community associations are separate metadata and never change audience access. This workspace does not apply remote migrations.
+
+Apply `202610040001_organization_audience_type.sql` before `202610040002_organizations_group_chat.sql`, committing the enum migration before it is used. Apply `202610040003_plan_routines.sql` for independent Plan membership and recurring schedules. Routine generation reuses Plans rather than a second Beacon scheduler. See [the Plan inventory](src/features/plans/_inventory.md) for trusted runner setup. Local tests do not deploy these migrations or activate hosted automation.
+
+Plans, Favorites and My templates shortcuts are confined to Activities → Past. Widget Studio is in Profile; native widgets require an iOS rebuild and do not run on Android/web/Expo Go. Quick Create reuses existing Beacon/Status/Plan editors. Outstanding acceptance and product gaps are tracked in [the refinement ledger](REMAINING_UI_CHANGES.md).

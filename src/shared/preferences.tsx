@@ -7,23 +7,50 @@ import React, {
 } from "react";
 import { Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
+import useDeviceAppearance from "@/src/platform/useDeviceAppearance";
 
-import { isThemeName, type ThemeName } from "@/src/shared/themes";
-const key = "beacon.show-avatars";
-const Preferences = createContext({
-  theme: "Mint" as ThemeName,
-  setTheme: (_value: ThemeName) => {},
+import {
+  getInitialThemePreferences,
+  resolveAppearanceMode,
+  type AppearanceMode,
+  type ResolvedAppearance,
+  type ThemeName,
+} from "@/src/shared/themes";
+
+const avatarsKey = "beacon.show-avatars";
+const themeKey = "beacon.theme";
+const appearanceKey = "beacon.appearance";
+type PreferencesValue = {
+  theme: ThemeName;
+  setTheme: (value: ThemeName) => void;
+  appearanceMode: AppearanceMode;
+  resolvedAppearance: ResolvedAppearance;
+  setAppearanceMode: (value: AppearanceMode) => void;
+  showAvatars: boolean;
+  ready: boolean;
+  error: string;
+  setShowAvatars: (value: boolean) => void;
+};
+const Preferences = createContext<PreferencesValue>({
+  theme: "Midnight",
+  setTheme: () => {},
+  appearanceMode: "dark",
+  resolvedAppearance: "dark",
+  setAppearanceMode: () => {},
   showAvatars: true,
   ready: false,
   error: "",
-  setShowAvatars: (_value: boolean) => {},
+  setShowAvatars: () => {},
 });
 export function PreferencesProvider({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const [theme, setThemeValue] = useState<ThemeName>("Mint");
+  const deviceAppearance = useDeviceAppearance();
+  const [theme, setThemeValue] = useState<ThemeName>("Midnight");
+  const [appearanceMode, setAppearanceModeValue] =
+    useState<AppearanceMode>("dark");
   const [showAvatars, setValue] = useState(true);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
@@ -32,17 +59,23 @@ export function PreferencesProvider({
     let active = true;
     const read = async () => {
       try {
-        const saved =
+        const get = (storageKey: string) =>
           Platform.OS === "web"
-            ? localStorage.getItem(key)
-            : await SecureStore.getItemAsync(key);
-        const savedTheme =
-          Platform.OS === "web"
-            ? localStorage.getItem("beacon.theme")
-            : await SecureStore.getItemAsync("beacon.theme");
+            ? Promise.resolve(localStorage.getItem(storageKey))
+            : SecureStore.getItemAsync(storageKey);
+        const [saved, savedTheme, savedAppearance] = await Promise.all([
+          get(avatarsKey),
+          get(themeKey),
+          get(appearanceKey),
+        ]);
         if (active) {
           setValue(saved !== "false");
-          if (isThemeName(savedTheme)) setThemeValue(savedTheme);
+          const initial = getInitialThemePreferences(
+            savedTheme,
+            savedAppearance,
+          );
+          setThemeValue(initial.theme);
+          setAppearanceModeValue(initial.appearanceMode);
         }
       } catch {
         if (active) setError("Display settings could not be loaded.");
@@ -55,34 +88,63 @@ export function PreferencesProvider({
       active = false;
     };
   }, []);
+  const persist = (
+    storageKey: string,
+    value: string,
+    failureMessage = "Changed for now. This device could not save your preference.",
+  ) => {
+    writes.current = writes.current.then(async () => {
+      try {
+        if (Platform.OS === "web") localStorage.setItem(storageKey, value);
+        else await SecureStore.setItemAsync(storageKey, value);
+      } catch {
+        setError(failureMessage);
+      }
+    });
+  };
   const setShowAvatars = (value: boolean) => {
     setValue(value);
     setError("");
-    writes.current = writes.current.then(async () => {
-      try {
-        if (Platform.OS === "web") localStorage.setItem(key, String(value));
-        else await SecureStore.setItemAsync(key, String(value));
-      } catch {
-        setError(
-          "Changed for now. This device could not save your preference.",
-        );
-      }
-    });
+    persist(avatarsKey, String(value));
   };
   const setTheme = (value: ThemeName) => {
     setThemeValue(value);
-    writes.current = writes.current.then(async () => {
-      try {
-        if (Platform.OS === "web") localStorage.setItem("beacon.theme", value);
-        else await SecureStore.setItemAsync("beacon.theme", value);
-      } catch {
-        setError("Theme changed for now; this device could not save it.");
-      }
-    });
+    setError("");
+    persist(themeKey, value, "Theme changed for now; this device could not save it.");
+    // Persist the resolved legacy mode too, so changing a legacy theme cannot
+    // silently switch its appearance the next time preferences are loaded.
+    persist(
+      appearanceKey,
+      appearanceMode,
+      "Theme changed for now; this device could not save it.",
+    );
   };
+  const setAppearanceMode = (value: AppearanceMode) => {
+    setAppearanceModeValue(value);
+    setError("");
+    persist(
+      appearanceKey,
+      value,
+      "Appearance changed for now; this device could not save it.",
+    );
+  };
+  const resolvedAppearance = resolveAppearanceMode(
+    appearanceMode,
+    deviceAppearance,
+  );
   return (
     <Preferences.Provider
-      value={{ theme, setTheme, showAvatars, ready, error, setShowAvatars }}
+      value={{
+        theme,
+        setTheme,
+        appearanceMode,
+        resolvedAppearance,
+        setAppearanceMode,
+        showAvatars,
+        ready,
+        error,
+        setShowAvatars,
+      }}
     >
       {children}
     </Preferences.Provider>

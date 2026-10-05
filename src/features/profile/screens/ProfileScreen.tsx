@@ -1,21 +1,19 @@
-import { usePreferences } from "@/src/shared/preferences";
-import { themeNames } from "@/src/shared/themes";
-import { MiniAvatar } from "@/src/features/people/MiniAvatar";
-import { avatarSeed } from "@/src/features/profile/avatarArt";
 import React, { useState } from "react";
-import { Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { router } from "expo-router";
 import type { Href } from "expo-router";
-import { ShieldCheck } from "lucide-react-native";
+import { Settings } from "lucide-react-native";
 import { useBeacon } from "@/src/shared/store";
 import { featuredActivity } from "@/src/shared/domain";
+import { MiniAvatar } from "@/src/features/people/MiniAvatar";
+import { avatarSeed } from "@/src/features/profile/avatarArt";
 import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
-import { AvatarToggle } from "@/src/features/profile/AvatarToggle";
 import { uploadAvatar } from "@/src/features/profile/avatar";
-import { ActivityCard } from "@/src/features/beacons/ActivityCard";
-import WidgetAdviceTip from "@/src/features/widgets/WidgetAdviceTip";
-import { enablePush, stopDeviceLocation, clearPush } from "@/src/platform/device";
-import { supabase } from "@/src/shared/supabase";
+import {
+  canReadMemory,
+  type BeaconMemory,
+} from "@/src/features/beacons/models";
+import type { Profile } from "@/src/shared/types";
 import {
   getAspirationProgress,
   ProfileSurveyContent,
@@ -24,252 +22,349 @@ import {
 import {
   Action,
   Button,
-  Chips,
   Field,
+  IconButton,
   Screen,
   Sheet,
   Txt,
   useTheme,
 } from "@/src/shared/ui";
-export default function ProfileScreen() {
-  const { styles, colors } = useTheme();
 
-  const { data, userId, demo, act, signOut, refresh } = useBeacon(),
-    profile = data.profiles.find((p) => p.id === userId)!;
-  const [edit, setEdit] = useState(false),
-    [survey, setSurvey] = useState(false),
-    [deleting, setDeleting] = useState(false),
-    [confirm, setConfirm] = useState(""),
-    [name, setName] = useState(profile.name),
-    [bio, setBio] = useState(profile.bio),
-    [quietStart, setQuietStart] = useState(String(profile.quiet_start)),
-    [quietEnd, setQuietEnd] = useState(String(profile.quiet_end));
+export default function ProfileScreen() {
+  const { data, userId, loading } = useBeacon();
+  const profile = data.profiles.find((item) => item.id === userId);
+  if (!profile)
+    return (
+      <Screen title="Profile" eyebrow="YOUR SPACE" create={false}>
+        <Txt muted>
+          {loading
+            ? "Your profile is loading."
+            : "Your profile is unavailable right now."}
+        </Txt>
+      </Screen>
+    );
+  return <ProfileContent key={profile.id} profile={profile} />;
+}
+
+function ProfileContent({ profile }: { profile: Profile }) {
+  const { styles, colors } = useTheme();
+  const { data, userId, demo, act, refresh } = useBeacon();
+  const [edit, setEdit] = useState(false);
+  const [survey, setSurvey] = useState(false);
+  const [name, setName] = useState(profile.name);
+  const [bio, setBio] = useState(profile.bio);
   const [feature, setFeature] = useState(
     profile.hide_featured
       ? "Hidden"
       : (profile.featured_activity_id ?? "Automatic"),
   );
-  const [home, setHome] = useState(profile.home ?? ""),
-    [birthday, setBirthday] = useState(profile.birthday_note ?? ""),
-    [aspirations, setAspirations] = useState(profile.aspirations ?? ""),
-    [personality, setPersonality] = useState(profile.personality ?? ""),
-    [quote, setQuote] = useState(profile.quote ?? ""),
-    [sharing, setSharing] = useState(profile.default_audience ?? "friends");
-  const { theme, setTheme } = usePreferences();
-  const [avatar, setAvatar] = useState(false),
-    [seed, setSeed] = useState(profile.avatar_seed ?? avatarSeed(profile.id));
+  const [home, setHome] = useState(profile.home ?? "");
+  const [birthday, setBirthday] = useState(profile.birthday_note ?? "");
+  const [aspirations, setAspirations] = useState(profile.aspirations ?? "");
+  const [personality, setPersonality] = useState(profile.personality ?? "");
+  const [quote, setQuote] = useState(profile.quote ?? "");
+  const [avatar, setAvatar] = useState(false);
+  const [seed, setSeed] = useState(
+    profile.avatar_seed ?? avatarSeed(profile.id),
+  );
+
   const featured = featuredActivity(profile, data.activities);
-  const pastBeacons = data.activities
-    .filter((activity) => activity.owner_id === userId && activity.status === "completed")
-    .sort((a, b) => b.starts_at.localeCompare(a.starts_at))
-    .slice(0, 5);
+  const memories = data.beacon_memories
+    .filter((memory) => memory.author_id === userId)
+    .flatMap((memory: BeaconMemory) => {
+      const activity = data.activities.find(
+        (item) => item.id === memory.activity_id,
+      );
+      return activity && userId && canReadMemory(data, activity, memory, userId)
+        ? [{ memory, activity }]
+        : [];
+    })
+    .sort((left, right) =>
+      right.memory.created_at.localeCompare(left.memory.created_at),
+    )
+    .slice(0, 3);
+  const journalCount = data.beacon_notes.filter(
+    (note) => note.author_id === userId,
+  ).length;
+  const listCount = data.library_saved_checklists.filter(
+    (list) => list.owner_id === userId,
+  ).length;
+
+  const openBeacon = (activityId: string) =>
+    router.push(`/activity/${activityId}` as Href);
+
   return (
-    <Screen title="Profile" eyebrow="Your profile and settings" create={false}>
-      <Button
-        title="Your memories"
-        secondary
-        onPress={() =>
-          router.push({
-            pathname: "/(tabs)/activities",
-            params: { filter: "Past" },
-          })
-        }
-      />
-      <Button
-        title="Widget Studio"
-        secondary
-        onPress={() => router.push("/widgets" as Href)}
-      />
-      <WidgetAdviceTip />
-      <View style={styles.card}>
-        <Text style={styles.h2}>Make it feel like you</Text>
-        <Chips
-          options={themeNames}
-          value={theme}
-          onChange={setTheme}
-        />
-        <AvatarToggle description />
-      </View>
-      <View style={[styles.card, { alignItems: "center" }]}>
-        <ProfileAvatar profile={profile} size={96} />
-        <Button
-          title="Style my mini"
-          secondary
-          onPress={() => setAvatar(true)}
-        />
-        <Text style={styles.title}>{profile.name}</Text>
-        <Txt muted>@{profile.username}</Txt>
-        <Txt>{profile.bio || "Tell your people a little about yourself."}</Txt>
-        {!!profile.identity_tags?.length && (
-          <View style={{ gap: 6, alignSelf: "stretch" }}>
-            <Text style={styles.label}>IDENTITY</Text>
-            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-              {profile.identity_tags.slice(0, 6).map((tag) => (
-                <Text key={tag} style={[styles.chip, styles.chipText]}>
-                  {tag}
-                </Text>
-              ))}
-              {profile.identity_tags.length > 6 && (
-                <Txt muted>+{profile.identity_tags.length - 6} more</Txt>
-              )}
-            </View>
+    <Screen
+      title="Profile"
+      eyebrow="YOUR SPACE"
+      create={false}
+      headerAction={
+        <IconButton
+          label="Settings"
+          onPress={() => router.push("/settings" as Href)}
+        >
+          <Settings size={20} color={colors.ink} />
+        </IconButton>
+      }
+    >
+      <View style={[styles.card, { gap: 12 }]}>
+        <View style={[styles.row, { alignItems: "flex-start", gap: 14 }]}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Style mini"
+            onPress={() => setAvatar(true)}
+            style={{ width: 72, height: 72 }}
+          >
+            <ProfileAvatar profile={profile} size={72} />
+          </Pressable>
+          <View style={{ flex: 1, gap: 5 }}>
+            <Text style={styles.h2}>{profile.name}</Text>
+            <Txt muted>@{profile.username}</Txt>
           </View>
-        )}
-        {!!profile.interests.length && (
-          <View style={{ gap: 6, alignSelf: "stretch" }}>
-            <Text style={styles.label}>INTERESTS</Text>
-            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-              {profile.interests.slice(0, 6).map((i) => (
-                <Text key={i} style={[styles.chip, styles.chipText]}>
-                  {i}
-                </Text>
-              ))}
-              {profile.interests.length > 6 && (
-                <Txt muted>+{profile.interests.length - 6} more</Txt>
-              )}
-            </View>
-          </View>
-        )}
-        {!demo && (
-          <Action
+        </View>
+        <Text style={styles.body}>
+          {profile.bio || "Tell your people a little about yourself."}
+        </Text>
+        <View style={[styles.row, { flexWrap: "wrap", gap: 8 }]}>
+          <Button compact title="Edit profile" onPress={() => setEdit(true)} />
+          <Button
+            compact
             secondary
-            title="Change profile photo"
-            run={async () => {
-              await uploadAvatar(userId!);
-              await refresh();
-            }}
+            title="Retake profile survey"
+            onPress={() => setSurvey(true)}
           />
-        )}
-        {[
-          profile.home,
-          profile.birthday_note,
-          profile.aspirations,
-          profile.personality,
-          profile.quote,
-        ]
-          .filter(Boolean)
-          .map((value, i) => (
-            <Txt key={i}>{value}</Txt>
-          ))}
-        <Button
-          secondary
-          title="Retake profile survey"
-          onPress={() => setSurvey(true)}
-        />
-        <Button secondary title="Edit profile" onPress={() => setEdit(true)} />
+        </View>
       </View>
+
+      {(!!profile.interests.length || !!profile.identity_tags?.length) && (
+        <View style={[styles.card, { gap: 8 }]}>
+          <Text style={styles.h2}>A little more about me</Text>
+          {!!profile.identity_tags?.length && (
+            <View style={{ gap: 6 }}>
+              <Text style={styles.label}>IDENTITY</Text>
+              <View style={[styles.row, { flexWrap: "wrap", gap: 7 }]}>
+                {profile.identity_tags.slice(0, 6).map((tag) => (
+                  <Text key={tag} style={[styles.chip, styles.chipText]}>
+                    {tag}
+                  </Text>
+                ))}
+                {profile.identity_tags.length > 6 && (
+                  <Txt muted>+{profile.identity_tags.length - 6} more</Txt>
+                )}
+              </View>
+            </View>
+          )}
+          {!!profile.interests.length && (
+            <View style={{ gap: 6 }}>
+              <Text style={styles.label}>INTERESTS</Text>
+              <View style={[styles.row, { flexWrap: "wrap", gap: 7 }]}>
+                {profile.interests.slice(0, 6).map((interest) => (
+                  <Text key={interest} style={[styles.chip, styles.chipText]}>
+                    {interest}
+                  </Text>
+                ))}
+                {profile.interests.length > 6 && (
+                  <Txt muted>+{profile.interests.length - 6} more</Txt>
+                )}
+              </View>
+            </View>
+          )}
+        </View>
+      )}
+
       {!!profile.aspiration_goals?.length && (
-        <View style={styles.card}>
+        <View style={[styles.card, { gap: 8 }]}>
           <Text style={styles.h2}>Things I want to make time for</Text>
           <Txt muted>
-            Finished beacons linked to an aspiration count toward its weekly target.
+            Finished Beacons linked to an aspiration count toward its weekly
+            target.
           </Txt>
-          {profile.aspiration_goals.map((aspiration: AspirationGoal) => {
-            const progress = getAspirationProgress(
-              aspiration,
-              data.activities,
-              userId!,
-              profile.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
-            );
-            return (
-              <View key={aspiration.id} style={{ gap: 4 }}>
-                <Text style={styles.body}>
-                  {aspiration.title} · {aspiration.category}
-                </Text>
-                <Txt muted>
-                  {progress.count}/{aspiration.target_per_week} this week
-                  {progress.streak > 0 ? ` · ${progress.streak}-week streak` : ""}
-                </Txt>
-              </View>
-            );
-          })}
+          {profile.aspiration_goals
+            .slice(0, 3)
+            .map((aspiration: AspirationGoal) => {
+              const progress = getAspirationProgress(
+                aspiration,
+                data.activities,
+                userId!,
+                profile.timezone ||
+                  Intl.DateTimeFormat().resolvedOptions().timeZone,
+              );
+              return (
+                <View key={aspiration.id} style={{ gap: 3 }}>
+                  <Text style={[styles.body, { fontWeight: "700" }]}>
+                    {aspiration.title}
+                  </Text>
+                  <Txt muted>
+                    {progress.count}/{aspiration.target_per_week} this week
+                    {progress.streak > 0
+                      ? ` · ${progress.streak}-week streak`
+                      : ""}
+                  </Txt>
+                </View>
+              );
+            })}
+          {profile.aspiration_goals.length > 3 && (
+            <Txt muted>
+              +{profile.aspiration_goals.length - 3} more aspirations
+            </Txt>
+          )}
         </View>
       )}
+
+      {(profile.home ||
+        profile.birthday_note ||
+        profile.aspirations ||
+        profile.personality ||
+        profile.quote) && (
+        <View style={[styles.card, { gap: 6 }]}>
+          <Text style={styles.h2}>About me</Text>
+          {[
+            profile.home && `Lives in ${profile.home}`,
+            profile.birthday_note && `Birthday · ${profile.birthday_note}`,
+            profile.aspirations,
+            profile.personality,
+            profile.quote && `“${profile.quote}”`,
+          ]
+            .filter(Boolean)
+            .map((value, index) => (
+              <Txt key={index}>{value}</Txt>
+            ))}
+        </View>
+      )}
+
       {featured && (
-        <>
+        <View style={[styles.card, { gap: 7 }]}>
           <Text style={styles.h2}>What I’m up to</Text>
-          <ActivityCard activity={featured} />
-        </>
-      )}
-      <View style={styles.card}>
-        <Text style={styles.h2}>Past beacons</Text>
-        {!pastBeacons.length && (
-          <Txt muted>Your finished beacons will show up here.</Txt>
-        )}
-        {pastBeacons.map((activity) => (
-          <ActivityCard key={activity.id} activity={activity} />
-        ))}
-        {pastBeacons.length > 0 && (
-          <Button
-            secondary
-            title="See all memories"
-            onPress={() =>
-              router.push({
-                pathname: "/(tabs)/activities",
-                params: { filter: "Past" },
-              })
-            }
-          />
-        )}
-      </View>
-      <View style={[styles.card, { gap: 8 }]}>
-        <Text style={styles.h2}>Your library</Text>
-        <Txt muted>Private journal entries and editable checklist copies.</Txt>
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-          <Button
-            title={`Journals (${data.beacon_notes.filter((note) => note.author_id === userId).length})`}
-            secondary
-            onPress={() => router.push({ pathname: "/library", params: { kind: "journal" } } as Href)}
-          />
-          <Button
-            title={`Lists (${data.library_saved_checklists.filter((list) => list.owner_id === userId).length})`}
-            secondary
-            onPress={() => router.push({ pathname: "/library", params: { kind: "checklist" } } as Href)}
-          />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Open Beacon ${featured.title}`}
+            onPress={() => openBeacon(featured.id)}
+            style={({ pressed }) => ({
+              minHeight: 48,
+              justifyContent: "center",
+              opacity: pressed ? 0.72 : 1,
+            })}
+          >
+            <Text style={[styles.body, { fontWeight: "700" }]}>
+              {featured.title}
+            </Text>
+            <Txt muted>
+              {featured.category} ·{" "}
+              {new Date(featured.starts_at).toLocaleString()}
+            </Txt>
+          </Pressable>
         </View>
-      </View>
-      <View style={styles.card}>
-        <View style={styles.row}>
-          <ShieldCheck color={colors.green} />
-          <Text style={styles.h2}>Privacy and notifications</Text>
+      )}
+
+      <View style={[styles.card, { gap: 6 }]}>
+        <View style={styles.between}>
+          <Text style={styles.h2}>Beacon Memories</Text>
+          <Text style={styles.label}>FROM YOUR BEACONS</Text>
         </View>
         <Txt muted>
-          Location is off unless you explicitly share it. Your birth date is
-          private. Only an optional birthday note is shown on your profile.
+          Photos and videos stay connected to the Beacon where they were shared.
+        </Txt>
+        {!memories.length && (
+          <Txt muted>Your Beacon Memories will appear here.</Txt>
+        )}
+        {memories.map(({ memory, activity }) => (
+          <Pressable
+            key={memory.id}
+            accessibilityRole="button"
+            accessibilityLabel={`Open ${memory.media_type} memory from ${activity.title}`}
+            onPress={() => openBeacon(activity.id)}
+            style={({ pressed }) => ({
+              minHeight: 54,
+              paddingVertical: 7,
+              paddingHorizontal: 9,
+              borderRadius: 12,
+              backgroundColor: colors.bg,
+              justifyContent: "center",
+              opacity: pressed ? 0.72 : 1,
+            })}
+          >
+            <Text
+              numberOfLines={1}
+              style={[styles.body, { fontWeight: "700" }]}
+            >
+              {memory.caption ||
+                (memory.media_type === "image" ? "Photo" : "Video")}
+            </Text>
+            <Txt muted>
+              {activity.title} ·{" "}
+              {new Date(memory.created_at).toLocaleDateString()}
+            </Txt>
+          </Pressable>
+        ))}
+        <Button
+          compact
+          secondary
+          title="See past Beacons"
+          onPress={() =>
+            router.push({
+              pathname: "/(tabs)/activities",
+              params: { filter: "Past" },
+            })
+          }
+        />
+      </View>
+
+      <View style={[styles.card, { gap: 8 }]}>
+        <Text style={styles.h2}>Your library</Text>
+        <Txt muted>Keep Beacon Notes and reusable checklists close.</Txt>
+        <View style={[styles.row, { flexWrap: "wrap", gap: 8 }]}>
+          <Button
+            compact
+            secondary
+            title={`Journals · ${journalCount}  ›`}
+            onPress={() =>
+              router.push({
+                pathname: "/library",
+                params: { kind: "journal" },
+              } as Href)
+            }
+          />
+          <Button
+            compact
+            secondary
+            title={`Lists · ${listCount}  ›`}
+            onPress={() =>
+              router.push({
+                pathname: "/library",
+                params: { kind: "checklist" },
+              } as Href)
+            }
+          />
+        </View>
+      </View>
+
+      <View style={[styles.card, { gap: 8 }]}>
+        <Text style={styles.h2}>Friends & lists</Text>
+        <Txt muted>Review friend requests, Squad invitations, and your private lists.</Txt>
+        <Button
+          compact
+          secondary
+          title="Open Friends & Lists"
+          onPress={() => router.push({ pathname: "/(tabs)/squads", params: { peopleLists: "yes" } } as Href)}
+        />
+      </View>
+
+      <View style={[styles.card, { gap: 7 }]}>
+        <View style={styles.between}>
+          <Text style={styles.h2}>Widget Studio</Text>
+          <Text style={styles.label}>OPTIONAL TOOLS</Text>
+        </View>
+        <Txt muted>
+          Choose a Friends Now or circle summary for your Home Screen.
         </Txt>
         <Button
-          title="Manage profile visibility"
+          compact
           secondary
-          onPress={() => router.push("/settings" as Href)}
+          title="Open Widget Studio"
+          onPress={() => router.push("/widgets" as Href)}
         />
-        <Button
-          title="Manage temporary location"
-          secondary
-          onPress={() => router.push("/location")}
-        />
-        <Action
-          title="Enable push notifications"
-          secondary
-          run={async () => {
-            if (demo)
-              throw new Error(
-                "Push is available with a real account on your phone.",
-              );
-            await enablePush();
-          }}
-        />
-        <Action title="Disable this device’s push" secondary run={clearPush} />
       </View>
-      <Button
-        secondary
-        title="Privacy, safety & support"
-        onPress={() => router.push("/legal")}
-      />
-      <Button
-        secondary
-        title="Help & tutorial"
-        onPress={() => router.push("/help" as Href)}
-      />
+
       {data.is_moderator && (
         <Button
           title="Moderation inbox"
@@ -277,14 +372,7 @@ export default function ProfileScreen() {
           onPress={() => router.push("/moderation")}
         />
       )}
-      <Action title={demo ? "Leave demo" : "Sign out"} run={signOut} />
-      {!demo && (
-        <Button
-          secondary
-          title="Delete my account"
-          onPress={() => setDeleting(true)}
-        />
-      )}
+
       <Sheet
         title="Style your mini"
         visible={avatar}
@@ -338,7 +426,19 @@ export default function ProfileScreen() {
           />
         )}
       </Sheet>
+
       <Sheet title="Edit profile" visible={edit} onClose={() => setEdit(false)}>
+        {!demo ? (
+          <Action
+            secondary
+            compact
+            title="Change profile photo"
+            run={async () => {
+              await uploadAvatar(userId!);
+              await refresh();
+            }}
+          />
+        ) : null}
         <Field label="Name" value={name} onChangeText={setName} />
         <Field label="Bio" value={bio} onChangeText={setBio} multiline />
         <Field
@@ -373,42 +473,25 @@ export default function ProfileScreen() {
           onChangeText={setQuote}
           maxLength={300}
         />
-        <Txt muted>Default beacon sharing</Txt>
-        <Chips
-          options={["friends", "private"] as const}
-          value={sharing}
-          onChange={setSharing}
+        <Text style={styles.label}>FEATURED BEACON</Text>
+        <Button
+          secondary={feature !== "Automatic"}
+          title={`${feature === "Automatic" ? "✓ " : ""}Automatic`}
+          onPress={() => setFeature("Automatic")}
         />
-        <Field
-          label="Quiet hours start · 0–23"
-          value={quietStart}
-          onChangeText={setQuietStart}
-          keyboardType="numeric"
-        />
-        <Field
-          label="Quiet hours end · 0–23"
-          value={quietEnd}
-          onChangeText={setQuietEnd}
-          keyboardType="numeric"
-        />
-        <Txt muted>
-          Quiet hours follow {profile.timezone}. Equal hours disable quiet
-          hours.
-        </Txt>
-        <Text style={styles.label}>FEATURED ACTIVITY</Text>
-        <Chips
-          options={["Automatic", "Hidden"]}
-          value={feature}
-          onChange={setFeature}
+        <Button
+          secondary={feature !== "Hidden"}
+          title={`${feature === "Hidden" ? "✓ " : ""}Hidden`}
+          onPress={() => setFeature("Hidden")}
         />
         {data.activities
-          .filter((a) => a.owner_id === userId)
-          .map((a) => (
+          .filter((activity) => activity.owner_id === userId)
+          .map((activity) => (
             <Button
-              key={a.id}
-              secondary={feature !== a.id}
-              title={(feature === a.id ? "✓ " : "") + a.title}
-              onPress={() => setFeature(a.id)}
+              key={activity.id}
+              secondary={feature !== activity.id}
+              title={`${feature === activity.id ? "✓ " : ""}${activity.title}`}
+              onPress={() => setFeature(activity.id)}
             />
           ))}
         <Action
@@ -423,10 +506,6 @@ export default function ProfileScreen() {
               aspirations,
               personality,
               quote,
-              default_audience: sharing,
-              timezone: profile.timezone,
-              quiet_start: Number(quietStart),
-              quiet_end: Number(quietEnd),
               hide_featured: feature === "Hidden",
               featured_activity_id: ["Hidden", "Automatic"].includes(feature)
                 ? null
@@ -436,6 +515,7 @@ export default function ProfileScreen() {
           }}
         />
       </Sheet>
+
       <Sheet
         title="Profile survey"
         visible={survey}
@@ -446,35 +526,6 @@ export default function ProfileScreen() {
           profile={profile}
           activities={data.activities}
           onComplete={() => setSurvey(false)}
-        />
-      </Sheet>
-      <Sheet
-        title="Delete your account"
-        visible={deleting}
-        onClose={() => setDeleting(false)}
-      >
-        <Txt>
-          This permanently removes your profile, beacons, messages, and sharing
-          sessions. Squads you own are removed too. Safety reports are retained
-          under the published retention policy.
-        </Txt>
-        <Field
-          label="Type DELETE to confirm"
-          value={confirm}
-          onChangeText={setConfirm}
-        />
-        <Action
-          title="Permanently delete account"
-          run={async () => {
-            if (confirm !== "DELETE")
-              throw new Error("Type DELETE to confirm.");
-            await act("stop_location");
-            await stopDeviceLocation();
-            const { error } =
-              await supabase!.functions.invoke("delete-account");
-            if (error) throw error;
-            await supabase!.auth.signOut({ scope: "local" });
-          }}
         />
       </Sheet>
     </Screen>

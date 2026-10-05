@@ -1,11 +1,26 @@
 import React, { useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { Check, Trash2 } from "lucide-react-native";
-import { Action, Button, Chips, Field, Screen, Txt, useTheme } from "@/src/shared/ui";
+import {
+  Action,
+  Button,
+  Chips,
+  Field,
+  Screen,
+  Txt,
+  useTheme,
+} from "@/src/shared/ui";
 import { useBeacon } from "@/src/shared/store";
 import type { Activity, AspirationGoal, Profile } from "@/src/shared/types";
-import { copyAspirationGoalsForSurvey, getAspirationProgress } from "@/src/features/profile/aspirations";
-import { IDENTITY_CATALOG, INTEREST_CATALOG } from "@/src/shared/interestCatalog";
+import {
+  copyAspirationGoalsForSurvey,
+  getAspirationProgress,
+} from "@/src/features/profile/aspirations";
+import {
+  IDENTITY_CATALOG,
+  INTEREST_CATALOG,
+} from "@/src/shared/interestCatalog";
+import { ProfileAvatar } from "./ProfileAvatar";
 
 export type { AspirationGoal } from "@/src/shared/types";
 export { getAspirationProgress } from "@/src/features/profile/aspirations";
@@ -100,6 +115,9 @@ function ProfileSurveyBody({
   const { styles, colors } = useTheme();
   const { act, userId } = useBeacon();
   const [step, setStep] = useState(0);
+  const [showIdentity, setShowIdentity] = useState(mode === "retake");
+  const [name, setName] = useState(profile.name);
+  const [bio, setBio] = useState(profile.bio ?? "");
   const [identityTags, setIdentityTags] = useState<string[]>(
     savedIdentityTags(profile),
   );
@@ -157,7 +175,11 @@ function ProfileSurveyBody({
     });
   }, [interestCategory, interestSearch, interestSubcategory]);
 
-  function toggleValue(values: string[], setValues: (next: string[]) => void, value: string) {
+  function toggleValue(
+    values: string[],
+    setValues: (next: string[]) => void,
+    value: string,
+  ) {
     setValues(
       values.includes(value)
         ? values.filter((item) => item !== value)
@@ -174,12 +196,17 @@ function ProfileSurveyBody({
   async function saveSurvey(status: "completed" | "skipped") {
     setSavingProfile(true);
     try {
+      if (status === "completed" && !name.trim())
+        throw new Error("Add your name so your friends recognize you.");
       await act("save_profile", {
         ...profile,
-        identity_tags: status === "skipped" ? profile.identity_tags ?? [] : identityTags,
-        interests: status === "skipped" ? profile.interests ?? [] : interests,
+        name: status === "skipped" ? profile.name : name.trim(),
+        bio: status === "skipped" ? profile.bio : bio.trim(),
+        identity_tags:
+          status === "skipped" ? (profile.identity_tags ?? []) : identityTags,
+        interests: status === "skipped" ? (profile.interests ?? []) : interests,
         aspiration_goals:
-          status === "skipped" ? profile.aspiration_goals ?? [] : aspirations,
+          status === "skipped" ? (profile.aspiration_goals ?? []) : aspirations,
         onboarding_survey_status: status,
       });
       if (status === "completed") onComplete?.();
@@ -191,9 +218,9 @@ function ProfileSurveyBody({
 
   const stepCopy = [
     {
-      label: "Identity",
-      title: "What feels like you?",
-      body: "Choose only the details you want on your profile. These tags can be seen by people who can view your profile.",
+      label: "You",
+      title: "A little introduction.",
+      body: "Start with your name. About me and identity badges are optional; you can change everything later.",
     },
     {
       label: "Interests",
@@ -210,7 +237,9 @@ function ProfileSurveyBody({
   return (
     <View style={{ gap: 14 }}>
       <View style={[styles.card, { gap: 12 }]}>
-        <Text style={styles.label}>PART {step + 1} OF 3 · {stepCopy.label.toUpperCase()}</Text>
+        <Text style={styles.label}>
+          PART {step + 1} OF 3 · {stepCopy.label.toUpperCase()}
+        </Text>
         <Text style={styles.h2}>{stepCopy.title}</Text>
         <Txt muted>{stepCopy.body}</Txt>
         <View style={{ flexDirection: "row", gap: 6 }}>
@@ -230,9 +259,40 @@ function ProfileSurveyBody({
 
       {step === 0 && (
         <View style={styles.card}>
+          <View style={{ alignItems: "center" }}>
+            <ProfileAvatar profile={profile} size={64} />
+          </View>
+          <Field
+            label="Name"
+            value={name}
+            onChangeText={setName}
+            maxLength={80}
+          />
+          <Field
+            label="About me (optional)"
+            value={bio}
+            onChangeText={setBio}
+            maxLength={280}
+            multiline
+          />
+          <Button
+            compact
+            secondary
+            title={
+              showIdentity
+                ? "Hide identity badges"
+                : "Identity badges (optional)"
+            }
+            onPress={() => setShowIdentity(!showIdentity)}
+          />
+        </View>
+      )}
+      {step === 0 && showIdentity && (
+        <View style={styles.card}>
           <Text style={styles.h2}>Identity badges</Text>
           <Txt muted>
-            Add badges that help friends understand who you are. Every choice is optional.
+            Add badges that help friends understand who you are. Every choice is
+            optional.
           </Txt>
           <Chips
             options={IDENTITY_CATALOG.map((group) => group.name)}
@@ -240,20 +300,24 @@ function ProfileSurveyBody({
             onChange={setIdentityGroup}
           />
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-            {IDENTITY_CATALOG.find((group) => group.name === identityGroup)?.tags.map(
-              (tag) => {
-                const value = tagKey(identityGroup, tag);
-                return (
-                  <SurveyChip
-                    key={value}
-                    label={tag}
-                    selected={identityTags.includes(value)}
-                    disabled={!identityTags.includes(value) && identityTags.length >= 50}
-                    onPress={() => toggleValue(identityTags, setIdentityTags, value)}
-                  />
-                );
-              },
-            )}
+            {IDENTITY_CATALOG.find(
+              (group) => group.name === identityGroup,
+            )?.tags.map((tag) => {
+              const value = tagKey(identityGroup, tag);
+              return (
+                <SurveyChip
+                  key={value}
+                  label={tag}
+                  selected={identityTags.includes(value)}
+                  disabled={
+                    !identityTags.includes(value) && identityTags.length >= 50
+                  }
+                  onPress={() =>
+                    toggleValue(identityTags, setIdentityTags, value)
+                  }
+                />
+              );
+            })}
           </View>
           <Field
             label="Add your own identity tag"
@@ -285,7 +349,9 @@ function ProfileSurveyBody({
                     selected
                     remove
                     onPress={() =>
-                      setIdentityTags(identityTags.filter((item) => item !== tag))
+                      setIdentityTags(
+                        identityTags.filter((item) => item !== tag),
+                      )
                     }
                   />
                 ))}
@@ -297,9 +363,17 @@ function ProfileSurveyBody({
 
       {step === 1 && (
         <View style={styles.card}>
-          <View style={{ flexDirection: "row", justifyContent: "space-between", gap: 8 }}>
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "space-between",
+              gap: 8,
+            }}
+          >
             <Text style={styles.h2}>Interest badges</Text>
-            <Text style={[styles.label, { alignSelf: "center" }]}>{interests.length} SELECTED</Text>
+            <Text style={[styles.label, { alignSelf: "center" }]}>
+              {interests.length} SELECTED
+            </Text>
           </View>
           {identityTags.length >= 50 && (
             <Txt muted>You can choose up to 50 identity tags.</Txt>
@@ -327,7 +401,9 @@ function ProfileSurveyBody({
               />
               <Text style={styles.label}>EXPLORE</Text>
               <Chips
-                options={currentSubcategories.map((subcategory) => subcategory.name)}
+                options={currentSubcategories.map(
+                  (subcategory) => subcategory.name,
+                )}
                 value={interestSubcategory}
                 onChange={setInterestSubcategory}
               />
@@ -339,7 +415,9 @@ function ProfileSurveyBody({
                 key={`${entry.category}:${entry.interest}`}
                 label={entry.interest}
                 selected={interests.includes(entry.interest)}
-                disabled={!interests.includes(entry.interest) && interests.length >= 500}
+                disabled={
+                  !interests.includes(entry.interest) && interests.length >= 500
+                }
                 onPress={() =>
                   toggleValue(interests, setInterests, entry.interest)
                 }
@@ -363,7 +441,8 @@ function ProfileSurveyBody({
             disabled={!interestCustom.trim() || interests.length >= 500}
             onPress={() => {
               const value = interestCustom.trim();
-              if (!interests.includes(value)) setInterests([...interests, value]);
+              if (!interests.includes(value))
+                setInterests([...interests, value]);
               setInterestCustom("");
             }}
           />
@@ -378,7 +457,9 @@ function ProfileSurveyBody({
                     selected
                     remove
                     onPress={() =>
-                      setInterests(interests.filter((item) => item !== interest))
+                      setInterests(
+                        interests.filter((item) => item !== interest),
+                      )
                     }
                   />
                 ))}
@@ -411,11 +492,20 @@ function ProfileSurveyBody({
         <View style={styles.card}>
           <Text style={styles.h2}>Aspirations</Text>
           <Txt muted>
-            Choose a goal and a pace that feels doable. Beacons linked to these goals count toward your weekly progress.
+            Choose a goal and a pace that feels doable. Beacons linked to these
+            goals count toward your weekly progress.
           </Txt>
           {!!profile.aspirations?.trim() && (
-            <View style={{ borderLeftWidth: 3, borderLeftColor: colors.lime, paddingLeft: 10 }}>
-              <Txt muted>Your existing aspiration note will stay on your profile:</Txt>
+            <View
+              style={{
+                borderLeftWidth: 3,
+                borderLeftColor: colors.lime,
+                paddingLeft: 10,
+              }}
+            >
+              <Txt muted>
+                Your existing aspiration note will stay on your profile:
+              </Txt>
               <Txt>{profile.aspirations}</Txt>
             </View>
           )}
@@ -425,20 +515,40 @@ function ProfileSurveyBody({
                   aspiration,
                   activities,
                   userId,
-                  profile.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone,
+                  profile.timezone ||
+                    Intl.DateTimeFormat().resolvedOptions().timeZone,
                 )
               : { count: 0, streak: 0 };
             return (
-              <View key={aspiration.id} style={[styles.card, { backgroundColor: colors.bg }]}>
-                <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-                  <Text style={styles.label}>{aspiration.category.toUpperCase()}</Text>
+              <View
+                key={aspiration.id}
+                style={[styles.card, { backgroundColor: colors.bg }]}
+              >
+                <View
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    gap: 8,
+                  }}
+                >
+                  <Text style={styles.label}>
+                    {aspiration.category.toUpperCase()}
+                  </Text>
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel={`Remove ${aspiration.title}`}
                     onPress={() =>
-                      setAspirations(aspirations.filter((item) => item.id !== aspiration.id))
+                      setAspirations(
+                        aspirations.filter((item) => item.id !== aspiration.id),
+                      )
                     }
-                    style={{ minWidth: 44, minHeight: 44, alignItems: "center", justifyContent: "center" }}
+                    style={{
+                      minWidth: 44,
+                      minHeight: 44,
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
                   >
                     <Trash2 size={18} color={colors.muted} />
                   </Pressable>
@@ -446,7 +556,9 @@ function ProfileSurveyBody({
                 <Field
                   label="Aspiration"
                   value={aspiration.title}
-                  onChangeText={(title) => updateAspiration(aspiration.id, { title })}
+                  onChangeText={(title) =>
+                    updateAspiration(aspiration.id, { title })
+                  }
                   maxLength={80}
                 />
                 <Text style={styles.label}>PACE · TIMES PER WEEK</Text>
@@ -460,8 +572,11 @@ function ProfileSurveyBody({
                   }
                 />
                 <Txt muted>
-                  {progress.count}/{aspiration.target_per_week} linked beacons this week
-                  {progress.streak > 0 ? ` · ${progress.streak}-week streak` : ""}
+                  {progress.count}/{aspiration.target_per_week} linked beacons
+                  this week
+                  {progress.streak > 0
+                    ? ` · ${progress.streak}-week streak`
+                    : ""}
                 </Txt>
               </View>
             );
@@ -539,7 +654,8 @@ function ProfileSurveyBody({
       )}
       {step === 0 && mode === "retake" && (
         <Txt muted>
-          You can update these choices again whenever you like from your profile.
+          You can update these choices again whenever you like from your
+          profile.
         </Txt>
       )}
     </View>
@@ -558,7 +674,8 @@ export function ProfileSurvey(props: SurveyProps) {
       create={false}
     >
       <Txt muted>
-        Help your people find shared interests and make plans together. Your profile survey is optional and never changes location sharing.
+        Help your people find shared interests and make plans together. Your
+        profile survey is optional and never changes location sharing.
       </Txt>
       <ProfileSurveyBody {...props} />
     </Screen>

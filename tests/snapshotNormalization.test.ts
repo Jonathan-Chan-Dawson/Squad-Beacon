@@ -54,6 +54,9 @@ test("legacy snapshots normalize planning arrays and new thread metadata", () =>
   assert.deepEqual(normalized.planning_ping_responses, []);
   assert.deepEqual(normalized.planning_proposals, []);
   assert.deepEqual(normalized.planning_votes, []);
+  assert.deepEqual(normalized.spaces, []);
+  assert.deepEqual(normalized.space_members, []);
+  assert.deepEqual(normalized.space_squads, []);
   assert.deepEqual(normalized.planning_threads[0].coowner_ids, []);
   assert.equal(normalized.planning_threads[0].replaced_from_proposal_id, null);
   assert.equal(normalized.activities[0].capacity_policy, "soft");

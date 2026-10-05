@@ -2,6 +2,7 @@ import React, { useCallback, useState } from "react";
 import {
   ActivityIndicator,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -11,7 +12,9 @@ import {
   type TextInputProps,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { ArrowLeft, Inbox, Radio, ShieldCheck, X } from "lucide-react-native";
+import { ArrowLeft, Bell, Radio, ShieldCheck, X } from "lucide-react-native";
+import { pendingSocialCount } from "@/src/features/people/communication";
+import { useNow } from "@/src/shared/useNow";
 import {
   router,
   useSegments,
@@ -21,7 +24,13 @@ import {
 import { useBeacon } from "@/src/shared/store";
 import type { Audience } from "@/src/shared/types";
 import { usePreferences } from "@/src/shared/preferences";
-import { themes, themeNames, type ThemeName } from "@/src/shared/themes";
+import {
+  themes,
+  themeNames,
+  themeVariants,
+  type ResolvedAppearance,
+  type ThemeName,
+} from "@/src/shared/themes";
 import { MotionPressable } from "@/src/shared/MotionPressable";
 export const colors = themes.Mint;
 const makeStyles = (colors: typeof themes.Mint) =>
@@ -121,12 +130,26 @@ const makeStyles = (colors: typeof themes.Mint) =>
     },
   });
 const themedStyles = Object.fromEntries(
-  themeNames.map((name) => [name, makeStyles(themes[name])]),
-) as Record<ThemeName, ReturnType<typeof makeStyles>>;
-export const styles = themedStyles.Mint;
+  themeNames.map((name) => [
+    name,
+    {
+      light: makeStyles(themeVariants[name].light),
+      dark: makeStyles(themeVariants[name].dark),
+    },
+  ]),
+) as Record<
+  ThemeName,
+  Record<ResolvedAppearance, ReturnType<typeof makeStyles>>
+>;
+export const styles = themedStyles.Mint.light;
 export function useTheme() {
-  const { theme } = usePreferences();
-  return { colors: themes[theme], styles: themedStyles[theme], theme };
+  const { theme, resolvedAppearance } = usePreferences();
+  return {
+    colors: themeVariants[theme][resolvedAppearance],
+    styles: themedStyles[theme][resolvedAppearance],
+    theme,
+    resolvedAppearance,
+  };
 }
 export function Txt({
   children,
@@ -145,12 +168,14 @@ export function Button({
   secondary = false,
   disabled = false,
   compact = false,
+  icon,
 }: {
   title: string;
   onPress: () => void;
   secondary?: boolean;
   disabled?: boolean;
   compact?: boolean;
+  icon?: React.ReactNode;
 }) {
   const { styles, colors } = useTheme();
 
@@ -175,18 +200,67 @@ export function Button({
         },
       ]}
     >
-      <Text
-        style={[
-          styles.buttonText,
-          compact && { fontSize: 12 },
-          secondary && { color: colors.ink },
-        ]}
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: icon ? 7 : 0,
+        }}
       >
-        {title}
-      </Text>
+        {icon}
+        <Text
+          style={[
+            styles.buttonText,
+            compact && { fontSize: 12 },
+            secondary && { color: colors.ink },
+          ]}
+        >
+          {title}
+        </Text>
+      </View>
     </MotionPressable>
   );
 }
+/** One accessible, thumb-friendly target for contextual icon actions. */
+export function IconButton({
+  label,
+  onPress,
+  children,
+  selected = false,
+  disabled = false,
+}: {
+  label: string;
+  onPress: () => void;
+  children: React.ReactNode;
+  selected?: boolean;
+  disabled?: boolean;
+}) {
+  const { colors } = useTheme();
+  return (
+    <MotionPressable
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ selected, disabled }}
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => ({
+        width: 44,
+        height: 44,
+        borderRadius: 15,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: selected ? colors.lime : colors.white,
+        borderWidth: 1,
+        borderColor: selected ? colors.green : colors.line,
+        opacity: disabled ? 0.45 : pressed ? 0.76 : 1,
+      })}
+    >
+      {children}
+    </MotionPressable>
+  );
+}
+
 export function Action({
   title,
   run,
@@ -348,11 +422,15 @@ export function Sheet({
   visible,
   onClose,
   children,
+  maxHeightPercent = 94,
+  footer,
 }: {
   title: string;
   visible: boolean;
   onClose: () => void;
   children: React.ReactNode;
+  maxHeightPercent?: number;
+  footer?: React.ReactNode;
 }) {
   const { colors, styles } = useTheme();
 
@@ -363,6 +441,7 @@ export function Sheet({
       transparent
       animationType="slide"
       onRequestClose={onClose}
+      accessibilityLabel={title}
     >
       <View
         style={{
@@ -373,8 +452,12 @@ export function Sheet({
       >
         <SafeAreaView
           edges={["bottom", "top"]}
+          role={Platform.OS === "web" ? undefined : "dialog"}
+          accessibilityLabel={title}
+          accessibilityViewIsModal
+          aria-modal={Platform.OS === "web" ? undefined : true}
           style={{
-            maxHeight: "94%",
+            maxHeight: `${Math.max(35, Math.min(94, maxHeightPercent))}%`,
             backgroundColor: colors.bg,
             borderTopLeftRadius: 26,
             borderTopRightRadius: 26,
@@ -400,6 +483,17 @@ export function Sheet({
           >
             {children}
           </ScrollView>
+          {footer ? (
+            <View
+              style={{
+                padding: 16,
+                borderTopWidth: 1,
+                borderTopColor: colors.line,
+              }}
+            >
+              {footer}
+            </View>
+          ) : null}
         </SafeAreaView>
       </View>
     </Modal>
@@ -411,12 +505,16 @@ export function Screen({
   children,
   create: _create = true,
   footer,
+  headerAction,
+  showDemoNotice = true,
 }: {
   title: string;
   eyebrow: string;
   children: React.ReactNode;
   create?: boolean;
   footer?: React.ReactNode;
+  headerAction?: React.ReactNode;
+  showDemoNotice?: boolean;
 }) {
   const { styles, colors } = useTheme();
 
@@ -430,10 +528,10 @@ export function Screen({
         <View style={[styles.content, { paddingBottom: 8 }]}>
           <View style={styles.between}>
             <View style={{ flex: 1, gap: 6 }}>
-              <Text style={styles.label}>{eyebrow}</Text>
+              {!!eyebrow && <Text style={styles.label}>{eyebrow}</Text>}
               <Text style={styles.title}>{title}</Text>
             </View>
-            {inTabs && <InboxButton />}
+            {headerAction ?? <InboxButton />}
           </View>
         </View>
       )}
@@ -449,13 +547,14 @@ export function Screen({
           <>
             <View style={styles.between}>
               <View style={{ flex: 1, gap: 6 }}>
-                <Text style={styles.label}>{eyebrow}</Text>
+                {!!eyebrow && <Text style={styles.label}>{eyebrow}</Text>}
                 <Text style={styles.title}>{title}</Text>
               </View>
+              {headerAction}
             </View>
           </>
         )}
-        {demo && !footer && (
+        {demo && showDemoNotice && !footer && (
           <View
             style={[
               styles.row,
@@ -500,26 +599,49 @@ export function AudiencePicker({
 }) {
   const { styles } = useTheme();
 
-  const { data } = useBeacon();
+  const { data, userId } = useBeacon();
+  const targets =
+    value === "list"
+      ? data.lists.filter((list) => list.owner_id === userId)
+      : value === "organization"
+        ? data.organizations.filter(
+            (org) =>
+              org.owner_id === userId ||
+              data.organization_members.some(
+                (member) =>
+                  member.organization_id === org.id &&
+                  member.user_id === userId &&
+                  member.status === "active",
+              ),
+          )
+        : data.squads.filter((squad) =>
+            data.squad_members.some(
+              (member) =>
+                member.squad_id === squad.id && member.user_id === userId,
+            ),
+          );
   return (
     <View style={{ gap: 9 }}>
       <Text style={styles.muted}>Who can see this?</Text>
       <Chips
-        options={["private", "friends", "list", "squad"] as const}
+        options={
+          ["private", "friends", "list", "squad", "organization"] as const
+        }
         value={value}
         onChange={(v) => onChange(v, null)}
+        showSelectedCheckmark={false}
       />
-      {(value === "list" || value === "squad") && (
+      {(value === "list" || value === "squad" || value === "organization") && (
         <View style={{ gap: 8 }}>
-          {(value === "list" ? data.lists : data.squads).map((x) => (
+          {targets.map((x) => (
             <Button
               key={x.id}
               secondary={id !== x.id}
-              title={(id === x.id ? "✓ " : "") + x.name}
+              title={x.name}
               onPress={() => onChange(value, x.id)}
             />
           ))}
-          {!(value === "list" ? data.lists : data.squads).length && (
+          {!targets.length && (
             <Txt muted>Create a {value} in Squads first.</Txt>
           )}
         </View>
@@ -565,8 +687,8 @@ export function InboxButton() {
   const { colors, styles } = useTheme();
 
   const { data, userId, act } = useBeacon();
-  const [open, setOpen] = useState(false),
-    [tab, setTab] = useState("Updates");
+  const [open, setOpen] = useState(false);
+  const pending = pendingSocialCount(data, userId, useNow());
   const params = useLocalSearchParams<{ inbox?: string }>();
   useFocusEffect(
     useCallback(() => {
@@ -577,18 +699,13 @@ export function InboxButton() {
     }, [params.inbox]),
   );
   const unread = data.notices.filter((n) => !n.read_at).length;
-  const partners = [
-    ...new Set(
-      data.messages
-        .filter((m) => !m.activity_id)
-        .map((m) => (m.author_id === userId ? m.recipient_id! : m.author_id)),
-    ),
-  ];
   return (
     <>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={unread ? `Inbox, ${unread} unread` : "Inbox"}
+        accessibilityLabel={
+          unread ? `Notifications, ${unread} unread` : "Notifications"
+        }
         onPress={() => setOpen(true)}
         style={{
           width: 46,
@@ -602,7 +719,7 @@ export function InboxButton() {
           elevation: 3,
         }}
       >
-        <Inbox size={21} color={colors.ink} />
+        <Bell size={21} color={colors.ink} />
         {unread > 0 && (
           <View
             style={{
@@ -622,95 +739,69 @@ export function InboxButton() {
           </View>
         )}
       </Pressable>
-      <Sheet title="Your inbox" visible={open} onClose={() => setOpen(false)}>
-        <Chips
-          options={["Updates", "Messages"]}
-          value={tab}
-          onChange={setTab}
-        />
-        {tab === "Updates" ? (
-          <>
-            {unread > 0 && (
-              <Action
-                title="Mark all read"
-                secondary
-                run={() => act("read_notices")}
-              />
-            )}
-            {!data.notices.length && (
-              <Txt muted>
-                You are all caught up. Invitations and beacon updates will
-                appear here.
-              </Txt>
-            )}
-            {data.notices
-              .slice()
-              .sort((a, b) => b.created_at.localeCompare(a.created_at))
-              .slice(0, 50)
-              .map((n) => (
-                <View key={n.id} style={styles.card}>
-                  <Text
-                    style={[
-                      styles.body,
-                      { fontWeight: n.read_at ? "400" : "700" },
-                    ]}
-                  >
-                    {n.body}
-                  </Text>
-                  <Button
-                    secondary
-                    title={
-                      n.activity_id
-                        ? "Open on map"
-                        : "View friends & invitations"
-                    }
-                    onPress={() => {
-                      setOpen(false);
-                      router.push(
-                        n.activity_id
-                          ? {
-                              pathname: "/(tabs)",
-                              params: { beacon: n.activity_id },
-                            }
-                          : {
-                              pathname: "/(tabs)/squads",
-                              params: { tab: "Friends" },
-                            },
-                      );
-                    }}
-                  />
-                </View>
-              ))}
-          </>
-        ) : (
-          <>
-            {!partners.length && (
-              <Txt muted>Your conversations start on a friend profile.</Txt>
-            )}
-            {partners.map((id) => (
+      <Sheet
+        title="Notifications"
+        visible={open}
+        onClose={() => setOpen(false)}
+      >
+        {pending > 0 ? (
+          <Button
+            title={`${pending} Pings & invitations need you`}
+            onPress={() => {
+              setOpen(false);
+              router.push({
+                pathname: "/(tabs)/squads",
+                params: { tab: "Pings" },
+              });
+            }}
+          />
+        ) : null}
+        {unread > 0 && (
+          <Action
+            title="Mark all read"
+            secondary
+            run={() => act("read_notices")}
+          />
+        )}
+        {!data.notices.length && (
+          <Txt muted>
+            You are all caught up. Invitations and beacon updates will appear
+            here.
+          </Txt>
+        )}
+        {data.notices
+          .slice()
+          .sort((a, b) => b.created_at.localeCompare(a.created_at))
+          .slice(0, 50)
+          .map((n) => (
+            <View key={n.id} style={styles.card}>
+              <Text
+                style={[styles.body, { fontWeight: n.read_at ? "400" : "700" }]}
+              >
+                {n.body}
+              </Text>
               <Button
-                key={id}
                 secondary
-                title={data.profiles.find((p) => p.id === id)?.name ?? "Friend"}
+                title={
+                  n.activity_id ? "Open on map" : "Review Pings & invitations"
+                }
                 onPress={() => {
                   setOpen(false);
-                  router.push({ pathname: "/messages/[id]", params: { id } });
+                  router.push(
+                    n.activity_id
+                      ? {
+                          pathname: "/(tabs)",
+                          params: { beacon: n.activity_id },
+                        }
+                      : {
+                          pathname: "/(tabs)/squads",
+                          params: { tab: "Pings" },
+                        },
+                  );
                 }}
               />
-            ))}
-            <Button
-              title="Find a friend"
-              secondary
-              onPress={() => {
-                setOpen(false);
-                router.push({
-                  pathname: "/(tabs)/squads",
-                  params: { tab: "Friends" },
-                });
-              }}
-            />
-          </>
-        )}
+            </View>
+          ))}
       </Sheet>
     </>
   );

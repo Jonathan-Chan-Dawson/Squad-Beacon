@@ -18,7 +18,9 @@ export async function openBeaconFromMap(page: Page, title: string) {
     });
     if (await target.count()) {
       await target.click();
-      await page.getByRole("button", { name: "Open Beacon", exact: true }).click();
+      await page
+        .getByRole("button", { name: "Open Beacon", exact: true })
+        .click();
       return;
     }
     await panel.getByRole("button", { name: "Close map cluster" }).click();

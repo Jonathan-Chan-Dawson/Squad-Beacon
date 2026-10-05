@@ -22,6 +22,36 @@ export interface MapPointGroup {
   members: ClusterPoint[];
 }
 
+export interface MapPointPriority {
+  /** Lower values are more relevant. Tiers follow the map discovery policy. */
+  tier: number;
+  attendance?: number;
+}
+
+/**
+ * Orders cluster previews consistently without coupling the marker UI to app data.
+ * Tiers: joined Beacon, Starred Friend, live Beacon, soon Beacon, busy Beacon,
+ * available Friend, Close Friend, then other nearby entities.
+ */
+export function rankClusterMembers(
+  members: ClusterPoint[],
+  priorities: Record<string, MapPointPriority> = {},
+) {
+  return [...members].sort((left, right) => {
+    const leftPriority = priorities[left.id] ?? { tier: 7, attendance: 0 };
+    const rightPriority = priorities[right.id] ?? { tier: 7, attendance: 0 };
+    return (
+      leftPriority.tier - rightPriority.tier ||
+      (rightPriority.attendance ?? 0) - (leftPriority.attendance ?? 0) ||
+      left.id.localeCompare(right.id)
+    );
+  });
+}
+
+export function clusterPreviewOverflow(memberCount: number, previewCount = 3) {
+  return Math.max(0, memberCount - previewCount);
+}
+
 const MAX_MERCATOR_LATITUDE = 85.05112878;
 const TILE_SIZE = 256;
 

@@ -26,13 +26,20 @@ import {
 } from "@/src/features/beacons/controls";
 import { applyDemoModuleCollectionAction } from "@/src/features/beacons/moduleCollections";
 import { applyDemoBeaconMediaTeamAction } from "@/src/features/beacons/models";
+import {
+  makeRoutineDemo,
+  applyPlanRoutineDemo,
+  type PlanRoutineDemoAction,
+} from "@/src/features/plans/routines";
 import type {
   BeaconDraft,
   Data,
   LibraryKind,
   Payload,
   PlanningThread,
+  Squad,
 } from "@/src/shared/types";
+import type { Space } from "@/src/features/spaces/types";
 import { localDate, validateActivity } from "@/src/shared/domain";
 import {
   canManagePlanningThread,
@@ -46,6 +53,22 @@ import {
   detectPlanStepOverlaps,
   validatePlanSteps,
 } from "@/src/features/plans/domain";
+import {
+  activeOrganizationRole,
+  canChangeOrganizationMemberRole,
+  canInviteOrganizationRole,
+  canLeaveOrganization,
+  canManageOrganization,
+  canManageOrganizationMember,
+  canManageOrganizationSquads,
+} from "@/src/features/organizations/domain";
+import type {
+  GroupMessageScope,
+  Organization,
+  OrganizationMemberRole,
+} from "@/src/features/organizations/types";
+import { canInviteWithPolicy, SOCIAL_ROLE_RANK } from "@/src/features/social/domain";
+import type { ActivitySocialLink, InvitePolicy, SocialMemberRole, SocialRole } from "@/src/features/social/types";
 import { makeDemo as makeNeighborhoodDemo } from "@/tests/fixtures/neighborhood";
 export const DEMO_ID = "demo-you";
 export function makeDemo(): Data {
@@ -56,6 +79,178 @@ export function makeDemo(): Data {
   const now = Date.now();
   data.viewer_id = DEMO_ID;
   data.is_demo = true;
+  const organizationId = "org-lakefront-collective";
+  data.organizations = [
+    {
+      id: organizationId,
+      owner_id: "maya",
+      name: "Lakefront Collective",
+      description:
+        "Friends making room for movement, good food, and small adventures.",
+      created_at: new Date(now - 60 * 86400000).toISOString(),
+      member_count: 4,
+      discoverability: "public",
+      join_mode: "open",
+      invite_policy: "elders",
+    },
+  ];
+  data.organization_members = [
+    {
+      organization_id: organizationId,
+      user_id: DEMO_ID,
+      role: "elder",
+      status: "active",
+      invited_by: "maya",
+      created_at: new Date(now - 45 * 86400000).toISOString(),
+    },
+    {
+      organization_id: organizationId,
+      user_id: "jordan",
+      role: "admin",
+      status: "active",
+      invited_by: "maya",
+      created_at: new Date(now - 42 * 86400000).toISOString(),
+    },
+    {
+      organization_id: organizationId,
+      user_id: "sam",
+      role: "member",
+      status: "active",
+      invited_by: "jordan",
+      created_at: new Date(now - 35 * 86400000).toISOString(),
+    },
+  ];
+  data.organization_squads = ["boxing", "weekend"].map((squad_id) => ({
+    organization_id: organizationId,
+    squad_id,
+    added_by: "maya",
+    created_at: new Date(now - 30 * 86400000).toISOString(),
+  }));
+  const spaceId = "space-neighborhood-studio";
+  data.spaces = [
+    {
+      id: spaceId,
+      owner_id: DEMO_ID,
+      name: "Neighborhood Studio",
+      description: "A small independent space for practice and shared routines.",
+      created_at: new Date(now - 24 * 86400000).toISOString(),
+      space_type: "interest",
+      discoverability: "private",
+      join_mode: "invite",
+      invite_policy: "admins",
+    },
+  ];
+  data.space_members = [
+    {
+      space_id: spaceId,
+      user_id: DEMO_ID,
+      role: "owner",
+      status: "active",
+      invited_by: null,
+      created_at: new Date(now - 24 * 86400000).toISOString(),
+    },
+    {
+      space_id: spaceId,
+      user_id: "jordan",
+      role: "member",
+      status: "active",
+      invited_by: DEMO_ID,
+      created_at: new Date(now - 20 * 86400000).toISOString(),
+    },
+  ];
+  data.space_squads = [
+    {
+      space_id: spaceId,
+      squad_id: "boxing",
+      added_by: DEMO_ID,
+      created_at: new Date(now - 18 * 86400000).toISOString(),
+    },
+  ];
+  data.organization_spaces = [
+    {
+      organization_id: organizationId,
+      space_id: spaceId,
+      added_by: DEMO_ID,
+      created_at: new Date(now - 18 * 86400000).toISOString(),
+    },
+  ];
+  data.group_messages = [
+    {
+      id: "org-chat-1",
+      scope: "organization",
+      scope_id: organizationId,
+      organization_id: organizationId,
+      squad_id: null,
+      author_id: "maya",
+      body: "Saturday trail loop is on. Anyone want to bring snacks?",
+      created_at: new Date(now - 26 * 60000).toISOString(),
+    },
+    {
+      id: "org-chat-2",
+      scope: "organization",
+      scope_id: organizationId,
+      organization_id: organizationId,
+      squad_id: null,
+      author_id: DEMO_ID,
+      body: "I can bring fruit and a thermos.",
+      created_at: new Date(now - 18 * 60000).toISOString(),
+    },
+    {
+      id: "squad-chat-1",
+      scope: "squad",
+      scope_id: "boxing",
+      organization_id: null,
+      squad_id: "boxing",
+      author_id: "jordan",
+      body: "Tuesday rounds are back at six.",
+      created_at: new Date(now - 70 * 60000).toISOString(),
+    },
+  ];
+  data.group_message_reads = [
+    {
+      scope: "organization",
+      scope_id: organizationId,
+      organization_id: organizationId,
+      squad_id: null,
+      user_id: DEMO_ID,
+      last_read_at: new Date(now - 10 * 60000).toISOString(),
+    },
+    {
+      scope: "squad",
+      scope_id: "boxing",
+      organization_id: null,
+      squad_id: "boxing",
+      user_id: DEMO_ID,
+      last_read_at: new Date(now - 90 * 60000).toISOString(),
+    },
+  ];
+  data.activities.push({
+    id: "org-beacon-lakefront-walk",
+    owner_id: "maya",
+    title: "Lakefront trail loop",
+    description: "Easy pace, coffee after if the weather holds.",
+    category: "Fitness",
+    mode: "squad",
+    starts_at: new Date(now + 2 * 86400000).toISOString(),
+    ends_at: new Date(now + 2 * 86400000 + 90 * 60000).toISOString(),
+    timezone: "America/Chicago",
+    approval_required: false,
+    status: "scheduled",
+    goal_id: null,
+    habit_id: null,
+    plan_id: null,
+    plan_step_index: null,
+    aspiration_ids: [],
+    audience: "organization",
+    audience_id: organizationId,
+  });
+  data.places.push({
+    activity_id: "org-beacon-lakefront-walk",
+    label: "Montrose Harbor",
+    latitude: 41.963,
+    longitude: -87.639,
+    online_url: null,
+  });
   data.activities.push({
     id: activityId,
     owner_id: DEMO_ID,
@@ -172,6 +367,41 @@ export function makeDemo(): Data {
     created_at: pingCreatedAt,
     resolved_at: null,
   });
+  data.planning_threads.push({
+    id: "demo-org-ping",
+    owner_id: "maya",
+    coowner_ids: [],
+    kind: "ping",
+    title: "Sunday picnic after the walk?",
+    body: "Vote yes if you're free to stay a little longer.",
+    audience: "organization",
+    audience_id: organizationId,
+    deadline_at: new Date(now + 18 * 60 * 60 * 1000).toISOString(),
+    status: "open",
+    payload: {
+      title: "Sunday picnic",
+      description: "Stay for a relaxed picnic after the trail loop.",
+      category: "Social",
+      mode: "squad",
+      starts_at: new Date(now + 48 * 60 * 60 * 1000).toISOString(),
+      ends_at: new Date(now + 50 * 60 * 60 * 1000).toISOString(),
+      timezone: "America/Chicago",
+      approval_required: false,
+      audience: "organization",
+      audience_id: organizationId,
+      target_count: null,
+      label: "Montrose Harbor",
+      online_url: null,
+      latitude: null,
+      longitude: null,
+      aspiration_ids: [],
+    },
+    winner_proposal_id: null,
+    replaced_from_proposal_id: null,
+    materialized_activity_id: null,
+    created_at: new Date(now - 20 * 60000).toISOString(),
+    resolved_at: null,
+  });
   const sampleDraft = (
     title: string,
     category: BeaconDraft["category"],
@@ -197,6 +427,31 @@ export function makeDemo(): Data {
       aspiration_ids: [],
     };
   };
+  const squadPingDraft = sampleDraft(
+    "Boxing rounds and coffee",
+    "Fitness",
+    30,
+  );
+  squadPingDraft.audience = "squad";
+  squadPingDraft.audience_id = "boxing";
+  data.planning_threads.push({
+    id: "demo-squad-ping-boxing",
+    owner_id: "jordan",
+    coowner_ids: [],
+    kind: "ping",
+    title: "A quick boxing session?",
+    body: "I can grab coffee nearby afterward if anyone wants to join.",
+    audience: "squad",
+    audience_id: "boxing",
+    deadline_at: new Date(now + 6 * 3600000).toISOString(),
+    status: "open",
+    payload: squadPingDraft,
+    winner_proposal_id: null,
+    replaced_from_proposal_id: null,
+    materialized_activity_id: null,
+    created_at: createdAt,
+    resolved_at: null,
+  });
   const makeIncomingPing = (
     id: string,
     ownerId: string,
@@ -260,25 +515,28 @@ export function makeDemo(): Data {
     created_at: createdAt,
     resolved_at: null,
   });
-  data.planning_proposals.push({
-    id: "demo-vote-option-walk",
-    thread_id: "demo-vote-weekend",
-    author_id: "maya",
-    payload: sampleDraft("Lakefront picnic walk", "Social", 48),
-    approved: true,
-    disqualified_at: null,
-    created_at: createdAt,
-    activity_id: null,
-  }, {
-    id: "demo-vote-option-market",
-    thread_id: "demo-vote-weekend",
-    author_id: "jordan",
-    payload: sampleDraft("Farmers market and lunch", "Social", 60),
-    approved: true,
-    disqualified_at: null,
-    created_at: createdAt,
-    activity_id: null,
-  });
+  data.planning_proposals.push(
+    {
+      id: "demo-vote-option-walk",
+      thread_id: "demo-vote-weekend",
+      author_id: "maya",
+      payload: sampleDraft("Lakefront picnic walk", "Social", 48),
+      approved: true,
+      disqualified_at: null,
+      created_at: createdAt,
+      activity_id: null,
+    },
+    {
+      id: "demo-vote-option-market",
+      thread_id: "demo-vote-weekend",
+      author_id: "jordan",
+      payload: sampleDraft("Farmers market and lunch", "Social", 60),
+      approved: true,
+      disqualified_at: null,
+      created_at: createdAt,
+      activity_id: null,
+    },
+  );
 
   const drawActivityId = "demo-draw-beacon",
     drawProposalId = "demo-draw-winner",
@@ -342,8 +600,1062 @@ export function makeDemo(): Data {
     created_at: drawCreatedAt,
     activity_id: drawActivityId,
   });
+  const routineDemo = makeRoutineDemo(data, DEMO_ID, new Date(now));
+  data.plan_routines.push(...routineDemo.plan_routines);
+  data.plan_members.push(...routineDemo.plan_members);
+  data.plans.push(...routineDemo.plans);
+  data.activities.push(...routineDemo.activities);
+  data.places.push(...routineDemo.places);
+  const growthCreatedAt = new Date(now - 20 * 86400000).toISOString();
+  data.squads.push(
+    {
+      id: "pickup-basketball",
+      owner_id: DEMO_ID,
+      name: "Pickup Basketball",
+      description: "A growing crew for weekday runs and weekend games.",
+      discoverability: "public",
+      join_mode: "open",
+      invite_policy: "members",
+    },
+    {
+      id: "open-run-club",
+      owner_id: "maya",
+      name: "Open Run Club",
+      description: "Easy paced runs around the neighborhood.",
+      discoverability: "public",
+      join_mode: "open",
+      invite_policy: "admins",
+    },
+    {
+      id: "chess-table",
+      owner_id: "jordan",
+      name: "Chess Table",
+      description: "Casual games and friendly puzzles.",
+      discoverability: "public",
+      join_mode: "request",
+      invite_policy: "elders",
+    },
+  );
+  data.squad_members.push({ squad_id: "pickup-basketball", user_id: DEMO_ID, role: "owner" });
+  for (let index = 1; index <= 34; index++) {
+    const personId = `pickup-player-${index}`;
+    const template = data.profiles[0];
+    data.profiles.push({
+      ...template,
+      id: personId,
+      username: `pickup${index}`,
+      name: `Pickup player ${index}`,
+      bio: "",
+      interests: [],
+      identity_tags: [],
+      aspiration_goals: [],
+      featured_activity_id: null,
+      hide_featured: false,
+    });
+    data.squad_members.push({ squad_id: "pickup-basketball", user_id: personId, role: "member" });
+  }
+  data.squad_members.push(
+    { squad_id: "open-run-club", user_id: "maya", role: "owner" },
+    { squad_id: "open-run-club", user_id: "sam", role: "member" },
+    { squad_id: "chess-table", user_id: "jordan", role: "owner" },
+    { squad_id: "chess-table", user_id: "sam", role: "member" },
+  );
+  data.spaces.push(
+    {
+      id: "space-lakefront-runs",
+      owner_id: "maya",
+      name: "Lakefront Runs",
+      description: "A standalone neighborhood running community.",
+      created_at: growthCreatedAt,
+      space_type: "local_community",
+      discoverability: "public",
+      join_mode: "open",
+      invite_policy: "admins",
+    },
+    {
+      id: "space-park-care",
+      owner_id: "jordan",
+      name: "Park Care Crew",
+      description: "Neighbors organizing small park cleanup days.",
+      created_at: growthCreatedAt,
+      space_type: "local_community",
+      discoverability: "public",
+      join_mode: "request",
+      invite_policy: "elders",
+    },
+  );
+  data.space_members.push(
+    { space_id: "space-lakefront-runs", user_id: "maya", role: "owner", status: "active", invited_by: null, created_at: growthCreatedAt },
+    { space_id: "space-park-care", user_id: "jordan", role: "owner", status: "active", invited_by: null, created_at: growthCreatedAt },
+  );
+  data.space_squads.push({ space_id: "space-lakefront-runs", squad_id: "open-run-club", added_by: "maya", created_at: growthCreatedAt });
   return data;
 }
+
+function applyDemoOrganizationAction(
+  data: Data,
+  action: string,
+  payload: Payload,
+  userId: string,
+  newId: () => string,
+) {
+  const organizationId = String(payload.organization_id ?? "");
+  const targetId = String(payload.user_id ?? "");
+  const organization = data.organizations.find(
+    (item) => item.id === organizationId,
+  );
+  const members = data.organization_members;
+  const blocked = (first: string, second: string) =>
+    data.blocks.some(
+      (row) =>
+        (row.blocker_id === first && row.blocked_id === second) ||
+        (row.blocker_id === second && row.blocked_id === first),
+    );
+  const rank = SOCIAL_ROLE_RANK;
+  const countMembers = (org: typeof organization) => {
+    if (!org) return;
+    org.member_count =
+      1 +
+      members.filter(
+        (member) =>
+          member.organization_id === org.id &&
+          member.status === "active" &&
+          member.user_id !== org.owner_id,
+      ).length;
+  };
+  const isGroupMember = (scope: GroupMessageScope, scopeId: string) =>
+    scope === "organization"
+      ? !!data.organizations.find((item) => item.id === scopeId) &&
+        activeOrganizationRole(
+          data.organizations.find((item) => item.id === scopeId)!,
+          members,
+          userId,
+        ) !== null &&
+        !blocked(
+          userId,
+          data.organizations.find((item) => item.id === scopeId)!.owner_id,
+        )
+      : data.squad_members.some(
+          (member) => member.squad_id === scopeId && member.user_id === userId,
+        ) &&
+        !blocked(
+          userId,
+          data.squads.find((item) => item.id === scopeId)?.owner_id ?? "",
+        );
+  const upsertRead = (
+    scope: GroupMessageScope,
+    scopeId: string,
+    at: string,
+  ) => {
+    const found = data.group_message_reads.find(
+      (row) =>
+        row.scope === scope &&
+        row.scope_id === scopeId &&
+        row.user_id === userId,
+    );
+    if (found) {
+      if (found.last_read_at < at) found.last_read_at = at;
+      return;
+    }
+    data.group_message_reads.push({
+      scope,
+      scope_id: scopeId,
+      organization_id: scope === "organization" ? scopeId : null,
+      squad_id: scope === "squad" ? scopeId : null,
+      user_id: userId,
+      last_read_at: at,
+    });
+  };
+
+  if (action === "create_organization") {
+    const name = String(payload.name ?? "").trim();
+    const description = String(payload.description ?? "");
+    if (name.length < 2 || name.length > 60 || description.length > 500)
+      throw new Error("Check the organization name and description.");
+    const id = newId();
+    data.organizations.push({
+      id,
+      owner_id: userId,
+      name,
+      description,
+      created_at: new Date().toISOString(),
+      member_count: 1,
+      discoverability: payload.discoverability === "public" || payload.discoverability === "community" ? payload.discoverability : "private",
+      join_mode: payload.join_mode === "open" || payload.join_mode === "request" ? payload.join_mode : "invite",
+      invite_policy: payload.invite_policy === "elders" || payload.invite_policy === "members" ? payload.invite_policy : "admins",
+    });
+    return true;
+  }
+
+  if (action === "send_group_message" || action === "mark_group_chat_read") {
+    const scope = payload.scope as GroupMessageScope;
+    const scopeId = String(
+      scope === "organization"
+        ? (payload.organization_id ?? "")
+        : (payload.squad_id ?? ""),
+    );
+    if (
+      (scope !== "organization" && scope !== "squad") ||
+      !scopeId ||
+      !isGroupMember(scope, scopeId)
+    )
+      throw new Error("That group chat is unavailable to you.");
+    if (action === "mark_group_chat_read") {
+      upsertRead(scope, scopeId, new Date().toISOString());
+      return true;
+    }
+    const body = String(payload.body ?? "").trim();
+    if (!body || body.length > 2000)
+      throw new Error("Messages must be 1 to 2000 characters.");
+    const createdAt = new Date().toISOString();
+    data.group_messages.push({
+      id: newId(),
+      scope,
+      scope_id: scopeId,
+      organization_id: scope === "organization" ? scopeId : null,
+      squad_id: scope === "squad" ? scopeId : null,
+      author_id: userId,
+      body,
+      created_at: createdAt,
+    });
+    upsertRead(scope, scopeId, createdAt);
+    return true;
+  }
+
+  if (action === "respond_organization_invite") {
+    if (!organization)
+      throw new Error("That organization invitation is unavailable.");
+    const invitation = members.find(
+      (member) =>
+        member.organization_id === organization.id &&
+        member.user_id === userId &&
+        member.status === "invited",
+    );
+    if (!invitation || organization.archived_at || blocked(userId, organization.owner_id) ||
+        data.organization_bans.some((row) => row.organization_id === organization.id && row.user_id === userId))
+      throw new Error("That organization invitation is unavailable.");
+    if (payload.accept) invitation.status = "active";
+    else
+      data.organization_members = members.filter(
+        (member) => member !== invitation,
+      );
+    countMembers(organization);
+    return true;
+  }
+
+  if (!organization) return false;
+
+  if (action === "update_organization") {
+    if (!canManageOrganization(organization, members, userId))
+      throw new Error(
+        "Only organization leaders can edit organization details.",
+      );
+    const name = String(payload.name ?? "").trim();
+    const description = String(payload.description ?? "");
+    if (name.length < 2 || name.length > 60 || description.length > 500)
+      throw new Error("Check the organization name and description.");
+    organization.name = name;
+    organization.description = description;
+    return true;
+  }
+
+  if (action === "invite_organization_member") {
+    const desiredRole = String(
+      payload.role ?? "member",
+    ) as OrganizationMemberRole;
+    if (
+      !data.profiles.some((profile) => profile.id === targetId) ||
+      targetId === userId ||
+      targetId === organization.owner_id ||
+      blocked(userId, targetId) ||
+      !canInviteOrganizationRole(organization, members, userId, desiredRole)
+    )
+      throw new Error("Your organization role cannot invite that person.");
+    if (
+      data.organization_bans.some(
+        (ban) =>
+          ban.organization_id === organization.id && ban.user_id === targetId,
+      )
+    )
+      throw new Error("That person is banned from this organization.");
+    const old = members.find(
+      (member) =>
+        member.organization_id === organization.id &&
+        member.user_id === targetId,
+    );
+    if (old?.status === "active")
+      throw new Error("That person is already in this organization.");
+    if (
+      old &&
+      !canChangeOrganizationMemberRole(
+        organization,
+        members,
+        userId,
+        targetId,
+        desiredRole,
+      )
+    )
+      throw new Error("Your organization role cannot replace that invitation.");
+    const invitedBy = userId;
+    const createdAt = new Date().toISOString();
+    if (old) {
+      old.role = desiredRole;
+      old.status = "invited";
+      old.invited_by = invitedBy;
+      old.created_at = createdAt;
+    } else {
+      members.push({
+        organization_id: organization.id,
+        user_id: targetId,
+        role: desiredRole,
+        status: "invited",
+        invited_by: invitedBy,
+        created_at: createdAt,
+      });
+    }
+    return true;
+  }
+
+  if (action === "set_organization_member_role") {
+    const member = members.find(
+      (row) =>
+        row.organization_id === organization.id && row.user_id === targetId,
+    );
+    const nextRole = String(payload.role ?? "") as OrganizationMemberRole;
+    if (
+      !member ||
+      !canChangeOrganizationMemberRole(
+        organization,
+        members,
+        userId,
+        targetId,
+        nextRole,
+      )
+    )
+      throw new Error(
+        "Your organization role cannot change this member's role.",
+      );
+    member.role = nextRole;
+    return true;
+  }
+
+  if (
+    action === "remove_organization_member" ||
+    action === "ban_organization_member"
+  ) {
+    const member = members.find(
+      (row) =>
+        row.organization_id === organization.id && row.user_id === targetId,
+    );
+    if (
+      !member ||
+      !canManageOrganizationMember(organization, members, userId, targetId)
+    )
+      throw new Error("Your organization role cannot change this member.");
+    if (action === "ban_organization_member") {
+      data.organization_bans = data.organization_bans.filter(
+        (row) =>
+          !(
+            row.organization_id === organization.id && row.user_id === targetId
+          ),
+      );
+      data.organization_bans.push({
+        organization_id: organization.id,
+        user_id: targetId,
+        banned_by: userId,
+        reason: String(payload.reason ?? ""),
+        former_role: member.role,
+        created_at: new Date().toISOString(),
+      });
+    }
+    data.organization_members = members.filter((row) => row !== member);
+    countMembers(organization);
+    return true;
+  }
+
+  if (action === "unban_organization_member") {
+    const ban = data.organization_bans.find(
+      (row) =>
+        row.organization_id === organization.id && row.user_id === targetId,
+    );
+    const actorRole = activeOrganizationRole(organization, members, userId);
+    if (!ban || !actorRole || rank[actorRole] <= rank[ban.former_role])
+      throw new Error("Your organization role cannot unban this person.");
+    data.organization_bans = data.organization_bans.filter(
+      (row) => row !== ban,
+    );
+    return true;
+  }
+
+  if (action === "leave_organization") {
+    if (!canLeaveOrganization(organization, members, userId))
+      throw new Error("The organization owner cannot leave.");
+    data.organization_members = members.filter(
+      (row) =>
+        !(row.organization_id === organization.id && row.user_id === userId),
+    );
+    countMembers(organization);
+    return true;
+  }
+
+  if (
+    action === "attach_organization_squad" ||
+    action === "detach_organization_squad"
+  ) {
+    const squadId = String(payload.squad_id ?? "");
+    const canManageSquad = canManageOrganizationSquads(
+      organization,
+      members,
+      userId,
+    );
+    const ownsSquad = data.squad_members.some(
+      (member) =>
+        member.squad_id === squadId &&
+        member.user_id === userId &&
+        (member.role === "owner" || member.role === "admin"),
+    );
+    if (!canManageSquad || !ownsSquad)
+      throw new Error(
+        "You need an elder or organization leader role and squad admin access.",
+      );
+    const old = data.organization_squads.find(
+      (row) =>
+        row.organization_id === organization.id && row.squad_id === squadId,
+    );
+    if (action === "attach_organization_squad") {
+      if (!data.squads.some((squad) => squad.id === squadId))
+        throw new Error("That Squad is unavailable.");
+      if (!old)
+        data.organization_squads.push({
+          organization_id: organization.id,
+          squad_id: squadId,
+          added_by: userId,
+          created_at: new Date().toISOString(),
+        });
+    } else {
+      if (!old)
+        throw new Error("That Squad is not linked to this organization.");
+      data.organization_squads = data.organization_squads.filter(
+        (row) => row !== old,
+      );
+    }
+    return true;
+  }
+
+  if (action === "attach_organization_space" || action === "detach_organization_space") {
+    const spaceId = String(payload.space_id ?? "");
+    const space = data.spaces.find((row) => row.id === spaceId);
+    const organizationRole = activeOrganizationRole(organization, members, userId);
+    const spaceRole = space && data.space_members.find((row) => row.space_id === space.id && row.user_id === userId && row.status === "active")?.role;
+    if (!space || !organizationRole || rank[organizationRole] < rank.admin ||
+        !spaceRole || SOCIAL_ROLE_RANK[spaceRole] < SOCIAL_ROLE_RANK.admin ||
+        blocked(userId, organization.owner_id) || blocked(userId, space.owner_id) ||
+        data.organization_bans.some((row) => row.organization_id === organization.id && row.user_id === userId) ||
+        data.space_bans.some((row) => row.space_id === space.id && row.user_id === userId))
+      throw new Error("You need active admin authority in both communities to link them.");
+    const old = data.organization_spaces.find((row) => row.organization_id === organization.id && row.space_id === space.id);
+    if (action === "attach_organization_space") {
+      if (!old) data.organization_spaces.push({ organization_id: organization.id, space_id: space.id, added_by: userId, created_at: new Date().toISOString() });
+    } else {
+      if (!old) throw new Error("That Space is not linked to this organization.");
+      data.organization_spaces = data.organization_spaces.filter((row) => row !== old);
+    }
+    return true;
+  }
+
+  return false;
+}
+
+function applyDemoSpaceAction(
+  data: Data,
+  action: string,
+  payload: Payload,
+  userId: string,
+  newId: () => string,
+) {
+  const spaceId = String(payload.space_id ?? "");
+  const targetId = String(payload.user_id ?? "");
+  const space = data.spaces.find((item) => item.id === spaceId);
+  const members = data.space_members;
+  const blocked = (first: string, second: string) =>
+    data.blocks.some(
+      (row) =>
+        (row.blocker_id === first && row.blocked_id === second) ||
+        (row.blocker_id === second && row.blocked_id === first),
+    );
+  const roleFor = (personId: string) => {
+    const member = members.find(
+      (row) => row.space_id === spaceId && row.user_id === personId,
+    );
+    if (member?.status !== "active") return null;
+    if (personId === space?.owner_id)
+      return member.role === "owner" ? "owner" : null;
+    return member.role === "owner" ? null : member.role;
+  };
+  const roleRank = SOCIAL_ROLE_RANK;
+  const actorRole = roleFor(userId);
+  const canManage = !!space && !space.archived_at && !blocked(userId, space.owner_id) &&
+    !data.space_bans.some((ban) => ban.space_id === spaceId && ban.user_id === userId) &&
+    !!actorRole && SOCIAL_ROLE_RANK[actorRole] >= SOCIAL_ROLE_RANK.admin;
+  const findMember = (personId: string) =>
+    members.find((row) => row.space_id === spaceId && row.user_id === personId);
+  const now = new Date().toISOString();
+
+  if (action === "create_space") {
+    const name = String(payload.name ?? "").trim();
+    const description = String(payload.description ?? "");
+    if (name.length < 2 || name.length > 60 || description.length > 500)
+      throw new Error("Check the Space name and description.");
+    const createdId = newId();
+    data.spaces.push({
+      id: createdId,
+      owner_id: userId,
+      name,
+      description,
+      created_at: now,
+      space_type: payload.space_type === "club" || payload.space_type === "academic" || payload.space_type === "sports" || payload.space_type === "residence" || payload.space_type === "interest" || payload.space_type === "local_community" || payload.space_type === "professional" ? payload.space_type : "other",
+      discoverability: payload.discoverability === "public" || payload.discoverability === "community" ? payload.discoverability : "private",
+      join_mode: payload.join_mode === "open" || payload.join_mode === "request" ? payload.join_mode : "invite",
+      invite_policy: payload.invite_policy === "elders" || payload.invite_policy === "members" ? payload.invite_policy : "admins",
+    });
+    data.space_members.push({
+      space_id: createdId,
+      user_id: userId,
+      role: "owner",
+      status: "active",
+      invited_by: null,
+      created_at: now,
+    });
+    return true;
+  }
+
+  if (!space) return false;
+  if (action === "update_space") {
+    const name = String(payload.name ?? "").trim();
+    const description = String(payload.description ?? "");
+    if (!canManage || name.length < 2 || name.length > 60 || description.length > 500)
+      throw new Error("Only Space owners and admins can edit valid Space details.");
+    space.name = name;
+    space.description = description;
+    return true;
+  }
+  if (action === "invite_space_member") {
+    const role: SocialMemberRole = payload.role === "coowner" || payload.role === "admin" || payload.role === "elder" ? payload.role : "member";
+    const targetMember = findMember(targetId);
+    const friend = data.friendships.some(
+      (friendship) =>
+        friendship.status === "accepted" &&
+        ((friendship.sender_id === userId && friendship.recipient_id === targetId) ||
+          (friendship.recipient_id === userId && friendship.sender_id === targetId)),
+    );
+    if (
+      !space || space.archived_at || targetId === userId || targetId === space.owner_id ||
+      !actorRole || !canInviteWithPolicy(actorRole, space.invite_policy) ||
+      (SOCIAL_ROLE_RANK[actorRole] <= SOCIAL_ROLE_RANK[role] && !(actorRole === "member" && role === "member" && space.invite_policy === "members")) ||
+      !data.profiles.some((profile) => profile.id === targetId) ||
+      blocked(userId, targetId) || blocked(space.owner_id, targetId) || !friend ||
+      data.space_bans.some((ban) => ban.space_id === spaceId && ban.user_id === targetId) ||
+      targetMember?.status === "active" ||
+      (!!targetMember && (!actorRole || SOCIAL_ROLE_RANK[actorRole] <= SOCIAL_ROLE_RANK[targetMember.role]))
+    )
+      throw new Error("Choose an eligible friend to invite to this Space.");
+    if (targetMember) {
+      targetMember.role = role;
+      targetMember.status = "invited";
+      targetMember.invited_by = userId;
+      targetMember.created_at = now;
+    } else {
+      members.push({
+        space_id: spaceId,
+        user_id: targetId,
+        role,
+        status: "invited",
+        invited_by: userId,
+        created_at: now,
+      });
+    }
+    return true;
+  }
+  if (action === "respond_space_invite") {
+    const invite = findMember(userId);
+    if (targetId && targetId !== userId || invite?.status !== "invited" || space.archived_at || blocked(userId, space.owner_id) ||
+        data.space_bans.some((row) => row.space_id === spaceId && row.user_id === userId))
+      throw new Error("That Space invitation is no longer available.");
+    if (payload.accept === true) invite.status = "active";
+    else data.space_members = members.filter((row) => row !== invite);
+    return true;
+  }
+  if (action === "set_space_member_role") {
+    const member = findMember(targetId);
+    const role = payload.role;
+    if (
+      !canManage || targetId === userId ||
+      targetId === space.owner_id || !member ||
+      (role !== "coowner" && role !== "admin" && role !== "elder" && role !== "member") ||
+      !actorRole || SOCIAL_ROLE_RANK[actorRole] <= SOCIAL_ROLE_RANK[member.role] || SOCIAL_ROLE_RANK[actorRole] <= SOCIAL_ROLE_RANK[role]
+    )
+      throw new Error("Your Space role cannot change this member role.");
+    member.role = role;
+    return true;
+  }
+  if (action === "remove_space_member") {
+    const member = findMember(targetId);
+    if (
+      !canManage || !member || targetId === userId || targetId === space.owner_id ||
+      !actorRole || roleRank[actorRole] <= roleRank[member.role]
+    )
+      throw new Error("Your Space role cannot remove this member.");
+    data.space_members = members.filter((row) => row !== member);
+    return true;
+  }
+  if (action === "leave_space") {
+    const member = findMember(userId);
+    if (userId === space.owner_id || !member || member.status !== "active")
+      throw new Error("The Space owner cannot leave; active members may leave.");
+    data.space_members = members.filter((row) => row !== member);
+    return true;
+  }
+  if (action === "attach_space_squad" || action === "detach_space_squad") {
+    const linked = data.space_squads.find(
+      (row) => row.space_id === spaceId && row.squad_id === String(payload.squad_id ?? ""),
+    );
+    if (!canManage) throw new Error("Only Space owners and admins can link Squads.");
+    if (action === "attach_space_squad") {
+      const hasSquadAdmin = data.squad_members.some(
+        (member) =>
+          member.squad_id === String(payload.squad_id ?? "") &&
+          member.user_id === userId &&
+          (member.role === "owner" || member.role === "admin"),
+      );
+      if (!hasSquadAdmin || !data.squads.some((squad) => squad.id === String(payload.squad_id ?? "")))
+        throw new Error("You need to administer that Squad to link it.");
+      if (!linked)
+        data.space_squads.push({
+          space_id: spaceId,
+          squad_id: String(payload.squad_id),
+          added_by: userId,
+          created_at: now,
+        });
+      return true;
+    }
+    if (!linked) throw new Error("That Squad is not linked to this Space.");
+    data.space_squads = data.space_squads.filter((row) => row !== linked);
+    return true;
+  }
+  return false;
+}
+
+function applyDemoSocialMembershipAction(
+  data: Data,
+  action: string,
+  payload: Payload,
+  userId: string,
+  newId: () => string,
+) {
+  const blocked = (first: string, second: string) =>
+    data.blocks.some(
+      (row) =>
+        (row.blocker_id === first && row.blocked_id === second) ||
+        (row.blocker_id === second && row.blocked_id === first),
+    );
+  if (action === "set_social_association" || action === "clear_social_association") {
+    const activityId = String(payload.activity_id ?? "");
+    const activity = data.activities.find((row) => row.id === activityId && row.owner_id === userId);
+    if (!activity) throw new Error("Only the Beacon host can change its community association.");
+    const existing = data.activity_social_links.find((row) => row.activity_id === activityId);
+    if (action === "clear_social_association") {
+      if (existing?.created_by === userId)
+        data.activity_social_links = data.activity_social_links.filter((row) => row !== existing);
+      return true;
+    }
+    const type = payload.entity_type;
+    const entityId = String(payload.entity_id ?? "");
+    const entity = type === "organization" ? data.organizations.find((row) => row.id === entityId)
+      : type === "space" ? data.spaces.find((row) => row.id === entityId)
+        : type === "squad" ? data.squads.find((row) => row.id === entityId) : undefined;
+    const banned = type === "organization" ? data.organization_bans.some((row) => row.organization_id === entityId && row.user_id === userId)
+      : type === "space" ? data.space_bans.some((row) => row.space_id === entityId && row.user_id === userId)
+        : data.squad_bans.some((row) => row.squad_id === entityId && row.user_id === userId);
+    const memberRole: SocialRole | null = type === "organization" && entity
+      ? activeOrganizationRole(entity as (typeof data.organizations)[number], data.organization_members, userId)
+      : type === "space"
+        ? data.space_members.find((row) => row.space_id === entityId && row.user_id === userId && row.status === "active")?.role ?? null
+        : data.squad_members.find((row) => row.squad_id === entityId && row.user_id === userId)?.role ?? null;
+    if (!entity || entity.archived_at || banned || blocked(userId, entity.owner_id) || !memberRole)
+      throw new Error("You need current membership in an available community to associate this Beacon.");
+    const now = new Date().toISOString();
+    if (existing) {
+      existing.entity_type = type as ActivitySocialLink["entity_type"];
+      existing.entity_id = entityId;
+      existing.created_by = userId;
+      existing.created_at = now;
+    } else {
+      data.activity_social_links.push({ activity_id: activityId, entity_type: type as ActivitySocialLink["entity_type"], entity_id: entityId, created_by: userId, created_at: now });
+    }
+    return true;
+  }
+  if (action === "set_social_policy") {
+    const type = payload.entity_type;
+    const entityId = String(payload.entity_id ?? "");
+    const entity = type === "organization" ? data.organizations.find((row) => row.id === entityId)
+      : type === "space" ? data.spaces.find((row) => row.id === entityId)
+        : type === "squad" ? data.squads.find((row) => row.id === entityId) : undefined;
+    const banned = type === "organization" ? data.organization_bans.some((row) => row.organization_id === entityId && row.user_id === userId)
+      : type === "space" ? data.space_bans.some((row) => row.space_id === entityId && row.user_id === userId)
+        : data.squad_bans.some((row) => row.squad_id === entityId && row.user_id === userId);
+    const role = type === "organization" && entity ? activeOrganizationRole(entity as (typeof data.organizations)[number], data.organization_members, userId)
+      : type === "space" ? data.space_members.find((row) => row.space_id === entityId && row.user_id === userId && row.status === "active")?.role
+        : data.squad_members.find((row) => row.squad_id === entityId && row.user_id === userId)?.role;
+    if (!entity || entity.archived_at || banned || blocked(userId, entity.owner_id) || !role || SOCIAL_ROLE_RANK[role] < SOCIAL_ROLE_RANK.admin)
+      throw new Error("Only active community admins can change social settings.");
+    if (!["public", "community", "private"].includes(String(payload.discoverability)) ||
+        !["open", "request", "invite"].includes(String(payload.join_mode)) ||
+        !["admins", "elders", "members"].includes(String(payload.invite_policy)))
+      throw new Error("Choose valid social settings.");
+    entity.discoverability = payload.discoverability as "public" | "community" | "private";
+    entity.join_mode = payload.join_mode as "open" | "request" | "invite";
+    entity.invite_policy = payload.invite_policy as InvitePolicy;
+    return true;
+  }
+  if (action === "set_squad_member_role") {
+    const squadId = String(payload.squad_id ?? "");
+    const targetId = String(payload.user_id ?? "");
+    const squad = data.squads.find((row) => row.id === squadId);
+    const role = payload.role;
+    const target = data.squad_members.find((row) => row.squad_id === squadId && row.user_id === targetId);
+    const actorRole = data.squad_members.find((row) => row.squad_id === squadId && row.user_id === userId)?.role;
+    if (!squad || squad.archived_at || blocked(userId, squad.owner_id) ||
+        data.squad_bans.some((ban) => ban.squad_id === squadId && ban.user_id === userId) ||
+        !actorRole || SOCIAL_ROLE_RANK[actorRole] < SOCIAL_ROLE_RANK.admin || targetId === userId ||
+        targetId === squad.owner_id || !target || (role !== "coowner" && role !== "admin" && role !== "elder" && role !== "member") ||
+        SOCIAL_ROLE_RANK[actorRole] <= SOCIAL_ROLE_RANK[target.role] || SOCIAL_ROLE_RANK[actorRole] <= SOCIAL_ROLE_RANK[role])
+      throw new Error("Your Squad role cannot change this member role.");
+    target.role = role;
+    return true;
+  }
+  const prefix = action.match(/^(join|request|cancel|approve|deny)_(squad|space|organization)(?:_join|_join_request)?$/);
+  if (action === "create_space_from_squads") {
+    const squadIds = Array.isArray(payload.squad_ids) ? payload.squad_ids.filter((id): id is string => typeof id === "string") : [];
+    if (squadIds.length < 1 || squadIds.length > 20 || new Set(squadIds).size !== squadIds.length)
+      throw new Error("Choose 1 to 20 different Squads.");
+    const managed = squadIds.map((id) => data.squads.find((row) => row.id === id));
+    if (managed.some((squad) => !squad || squad.archived_at || blocked(userId, squad.owner_id) ||
+      data.squad_bans.some((ban) => ban.squad_id === squad.id && ban.user_id === userId) ||
+      !data.squad_members.some((member) => member.squad_id === squad.id && member.user_id === userId && SOCIAL_ROLE_RANK[member.role] >= SOCIAL_ROLE_RANK.admin)))
+      throw new Error("You need active admin access to every Squad.");
+    const name = String(payload.name ?? "").trim();
+    const description = String(payload.description ?? "");
+    if (name.length < 2 || name.length > 60 || description.length > 500)
+      throw new Error("Check the Space name and description.");
+    const spaceId = newId();
+    const now = new Date().toISOString();
+    data.spaces.push({
+      id: spaceId, owner_id: userId, name, description, created_at: now,
+      space_type: payload.space_type === "club" || payload.space_type === "academic" || payload.space_type === "sports" || payload.space_type === "residence" || payload.space_type === "interest" || payload.space_type === "local_community" || payload.space_type === "professional" ? payload.space_type : "other",
+      discoverability: payload.discoverability === "public" || payload.discoverability === "community" ? payload.discoverability : "private",
+      join_mode: payload.join_mode === "open" || payload.join_mode === "request" ? payload.join_mode : "invite",
+      invite_policy: payload.invite_policy === "elders" || payload.invite_policy === "members" ? payload.invite_policy : "admins",
+    });
+    data.space_members.push({ space_id: spaceId, user_id: userId, role: "owner", status: "active", invited_by: null, created_at: now });
+    for (const squadId of squadIds) data.space_squads.push({ space_id: spaceId, squad_id: squadId, added_by: userId, created_at: now });
+    return { space_id: spaceId, linked_squad_count: squadIds.length };
+  }
+  const banAction = action.match(/^(ban|unban)_(squad|space)_member$/);
+  if (banAction) {
+    const [, verb, type] = banAction;
+    const id = String(payload[`${type}_id`] ?? "");
+    const targetId = String(payload.user_id ?? "");
+    const entity = type === "space" ? data.spaces.find((row) => row.id === id) : data.squads.find((row) => row.id === id);
+    const ownerId = entity?.owner_id;
+    const role = type === "space"
+      ? data.space_members.find((row) => row.space_id === id && row.user_id === userId && row.status === "active")?.role
+      : data.squad_members.find((row) => row.squad_id === id && row.user_id === userId)?.role;
+    const oldBan = type === "space"
+      ? data.space_bans.find((row) => row.space_id === id && row.user_id === targetId)
+      : data.squad_bans.find((row) => row.squad_id === id && row.user_id === targetId);
+    if (!entity || entity.archived_at || !ownerId || blocked(userId, ownerId) ||
+        (type === "space" ? data.space_bans.some((row) => row.space_id === id && row.user_id === userId) : data.squad_bans.some((row) => row.squad_id === id && row.user_id === userId)) ||
+        !role || SOCIAL_ROLE_RANK[role] < SOCIAL_ROLE_RANK.admin || targetId === userId || targetId === ownerId)
+      throw new Error("Only active community admins can manage bans.");
+    if (verb === "unban") {
+      if (!oldBan || SOCIAL_ROLE_RANK[role] <= SOCIAL_ROLE_RANK[oldBan.former_role]) throw new Error("Your role cannot remove that ban.");
+      if (type === "space") data.space_bans = data.space_bans.filter((row) => row !== oldBan);
+      else data.squad_bans = data.squad_bans.filter((row) => row !== oldBan);
+      return true;
+    }
+    if (String(payload.reason ?? "").length > 200) throw new Error("Ban reasons must be 200 characters or fewer.");
+    const targetRole = type === "space"
+      ? data.space_members.find((row) => row.space_id === id && row.user_id === targetId && row.status === "active")?.role
+      : data.squad_members.find((row) => row.squad_id === id && row.user_id === targetId)?.role;
+    const formerRole = targetRole && targetRole !== "owner" ? targetRole : null;
+    if (!formerRole || SOCIAL_ROLE_RANK[role] <= SOCIAL_ROLE_RANK[formerRole]) throw new Error("Your role cannot ban that member.");
+    if (type === "space") {
+      data.space_members = data.space_members.filter((row) => !(row.space_id === id && row.user_id === targetId));
+      data.space_bans = data.space_bans.filter((row) => !(row.space_id === id && row.user_id === targetId));
+      data.space_bans.push({ space_id: id, user_id: targetId, banned_by: userId, reason: String(payload.reason ?? ""), former_role: formerRole, created_at: new Date().toISOString() });
+    } else {
+      data.squad_members = data.squad_members.filter((row) => !(row.squad_id === id && row.user_id === targetId));
+      data.squad_join_requests = data.squad_join_requests.filter((row) => !(row.squad_id === id && row.user_id === targetId));
+      data.squad_invites = data.squad_invites.filter((row) => !(row.squad_id === id && row.recipient_id === targetId));
+      data.squad_bans = data.squad_bans.filter((row) => !(row.squad_id === id && row.user_id === targetId));
+      data.squad_bans.push({ squad_id: id, user_id: targetId, banned_by: userId, reason: String(payload.reason ?? ""), former_role: formerRole, created_at: new Date().toISOString() });
+    }
+    return true;
+  }
+  if (prefix) {
+    const [, verb, entityType] = prefix;
+    const idField = entityType === "organization" ? "organization_id" : `${entityType}_id`;
+    const entityId = String(payload[idField] ?? "");
+    const entity = entityType === "organization"
+      ? data.organizations.find((row) => row.id === entityId)
+      : entityType === "space"
+        ? data.spaces.find((row) => row.id === entityId)
+        : data.squads.find((row) => row.id === entityId);
+    if (!entity) throw new Error("That community is unavailable.");
+    const ownerId = entity.owner_id;
+    const currentStatus = entityType === "organization"
+      ? data.organization_members.find((row) => row.organization_id === entityId && row.user_id === userId)?.status ?? (ownerId === userId ? "active" : null)
+      : entityType === "space"
+        ? data.space_members.find((row) => row.space_id === entityId && row.user_id === userId)?.status ?? null
+        : data.squad_members.some((row) => row.squad_id === entityId && row.user_id === userId)
+          ? "active"
+          : data.squad_join_requests.some((row) => row.squad_id === entityId && row.user_id === userId)
+            ? "requested"
+            : null;
+    const parentEligible = () => {
+      if (entityType === "organization") return false;
+      if (entityType === "space")
+        return data.organization_spaces.some((link) => {
+          const parent = data.organizations.find((row) => row.id === link.organization_id);
+          return link.space_id === entityId && !!parent && !parent.archived_at && !blocked(userId, parent.owner_id) &&
+            !data.organization_bans.some((ban) => ban.organization_id === parent.id && ban.user_id === userId) &&
+            activeOrganizationRole(parent, data.organization_members, userId) !== null;
+        });
+      return data.space_squads.some((link) => {
+        const parent = data.spaces.find((row) => row.id === link.space_id);
+        return link.squad_id === entityId && !!parent && !parent.archived_at && !blocked(userId, parent.owner_id) &&
+          !data.space_bans.some((ban) => ban.space_id === parent.id && ban.user_id === userId) &&
+          data.space_members.some((member) => member.space_id === parent.id && member.user_id === userId && member.status === "active");
+      }) || data.organization_squads.some((link) => {
+        const parent = data.organizations.find((row) => row.id === link.organization_id);
+        return link.squad_id === entityId && !!parent && !parent.archived_at && !blocked(userId, parent.owner_id) &&
+          !data.organization_bans.some((ban) => ban.organization_id === parent.id && ban.user_id === userId) &&
+          activeOrganizationRole(parent, data.organization_members, userId) !== null;
+      }) || data.space_squads.some((link) => data.organization_spaces.some((parentLink) => {
+        const parent = data.organizations.find((row) => row.id === parentLink.organization_id);
+        const space = data.spaces.find((row) => row.id === link.space_id);
+        return link.squad_id === entityId && link.space_id === parentLink.space_id && !!space && !space.archived_at &&
+          data.space_members.some((member) => member.space_id === space.id && member.user_id === userId && member.status === "active") &&
+          !!parent && !parent.archived_at && !blocked(userId, parent.owner_id) &&
+          !data.organization_bans.some((ban) => ban.organization_id === parent.id && ban.user_id === userId) &&
+          activeOrganizationRole(parent, data.organization_members, userId) !== null;
+      }));
+    };
+    const banned = entityType === "organization"
+      ? data.organization_bans.some((row) => row.organization_id === entityId && row.user_id === userId)
+      : entityType === "space"
+        ? data.space_bans.some((row) => row.space_id === entityId && row.user_id === userId)
+        : data.squad_bans.some((row) => row.squad_id === entityId && row.user_id === userId);
+    const canCurrentlyJoin = () =>
+      !entity.archived_at && !banned && !blocked(userId, ownerId) &&
+      (entity.discoverability === "public" ||
+        (entity.discoverability === "community" && parentEligible()));
+    const actorRole: SocialRole | null = entityType === "organization"
+      ? activeOrganizationRole(entity as (typeof data.organizations)[number], data.organization_members, userId)
+      : entityType === "space"
+        ? (() => {
+            const row = data.space_members.find((member) => member.space_id === entityId && member.user_id === userId && member.status === "active");
+            return row ? row.role : null;
+          })()
+        : data.squad_members.find((member) => member.squad_id === entityId && member.user_id === userId)?.role ?? null;
+
+    if (verb === "join" || verb === "request") {
+      if (banned || blocked(userId, ownerId) || !canCurrentlyJoin())
+        throw new Error("That community is unavailable to you.");
+      if (currentStatus === "active") return true;
+      if (currentStatus === "invited") throw new Error("Accept your invitation to join this community.");
+      const joinMode = entity.join_mode ?? "invite";
+      if (verb === "join" && joinMode !== "open") throw new Error("This community requires a request or invitation.");
+      if (verb === "request" && joinMode !== "request") throw new Error("This community is not accepting join requests.");
+      const createdAt = new Date().toISOString();
+      if (entityType === "organization") {
+        const old = data.organization_members.find((row) => row.organization_id === entityId && row.user_id === userId);
+        if (old) { old.status = verb === "join" ? "active" : "requested"; old.role = "member"; }
+        else data.organization_members.push({ organization_id: entityId, user_id: userId, role: "member", status: verb === "join" ? "active" : "requested", invited_by: null, created_at: createdAt });
+      } else if (entityType === "space") {
+        const old = data.space_members.find((row) => row.space_id === entityId && row.user_id === userId);
+        if (old) { old.status = verb === "join" ? "active" : "requested"; old.role = "member"; }
+        else data.space_members.push({ space_id: entityId, user_id: userId, role: "member", status: verb === "join" ? "active" : "requested", invited_by: null, created_at: createdAt });
+      } else if (verb === "join") {
+        data.squad_join_requests = data.squad_join_requests.filter((row) => !(row.squad_id === entityId && row.user_id === userId));
+        data.squad_members.push({ squad_id: entityId, user_id: userId, role: "member" });
+      } else if (!data.squad_join_requests.some((row) => row.squad_id === entityId && row.user_id === userId)) {
+        data.squad_join_requests.push({ squad_id: entityId, user_id: userId, created_at: createdAt });
+      }
+      return true;
+    }
+
+    if (verb === "cancel") {
+      if (currentStatus !== "requested") throw new Error("You do not have a pending join request.");
+      if (entityType === "organization") data.organization_members = data.organization_members.filter((row) => !(row.organization_id === entityId && row.user_id === userId && row.status === "requested"));
+      else if (entityType === "space") data.space_members = data.space_members.filter((row) => !(row.space_id === entityId && row.user_id === userId && row.status === "requested"));
+      else data.squad_join_requests = data.squad_join_requests.filter((row) => !(row.squad_id === entityId && row.user_id === userId));
+      return true;
+    }
+
+    const targetId = String(payload.user_id ?? "");
+    if (entity.archived_at || banned || blocked(userId, ownerId) || !actorRole || SOCIAL_ROLE_RANK[actorRole] < SOCIAL_ROLE_RANK.admin || targetId === userId)
+      throw new Error("Only community admins can review join requests.");
+    if (entityType === "organization" || entityType === "space") {
+      const target = entityType === "organization"
+        ? data.organization_members.find((row) => row.organization_id === entityId && row.user_id === targetId && row.status === "requested")
+        : data.space_members.find((row) => row.space_id === entityId && row.user_id === targetId && row.status === "requested");
+      if (!target) throw new Error("That join request is no longer available.");
+      if (verb === "deny") {
+        if (entityType === "organization") data.organization_members = data.organization_members.filter((row) => row !== target);
+        else data.space_members = data.space_members.filter((row) => row !== target);
+        return true;
+      }
+      const targetBlocked = blocked(targetId, ownerId);
+      const targetBanned = entityType === "organization"
+        ? data.organization_bans.some((row) => row.organization_id === entityId && row.user_id === targetId)
+        : data.space_bans.some((row) => row.space_id === entityId && row.user_id === targetId);
+      if (targetBlocked || targetBanned || (entity.discoverability === "community" && !parentEligibleFor(entityType, entityId, targetId)))
+        throw new Error("That person is no longer eligible to join this community.");
+      target.status = "active";
+      return true;
+    }
+    const target = data.squad_join_requests.find((row) => row.squad_id === entityId && row.user_id === targetId);
+    if (!target) throw new Error("That join request is no longer available.");
+    if (verb === "deny") {
+      data.squad_join_requests = data.squad_join_requests.filter((row) => row !== target);
+      return true;
+    }
+    const targetBlocked = blocked(targetId, ownerId);
+    const targetBanned = data.squad_bans.some((row) => row.squad_id === entityId && row.user_id === targetId);
+    if (targetBlocked || targetBanned || (entity.discoverability === "community" && !parentEligibleFor(entityType, entityId, targetId)))
+      throw new Error("That person is no longer eligible to join this Squad.");
+    data.squad_join_requests = data.squad_join_requests.filter((row) => row !== target);
+    data.squad_members.push({ squad_id: entityId, user_id: targetId, role: "member" });
+    return true;
+  }
+
+  if (action === "invite_squad") {
+    const squadId = String(payload.squad_id ?? payload.id ?? "");
+    const targetId = String(payload.user_id ?? "");
+    const squad = data.squads.find((row) => row.id === squadId);
+    const actorRole = data.squad_members.find((row) => row.squad_id === squadId && row.user_id === userId)?.role ?? null;
+    const friend = data.friendships.some((row) => row.status === "accepted" &&
+      ((row.sender_id === userId && row.recipient_id === targetId) || (row.recipient_id === userId && row.sender_id === targetId)));
+    if (!squad || squad.archived_at || data.squad_bans.some((row) => row.squad_id === squadId && row.user_id === userId) ||
+        blocked(userId, squad.owner_id) || !actorRole || !canInviteWithPolicy(actorRole, squad.invite_policy) || !friend ||
+        targetId === userId || blocked(userId, targetId) || blocked(squad.owner_id, targetId) ||
+        data.squad_bans.some((row) => row.squad_id === squadId && row.user_id === targetId) ||
+        data.squad_members.some((row) => row.squad_id === squadId && row.user_id === targetId))
+      throw new Error("Your Squad role cannot invite that person.");
+    if (!data.squad_invites.some((row) => row.squad_id === squadId && row.recipient_id === targetId))
+      data.squad_invites.push({ id: newId(), squad_id: squadId, sender_id: userId, recipient_id: targetId });
+    return true;
+  }
+
+  if (action === "accept_squad") {
+    const invite = data.squad_invites.find((row) => row.id === String(payload.id ?? "") && row.recipient_id === userId);
+    const squad = invite && data.squads.find((row) => row.id === invite.squad_id);
+    const inviterRole = invite && data.squad_members.find((row) => row.squad_id === invite.squad_id && row.user_id === invite.sender_id)?.role;
+    if (!invite || !squad || squad.archived_at || !inviterRole || !canInviteWithPolicy(inviterRole, squad.invite_policy) ||
+        data.squad_bans.some((row) => row.squad_id === squad.id && row.user_id === invite.sender_id) ||
+        blocked(userId, invite.sender_id) || blocked(userId, squad.owner_id) ||
+        data.squad_bans.some((row) => row.squad_id === squad.id && row.user_id === userId) ||
+        (squad.discoverability === "community" && !parentEligibleFor("squad", squad.id, userId)))
+      throw new Error("That Squad invitation is no longer available.");
+    if (!data.squad_members.some((row) => row.squad_id === squad.id && row.user_id === userId))
+      data.squad_members.push({ squad_id: squad.id, user_id: userId, role: "member" });
+    data.squad_invites = data.squad_invites.filter((row) => row !== invite);
+    return true;
+  }
+
+  if (action === "organize_squad_into_space") {
+    const squadId = String(payload.squad_id ?? "");
+    const squad = data.squads.find((row) => row.id === squadId);
+    if (!squad || squad.archived_at || squad.owner_id !== userId || !data.squad_members.some((row) => row.squad_id === squadId && row.user_id === userId && row.role === "owner"))
+      throw new Error("Only the Squad owner can organize it into a Space.");
+    const name = String(payload.name ?? "").trim();
+    const description = String(payload.description ?? "");
+    const copyMembers = payload.copy_members === true;
+    if (name.length < 2 || name.length > 60 || description.length > 500)
+      throw new Error("Check the Space name and description.");
+    if (copyMembers && payload.confirm_member_copy !== true)
+      throw new Error("Confirm that current Squad members will become Space members.");
+    const eligibleMembers = data.squad_members.filter((row) => row.squad_id === squadId && row.user_id !== userId &&
+      data.profiles.some((profile) => profile.id === row.user_id) && !blocked(userId, row.user_id) &&
+      !data.squad_bans.some((ban) => ban.squad_id === squadId && ban.user_id === row.user_id));
+    if (copyMembers && payload.expected_member_count !== undefined && payload.expected_member_count !== eligibleMembers.length)
+      throw new Error("The eligible Squad roster changed. Review the current members and confirm again.");
+    const now = new Date().toISOString();
+    const spaceId = newId();
+    data.spaces.push({
+      id: spaceId,
+      owner_id: userId,
+      name,
+      description,
+      created_at: now,
+      space_type: payload.space_type === "club" || payload.space_type === "academic" || payload.space_type === "sports" || payload.space_type === "residence" || payload.space_type === "interest" || payload.space_type === "local_community" || payload.space_type === "professional" ? payload.space_type : "other",
+      discoverability: payload.discoverability === "public" || payload.discoverability === "community" ? payload.discoverability : "private",
+      join_mode: payload.join_mode === "open" || payload.join_mode === "request" ? payload.join_mode : "invite",
+      invite_policy: payload.invite_policy === "elders" || payload.invite_policy === "members" ? payload.invite_policy : "admins",
+    });
+    data.space_members.push({ space_id: spaceId, user_id: userId, role: "owner", status: "active", invited_by: null, created_at: now });
+    data.space_squads.push({ space_id: spaceId, squad_id: squadId, added_by: userId, created_at: now });
+    let copiedCount = 0;
+    let skippedBlockedCount = 0;
+    if (copyMembers) {
+      for (const member of data.squad_members.filter((row) => row.squad_id === squadId && row.user_id !== userId)) {
+        if (!data.profiles.some((profile) => profile.id === member.user_id) || blocked(userId, member.user_id) ||
+            data.squad_bans.some((ban) => ban.squad_id === squadId && ban.user_id === member.user_id)) {
+          skippedBlockedCount++;
+          continue;
+        }
+        const role: SocialMemberRole = member.role === "coowner" || member.role === "admin" || member.role === "elder" ? member.role : "member";
+        data.space_members.push({ space_id: spaceId, user_id: member.user_id, role, status: "active", invited_by: userId, created_at: now });
+        copiedCount++;
+      }
+    }
+    if (payload.rename_general === true) squad.name = "General";
+    return { space_id: spaceId, copied_member_count: copiedCount, skipped_member_count: skippedBlockedCount, source_squad_id: squadId };
+  }
+
+  return false;
+
+  function parentEligibleFor(type: string, id: string, personId: string) {
+    if (type === "organization") return false;
+    if (type === "space") return data.organization_spaces.some((link) => {
+      const parent = data.organizations.find((row) => row.id === link.organization_id);
+      return link.space_id === id && !!parent && !parent.archived_at && !blocked(personId, parent.owner_id) &&
+        !data.organization_bans.some((ban) => ban.organization_id === parent.id && ban.user_id === personId) &&
+        activeOrganizationRole(parent, data.organization_members, personId) !== null;
+    });
+    return data.space_squads.some((link) => {
+      const parent = data.spaces.find((row) => row.id === link.space_id);
+      return link.squad_id === id && !!parent && !parent.archived_at && !blocked(personId, parent.owner_id) &&
+        !data.space_bans.some((ban) => ban.space_id === parent.id && ban.user_id === personId) &&
+        data.space_members.some((member) => member.space_id === parent.id && member.user_id === personId && member.status === "active");
+    }) || data.organization_squads.some((link) => {
+      const parent = data.organizations.find((row) => row.id === link.organization_id);
+      return link.squad_id === id && !!parent && !blocked(personId, parent.owner_id) &&
+        !data.organization_bans.some((ban) => ban.organization_id === parent.id && ban.user_id === personId) &&
+        activeOrganizationRole(parent, data.organization_members, personId) !== null;
+    }) || data.space_squads.some((link) => data.organization_spaces.some((parentLink) => {
+      const parent = data.organizations.find((row) => row.id === parentLink.organization_id);
+      const space = data.spaces.find((row) => row.id === link.space_id);
+      return link.squad_id === id && link.space_id === parentLink.space_id && !!space && !space.archived_at &&
+        data.space_members.some((member) => member.space_id === space.id && member.user_id === personId && member.status === "active") &&
+        !!parent && !parent.archived_at && !blocked(personId, parent.owner_id) &&
+        !data.organization_bans.some((ban) => ban.organization_id === parent.id && ban.user_id === personId) &&
+        activeOrganizationRole(parent, data.organization_members, personId) !== null;
+    }));
+  }
+}
+
 export function demoAction(previous: Data, action: string, p: Payload): Data {
   const d = structuredClone(previous),
     id = String(p.id ?? ""),
@@ -352,26 +1664,91 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
   const currentProfile = d.profiles.find((profile) => profile.id === uid)!;
   if (applyDemoBeaconMediaTeamAction(d, action, p, uid)) return d;
   if (applyDemoModuleCollectionAction(d, action, p, uid, newId)) return d;
+  if (
+    [
+      "create_routine",
+      "join_plan",
+      "leave_plan",
+      "pause_routine",
+      "resume_routine",
+      "skip_routine_next",
+      "end_routine",
+      "edit_routine",
+      "run_routine_once",
+    ].includes(action)
+  ) {
+    const additions = applyPlanRoutineDemo(
+      d,
+      action as PlanRoutineDemoAction,
+      p,
+      uid,
+    );
+    for (const routine of additions.plan_routines) {
+      const index = d.plan_routines.findIndex((row) => row.id === routine.id);
+      if (index < 0) d.plan_routines.push(routine);
+      else d.plan_routines[index] = routine;
+    }
+    d.plans.push(...additions.plans);
+    d.activities.push(...additions.activities);
+    d.places.push(...additions.places);
+    d.plan_members = d.plan_members.filter(
+      (member) =>
+        !additions.remove_plan_members.some(
+          (removed) =>
+            removed.plan_id === member.plan_id &&
+            removed.user_id === member.user_id,
+        ),
+    );
+    for (const member of additions.plan_members) {
+      if (
+        !d.plan_members.some(
+          (row) =>
+            row.plan_id === member.plan_id && row.user_id === member.user_id,
+        )
+      ) {
+        d.plan_members.push(member);
+      }
+    }
+    return d;
+  }
   if (action === "save_profile_privacy") {
     const visibility = p.profile_visibility,
       personIds = p.person_ids ?? [],
       squadIds = p.squad_ids ?? [],
       listIds = p.list_ids ?? [],
-      arrays = [personIds, squadIds, listIds];
+      organizationIds = p.organization_ids ?? [],
+      arrays = [personIds, squadIds, listIds, organizationIds];
     if (
-      (visibility !== "public" && visibility !== "friends" && visibility !== "custom") ||
-      arrays.some((value) => !Array.isArray(value) || value.some((id) => typeof id !== "string"))
+      (visibility !== "public" &&
+        visibility !== "friends" &&
+        visibility !== "custom") ||
+      arrays.some(
+        (value) =>
+          !Array.isArray(value) || value.some((id) => typeof id !== "string"),
+      )
     )
       throw new Error("Choose a valid profile audience.");
-    const [people, squads, lists] = arrays as string[][];
-    if (people.length > 200 || squads.length > 50 || lists.length > 100)
+    const [people, squads, lists, organizations] = arrays as string[][];
+    if (
+      people.length > 200 ||
+      squads.length > 50 ||
+      lists.length > 100 ||
+      organizations.length > 50
+    )
       throw new Error("Your custom profile audience is too large.");
     if (
-      [people, squads, lists].some((items) => new Set(items).size !== items.length)
+      [people, squads, lists, organizations].some(
+        (items) => new Set(items).size !== items.length,
+      )
     )
       throw new Error("Choose each audience member once.");
-    if (visibility !== "custom" && arrays.some((value) => (value as unknown[]).length > 0))
-      throw new Error("Custom audience selections are only used in Custom mode.");
+    if (
+      visibility !== "custom" &&
+      arrays.some((value) => (value as unknown[]).length > 0)
+    )
+      throw new Error(
+        "Custom audience selections are only used in Custom mode.",
+      );
     if (
       people.some(
         (personId) =>
@@ -401,19 +1778,52 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
       )
     )
       throw new Error("Choose your own private friend lists.");
+    if (
+      organizations.some((organizationId) => {
+        const organization = d.organizations.find(
+          (item) => item.id === organizationId,
+        );
+        return (
+          !organization ||
+          activeOrganizationRole(organization, d.organization_members, uid) ===
+            null
+        );
+      })
+    )
+      throw new Error("Choose organizations you currently belong to.");
     currentProfile.profile_visibility = visibility;
     d.profile_visibility_grants = d.profile_visibility_grants.filter(
       (grant) => grant.owner_id !== uid,
     );
     if (visibility === "custom") {
       d.profile_visibility_grants.push(
-        ...people.map((target_id) => ({ owner_id: uid, kind: "person" as const, target_id })),
-        ...squads.map((target_id) => ({ owner_id: uid, kind: "squad" as const, target_id })),
-        ...lists.map((target_id) => ({ owner_id: uid, kind: "list" as const, target_id })),
+        ...people.map((target_id) => ({
+          owner_id: uid,
+          kind: "person" as const,
+          target_id,
+        })),
+        ...squads.map((target_id) => ({
+          owner_id: uid,
+          kind: "squad" as const,
+          target_id,
+        })),
+        ...lists.map((target_id) => ({
+          owner_id: uid,
+          kind: "list" as const,
+          target_id,
+        })),
+        ...organizations.map((target_id) => ({
+          owner_id: uid,
+          kind: "organization" as const,
+          target_id,
+        })),
       );
     }
     return d;
   }
+  if (applyDemoOrganizationAction(d, action, p, uid, newId)) return d;
+  if (applyDemoSpaceAction(d, action, p, uid, newId)) return d;
+  if (applyDemoSocialMembershipAction(d, action, p, uid, newId)) return d;
   const isSquadMember = (squadId: string) =>
     d.squad_members.some(
       (member) => member.squad_id === squadId && member.user_id === uid,
@@ -432,7 +1842,9 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
       ids.some(
         (aspirationId) =>
           typeof aspirationId !== "string" ||
-          !currentProfile.aspiration_goals.some((goal) => goal.id === aspirationId),
+          !currentProfile.aspiration_goals.some(
+            (goal) => goal.id === aspirationId,
+          ),
       )
     )
       throw new Error("Choose aspirations from your profile.");
@@ -442,60 +1854,89 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
     d.friendships.some(
       (friendship) =>
         friendship.status === "accepted" &&
-        ((friendship.sender_id === uid && friendship.recipient_id === personId) ||
-          (friendship.recipient_id === uid && friendship.sender_id === personId)),
+        ((friendship.sender_id === uid &&
+          friendship.recipient_id === personId) ||
+          (friendship.recipient_id === uid &&
+            friendship.sender_id === personId)),
     );
   const currentControlValues = (activity: Data["activities"][number]) =>
     beaconControlValuesFromActivity(activity);
   if (action === "set_beacon_controls") {
-    const activity = d.activities.find((item) => item.id === (p.activity_id ?? id));
+    const activity = d.activities.find(
+      (item) => item.id === (p.activity_id ?? id),
+    );
     if (!activity || !canManageBeaconSettings(d, activity, uid))
-      throw new Error("Only the beacon owner or a current co-owner can change settings.");
+      throw new Error(
+        "Only the beacon owner or a current co-owner can change settings.",
+      );
     if (activity.status !== "scheduled")
       throw new Error("Beacon settings are read-only after the beacon ends.");
     const values: BeaconControlValues = validateBeaconControlValues({
       ...currentControlValues(activity),
       ...p,
     });
-    if (!canSetStrictCapacity(d, activity, values.capacity_limit, values.capacity_policy))
-      throw new Error("Capacity cannot be lowered below current accepted Going count.");
+    if (
+      !canSetStrictCapacity(
+        d,
+        activity,
+        values.capacity_limit,
+        values.capacity_policy,
+      )
+    )
+      throw new Error(
+        "Capacity cannot be lowered below current accepted Going count.",
+      );
     Object.assign(activity, values);
     return d;
   }
   if (action === "set_beacon_attendance") {
-    const activity = d.activities.find((item) => item.id === (p.activity_id ?? id)),
+    const activity = d.activities.find(
+        (item) => item.id === (p.activity_id ?? id),
+      ),
       targetId = typeof p.user_id === "string" ? p.user_id : uid,
       state = p.state;
     if (
       !activity ||
       (state !== "none" && state !== "arriving" && state !== "present") ||
-      !canSetArrivalState(d, activity, uid, targetId, state as "none" | "arriving" | "present")
+      !canSetArrivalState(
+        d,
+        activity,
+        uid,
+        targetId,
+        state as "none" | "arriving" | "present",
+      )
     )
-      throw new Error("Only an eligible attendee may update their own arrival status.");
+      throw new Error(
+        "Only an eligible attendee may update their own arrival status.",
+      );
     const existing = d.beacon_attendance.find(
       (item) => item.activity_id === activity.id && item.user_id === uid,
     );
     if (existing) existing.state = state as "none" | "arriving" | "present";
-    else d.beacon_attendance.push({
-      activity_id: activity.id,
-      user_id: uid,
-      state: state as "none" | "arriving" | "present",
-      updated_at: new Date().toISOString(),
-    });
+    else
+      d.beacon_attendance.push({
+        activity_id: activity.id,
+        user_id: uid,
+        state: state as "none" | "arriving" | "present",
+        updated_at: new Date().toISOString(),
+      });
     return d;
   }
   if (action === "assign_beacon_role" || action === "revoke_beacon_role") {
-    const activity = d.activities.find((item) => item.id === (p.activity_id ?? id)),
+    const activity = d.activities.find(
+        (item) => item.id === (p.activity_id ?? id),
+      ),
       targetId = typeof p.user_id === "string" ? p.user_id : "";
-    if (!activity)
-      throw new Error("Beacon unavailable.");
+    if (!activity) throw new Error("Beacon unavailable.");
     if (action === "assign_beacon_role") {
       const role = p.role;
       if (
         (role !== "coowner" && role !== "admin") ||
         !canAssignBeaconRole(d, activity, uid, targetId, role)
       )
-        throw new Error("Choose an eligible Going participant and a role you can assign.");
+        throw new Error(
+          "Choose an eligible Going participant and a role you can assign.",
+        );
       const existing = d.beacon_roles.find(
         (item) => item.activity_id === activity.id && item.user_id === targetId,
       );
@@ -516,7 +1957,8 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
       if (!canRevokeBeaconRole(d, activity, uid, targetId))
         throw new Error("Your role cannot remove that beacon role.");
       d.beacon_roles = d.beacon_roles.filter(
-        (item) => !(item.activity_id === activity.id && item.user_id === targetId),
+        (item) =>
+          !(item.activity_id === activity.id && item.user_id === targetId),
       );
     }
     return d;
@@ -557,10 +1999,7 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
     validateBeaconDraft(draft);
     checkAspirationIds(draft.aspiration_ids);
   };
-  const materializePlanningBeacon = (
-    ownerId: string,
-    draft: BeaconDraft,
-  ) => {
+  const materializePlanningBeacon = (ownerId: string, draft: BeaconDraft) => {
     validatePlanningBeaconDraft(draft);
     const activityId = newId();
     d.activities.push({
@@ -604,6 +2043,23 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
       requestedId = typeof p.id === "string" && p.id ? p.id : null;
     if (!(["ping", "vote", "draw"] as string[]).includes(kind))
       throw new Error("Choose a ping, vote council, or draw council.");
+    if (audience === "squad") {
+      const squad = audienceId
+        ? d.squads.find((item) => item.id === audienceId)
+        : undefined;
+      if (
+        !squad ||
+        !d.squad_members.some(
+          (member) => member.squad_id === squad.id && member.user_id === uid,
+        ) ||
+        d.blocks.some(
+          (block) =>
+            (block.blocker_id === uid && block.blocked_id === squad.owner_id) ||
+            (block.blocked_id === uid && block.blocker_id === squad.owner_id),
+        )
+      )
+        throw new Error("Only current Squad members can create a Squad Ping or decision.");
+    }
     if (requestedId) {
       const existing = planningThread(requestedId);
       if (existing) {
@@ -736,17 +2192,24 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
       !canReadThread(thread)
     )
       throw new Error("This council is no longer open for proposals.");
-    if (d.planning_proposals.filter((item) => item.thread_id === thread.id).length >= 30)
+    if (
+      d.planning_proposals.filter((item) => item.thread_id === thread.id)
+        .length >= 30
+    )
       throw new Error("This council has reached its proposal limit.");
     if (!draft) throw new Error("Add the proposed beacon details.");
     validateCouncilProposal(thread, draft);
     validatePlanningBeaconDraft(draft);
-    if (draft.audience !== thread.audience || draft.audience_id !== thread.audience_id)
+    if (
+      draft.audience !== thread.audience ||
+      draft.audience_id !== thread.audience_id
+    )
       throw new Error("The proposed beacon must use this council's audience.");
     const requestedId = typeof p.id === "string" && p.id ? p.id : newId(),
       existing = d.planning_proposals.find((item) => item.id === requestedId);
     if (existing) {
-      if (existing.thread_id === thread.id && existing.author_id === uid) return d;
+      if (existing.thread_id === thread.id && existing.author_id === uid)
+        return d;
       throw new Error("That proposal ID is already in use.");
     }
     d.planning_proposals.push({
@@ -774,9 +2237,16 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
       Date.parse(thread.deadline_at) <= Date.now() ||
       !canManageThread(thread) ||
       !proposal ||
-      !canReadPlanningAudience(thread.owner_id, thread.audience, thread.audience_id, proposal.author_id)
+      !canReadPlanningAudience(
+        thread.owner_id,
+        thread.audience,
+        thread.audience_id,
+        proposal.author_id,
+      )
     )
-      throw new Error("Only a current council manager can approve visible options before the deadline.");
+      throw new Error(
+        "Only a current council manager can approve visible options before the deadline.",
+      );
     if (approved) {
       if (Date.parse(proposal.payload.starts_at) <= Date.now())
         throw new Error("This option start time has passed.");
@@ -801,13 +2271,22 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
       !proposal.approved ||
       proposal.disqualified_at ||
       Date.parse(proposal.payload.starts_at) <= Date.now() ||
-      !canReadPlanningAudience(thread.owner_id, thread.audience, thread.audience_id, proposal.author_id) ||
-      d.blocks.some((block) =>
-        (block.blocker_id === uid && block.blocked_id === proposal.author_id) ||
-        (block.blocker_id === proposal.author_id && block.blocked_id === uid)
+      !canReadPlanningAudience(
+        thread.owner_id,
+        thread.audience,
+        thread.audience_id,
+        proposal.author_id,
+      ) ||
+      d.blocks.some(
+        (block) =>
+          (block.blocker_id === uid &&
+            block.blocked_id === proposal.author_id) ||
+          (block.blocker_id === proposal.author_id && block.blocked_id === uid),
       )
     )
-      throw new Error("Choose an approved option that is still visible to you.");
+      throw new Error(
+        "Choose an approved option that is still visible to you.",
+      );
     const existing = d.planning_votes.find(
       (item) => item.thread_id === thread.id && item.user_id === uid,
     );
@@ -823,12 +2302,10 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
   }
   if (action === "resolve_planning_thread") {
     const thread = planningThread(String(p.thread_id ?? ""));
-    if (
-      !thread ||
-      thread.kind === "ping" ||
-      !canManageThread(thread)
-    )
-      throw new Error("Only a current council manager can resolve this council.");
+    if (!thread || thread.kind === "ping" || !canManageThread(thread))
+      throw new Error(
+        "Only a current council manager can resolve this council.",
+      );
     if (thread.status !== "open") return d;
     if (Date.parse(thread.deadline_at) > Date.now())
       throw new Error("The council deadline has not arrived.");
@@ -838,7 +2315,12 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
         proposal.approved &&
         proposal.disqualified_at == null &&
         Date.parse(proposal.payload.starts_at) > Date.now() &&
-        canReadPlanningAudience(thread.owner_id, thread.audience, thread.audience_id, proposal.author_id),
+        canReadPlanningAudience(
+          thread.owner_id,
+          thread.audience,
+          thread.audience_id,
+          proposal.author_id,
+        ),
     );
     if (!approved.length) {
       thread.status = d.planning_proposals.some(
@@ -846,7 +2328,12 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
           proposal.thread_id === thread.id &&
           proposal.approved &&
           proposal.disqualified_at == null &&
-          canReadPlanningAudience(thread.owner_id, thread.audience, thread.audience_id, proposal.author_id),
+          canReadPlanningAudience(
+            thread.owner_id,
+            thread.audience,
+            thread.audience_id,
+            proposal.author_id,
+          ),
       )
         ? "expired"
         : "no_options";
@@ -859,9 +2346,12 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
             vote.thread_id === thread.id &&
             vote.proposal_id === first.id &&
             canReadThread(thread, vote.user_id) &&
-            !d.blocks.some((block) =>
-              (block.blocker_id === vote.user_id && block.blocked_id === first.author_id) ||
-              (block.blocker_id === first.author_id && block.blocked_id === vote.user_id)
+            !d.blocks.some(
+              (block) =>
+                (block.blocker_id === vote.user_id &&
+                  block.blocked_id === first.author_id) ||
+                (block.blocker_id === first.author_id &&
+                  block.blocked_id === vote.user_id),
             ),
         ).length,
         secondVotes = d.planning_votes.filter(
@@ -869,19 +2359,28 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
             vote.thread_id === thread.id &&
             vote.proposal_id === second.id &&
             canReadThread(thread, vote.user_id) &&
-            !d.blocks.some((block) =>
-              (block.blocker_id === vote.user_id && block.blocked_id === second.author_id) ||
-              (block.blocker_id === second.author_id && block.blocked_id === vote.user_id)
+            !d.blocks.some(
+              (block) =>
+                (block.blocker_id === vote.user_id &&
+                  block.blocked_id === second.author_id) ||
+                (block.blocker_id === second.author_id &&
+                  block.blocked_id === vote.user_id),
             ),
         ).length;
-      return secondVotes - firstVotes ||
+      return (
+        secondVotes - firstVotes ||
         first.created_at.localeCompare(second.created_at) ||
-        first.id.localeCompare(second.id);
+        first.id.localeCompare(second.id)
+      );
     });
-    const winner = thread.kind === "draw"
-      ? approved[Math.floor(Math.random() * approved.length)]
-      : ordered[0];
-    const activityId = materializePlanningBeacon(thread.owner_id, winner.payload);
+    const winner =
+      thread.kind === "draw"
+        ? approved[Math.floor(Math.random() * approved.length)]
+        : ordered[0];
+    const activityId = materializePlanningBeacon(
+      thread.owner_id,
+      winner.payload,
+    );
     winner.activity_id = activityId;
     thread.status = "resolved";
     thread.winner_proposal_id = winner.id;
@@ -902,7 +2401,9 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
     const expectedWinnerId = String(p.expected_winner_proposal_id ?? "");
     if (expectedWinnerId === thread.replaced_from_proposal_id) return d;
     if (expectedWinnerId !== thread.winner_proposal_id)
-      throw new Error("The council winner changed. Refresh before trying again.");
+      throw new Error(
+        "The council winner changed. Refresh before trying again.",
+      );
     const currentActivity = d.activities.find(
         (activity) => activity.id === thread.materialized_activity_id,
       ),
@@ -915,7 +2416,9 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
       Date.parse(currentActivity.starts_at) <= Date.now() ||
       !previousProposal
     )
-      throw new Error("The current winner has started or is no longer replaceable.");
+      throw new Error(
+        "The current winner has started or is no longer replaceable.",
+      );
     const alternatives = d.planning_proposals.filter(
       (proposal) =>
         proposal.thread_id === thread.id &&
@@ -924,27 +2427,42 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
         proposal.disqualified_at == null &&
         proposal.activity_id == null &&
         Date.parse(proposal.payload.starts_at) > Date.now() &&
-        canReadPlanningAudience(thread.owner_id, thread.audience, thread.audience_id, proposal.author_id),
+        canReadPlanningAudience(
+          thread.owner_id,
+          thread.audience,
+          thread.audience_id,
+          proposal.author_id,
+        ),
     );
     if (!alternatives.length)
-      throw new Error("There is no other approved option that can still take place.");
+      throw new Error(
+        "There is no other approved option that can still take place.",
+      );
     alternatives.sort((first, second) => {
       const firstVotes = d.planning_votes.filter(
-          (vote) => vote.thread_id === thread.id && vote.proposal_id === first.id,
+          (vote) =>
+            vote.thread_id === thread.id && vote.proposal_id === first.id,
         ).length,
         secondVotes = d.planning_votes.filter(
-          (vote) => vote.thread_id === thread.id && vote.proposal_id === second.id,
+          (vote) =>
+            vote.thread_id === thread.id && vote.proposal_id === second.id,
         ).length;
-      return secondVotes - firstVotes ||
+      return (
+        secondVotes - firstVotes ||
         first.created_at.localeCompare(second.created_at) ||
-        first.id.localeCompare(second.id);
+        first.id.localeCompare(second.id)
+      );
     });
-    const replacement = thread.kind === "draw"
-      ? alternatives[Math.floor(Math.random() * alternatives.length)]
-      : alternatives[0];
+    const replacement =
+      thread.kind === "draw"
+        ? alternatives[Math.floor(Math.random() * alternatives.length)]
+        : alternatives[0];
     currentActivity.status = "cancelled";
     previousProposal.disqualified_at = new Date().toISOString();
-    const activityId = materializePlanningBeacon(thread.owner_id, replacement.payload);
+    const activityId = materializePlanningBeacon(
+      thread.owner_id,
+      replacement.payload,
+    );
     replacement.activity_id = activityId;
     thread.replaced_from_proposal_id = previousProposal.id;
     thread.winner_proposal_id = replacement.id;
@@ -969,12 +2487,27 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
     if (!Number.isInteger(minutes) || minutes < 5 || minutes > 1440)
       throw new Error("Choose a duration from 5 to 1440 minutes.");
     const existing = d.templates.find((t) => t.id === id && t.owner_id === uid);
-    const moduleDefaults = p.module_defaults == null
-      ? existing?.module_defaults ?? null
-      : p.module_defaults as Record<string, unknown>;
+    const moduleDefaults =
+      p.module_defaults == null
+        ? (existing?.module_defaults ?? null)
+        : (p.module_defaults as Record<string, unknown>);
     if (moduleDefaults) {
-      const known = ["enable_chat", "enable_checklist", "enable_journal", "enable_experiences", "enable_focus", "enable_scoreboard", "enable_comments", "enable_music"];
-      if (Object.keys(moduleDefaults).some((key) => !known.includes(key)) || Object.values(moduleDefaults).some((value) => typeof value !== "boolean"))
+      const known = [
+        "enable_chat",
+        "enable_checklist",
+        "enable_journal",
+        "enable_experiences",
+        "enable_focus",
+        "enable_scoreboard",
+        "enable_comments",
+        "enable_music",
+      ];
+      if (
+        Object.keys(moduleDefaults).some((key) => !known.includes(key)) ||
+        Object.values(moduleDefaults).some(
+          (value) => typeof value !== "boolean",
+        )
+      )
         throw new Error("Choose valid template module preferences.");
     }
     const template = {
@@ -1040,7 +2573,9 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
     )
       throw new Error("Join this beacon before using its tools.");
     if (!value || value.length > maximum)
-      throw new Error(`Write ${isNote ? "1 to 1000 characters" : "1 to 160 characters"}.`);
+      throw new Error(
+        `Write ${isNote ? "1 to 1000 characters" : "1 to 160 characters"}.`,
+      );
     const rowId = typeof p.id === "string" && p.id ? p.id : newId();
     if (isNote) {
       const duplicate = d.beacon_notes.find((item) => item.id === rowId);
@@ -1057,7 +2592,7 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
             .length >= 50
         )
           throw new Error("This beacon already has 50 notes.");
-      d.beacon_notes.push({
+        d.beacon_notes.push({
           id: rowId,
           activity_id: activityId,
           author_id: uid,
@@ -1104,11 +2639,17 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
   if (action === "toggle_checklist_item") {
     const item = d.beacon_checklist_items.find((entry) => entry.id === id),
       activity = d.activities.find((entry) => entry.id === item?.activity_id);
-    if (!item || !activity || !canEditBeaconChecklist(d, activity, uid) ||
+    if (
+      !item ||
+      !activity ||
+      !canEditBeaconChecklist(d, activity, uid) ||
       !canWriteBeaconModule(d, activity, uid, "checklist") ||
-      d.blocks.some((block) =>
-        (block.blocker_id === uid && block.blocked_id === item.author_id) ||
-        (block.blocked_id === uid && block.blocker_id === item.author_id)))
+      d.blocks.some(
+        (block) =>
+          (block.blocker_id === uid && block.blocked_id === item.author_id) ||
+          (block.blocked_id === uid && block.blocker_id === item.author_id),
+      )
+    )
       throw new Error("This checklist item is unavailable.");
     if (typeof p.completed !== "boolean")
       throw new Error("Choose whether this checklist item is complete.");
@@ -1119,21 +2660,36 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
       rows = isNote ? d.beacon_notes : d.beacon_checklist_items,
       item = rows.find((entry) => entry.id === id),
       activity = d.activities.find((entry) => entry.id === item?.activity_id);
-    if (!item || !activity || !canDeleteBeaconModuleEntry(d, activity, item.author_id, uid) ||
-      !canWriteBeaconModule(d, activity, uid, isNote ? "journal" : "checklist") ||
-      (!isNote && !canEditBeaconChecklist(d, activity, uid)))
+    if (
+      !item ||
+      !activity ||
+      !canDeleteBeaconModuleEntry(d, activity, item.author_id, uid) ||
+      !canWriteBeaconModule(
+        d,
+        activity,
+        uid,
+        isNote ? "journal" : "checklist",
+      ) ||
+      (!isNote && !canEditBeaconChecklist(d, activity, uid))
+    )
       throw new Error("This item is unavailable or cannot be deleted.");
     if (isNote)
       d.beacon_notes = d.beacon_notes.filter((entry) => entry.id !== id);
     else
-      d.beacon_checklist_items = d.beacon_checklist_items.filter((entry) => entry.id !== id);
+      d.beacon_checklist_items = d.beacon_checklist_items.filter(
+        (entry) => entry.id !== id,
+      );
   }
   if (action === "edit_beacon_note") {
     const note = d.beacon_notes.find((entry) => entry.id === id),
       activity = d.activities.find((entry) => entry.id === note?.activity_id),
       body = typeof p.body === "string" ? p.body.trim() : "",
       expectedRevision = Number(p.expected_revision);
-    if (!note || !activity || !canWriteBeaconModule(d, activity, uid, "journal"))
+    if (
+      !note ||
+      !activity ||
+      !canWriteBeaconModule(d, activity, uid, "journal")
+    )
       throw new Error("This beacon journal is paused or unavailable.");
     if (note.author_id !== uid || !canAddBeaconNote(d, activity, uid))
       throw new Error("Only the note author can edit this shared note.");
@@ -1141,7 +2697,9 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
       throw new Error("Refresh the note before editing it.");
     if (note.revision === expectedRevision + 1 && note.body === body) return d;
     if (note.revision !== expectedRevision)
-      throw new Error("This note changed. Your draft is still here; refresh and resolve before saving.");
+      throw new Error(
+        "This note changed. Your draft is still here; refresh and resolve before saving.",
+      );
     if (!body || body.length > 1000)
       throw new Error("Write a note of 1 to 1000 characters.");
     note.body = body;
@@ -1156,7 +2714,9 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
       name = String(p.name ?? "").trim(),
       editing = action === "rename_library_folder",
       folder = editing
-        ? d.library_folders.find((item) => item.id === id && item.owner_id === uid)
+        ? d.library_folders.find(
+            (item) => item.id === id && item.owner_id === uid,
+          )
         : undefined;
     if (kind !== "journal" && kind !== "checklist")
       throw new Error("Choose Journals or Checklists for this folder.");
@@ -1205,7 +2765,11 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
         folder.updated_at = new Date().toISOString();
       }
     } else {
-      if (d.library_folders.filter((item) => item.owner_id === uid && item.kind === kind).length >= 30)
+      if (
+        d.library_folders.filter(
+          (item) => item.owner_id === uid && item.kind === kind,
+        ).length >= 30
+      )
         throw new Error("You can create up to 30 folders in each library.");
       const now = new Date().toISOString();
       const folderId = typeof p.id === "string" && p.id ? p.id : newId();
@@ -1252,7 +2816,8 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
         (item) =>
           item.id === folderId && item.owner_id === uid && item.kind === kind,
       );
-      if (!folder) throw new Error("Choose one of your folders in this library.");
+      if (!folder)
+        throw new Error("Choose one of your folders in this library.");
       const assignment = {
         owner_id: uid,
         kind,
@@ -1263,8 +2828,7 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
       if (existingIndex >= 0) {
         if (d.library_folder_items[existingIndex].folder_id !== folderId)
           d.library_folder_items[existingIndex] = assignment;
-      }
-      else d.library_folder_items.push(assignment);
+      } else d.library_folder_items.push(assignment);
     } else if (existingIndex >= 0) {
       d.library_folder_items.splice(existingIndex, 1);
     }
@@ -1279,7 +2843,9 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
         )
       )
         throw new Error("Choose up to 50 valid identity tags.");
-      p.identity_tags = [...new Set((p.identity_tags as string[]).map((tag) => tag.trim()))];
+      p.identity_tags = [
+        ...new Set((p.identity_tags as string[]).map((tag) => tag.trim())),
+      ];
     }
     if (Object.hasOwn(p, "aspiration_goals")) {
       if (!Array.isArray(p.aspiration_goals) || p.aspiration_goals.length > 20)
@@ -1287,12 +2853,19 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
       p.aspiration_goals = p.aspiration_goals.map((item) => {
         const goal = item as Record<string, unknown>;
         const title = typeof goal.title === "string" ? goal.title.trim() : "",
-          category = typeof goal.category === "string" ? goal.category.trim() : "",
+          category =
+            typeof goal.category === "string" ? goal.category.trim() : "",
           target = Number(goal.target_per_week);
         if (
-          typeof goal.id !== "string" || !goal.id.trim() ||
-          !title || title.length > 100 || !category || category.length > 60 ||
-          !Number.isInteger(target) || target < 1 || target > 7
+          typeof goal.id !== "string" ||
+          !goal.id.trim() ||
+          !title ||
+          title.length > 100 ||
+          !category ||
+          category.length > 60 ||
+          !Number.isInteger(target) ||
+          target < 1 ||
+          target > 7
         )
           throw new Error("Check each aspiration and its weekly target.");
         return { id: goal.id, title, category, target_per_week: target };
@@ -1317,7 +2890,9 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
         ? rawSteps.map((step) => ({ ...step, aspiration_ids: [] }))
         : rawSteps;
     if (!title || title.length > 100 || description.length > 1000)
-      throw new Error("Add a template title and a description under 1000 characters.");
+      throw new Error(
+        "Add a template title and a description under 1000 characters.",
+      );
     new Intl.DateTimeFormat("en-US", { timeZone: timezone });
     if (squadId && !isSquadAdmin(squadId))
       throw new Error("Only squad admins can edit squad plan templates.");
@@ -1363,14 +2938,18 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
       timezone = String(p.timezone ?? ""),
       startDate = String(p.start_date ?? "");
     if (!title || title.length > 100 || description.length > 1000)
-      throw new Error("Add a plan title and a description under 1000 characters.");
+      throw new Error(
+        "Add a plan title and a description under 1000 characters.",
+      );
     if (squadId && !isSquadMember(squadId))
       throw new Error("Join that squad before creating a plan for it.");
     new Intl.DateTimeFormat("en-US", { timeZone: timezone });
     planStartDateIsValid(startDate, timezone);
     let steps;
     if (p.template_id) {
-      const template = d.plan_templates.find((item) => item.id === p.template_id);
+      const template = d.plan_templates.find(
+        (item) => item.id === p.template_id,
+      );
       if (
         !template ||
         (template.squad_id
@@ -1383,7 +2962,9 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
     steps.forEach((step) => checkAspirationIds(step.aspiration_ids ?? []));
     const scheduled = buildPlanSchedule(startDate, timezone, steps);
     if (detectPlanStepOverlaps(scheduled).length)
-      throw new Error("Beacons in a plan cannot overlap. Choose a suggested time.");
+      throw new Error(
+        "Beacons in a plan cannot overlap. Choose a suggested time.",
+      );
     const planId = newId(),
       createdAt = new Date().toISOString();
     d.plans.push({
@@ -1431,7 +3012,9 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
     }
   }
   if (action === "cancel_plan") {
-    const plan = d.plans.find((item) => item.id === id && item.owner_id === uid);
+    const plan = d.plans.find(
+      (item) => item.id === id && item.owner_id === uid,
+    );
     if (!plan) throw new Error("Plan unavailable.");
     plan.status = "cancelled";
     for (const activity of d.activities) {
@@ -1440,6 +3023,31 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
     }
   }
   if (action === "create_activity") {
+    const socialType = p.social_entity_type;
+    const socialEntityId = String(p.social_entity_id ?? "");
+    if ((socialType == null) !== (p.social_entity_id == null))
+      throw new Error("Choose both a community type and community.");
+    let socialEntity: Organization | Space | Squad | undefined;
+    if (socialType === "organization") socialEntity = d.organizations.find((row) => row.id === socialEntityId);
+    else if (socialType === "space") socialEntity = d.spaces.find((row) => row.id === socialEntityId);
+    else if (socialType === "squad") socialEntity = d.squads.find((row) => row.id === socialEntityId);
+    else if (socialType != null) throw new Error("Choose an available community.");
+    const socialMemberRole: SocialRole | null = socialType === "organization" && socialEntity
+      ? activeOrganizationRole(socialEntity as Organization, d.organization_members, uid)
+      : socialType === "space"
+        ? d.space_members.find((row) => row.space_id === socialEntityId && row.user_id === uid && row.status === "active")?.role ?? null
+        : socialType === "squad"
+          ? d.squad_members.find((row) => row.squad_id === socialEntityId && row.user_id === uid)?.role ?? null
+          : null;
+    const socialBanned = socialType === "organization"
+      ? d.organization_bans.some((row) => row.organization_id === socialEntityId && row.user_id === uid)
+      : socialType === "space"
+        ? d.space_bans.some((row) => row.space_id === socialEntityId && row.user_id === uid)
+        : d.squad_bans.some((row) => row.squad_id === socialEntityId && row.user_id === uid);
+    if (socialType != null && (!socialEntity || socialEntity.archived_at || socialBanned || !socialMemberRole ||
+        d.blocks.some((row) => (row.blocker_id === uid && row.blocked_id === socialEntity?.owner_id) ||
+          (row.blocked_id === uid && row.blocker_id === socialEntity?.owner_id))))
+      throw new Error("Join the selected community before associating this Beacon.");
     validateActivity(p);
     const defaults = defaultBeaconControlValues();
     const controls = validateBeaconControlValues({
@@ -1456,7 +3064,8 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
       enable_comments: p.enable_comments ?? defaults.enable_comments,
       enable_scoreboard: p.enable_scoreboard ?? defaults.enable_scoreboard,
       enable_music: p.enable_music ?? defaults.enable_music,
-      checklist_edit_policy: p.checklist_edit_policy ?? defaults.checklist_edit_policy,
+      checklist_edit_policy:
+        p.checklist_edit_policy ?? defaults.checklist_edit_policy,
       music_url: p.music_url ?? defaults.music_url,
       decoration_emoji: p.decoration_emoji ?? defaults.decoration_emoji,
       decoration_accent: p.decoration_accent ?? defaults.decoration_accent,
@@ -1485,6 +3094,13 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
       audience_id: p.audience_id as string | null,
       ...controls,
     });
+    if (socialType != null) d.activity_social_links.push({
+      activity_id: aid,
+      entity_type: socialType as ActivitySocialLink["entity_type"],
+      entity_id: socialEntityId,
+      created_by: uid,
+      created_at: new Date().toISOString(),
+    });
     d.places.push({
       activity_id: aid,
       label: String(p.label ?? ""),
@@ -1495,7 +3111,9 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
   }
   if (action === "rsvp") {
     const activity = d.activities.find((item) => item.id === id),
-      existing = d.rsvps.find((item) => item.activity_id === id && item.user_id === uid),
+      existing = d.rsvps.find(
+        (item) => item.activity_id === id && item.user_id === uid,
+      ),
       invite = d.beacon_invitation_grants.find(
         (item) => item.activity_id === id && item.user_id === uid,
       );
@@ -1524,15 +3142,15 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
     if (p.status !== "going" && p.status !== "interested")
       throw new Error("Choose I'm In, Request, Interested, or I'm Out.");
     if (p.status === "going") {
-      if (isApprovedGoing(activity, existing) || existing?.status === "requested")
+      if (
+        isApprovedGoing(activity, existing) ||
+        existing?.status === "requested"
+      )
         return d;
       const requestsApproval =
         (activity.approval_required || activity.mode === "invite") &&
         !existing?.approved;
-      if (
-        activity.manual_closed ||
-        beaconCapacity(d, activity).full
-      )
+      if (activity.manual_closed || beaconCapacity(d, activity).full)
         throw new Error("This beacon is closed or full.");
       d.rsvps = d.rsvps.filter(
         (item) => !(item.activity_id === id && item.user_id === uid),
@@ -1596,9 +3214,12 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
       !canAdmitBeaconParticipants(d, activity, uid) ||
       targetId === uid ||
       !isFriend(targetId) ||
-      d.blocks.some((block) =>
-        (block.blocker_id === activity.owner_id && block.blocked_id === targetId) ||
-        (block.blocked_id === activity.owner_id && block.blocker_id === targetId),
+      d.blocks.some(
+        (block) =>
+          (block.blocker_id === activity.owner_id &&
+            block.blocked_id === targetId) ||
+          (block.blocked_id === activity.owner_id &&
+            block.blocker_id === targetId),
       )
     )
       throw new Error("Invite an accepted friend to an active beacon.");
@@ -1610,10 +3231,17 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
     d.rsvps = d.rsvps.filter(
       (item) => !(item.activity_id === id && item.user_id === targetId),
     );
-    d.rsvps.push({ activity_id: id, user_id: targetId, status: "invited", approved: true });
-    if (!d.beacon_invitation_grants.some(
-      (item) => item.activity_id === id && item.user_id === targetId,
-    ))
+    d.rsvps.push({
+      activity_id: id,
+      user_id: targetId,
+      status: "invited",
+      approved: true,
+    });
+    if (
+      !d.beacon_invitation_grants.some(
+        (item) => item.activity_id === id && item.user_id === targetId,
+      )
+    )
       d.beacon_invitation_grants.push({
         activity_id: id,
         user_id: targetId,
@@ -1627,8 +3255,12 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
       request = d.rsvps.find(
         (item) => item.activity_id === id && item.user_id === targetId,
       );
-    if (!activity || !request || request.status !== "requested" ||
-      !canAdmitBeaconParticipants(d, activity, uid))
+    if (
+      !activity ||
+      !request ||
+      request.status !== "requested" ||
+      !canAdmitBeaconParticipants(d, activity, uid)
+    )
       throw new Error("Only a beacon manager can approve a pending request.");
     if (activity.manual_closed || beaconCapacity(d, activity).full)
       throw new Error("This beacon is closed or full.");
@@ -1649,9 +3281,11 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
     d.beacon_invitation_grants = d.beacon_invitation_grants.filter(
       (item) => !(item.activity_id === id && item.user_id === targetId),
     );
-    if (!d.activity_exclusions.some(
-      (entry) => entry.activity_id === id && entry.user_id === targetId,
-    ))
+    if (
+      !d.activity_exclusions.some(
+        (entry) => entry.activity_id === id && entry.user_id === targetId,
+      )
+    )
       d.activity_exclusions.push({ activity_id: id, user_id: targetId });
   }
   if (action === "comment") {
@@ -1725,6 +3359,9 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
       owner_id: uid,
       name: String(p.name),
       description: String(p.description ?? ""),
+      discoverability: p.discoverability === "public" || p.discoverability === "community" ? p.discoverability : "private",
+      join_mode: p.join_mode === "open" || p.join_mode === "request" ? p.join_mode : "invite",
+      invite_policy: p.invite_policy === "elders" || p.invite_policy === "members" ? p.invite_policy : "admins",
     });
     d.squad_members.push({ squad_id: sid, user_id: uid, role: "owner" });
   }
@@ -1782,10 +3419,14 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
     d.activities = d.activities.filter((x) => x.owner_id !== id);
     d.comments = d.comments.filter((x) => x.author_id !== id);
     d.beacon_checklist_items = d.beacon_checklist_items.filter(
-      (x) => x.author_id !== id && !d.activities.every((a) => a.id !== x.activity_id),
+      (x) =>
+        x.author_id !== id &&
+        !d.activities.every((a) => a.id !== x.activity_id),
     );
     d.beacon_notes = d.beacon_notes.filter(
-      (x) => x.author_id !== id && !d.activities.every((a) => a.id !== x.activity_id),
+      (x) =>
+        x.author_id !== id &&
+        !d.activities.every((a) => a.id !== x.activity_id),
     );
     d.friendships = d.friendships.filter(
       (x) => ![x.sender_id, x.recipient_id].includes(id),

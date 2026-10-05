@@ -2,13 +2,32 @@ import React, { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { router } from "expo-router";
 import { useBeacon } from "@/src/shared/store";
-import type { Data, ID, Payload, ProfileVisibilityGrant } from "@/src/shared/types";
-import { Action, Button, Chips, Field, Screen, Txt, useTheme } from "@/src/shared/ui";
+import type {
+  Data,
+  ID,
+  Payload,
+  ProfileVisibilityGrant,
+} from "@/src/shared/types";
+import {
+  Action,
+  Button,
+  Chips,
+  Field,
+  Screen,
+  Txt,
+  useTheme,
+} from "@/src/shared/ui";
+import { activeOrganizationRole } from "@/src/features/organizations/domain";
 
 type Visibility = "public" | "friends" | "custom";
 
 function selectedTargets(grants: ProfileVisibilityGrant[], ownerId: ID) {
   return {
+    organizations: grants
+      .filter(
+        (grant) => grant.owner_id === ownerId && grant.kind === "organization",
+      )
+      .map((grant) => grant.target_id),
     people: grants
       .filter((grant) => grant.owner_id === ownerId && grant.kind === "person")
       .map((grant) => grant.target_id),
@@ -86,6 +105,7 @@ export default function ProfilePrivacySettings() {
     people: saved.people.sort(),
     squads: saved.squads.sort(),
     lists: saved.lists.sort(),
+    organizations: saved.organizations.sort(),
   });
   return (
     <ProfilePrivacyForm
@@ -115,13 +135,15 @@ function ProfilePrivacyForm({
     people: string[];
     squads: string[];
     lists: string[];
+    organizations: string[];
   };
-  const [visibility, setVisibility] = useState<Visibility>(
-    saved.visibility,
-  );
+  const [visibility, setVisibility] = useState<Visibility>(saved.visibility);
   const [people, setPeople] = useState<string[]>(saved.people);
   const [squads, setSquads] = useState<string[]>(saved.squads);
   const [lists, setLists] = useState<string[]>(saved.lists);
+  const [organizations, setOrganizations] = useState<string[]>(
+    saved.organizations ?? [],
+  );
   const [peopleQuery, setPeopleQuery] = useState("");
 
   const selectablePeople = data.profiles.filter(
@@ -139,6 +161,11 @@ function ProfilePrivacyForm({
     ),
   );
   const selectableLists = data.lists.filter((list) => list.owner_id === userId);
+  const selectableOrganizations = data.organizations.filter(
+    (org) =>
+      !!userId &&
+      !!activeOrganizationRole(org, data.organization_members, userId),
+  );
   const visiblePeople = selectablePeople.filter((person) => {
     const query = peopleQuery.trim().toLowerCase();
     return (
@@ -148,8 +175,8 @@ function ProfilePrivacyForm({
     );
   });
 
-  const toggle = (current: string[], setter: (next: string[]) => void) =>
-    (id: string) =>
+  const toggle =
+    (current: string[], setter: (next: string[]) => void) => (id: string) =>
       setter(
         current.includes(id)
           ? current.filter((value) => value !== id)
@@ -161,17 +188,24 @@ function ProfilePrivacyForm({
       <View style={styles.card}>
         <Text style={styles.h2}>Who can see your full profile?</Text>
         <Txt muted>
-          Your name may still appear in places you’re already allowed to use. This controls your bio, interests, aspirations, and other profile details.
+          Your name may still appear in places you’re already allowed to use.
+          This controls your bio, interests, aspirations, and other profile
+          details.
         </Txt>
         <Chips
           options={["Public", "Friends", "Custom"] as const}
-          value={(visibility.charAt(0).toUpperCase() + visibility.slice(1)) as "Public" | "Friends" | "Custom"}
+          value={
+            (visibility.charAt(0).toUpperCase() + visibility.slice(1)) as
+              "Public" | "Friends" | "Custom"
+          }
           onChange={(value) => setVisibility(value.toLowerCase() as Visibility)}
           accessibilityPrefix="Full profile audience"
         />
         {visibility === "public" && (
           <Txt muted>
-            People who can already find you in the app. This preserves the current relationship-based discovery in friends, squads, lists, and shared beacons; your profile is not public on the internet.
+            People who can already find you in the app. This preserves the
+            current relationship-based discovery in friends, squads, lists, and
+            shared beacons; your profile is not public on the internet.
           </Txt>
         )}
         {visibility === "friends" && (
@@ -179,12 +213,29 @@ function ProfilePrivacyForm({
         )}
         {visibility === "custom" && (
           <Txt muted>
-            Only chosen people or current members of your chosen squads or lists. Friends not selected here won’t see full details. Organizations aren’t available as an audience yet.
+            Only chosen people or current members of your chosen squads,
+            organizations, or lists. Friends not selected here won’t see full
+            details.
           </Txt>
         )}
       </View>
       {visibility === "custom" && (
         <>
+          <View style={styles.card}>
+            <Text style={styles.h2}>Current organization members</Text>
+            {!selectableOrganizations.length ? (
+              <Txt muted>You don’t currently belong to any organizations.</Txt>
+            ) : null}
+            {selectableOrganizations.map((org) => (
+              <AudienceToggle
+                key={org.id}
+                id={org.id}
+                label={org.name}
+                selected={organizations.includes(org.id)}
+                onToggle={toggle(organizations, setOrganizations)}
+              />
+            ))}
+          </View>
           <View style={styles.card}>
             <Text style={styles.h2}>Chosen people</Text>
             <Field
@@ -246,6 +297,7 @@ function ProfilePrivacyForm({
             person_ids: visibility === "custom" ? people : [],
             squad_ids: visibility === "custom" ? squads : [],
             list_ids: visibility === "custom" ? lists : [],
+            organization_ids: visibility === "custom" ? organizations : [],
           })
         }
       />

@@ -4,6 +4,7 @@ import {
   canAddBeaconNote,
   canDeleteBeaconModuleEntry,
   canEditBeaconChecklist,
+  canReadBeaconActivity,
   canReadBeaconModuleEntry,
   canUseBeaconModules,
 } from "@/src/features/beacons/beaconModules";
@@ -64,6 +65,44 @@ test("approval-gated and invite beacons require an approved Going RSVP", () => {
   assert.equal(canUseBeaconModules(data, { ...activity, mode: "invite" }, "guest"), true);
   data.rsvps[0].approved = false;
   assert.equal(canUseBeaconModules(data, { ...activity, mode: "invite" }, "guest"), false);
+});
+
+test("organization Beacon visibility requires both active memberships and ignores stale RSVP grants", () => {
+  const data = emptyData();
+  data.organizations.push({
+    id: "org-1", owner_id: "org-owner", name: "Trail Crew", description: "", created_at: "2026-09-01T00:00:00Z",
+  });
+  data.organization_members.push(
+    { organization_id: "org-1", user_id: "host", role: "admin", status: "active", invited_by: "org-owner", created_at: "2026-09-02T00:00:00Z" },
+    { organization_id: "org-1", user_id: "guest", role: "member", status: "active", invited_by: "host", created_at: "2026-09-03T00:00:00Z" },
+    { organization_id: "org-1", user_id: "pending", role: "member", status: "invited", invited_by: "host", created_at: "2026-09-04T00:00:00Z" },
+  );
+  const orgActivity: Activity = { ...activity, audience: "organization", audience_id: "org-1" };
+  assert.equal(canReadBeaconActivity(data, orgActivity, "guest"), true);
+  assert.equal(canReadBeaconActivity(data, orgActivity, "org-owner"), true);
+  assert.equal(canReadBeaconActivity(data, orgActivity, "pending"), false);
+  assert.equal(canReadBeaconActivity(data, orgActivity, "outsider"), false);
+
+  data.rsvps.push({ activity_id: orgActivity.id, user_id: "guest", status: "going", approved: true });
+  data.organization_members = data.organization_members.filter((member) => member.user_id !== "guest");
+  assert.equal(canReadBeaconActivity(data, orgActivity, "guest"), false,
+    "an approved RSVP cannot preserve organization Beacon access after leaving");
+  data.organization_members.push({
+    organization_id: "org-1", user_id: "guest", role: "member", status: "active", invited_by: "host", created_at: "2026-09-03T00:00:00Z",
+  });
+  data.organization_bans.push({
+    organization_id: "org-1", user_id: "guest", banned_by: "host", reason: "", former_role: "member", created_at: "2026-09-05T00:00:00Z",
+  });
+  assert.equal(canReadBeaconActivity(data, orgActivity, "guest"), false,
+    "an active-looking stale membership row does not override an organization ban");
+  data.organization_bans = [];
+  data.blocks.push({ blocker_id: "guest", blocked_id: "org-owner" });
+  assert.equal(canReadBeaconActivity(data, orgActivity, "guest"), false,
+    "blocking the organization owner denies organization audience access");
+  data.blocks = [];
+  data.organization_members = data.organization_members.filter((member) => member.user_id !== "host");
+  assert.equal(canReadBeaconActivity(data, orgActivity, "guest"), false,
+    "the Beacon author must remain an active member of the organization too");
 });
 
 test("checklist and note permissions follow beacon lifecycle", () => {

@@ -9,22 +9,49 @@ import type {
   LocationSession,
   Profile,
 } from "@/src/shared/types";
-import type { MapPointGroup } from "@/src/features/maps/cluster";
+import type {
+  MapPointGroup,
+  MapPointPriority,
+} from "@/src/features/maps/cluster";
+import type { ExplorationTarget, MapViewport } from "@/src/shared/exploration";
+export type MapControlCommand = {
+  kind: "zoom-in" | "zoom-out" | "fit";
+  revision: number;
+};
+export type MapStyle = "standard" | "satellite";
+/** Screen-space clearances reserved for overlays around the interactive map. */
+export type MapViewportInsets = {
+  top?: number;
+  right?: number;
+  bottom?: number;
+  left?: number;
+};
 export interface MapProps {
   onAnchor?: (point: { x: number; y: number } | null) => void;
   fullScreen?: boolean;
+  hideControls?: boolean;
+  viewportInsets?: MapViewportInsets;
   controlsTop?: number;
   panelHeight?: number;
   focused?: { latitude: number; longitude: number } | null;
+  explorationTarget?: ExplorationTarget | null;
   activities: Activity[];
   places: ActivityPlace[];
   locations: LocationSession[];
   profiles: Profile[];
   onActivity: (id: string) => void;
   onPerson: (id: string) => void;
-  onCluster?: (cluster: MapPointGroup) => void;
+  onCluster?: (
+    cluster: MapPointGroup,
+    anchor?: { x: number; y: number } | null,
+  ) => void;
+  clusterPriorities?: Record<string, MapPointPriority>;
   onMapTap?: () => void;
-  onViewportChange?: () => void;
+  onViewportChange?: (viewport: MapViewport, userMoved?: boolean) => void;
+  onOptions?: () => void;
+  onRecenter?: () => void;
+  controlCommand?: MapControlCommand;
+  mapStyle?: MapStyle;
   onPick?: (latitude: number, longitude: number) => void;
   selected?: { latitude: number; longitude: number } | null;
 }
@@ -45,7 +72,7 @@ export default function BeaconMap({
   );
   if (onPick)
     return (
-      <View style={[styles.card, { backgroundColor: "#E6ECDD" }]}>
+      <View style={[styles.card, { backgroundColor: colors.bg }]}>
         <Text style={styles.h2}>Choose a meeting pin on your phone</Text>
         <Text style={styles.muted}>
           For now, a place name is all you need.

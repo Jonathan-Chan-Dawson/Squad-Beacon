@@ -11,6 +11,7 @@ import type { CircleKey, CircleSource } from "@/src/features/widgets/types";
 const circleKeys: CircleKey[] = ["circle1", "circle2", "circle3"];
 const sourceOptions = [
   "Everyone",
+  "Starred Friends",
   "One friend",
   "Squad",
   "Private list",
@@ -41,11 +42,13 @@ export default function WidgetStudioScreen() {
   function sourceType(source: CircleSource) {
     return source.kind === "all"
       ? "Everyone"
-      : source.kind === "friend"
-        ? "One friend"
-        : source.kind === "squad"
-          ? "Squad"
-          : "Private list";
+      : source.kind === "starred"
+        ? "Starred Friends"
+        : source.kind === "friend"
+          ? "One friend"
+          : source.kind === "squad"
+            ? "Squad"
+            : "Private list";
   }
 
   return (
@@ -54,6 +57,17 @@ export default function WidgetStudioScreen() {
       eyebrow="Make your home screen yours"
       create={false}
     >
+      <View style={styles.card}>
+        <Text style={styles.h2}>
+          Friend status first. Your next plan, one tap away.
+        </Text>
+        <Txt muted>
+          Friends Now supports a single friend, Starred Friends, or a private
+          list through your circles. Quick Create opens the app’s Beacon,
+          Status, or Beacon Plan editor—never a second editor on your Home
+          Screen.
+        </Txt>
+      </View>
       {!widgetsAvailable ? (
         <View style={styles.card}>
           <Text style={styles.h2}>
@@ -99,7 +113,10 @@ export default function WidgetStudioScreen() {
                     : [];
             const selected = entities.find(
               (entity) =>
-                entity.id === (source.kind === "all" ? "" : source.id),
+                entity.id ===
+                (source.kind === "all" || source.kind === "starred"
+                  ? ""
+                  : source.id),
             );
             const entityLabels = entities.map((entity) => entity.label);
             const selectedLabel = selected?.label ?? entityLabels[0] ?? "";
@@ -123,6 +140,8 @@ export default function WidgetStudioScreen() {
                   value={type}
                   onChange={(value) => {
                     if (value === "Everyone") setCircle(key, { kind: "all" });
+                    else if (value === "Starred Friends")
+                      setCircle(key, { kind: "starred" });
                     else if (value === "One friend")
                       setCircle(key, {
                         kind: "friend",
@@ -153,21 +172,27 @@ export default function WidgetStudioScreen() {
                         const entity = entities.find(
                           (item) => item.label === label,
                         );
-                        if (entity && source.kind !== "all")
+                        if (
+                          entity &&
+                          source.kind !== "all" &&
+                          source.kind !== "starred"
+                        )
                           setCircle(key, { kind: source.kind, id: entity.id });
                       }}
                     />
                   </>
                 )}
-                {type !== "Everyone" && entities.length === 0 && (
-                  <Txt muted>
-                    {type === "One friend"
-                      ? "Accept a friend request to use this circle."
-                      : type === "Squad"
-                        ? "Join or create a squad to use this circle."
-                        : "Create a private list from Squads to use this circle."}
-                  </Txt>
-                )}
+                {type !== "Everyone" &&
+                  type !== "Starred Friends" &&
+                  entities.length === 0 && (
+                    <Txt muted>
+                      {type === "One friend"
+                        ? "Accept a friend request to use this circle."
+                        : type === "Squad"
+                          ? "Join or create a squad to use this circle."
+                          : "Create a private list from Squads to use this circle."}
+                    </Txt>
+                  )}
               </View>
             );
           })}

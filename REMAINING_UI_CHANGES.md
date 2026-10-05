@@ -1,371 +1,136 @@
-# Remaining UI / UX Changes
+# UX refinement status
 
-This is a status ledger for the execution blueprint and related follow-up
-requirements. It is intentionally not a completion claim. The current
-checkpoint ships shared selected-state marks, one compact activity card,
-relative active-time wording, visible Vote/Draw and Beacon Plan naming, and a
-friend-to-DM action, capacity/tool settings, and manual attendance controls.
-Checkpoint validation passed: 110 unit/database tests, 18 browser tests,
-typecheck, lint, and fresh web/Android exports. Exports are not device testing
-or a native binary build. Local migrations have not been remotely deployed.
+Tracks the October 4 major product brief and earlier follow-ups. Implemented means local code, not hosted deployment or native-device acceptance. This is not a claim that all 106 sections are finished.
 
-## Phase 0 — Audit
+## Final social architecture pass — implemented locally
 
-- **Architecture inventory — Complete.** Existing Expo Router routes,
-  feature folders, data/domain boundaries, and prior shared implementations
-  were reviewed before this checkpoint. Preserve the current app/ route
-  wrappers and established src/features, src/shared, and src/platform
-  organization. Paths: _inventory.md, app/_inventory.md, src/_inventory.md,
-  src/features/_inventory.md.
+The latest 69-section social brief extends the existing chat-first model rather than replacing it. The core contracts and connected UI are implemented locally. This is not a claim that every long-term feature, hosted integration or large-scale acceptance criterion is complete.
 
-## Phase 1 — Component architecture
+- Keep the hierarchy shallow: Organization → Space → Squad, Organization → Squad, and standalone Spaces/Squads. Preserve existing links and histories; never introduce nested Spaces or Squads.
+- Keep discoverability, membership, profile privacy, Beacon audiences and location sharing independent. Public community search uses a sanitized, bounded projection, not the private member snapshot.
+- Share readable role and join-policy choices. Preserve existing private/invitation behavior until an authorized manager changes it. Invitations bypass redundant requests; joining a parent never joins its children.
+- Organizing a Squad into a Space preserves its ID, messages, Beacons, Plans, Routines and history. Copying current members is an explicitly confirmed exception; grouping several Squads never merges their memberships or chats.
+- Related Space/Organization previews, contextual search and creation menus, count-first Squad size labels and a dismissible growth suggestion are implemented. Preview → related community → Beacon stays in one sheet with Back. Settings remain secondary; private lists are reached from Profile → Friends & Lists, not Communities.
+- Beacon community association is metadata, not an additional audience grant. No new Beacon type or implicit membership is introduced.
+- Use existing accessible controls and reduced-motion-aware animation. Verify local actions and permissions before describing a flow as complete; hosted deployment, native acceptance and large-scale profiling remain separate operator work.
 
-- **Reusable UI ownership — Partial; Medium.** Reusable components still live
-  beside feature screens under src/features; the blueprint asks for a clear
-  components/ boundary. Do not move them while 005 backend/UI work is active.
-  Proposed mapping: src/shared/ui.tsx → components/shared/ui.tsx;
-  src/features/beacons/ActivityCard.tsx and ActivityBadge.tsx →
-  components/activities/; src/features/profile/ProfileAvatar.tsx and
-  AvatarToggle.tsx → components/avatar/; map panel, tooltip, and native/web map
-  siblings → components/map/; DirectoryControls.tsx and InviteQR.tsx →
-  components/squads/; Beacon response/tools and ProposalEditor →
-  components/beacon/. Keep screens, business logic, hooks, and feature
-  contracts in src/features, src/shared, and src/platform. Preserve platform
-  siblings and avoid re-export stubs. Dependency: backend 005 edit-freeze/
-  handoff, then import/platform-resolution QA. Paths: components/,
-  src/shared/, src/features/.
-- **Search and sorting ownership — Partial; Medium.** Common Beacon browsing
-  and domain helpers are separated, but Search UI/filter behavior remains
-  screen-specific and friend ranking is inside ActivitiesScreen. Consolidate
-  only after behavior is covered by tests. Paths: src/shared/browsing.ts,
-  src/shared/domain.ts, src/features/beacons/screens/ActivitiesScreen.tsx,
-  src/features/people/screens/SquadsScreen.tsx.
-- **Folder guidance — Partial; Low.** Inventory guides exist for authored
-  folders; add short README guidance only where a later component move creates
-  a non-obvious boundary. Do not document generated/native internals as source
-  components. Paths: components/, src/features/, src/shared/.
+Remaining social boundaries: ownership transfer/archive workflows, optional per-entity “who can create” policy fields, richer announcement/system-message feeds, and large-account roster pagination. Existing creation authority and archive checks remain enforced; unsupported configuration controls are not displayed.
 
-## Phase 2 — Shared design system
+## Brief coverage
 
-- **Selected controls — Implemented; broader audit remains.** Activities period
-  tabs, Friends Now filters, and directory tabs use selected contrast and
-  accessibility state without redundant checks. Multi-select interests and
-  custom privacy audiences retain meaningful checks. Audit other local controls
-  as their screens change. Paths: src/shared/ui.tsx,
-  src/features/people/DirectoryControls.tsx,
-  src/features/beacons/screens/ActivitiesScreen.tsx,
-  src/features/plans/PlansScreen.tsx.
-- **Consistency and feedback — Partial; Medium.** Shared Button/Action/Field/
-  Sheet/Empty/Screen primitives exist, but local spacing, focused states,
-  loading/error behavior, and expandable sections have not received a complete
-  screen-by-screen audit. Keep tooltips limited to genuinely non-obvious
-  concepts. Paths: src/shared/ui.tsx, src/features/**/.
+| Sections | Current implementation |
+| --- | --- |
+| 0–8: design, density, buttons, delight, terminology | Existing feature folders retained; compact labeled icon actions, contrast-based selection and reduced-motion press feedback. No redundant single-choice checks; meaningful multi-select checks remain. Full screen audit remains partial. |
+| 9–18: map | Smaller circular/point Beacon pins and avatars; shared screen-space clustering; real thumbnails plus overflow; relevance ranking; anchored Beacons/People popovers; quick responses; outside dismissal; authorized saved-place search and dropped-pin creation; physical directions. External geocoder and native QA remain. |
+| 19–22: Friends Now | Vertical compact rows, availability/time/location, direct Star, avatar → Profile, row → Message, joined/free/starred/close-friend ordering. See more/Find friends below. Private profiles and blocks gate identity/location. |
+| 23–29: Chats/Pings/notifications | Squads has Chats/Communities, temporary search, a contextual New menu and compact response prompts. Squad Pings share canonical response state in chat; group messages have real read timestamps. Directory/private lists remain in a management sheet. DM unread counts are not invented. |
+| 30–35: organizations/XP/games | Creation, invitations, owner/coowner/admin/elder/member hierarchy, role changes/removal/bans, linked Squads, shared chat/read state, Beacon/Ping audiences, profile grants and membership-revocation checks implemented locally. Private Squad rosters/chat remain separate. No unfinished XP/Games controls added. |
+| 36–41: cards/details | One reusable compact card, functional save Star, time/place/approved avatars, state-aware response, owner Manage and contextual actions. Existing detail tools/permissions preserved; broader navigation simplification remains partial. |
+| 42–54: modules/fields | Existing Chat, checklist, revision-safe Beacon Note, Memories, Timer, Music link, Teams/scoreboard, equipment and Vote/Draw preserved. Disabled tools keep authorized history readable; Library checklist preview added. Native media reliability remains to validate. |
+| 55–62: creation/templates | Fewer quick starts, reusable searchable recipe catalog, quick virtual/join choices, More options for extras. Optional live draft preview and map confirmation added. Alternative-proposal handoff and advanced group redesign remain partial. |
+| 63–65: Plans/Routines | Ordered timezone-aware sequences, personal/Squad templates retained. Separate Plan membership does not RSVP to every step. Routine schedules/lifecycle reuse Plans; server automation requires migration/scheduler activation. |
+| 66–71: Activities/favorites/lists | Own status on Now; focused Upcoming with compact decisions link. Plans/Favorites/My templates/Library shortcuts ONLY in Past. Widgets in Profile. Existing private lists/canonical favorites reused. |
+| 72–80: Profile/Settings/library | Compact identity-first profile, avatar styling, edit and repeatable survey; Settings header gear. Appearance/privacy/notifications/defaults/account groups; custom organization grants in actual privacy settings. Interests/aspirations/source-linked memories/library retained. Richer public-library display remains partial. |
+| 81–83: Help/onboarding/auth | Settings → Help explains real features/platform limits. Survey skippable, retakable, prefilled; identity badges optional/collapsed on first run. Existing age gate/Auth retained. No anonymous public feed. |
+| 84–92: widgets | One Friend Status architecture supports single/Starred/Squad/private-list circles, availability colors and privacy-safe initials. Freshness expiry; no coordinates. One configurable Beacon/Status/Plan launcher reuses editors. Existing Next Beacon/Squad Beacons/Pulse preserved. iOS build/device acceptance remains. |
+| 93–96: notifications/search/filters | One notification ledger, quiet hours/push controls; actionable Pings badge. Shared normalized search and relevance helpers. Organization/private-list/audience search and more feed filters remain partial. Empty entry briefing intentionally omitted. |
+| 97–100: organization/accessibility/performance | Feature-owned code, Markdown inventories, labeled icon actions, 44px shared targets, contrast themes/reduced motion. No aesthetic-only folder moves. Large-account pagination and complete native accessibility audit remain. |
+| 101–106: fixtures/action matrix/QA/success | Demo statuses, decisions, organizations, group-message shapes and Friday Routine. Connected local tests; hosted/native acceptance remains. Not all final success criteria are satisfied. |
 
-## Phase 3 — Search, filters, and friend priority
+## Part 2 and Part 3 reconciliation
 
-- **Search coverage — Partial; High.** Search is present for Beacons,
-  friends, templates, and library entries, but there is no single reusable
-  search pattern and place/Squad/private-list search is incomplete.
-  Dependencies: shared SearchField and discovery/organization data contracts.
-  Paths: src/shared/ui.tsx, src/shared/browsing.ts,
-  src/features/beacons/screens/ActivitiesScreen.tsx,
-  src/features/people/screens/SquadsScreen.tsx, src/features/maps/.
-- **Friend list terminology — Partial; Medium.** Current preview now says
-  Starred Friends; the existing private Close Friends list is retained. Verify
-  every entry point consistently replaces Best/Good Friends language without
-  changing private-list behavior. Paths:
-  src/features/beacons/screens/ActivitiesScreen.tsx,
-  src/features/people/DirectoryControls.tsx,
-  src/features/people/screens/SquadsScreen.tsx.
-- **Prioritization rules — Partial; High.** Current friend preview currently
-  orders available friends, then starred friends, then name. It does not yet
-  implement the complete requested order (people in the user's Beacon,
-  available Starred, available Close Friends, other available friends, then
-  relevant non-available friends). Move policy out of screen JSX and test
-  each branch. Paths: src/features/beacons/screens/ActivitiesScreen.tsx,
-  src/shared/domain.ts, tests/domain.test.ts.
-- **Beacon filters — Partial; Medium.** Search/category/join/sort filters
-  exist and selected checks are visible; public/open-to-join/time filters
-  must follow server-backed public/admission semantics rather than imply
-  unavailable access. Paths: src/features/beacons/screens/ActivitiesScreen.tsx,
-  src/features/discovery/.
+The subsequently supplied Final Product Architecture brief (Part 2) and Map/Discovery brief (Part 3) extend this ledger. A document proposal is not an instruction to expose private data or fabricate unfinished features. Direct user choices take precedence: profiles remain Public by default, utilities stay in Past, worldwide search uses the user's Google Places key, and fresh installs start in Midnight/Dark.
 
-## Phase 4 — Terminology and RSVP
+- Chats: two primary sections, Chats and Communities. Existing planning records power compact Needs your response cards and Interested/Maybe/Pass actions; Squad prompts jump to the exact canonical card in chat. Other invitations/decisions remain reachable in a secondary sheet. Search and filters appear only when requested; a contextual plus starts messages, Squads, friend requests or Spaces. Avatar/name opens the matching preview; the rest of the row opens chat.
+- Spaces: independent lightweight hubs containing linked Squads, with creation, invitations, membership hierarchy and settings. Organizations and Squads do not require a Space. A link never enrolls someone in a Squad or grants access to private chat, profiles or location. Local migration `202610040006_spaces.sql` must be applied for hosted accounts.
+- Appearance: each palette needs independently selectable Light/Dark/Device behavior, persisted per device; legacy saved palettes keep their former appearance. Status bar follows resolved appearance, not palette name.
+- Exploration: a shared area/query/filter context connects Map and Upcoming. The Map has a compact search/Compass header, inline quick filters, progressive advanced sections with a sticky result action, separate map options, and one Sharing/My Beacon control. Search this area follows user gestures without snapping the camera. Past ignores geographic browsing. Search/pan changes do not start Sonar, grant profile access, or enroll anyone in groups.
+- Google Places: server-only key, authenticated explicit query, bounded response, quota guard and no durable query/result cache. Operator setup is documented in `supabase/functions/places-search/README.md`. No key, billing change or remote deployment has been performed. Google Places results cannot be plotted on existing OSM/Apple maps; Google-map migration versus separate results is awaiting the user's choice.
+- Public discovery: safe summaries must be separate from full authorized snapshots. Backend opt-in/join work is restricted to private/friends/list Beacons in this tranche; Squad/Organization public publishing stays unavailable until narrow per-Beacon provenance and revocation are permission-tested. Discovery is not a notification audience or group membership grant.
 
-- **Visible language — In progress; High.** The UI now uses Pings & Decisions,
-  Vote, Draw, and Beacon Plans; RSVP controls now use I'm In, I'm Out,
-  Request, and Pending. Confirm no user-facing Council strings remain;
-  internal action names and /council/... routes intentionally remain stable.
-  Paths: src/features/planning/, src/features/plans/,
-  src/features/beacons/BeaconResponse.tsx, src/features/maps/MapTooltip.tsx.
-- **Invitation lifecycle — Implemented and checkpoint-verified.**
-  Migration 005 and demo preserve durable invitations across I'm Out and
-  remove the invitation grant only when a manager removes the person. The
-  database acceptance and browser re-entry tests pass. Native device testing
-  remains separate from the successful Android bundle export. Paths:
-  supabase/migrations/202610010005_beacon_controls.sql, src/shared/types.ts,
-  src/shared/store.tsx, src/shared/demo.ts, src/features/beacons/BeaconResponse.tsx.
-- **Alternative creation — Partial; High.** Pings, Vote/Draw option creation,
-  approval, resolution, and idempotent materialization exist. Normal Beacon
-  creation does not yet offer a clear Add Alternative path that transitions
-  into Vote/Draw while distinguishing an independent Add another Beacon.
-  Paths: src/features/planning/, src/features/beacons/screens/, app/create.tsx.
+### Additional remaining requirements from Parts 2–3
 
-## Phase 5 — Beacon creation
+| Requirement | Current boundary / next step | Priority |
+| --- | --- | --- |
+| Profile-first chat headers | DM and Squad avatar/name headers open matching compact previews, also reused by authorized map search results. Beacons open inside the same sheet with Back; full Squad profiles reuse existing member actions and readable history. Native acceptance remains. | Local implementation complete |
+| Squad discovery and Open/Request/Invite-only membership | Independent discoverability/join/invite settings, sanitized directory search and server-enforced join/request/cancel/review flows are implemented for Squads, Spaces and Organizations. Existing entities retain private/invite-only defaults. | Local implementation complete; deploy migration 007 |
+| Large Organizations with searchable public/community-only Squad metadata | Bounded authenticated directory pages and authoritative summary counts are implemented, with independently authorized parent context. The full member snapshot remains pilot-sized; 50,000-member profiling and incremental membership loading are not verified. | P1 (scale acceptance) |
+| Interactive Pings as messages inside DM/Squad threads | Squad chat now merges canonical audience-scoped Pings with text messages and supports exact-card jumps and direct replies. Friend-audience broadcasts are not falsely associated with individual DMs; a permission-scoped direct conversation association remains. | P1 (DM association) |
+| System activity cards inside chats | Existing group chat is text-only. Add source-linked cards for created/finished Beacons, plans and routines; no fake photo/GIF controls. | P1 |
+| Public reach and notification targets | Local/Wider reach must be independent of join mode and audience; no nearby broadcast. Explicit notification target schema/validation remains separate work. | P1 |
+| Social-first multi-source filters and structured category refinements | Current audience/category/time filters exist. Add OR-based source filters and only refinements backed by real fields; never infer cuisine/skill from descriptions. | P1 |
+| Organization announcements and fine-grained Squad roles/settings | Shared Owner/Co-owner/Admin/Elder/Member hierarchy and policy settings are implemented for all three community types. Elder organizes but cannot moderate or escalate roles. Announcement feeds and ownership-transfer workflows remain separate work. | P1 (announcements/transfer) |
+| Search/provider native acceptance | Configure Places API (New), server secret/origins, billing quotas and deploy; validate Google attribution and map-provider choice on Android/iOS/web. | P0 |
 
-- **Fast path and progressive disclosure — Partial; High.** Searchable
-  recipes, editable fields, saved templates, and recommended tools exist; the
-  end-to-end editor still needs a focused pass so essential title/place/time/
-  audience/join behavior is quick and secondary People/Activity/Social/Style
-  controls are grouped behind Advanced. Preserve approval, privacy, templates,
-  and repeat-as-reuse semantics. Paths: app/create.tsx, src/features/beacons/,
-  src/features/library/, src/shared/templates.ts.
-- **Map-to-create and confirmation — Not complete; High.** Place search or a
-  selected map point should enter the Beacon editor with that location; after
-  creation use restrained confirmation feedback. Paths:
-  src/features/maps/screens/MapScreen.tsx, src/features/maps/, app/create.tsx.
+## Remaining work
 
-## Phase 6 — Beacon card
+### P0 — Deploy backend and Routine scheduler
 
-- **Single compact card — Implemented and checkpoint-verified.**
-  Activities now uses one shared compact ActivityCard; the Full/Compact
-  selector and duplicate feed-card branch were removed. Existing details,
-  RSVP, and a non-interactive priority marker remain. Paths:
-  src/features/beacons/ActivityCard.tsx,
-  src/features/beacons/screens/ActivitiesScreen.tsx.
-- **Card details — Partial; Medium.** The card shows category/title, host,
-  location or Virtual, relative time, attendance count, target need, and RSVP.
-  It does not yet show attendee avatar groups or expose a dedicated Beacon
-  star control; the up-arrow shown today is friend/squad priority, not a Beacon
-  favorite. Keep these concepts distinct. Paths:
-  src/features/beacons/ActivityCard.tsx, src/features/beacons/BeaconResponse.tsx,
-  src/shared/types.ts.
+- Current: organization/Routine/Space migrations are local only; hosted accounts require the new contracts.
+- Dependency: operator approval and actual remote/scheduler configuration.
+- Files: `supabase/migrations/202610040001_organization_audience_type.sql`, `202610040002_organizations_group_chat.sql`, `202610040003_plan_routines.sql`; plans inventory; README.
+- Next: apply in filename order, committing the enum migration before organization use; verify deployed RPC/snapshot access; activate the documented due-Routine scheduler. No remote migration/deployment performed here.
 
-## Phase 7 — Beacon overview
+### P0 — Native widgets, map and push acceptance
 
-- **Progressive detail and modules — Partial; High.** Detail already has
-  Overview/People/Chat and shared checklist/notes/local focus tools, with
-  Virtual presentation available from meeting data. Audit disabled modules,
-  narrow-screen overview facts, and completed/cancelled history permissions.
-  Invitation controls still need progressive disclosure rather than a long
-  stack of individual friend buttons before Tools. Paused checklist, journal,
-  focus, and chat behavior passed the checkpoint browser tests.
-  Memories remain simple comments rather than linked media Experiences.
-  Paths: app/activity/[id].tsx, src/features/maps/MapPanel.tsx,
-  src/features/beacons/BeaconTools.tsx, src/features/library/LibraryScreen.tsx.
+- Current: web and JS exports are not native binaries/device acceptance. Expo widgets cannot run on Android/web/Expo Go.
+- Dependency: real iOS bundle identifier, extension rebuild, signing/device, push credentials.
+- Files: `app.json`, `src/features/widgets/`, native BeaconMap, platform notifications.
+- Next: set the application's own iOS identifier and rebuild; test full/discreet circles, stale/sign-out clearing, launcher links. Test Android map anchoring/zoom/dismissal and phone push/quiet hours. Never offer unsupported widgets as installable.
 
-## Phase 8 — Map
+### P1 — DM unread receipts
 
-- **Place search / drop-to-create — Not complete; High.** Search and choose a
-  place, or select a map point and carry it into Beacon creation. Paths:
-  src/features/maps/screens/MapScreen.tsx,
-  src/features/maps/components/BeaconMap.tsx, app/create.tsx.
-- **Clustering, marker sizing, and drill-in — Implemented.** Native and web
-  use shared screen-space clustering as zoom changes. Smaller avatar markers
-  remain below Beacon size. Mixed clusters expand into Beacons with visible
-  participants and People; map taps dismiss popups, and viewer-scoped route
-  handling prevents old links from restoring dismissed or revoked selections.
-  Native device acceptance remains. Paths:
-  src/features/maps/cluster.ts,
-  src/features/maps/components/BeaconMap.tsx,
-  src/features/maps/MapTooltip.tsx, src/features/maps/MapPanel.tsx.
-- **Directions and person quick actions — Not complete; High.** Physical
-  Beacon and Beacon Plan steps need distance/navigation actions; avatar
-  quick-details need Ping, Message, Invite, and Profile without exposing
-  private location. Paths: src/features/maps/MapPanel.tsx,
-  src/features/maps/MapTooltip.tsx, src/features/plans/.
-- **Privacy — Preserve.** Do not add precise public or Sonar location sharing
-  to solve map discovery.
+- Current: group read timestamps exist; DMs lack authoritative receipts. Unread reports squad conversations only.
+- Dependency: permission-tested DM receipt schema/projection, not guessed counts.
+- Files: CommunicationHub, Messages screen, shared message contracts, new migration.
+- Next: persist per-conversation reads, project the viewer's receipts, extend the same filter. No second messenger.
 
-## Phase 9 — Activities
+### P1 — Creation/detail consolidation
 
-- **Current/Upcoming/Past — Partial; High.** Current friend preview,
-  actionable planning inbox, Past-only toolkit, and compact Beacon history are
-  retained. Activity cards now use relative Starts in / Ends in wording;
-  confirm screen and widget clocks on native/web. Paths:
-  src/features/beacons/screens/ActivitiesScreen.tsx,
-  src/features/planning/PlanningInbox.tsx, src/shared/domain.ts.
-- **Friend status presentation — Implemented.** Compact rows show a clock/time
-  caption, fresh authorized-location pin, and an avatar availability badge:
-  green for explicitly available, yellow within 30 minutes of ending, red for
-  explicitly unavailable. Missing/private status stays neutral. Widget feeds
-  apply the same full-profile visibility gate and reject mismatched viewers.
-  Paths: src/features/beacons/screens/ActivitiesScreen.tsx,
-  src/features/widgets/derive.ts, src/shared/domain.ts.
-- **Current status priority/editing — Partial; High.** Friend preview and
-  Find Friends work, but editing the user's status directly here and
-  prioritizing people inside the user's Beacon need completion. Paths:
-  src/features/beacons/screens/ActivitiesScreen.tsx, src/features/beacons/.
-- **Upcoming plans/invites and Past repeat behavior — Partial; Medium.**
-  Pending decisions are shown only when actionable and utilities stay Past
-  only. A compact joined Beacon Plan summary and repeat-focused routines/
-  saved Plan templates/recent-memory flow still need product-level verification.
-  Paths: src/features/planning/PlanningInbox.tsx,
-  src/features/beacons/screens/ActivitiesScreen.tsx, src/features/plans/.
+- Current: quick editor/More options work; advanced settings retain the established layout. Optional preview exists; creation confirmation is text, not marker-drop/haptic choreography. Detail navigation remains established workspace.
+- Dependency: preserve default-off modules, permission checks and validation.
+- Files: `app/create.tsx`, BeaconSettings, BeaconResponse, MapPanel, ProposalEditor.
+- Next: regroup People/Tools/Social/Style without duplicate models; add contextual Add another/Alternative → existing proposals. Invite-only access exists through private audiences/invitations but lacks a separate quick-editor label. Cover tools before reducing detail tabs.
 
-## Phase 10 — Beacon Plans
+### P1 — Routine start-time override
 
-- **Terminology and multi-Beacon data — Partial; Medium.** The user-facing
-  label is now Beacon Plans and Plans/templates already schedule multiple
-  Beacon steps. Clarify Plan membership separately from individual Beacon
-  RSVP; add per-step directions and map entry. Paths:
-  src/features/plans/PlansScreen.tsx, src/features/plans/PlanDetailScreen.tsx,
-  src/features/plans/domain.ts, src/features/maps/.
-- **Conflict discussion — Not complete; High.** Conflict detection suggests
-  alternate times, but a squad/Plan conflict should offer an actual Ask the
-  group Vote/Draw draft with the conflicting step and editable alternative,
-  retaining the Plan audience and deadline-before-start validation. No
-  auto-publish or auto-RSVP. Paths: src/features/plans/,
-  src/features/planning/ProposalEditor.tsx,
-  src/features/planning/PlanningListScreen.tsx.
+- Current: Routine configuration reuses each source Beacon's local start time and relative day offsets; weekdays, interval, end date and reminder are editable. There is no separate Routine-wide start-time override (§65).
+- Dependency: a single shift must preserve all relative steps across date/timezone/DST changes, rather than introduce another independent schedule.
+- Files: `src/features/plans/routines.ts`, RoutineScheduleSheet, Routine migration and tests.
+- Next: expose an optional first-step start time, defaulting to the source, and shift the existing Plan step schedule with parity-tested server/demo logic. Fixed source times are explicitly explained in the current sheet.
 
-## Phase 11 — Squads / conversations
+### P1 — Discovery/search/filter coverage
 
-- **Friend messaging — Implemented and browser-verified.**
-  Friend cards now give the larger primary action to a real direct-message
-  route while avatar/name retain a separate Profile target. Paths:
-  src/features/people/screens/SquadsScreen.tsx, app/messages/[id].tsx,
-  app/person/[id].tsx.
-- **Squad conversations — Backend/product dependency; High.** Squad rows
-  still open real Squad details/activities; no Squad-chat route or durable
-  squad-conversation contract exists. Do not add a misleading Chat button/page.
-  Add conversation only with a real access-controlled backend and then make
-  the row conversation-first. Paths: src/features/people/screens/SquadsScreen.tsx,
-  src/features/messages/, src/shared/types.ts, src/shared/store.tsx,
-  supabase/migrations/.
-- **Directory organization — Partial; High.** All/Squads/Friends/Private Lists
-  and friend search exist. Organization records/audience are still isolated
-  scaffolding, and unread/starred sections are not part of the directory.
-  Native share and QR invite exist; confirm native share is as discoverable
-  as QR. Paths: src/features/people/, src/features/organizations/,
-  src/features/people/InviteQR.tsx.
+- Current: authorized map places, Beacons, people/chats, recipes and library searchable. Google Places Text Search is implemented through an authenticated, rate-limited server proxy but awaits operator configuration/deployment. There is no anonymous public feed.
+- Dependency: public server projection/pagination; Google server credentials/deployment and the remaining web/iOS map-provider choice.
+- Files: discovery feature, MapScreen, shared search/AudiencePicker, OrganizationDirectory.
+- Next: organization/private-list/audience search over visible fields first. Design external/anonymous discovery separately; map visibility never grants profile/GPS access. Public/Open/Time/Momentum filters need explicit semantics.
 
-## Phase 12 — Profile
+### P1 — Notification events for new features
 
-- **Profile/settings consolidation — Partial; Medium.** Public and self
-  profile, editable identity, photo/mini avatar, interests, aspirations, and
-  theme palettes exist. Consolidate notification/privacy/theme/account
-  controls into coherent Settings; reduce management-button stacking and make
-  own/public profile hierarchy consistent. Paths:
-  src/features/profile/ProfileScreen.tsx,
-  src/features/profile/ProfileSurvey.tsx, src/shared/preferences.tsx,
-  src/shared/themes.ts.
-- **Linked Experiences — Not complete; Medium.** Memories/media should remain
-  linked to their source Beacon when surfaced on Profile. 005 stores validated
-  optional external music links and decoration settings; it does not provide
-  audio playback, media creation/reels, or decorations on Profile. Do not
-  present those as implemented. Paths: src/features/profile/,
-  src/features/library/, src/features/beacons/BeaconTools.tsx,
-  src/features/beacons/BeaconSettings.tsx.
-- **Avatar and privacy limits — Partial; Low.** Mini avatar/photo exists;
-  a full avatar builder and per-field public profile visibility controls do
-  not. Birthday/age information remains private. Paths:
-  src/features/profile/, src/shared/types.ts.
-- **Full profile privacy — Implemented; organizations pending.** Settings
-  offers Public (existing authenticated discovery), accepted Friends, or Custom
-  selected people/current squad members/owner-list members. Server projections
-  distinguish minimal authorized identity from full profile fields. Direct
-  sensitive-column reads, private photos, and GPS reads obey the current
-  audience and mutual blocks. Organization selection depends on real
-  organization membership support; per-field profile privacy remains separate.
-  Paths: app/settings.tsx, src/features/profile/privacy.ts,
-  src/features/profile/screens/ProfilePrivacySettings.tsx,
-  supabase/migrations/202610030001_profile_privacy.sql.
+- Current: invites/Pings appear through snapshots; existing notice pipeline retained. Immediate background pushes for every new organization/chat/Routine event are not promised.
+- Dependency: event triggers, deduplication, deployed worker and real tokens.
+- Files: new migrations, push-worker, communication helper, notification UI.
+- Next: connect uncovered events to the existing queue; recheck membership/profile/blocks at dispatch; no private content in push payloads or second inbox.
 
-## Phase 13 — Onboarding and authentication
+### P2 — Profile/library polish
 
-- **Fast onboarding and later completion — Partial; Medium.** Auth, age gate,
-  skippable/repeatable interests and aspiration survey exist. Recheck that
-  signup reaches the app quickly, optional identity questions are not
-  accidentally mandatory, and an incomplete survey remains easy to resume.
-  Paths: src/features/auth/, src/features/profile/ProfileSurvey.tsx,
-  src/shared/preferences.tsx.
-- **Guest/public browse and action gates — Not complete; High.** Define how
-  signed-out guests browse safely and when creation/join/messaging prompts for
-  auth. Any public Discover route must use only the sanitized summary from
-  006; account/auth transitions must not load private activity details or
-  expose exact location. Dependencies: SQL006 public projection/admission
-  security and Auth route behavior. Paths: src/features/auth/,
-  src/features/discovery/, src/shared/store.tsx.
+- Current: aspiration progress/source-linked memories retained; private Journals/Lists file references rather than duplicate Beacon content. Disabled history readable.
+- Dependency: public tags/folders and per-field visibility need explicit privacy contracts.
+- Files: profile/library/beacon features, demo fixture.
+- Next: richer progress/streak fixtures/layout and empty states; design public-library projections with revocation tests. Preserve one shared checklist/Beacon Note surface per Beacon.
 
-## Phase 14 — Notifications / briefing
+### P2 — Media reliability, accessibility and scale
 
-- **Action notifications and briefing — Partial/unverified; High.** The app
-  has notification/inbox foundations, but end-to-end delivery for Pings,
-  votes, draws, invites, approval, joins, starts-soon, and Squad messages plus
-  a non-empty-only entry briefing is not demonstrated. Dependencies: durable
-  backend event/notification contracts and permission-aware navigation.
-  Paths: src/platform/notifications.*, src/features/planning/,
-  src/features/beacons/, src/features/messages/.
+- Current: authenticated media permissions retained; group chat plain text. No new background cleanup service deployed.
+- Dependency: storage retry/cleanup, native uploads/playback, screen-reader/keyboard/font-scaling and large-account acceptance.
+- Files: beacon/platform features, MotionPressable, GroupChatThread, snapshot SQL.
+- Next: interrupted upload/orphan tests, touch targets/focus/font scale, pagination/incremental updates and production profiling. Avoid decoration that hurts latency or reduced motion.
 
-## Phase 15 — Help / terminology
+## Verification
 
-- **Help content — Partial; Medium.** Help/tutorial route exists; review it
-  against current Ping, Beacon, Vote/Draw, Beacon Plan, Starred/Close Friends,
-  and location semantics. Do not teach Council terminology or imply
-  unimplemented public discovery/Sonar behavior. Paths:
-  src/features/help/HelpScreen.tsx, app/help.tsx.
+October 5 social pass: all 210 app/database tests and 3 exploration tests passed. TypeScript and zero-warning ESLint passed. Web static export and Android Hermes bundle export succeeded. The broad Chrome run passed 54/56 journeys; its two failures were hidden retained-screen selectors, corrected without changing product behavior. All nine social journeys then passed on a clean rerun, including conversion/history preservation and link-only grouping. This verifies all 56 journeys across the broad run and focused rerun, not a single 56/56 run. Screenshots were reviewed at 320/390px.
 
-## Phase 16 — Final polish and QA
+October 4 local checks: 202 app/database tests and 3 exploration tests passed; all 47 Chrome browser journeys passed on the final two-worker run. TypeScript and ESLint passed. Final web static export and Android Hermes bundle export succeeded. Browser screenshots were reviewed at 320/390px, including compact Chats and independent Space creation. Reopening Ping/Plan creation from the same retained chat, exact Squad Ping jumps, direct replies, profile previews, community creation and the existing Map/privacy/library flows are covered. The initial six-worker run exposed stale navigation selectors and an animation timing failure; updated selectors and the unchanged animation passed the final run.
 
-- **Checkpoint QA — Passed; wider blueprint QA remains.** All 110 tests,
-  typecheck, lint, 18 browser flows, and fresh web/Android exports passed.
-  Browser coverage includes 320px/390px controls across five themes, real
-  friend-DM navigation, capacity settings, manual attendance, paused tools,
-  and durable invitation re-entry. No native device/binary test or remote
-  migration deployment is claimed. Remaining blueprint flows include
-  map-to-place creation, ping → Beacon, Vote/Draw resolution, RSVP
-  I'm In/I'm Out, Plan-step directions, friend-status-to-Beacon, Squad
-  conversation/Profile, and Beacon memory → Profile → source Beacon. Check
-  320px/390px, theme contrast, keyboard/search, focus, tap targets, empty/
-  error/loading states, and route dead ends. Paths: tests/browser/, tests/,
-  src/features/, app/.
-
-## Additional requirements / current partial work
-
-- **Public discovery and organizations — Isolated scaffold only; Critical
-  before integration.** Safe domain/types validation and three focused
-  standalone tests exist under src/features/discovery/ and
-  src/features/organizations/. There is no migration 006, shared Data/store/
-  snapshot/action integration, route, or screen. Implement sanitized public
-  summary and explicit coarse-area opt-in; server-side coordinate quantization,
-  block/exclusion checks, public admission, and capacity must be authoritative.
-  Organizations must remain distinct from Squads, invite-only, and role
-  protected. Preserve 005 viewer_id, viewer_can_access, and
-  accepted_seat_count. Dependencies: stable 005 handoff, SQL006 security/
-  snapshot/action integration, then routes and browser coverage. Register the
-  suite is registered in the main test script and passes.
-  Paths: src/features/discovery/, src/features/organizations/,
-  src/shared/types.ts, src/shared/demo.ts, src/shared/store.tsx,
-  supabase/migrations/, tests/discoveryOrganizations.test.ts.
-- **Planning/database delivery — Core implemented; follow-up partial; High.**
-  Migrations 001–005, shared types/demo/store, controls UI, planning UI, and
-  database tests are integrated and currently green. Keep 006 isolated until
-  the backend handoff, then add its migration chain. Proposal editing/search/
-  time/place and deterministic resolution exist; add the Plan conflict entry
-  point described above. Dependency: public/org contracts and SQL006 review.
-  Paths:
-  supabase/migrations/20261001000*.sql, src/features/planning/,
-  tests/planningThreads*.test.ts.
-- **Beacon modules/media limits — Partial; Medium.** Shared Checklist/Notes and the
-  local timer exist; do not replace existing notes. Media Experiences/reels,
-  streaming songs, and linked Profile media are separate work, not implied by
-  the current Library. Dependency: source-linked media model and permissions.
-  Paths: src/features/beacons/BeaconTools.tsx, src/features/library/,
-  src/features/profile/.
-- **Capacity, attendance, and roles — Verified foundation; role UI incomplete; High.**
-  Migration 005, server projections, BeaconSettings, AttendanceControls, and
-  permission gates are integrated. Database permission/revocation tests and
-  browser capacity/settings/manual-attendance flows pass. Role grant/revoke
-  pickers and co-owner/admin admission controls remain API-only and need UI;
-  do not infer access from a client list. Dependency: role-management UI and
-  native device QA. Paths:
-  src/features/beacons/,
-  src/shared/types.ts, supabase/migrations/202610010005_beacon_controls.sql.
-- **Discovery limits — Explicitly not implemented; Critical safety dependency.**
-  Public recommendations must not appear as an Upcoming widget by default; use a dedicated Discover
-  route reached from Past utilities or an explicit opt-in filter. No precise
-  public GPS, Sonar, full host profile, private place, chat, attendee, or tool
-  payload may enter a public summary. Dependency: server-sanitized SQL006
-  projection and explicit publication opt-in. Paths: src/features/discovery/,
-  src/features/beacons/screens/ActivitiesScreen.tsx.
+Local SQL tests use PGlite, not hosted Supabase Auth/Storage/Realtime, native widgets or phone push delivery. Android export is not emulator acceptance. The Places Edge function still needs server credentials, its migration, deployment, and a live-account smoke test; Deno was unavailable locally. No paid Google request or remote deployment was made.

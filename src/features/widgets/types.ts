@@ -1,6 +1,7 @@
 export type CircleKey = "circle1" | "circle2" | "circle3";
 export type CircleSource =
   | { kind: "all" }
+  | { kind: "starred" }
   | { kind: "friend"; id: string }
   | { kind: "squad"; id: string }
   | { kind: "list"; id: string };
@@ -12,6 +13,8 @@ export type WidgetPreferences = {
   enabled: boolean;
 };
 export type FriendStatusItem = {
+  initials?: string;
+  availability?: "available" | "ending-soon" | "unavailable" | "unknown";
   name: string;
   status: string;
   detail: string;

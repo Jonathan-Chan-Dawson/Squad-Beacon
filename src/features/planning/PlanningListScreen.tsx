@@ -1,8 +1,15 @@
 import React, { useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import { router } from "expo-router";
-import { ArrowUpRight, CalendarClock, CircleHelp, Dices, Vote } from "lucide-react-native";
+import { router, useLocalSearchParams } from "expo-router";
+import {
+  ArrowUpRight,
+  CalendarClock,
+  CircleHelp,
+  Dices,
+  Vote,
+} from "lucide-react-native";
 import { templates } from "@/src/shared/templates";
+import { canOpenSquadProfile } from "@/src/features/people/squadProfile";
 import { useBeacon } from "@/src/shared/store";
 import type { Audience } from "@/src/shared/types";
 import {
@@ -42,39 +49,100 @@ const shortDate = (value: string) =>
 
 export default function PlanningListScreen() {
   const { data, userId, act } = useBeacon();
+  const { organizationId, squadId: squadIdParam, newPing, pingSeed } = useLocalSearchParams<{
+    organizationId?: string;
+    squadId?: string;
+    newPing?: string;
+    pingSeed?: string;
+  }>();
+  const requestedSquadId = Array.isArray(squadIdParam)
+    ? squadIdParam[0]
+    : squadIdParam;
+  const createSquadPing = Array.isArray(newPing) ? newPing[0] : newPing;
+  const pingSeedToken = Array.isArray(pingSeed) ? pingSeed[0] : pingSeed;
+  const hasSquadPingRequest = createSquadPing === "yes" && !!requestedSquadId;
+  const seedKey = `${userId ?? "signed-out"}:${requestedSquadId ?? ""}:${pingSeedToken ?? "direct"}`;
+  const seededSquad =
+    requestedSquadId &&
+    userId &&
+    data.squads.find((item) => item.id === requestedSquadId) &&
+    canOpenSquadProfile(data, requestedSquadId, userId)
+      ? data.squads.find((item) => item.id === requestedSquadId)
+      : undefined;
+  const organization = data.organizations.find(
+    (item) =>
+      item.id === organizationId &&
+      (item.owner_id === userId ||
+        data.organization_members.some(
+          (member) =>
+            member.organization_id === item.id &&
+            member.user_id === userId &&
+            member.status === "active",
+        )),
+  );
   const { colors, styles } = useTheme();
   const planning = normalizePlanningData(data);
-  const [createOpen, setCreateOpen] = useState(false);
+  const [manualCreateOpen, setManualCreateOpen] = useState(!!organization);
+  const [dismissedSeedKey, setDismissedSeedKey] = useState<string | null>(null);
   const [kindChoice, setKindChoice] = useState<(typeof kinds)[number]>("Ping");
-  const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
-  const [audience, setAudience] = useState<Audience>("friends");
-  const [audienceId, setAudienceId] = useState<string | null>(null);
+  const [titleDraft, setTitleDraft] = useState({ key: "", value: "" });
+  const [bodyDraft, setBodyDraft] = useState({ key: "", value: "" });
+  const [coownerDraft, setCoownerDraft] = useState({ key: "", value: [] as string[] });
+  const [audience, setAudience] = useState<Audience>(organization ? "organization" : "friends");
+  const [audienceId, setAudienceId] = useState<string | null>(
+    organization?.id ?? null,
+  );
   const [deadlineChoice, setDeadlineChoice] =
     useState<(typeof deadlines)[number]>("24 hours");
   const [recipeId, setRecipeId] = useState(quickRecipes[0].id);
-  const [coownerIds, setCoownerIds] = useState<string[]>([]);
+  const activeSeed = !!(
+    hasSquadPingRequest &&
+    seededSquad &&
+    dismissedSeedKey !== seedKey
+  );
+  const createOpen = hasSquadPingRequest
+    ? activeSeed
+    : manualCreateOpen;
+  const draftKey = activeSeed ? `squad:${seedKey}` : "normal";
+  const title = titleDraft.key === draftKey ? titleDraft.value : "";
+  const body = bodyDraft.key === draftKey ? bodyDraft.value : "";
+  const coownerIds = coownerDraft.key === draftKey ? coownerDraft.value : [];
+  const effectiveKindChoice = activeSeed ? "Ping" : kindChoice;
+  const effectiveAudience: Audience = activeSeed ? "squad" : audience;
+  const effectiveAudienceId = activeSeed ? seededSquad!.id : audienceId;
+
+  function closeCreate() {
+    setManualCreateOpen(false);
+    if (hasSquadPingRequest) {
+      setDismissedSeedKey(seedKey);
+      router.setParams({ newPing: undefined, pingSeed: undefined });
+    }
+  }
 
   const kind: PlanningThreadKind =
-    kindChoice === "Ping" ? "ping" : kindChoice === "Vote" ? "vote" : "draw";
+    effectiveKindChoice === "Ping"
+      ? "ping"
+      : effectiveKindChoice === "Vote"
+        ? "vote"
+        : "draw";
   const candidateThread: PlanningThread = {
-      id: "draft",
-      owner_id: userId ?? "",
-      coowner_ids: [],
-      kind,
-      title: "",
-      body: "",
-      audience,
-      audience_id: audienceId,
-      deadline_at: "",
-      status: "open",
-      payload: null,
-      winner_proposal_id: null,
-      replaced_from_proposal_id: null,
-      materialized_activity_id: null,
-      created_at: "",
-      resolved_at: null,
-    };
+    id: "draft",
+    owner_id: userId ?? "",
+    coowner_ids: [],
+    kind,
+    title: "",
+    body: "",
+    audience: effectiveAudience,
+    audience_id: effectiveAudienceId,
+    deadline_at: "",
+    status: "open",
+    payload: null,
+    winner_proposal_id: null,
+    replaced_from_proposal_id: null,
+    materialized_activity_id: null,
+    created_at: "",
+    resolved_at: null,
+  };
   const coownerCandidates = data.profiles.filter(
     (profile) =>
       profile.id !== userId &&
@@ -97,25 +165,34 @@ export default function PlanningListScreen() {
   }
 
   function pingDraft(deadlineAt: string) {
-    const recipe = quickRecipes.find((item) => item.id === recipeId) ?? quickRecipes[0];
+    const recipe =
+      quickRecipes.find((item) => item.id === recipeId) ?? quickRecipes[0];
     const startAt = new Date(Date.parse(deadlineAt) + 24 * 60 * 60 * 1000);
     const draft = makeBeaconDraft(startAt, recipe.minutes);
     draft.title = recipe.title;
     draft.category = recipe.category;
-    draft.audience = audience;
-    draft.audience_id = audienceId;
+    draft.audience = effectiveAudience;
+    draft.audience_id = effectiveAudienceId;
     return draft;
   }
 
   async function createThread() {
+    if (
+      hasSquadPingRequest &&
+      (!activeSeed || !requestedSquadId || !userId ||
+        !canOpenSquadProfile(data, requestedSquadId, userId))
+    ) {
+      closeCreate();
+      throw new Error("You’re no longer an active member of that Squad. No Ping was shared.");
+    }
     const deadlineAt = startDeadline();
     const payload = kind === "ping" ? pingDraft(deadlineAt) : undefined;
     validatePlanningThreadDraft(
       kind,
       title,
       body,
-      audience,
-      audienceId,
+      effectiveAudience,
+      effectiveAudienceId,
       deadlineAt,
       Date.now(),
       payload,
@@ -124,13 +201,13 @@ export default function PlanningListScreen() {
       kind,
       title: title.trim(),
       body: body.trim(),
-      audience,
-      audience_id: audienceId,
+      audience: effectiveAudience,
+      audience_id: effectiveAudienceId,
       deadline_at: deadlineAt,
       coowner_ids: kind === "ping" ? [] : coownerIds,
       ...(payload ? { payload } : {}),
     });
-    setCreateOpen(false);
+    closeCreate();
     const id = typeof result.id === "string" ? result.id : "";
     if (id) router.push({ pathname: "/council/[id]", params: { id } });
   }
@@ -144,10 +221,18 @@ export default function PlanningListScreen() {
       <Button
         title="Start a ping, vote, or draw"
         onPress={() => {
-          setTitle("");
-          setBody("");
-          setCoownerIds([]);
-          setCreateOpen(true);
+          if (hasSquadPingRequest) {
+            setDismissedSeedKey(seedKey);
+            router.setParams({ newPing: undefined, pingSeed: undefined });
+          }
+          const key = "normal";
+          setTitleDraft({ key, value: "" });
+          setBodyDraft({ key, value: "" });
+          setCoownerDraft({ key, value: [] });
+          setAudience(organization ? "organization" : "friends");
+          setAudienceId(organization?.id ?? null);
+          setKindChoice("Ping");
+          setManualCreateOpen(true);
         }}
       />
       {!threads.length ? (
@@ -170,7 +255,10 @@ export default function PlanningListScreen() {
               accessibilityRole="button"
               accessibilityLabel={`${thread.title}, ${kindName(thread.kind)}, ${thread.status}`}
               onPress={() =>
-                router.push({ pathname: "/council/[id]", params: { id: thread.id } })
+                router.push({
+                  pathname: "/council/[id]",
+                  params: { id: thread.id },
+                })
               }
               style={({ pressed }) => [
                 styles.card,
@@ -205,33 +293,46 @@ export default function PlanningListScreen() {
       <Sheet
         title="Start a ping or decision"
         visible={createOpen}
-        onClose={() => setCreateOpen(false)}
+        onClose={closeCreate}
       >
-        <Chips options={kinds} value={kindChoice} onChange={setKindChoice} />
+        {activeSeed ? (
+          <View style={styles.card}>
+            <Text style={styles.h2}>Squad Ping</Text>
+          </View>
+        ) : (
+          <Chips options={kinds} value={kindChoice} onChange={setKindChoice} />
+        )}
         <Field
           label="Question or decision"
           value={title}
-          onChangeText={setTitle}
+          onChangeText={(value) => setTitleDraft({ key: draftKey, value })}
           maxLength={120}
           placeholder="What should we do together?"
         />
         <Field
           label="A little context (optional)"
           value={body}
-          onChangeText={setBody}
+          onChangeText={(value) => setBodyDraft({ key: draftKey, value })}
           maxLength={500}
           multiline
           placeholder="Add the detail people need to decide."
         />
-        <AudiencePicker
-          value={audience}
-          id={audienceId}
-          onChange={(nextAudience, nextId) => {
-            setAudience(nextAudience);
-            setAudienceId(nextId);
-            setCoownerIds([]);
-          }}
-        />
+        {activeSeed && seededSquad ? (
+          <View style={[styles.card, { gap: 4 }]}>
+            <Text style={styles.h2}>Shared with {seededSquad.name}</Text>
+            <Txt muted>Only current members of this Squad can read or respond to this Ping.</Txt>
+          </View>
+        ) : (
+          <AudiencePicker
+            value={effectiveAudience}
+            id={effectiveAudienceId}
+            onChange={(nextAudience, nextId) => {
+              setAudience(nextAudience);
+              setAudienceId(nextId);
+              setCoownerDraft({ key: draftKey, value: [] });
+            }}
+          />
+        )}
         <View style={{ gap: 7 }}>
           <Text style={styles.muted}>Decision deadline</Text>
           <Chips
@@ -242,7 +343,9 @@ export default function PlanningListScreen() {
         </View>
         {kind === "ping" && (
           <View style={{ gap: 7 }}>
-            <Text style={styles.muted}>Beacon if you turn this into a plan</Text>
+            <Text style={styles.muted}>
+              Beacon if you turn this into a plan
+            </Text>
             <Chips
               options={quickRecipes.map((recipe) => recipe.label)}
               value={
@@ -273,11 +376,12 @@ export default function PlanningListScreen() {
                   title={`${selected ? "✓ " : "＋ "}${profile.name}`}
                   secondary={!selected}
                   onPress={() =>
-                    setCoownerIds((current) =>
-                      selected
-                        ? current.filter((id) => id !== profile.id)
-                        : [...current, profile.id],
-                    )
+                    setCoownerDraft({
+                      key: draftKey,
+                      value: selected
+                        ? coownerIds.filter((id) => id !== profile.id)
+                        : [...coownerIds, profile.id],
+                    })
                   }
                 />
               );

@@ -17,7 +17,7 @@ const categories: Category[] = [
   "Social",
   "Other",
 ];
-const audiences: Audience[] = ["private", "friends", "list", "squad"];
+const audiences: Audience[] = ["private", "friends", "list", "squad", "organization"];
 
 export function makeBeaconDraft(
   startAt = new Date(Date.now() + 48 * 60 * 60 * 1000),
@@ -64,8 +64,8 @@ export function normalizePlanningData(data: Data): PlanningData {
 export function validateAudience(audience: string, audienceId: string | null) {
   if (!audiences.includes(audience as Audience))
     throw new Error("Choose a sharing audience.");
-  if ((audience === "list" || audience === "squad") !== !!audienceId)
-    throw new Error("Choose the private list or squad for this audience.");
+  if ((audience === "list" || audience === "squad" || audience === "organization") !== !!audienceId)
+    throw new Error("Choose the private list, squad, or organization for this audience.");
 }
 
 export function validateBeaconDraft(draft: BeaconDraft) {
@@ -205,6 +205,23 @@ function acceptedFriend(data: PlanningAccessData, first: ID, second: ID) {
   );
 }
 
+function activeOrganizationMember(data: PlanningAccessData, organizationId: ID, personId: ID) {
+  const organization = data.organizations.find((item) => item.id === organizationId);
+  if (!organization) return false;
+  if (organization.owner_id === personId) return true;
+  return (
+    data.organization_members.some(
+      (member) =>
+        member.organization_id === organizationId &&
+        member.user_id === personId &&
+        member.status === "active",
+    ) &&
+    !data.organization_bans.some(
+      (ban) => ban.organization_id === organizationId && ban.user_id === personId,
+    )
+  );
+}
+
 export function canReadPlanningThread(
   data: PlanningAccessData,
   thread: PlanningThread,
@@ -227,6 +244,16 @@ export function canReadPlanningThread(
           member.list_id === thread.audience_id && member.user_id === userId,
       )
     );
+  if (thread.audience === "organization") {
+    const organizationId = thread.audience_id;
+    if (!organizationId) return false;
+    const organization = data.organizations.find((item) => item.id === organizationId);
+    if (!organization || blockedBetween(data, userId, organization.owner_id)) return false;
+    return (
+      activeOrganizationMember(data, organizationId, thread.owner_id) &&
+      activeOrganizationMember(data, organizationId, userId)
+    );
+  }
   const squad = data.squads.find((item) => item.id === thread.audience_id);
   return !!(
     squad &&

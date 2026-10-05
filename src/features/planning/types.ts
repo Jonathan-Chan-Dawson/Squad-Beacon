@@ -89,4 +89,7 @@ export type PlanningAccessData = Pick<
   | "list_members"
   | "squad_members"
   | "squads"
+  | "organizations"
+  | "organization_members"
+  | "organization_bans"
 >;

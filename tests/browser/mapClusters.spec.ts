@@ -10,19 +10,25 @@ test("map clusters drill into Beacons and People, focus a Beacon, and dismiss on
   page,
 }) => {
   await startDemo(page);
+  await page.getByRole("button", { name: "Map options", exact: true }).click();
   await expect(
-    page.getByRole("button", { name: "Fit all beacons", exact: true }),
+    page.getByRole("button", { name: "Fit visible results", exact: true }),
   ).toBeVisible();
-  const zoomOut = page.getByRole("button", { name: "Zoom out", exact: true });
-  await zoomOut.click();
-  await zoomOut.click();
+  await page
+    .getByRole("button", { name: "Fit visible results", exact: true })
+    .click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  // Web wheel zoom exercises the map gesture instead of removed mobile +/- UI.
+  await page.mouse.move(195, 390);
+  await page.mouse.wheel(0, 1200);
 
   const cluster = page
     .getByRole("button", {
-      name: /^Map cluster: [1-9]\d* beacons, [1-9]\d* people$/,
+      name: /^Map cluster: [1-9]\d* beacons, [1-9]\d* people\. Preview:/,
     })
     .first();
   await expect(cluster).toBeVisible();
+  await expect(cluster).toHaveAccessibleName(/Preview:/);
   await cluster.click();
   const panel = page.getByTestId("map-cluster-panel");
   await expect(panel).toBeVisible();
@@ -40,18 +46,18 @@ test("map clusters drill into Beacons and People, focus a Beacon, and dismiss on
   await expect(panel).toHaveCount(0);
   await expect(page.getByTestId("map-tooltip")).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Beacon details" }),
+    page.getByRole("button", { name: /^(Open|Manage) .* Beacon$/ }),
   ).toBeVisible();
+  await expect(page.getByTestId("map-tooltip-card")).toContainText("going");
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= innerWidth,
     ),
   ).toBe(true);
 
-  const map = page.locator('[aria-label="Beacon map"]');
-  const bounds = await map.boundingBox();
-  expect(bounds).not.toBeNull();
-  await page.mouse.click(bounds!.x + 8, bounds!.y + bounds!.height * 0.65);
+  await page
+    .getByRole("button", { name: "Close map preview", exact: true })
+    .click();
   await expect(page.getByTestId("map-tooltip")).toHaveCount(0);
   await expect(page.getByTestId("map-cluster-panel")).toHaveCount(0);
   await page.getByRole("tab", { name: "Beacons", exact: true }).click();
@@ -65,12 +71,21 @@ test("Draw-created Beacon links back to its decision", async ({ page }) => {
   await page.getByRole("tab", { name: "Beacons", exact: true }).click();
   await page.getByRole("button", { name: "Upcoming", exact: true }).click();
   await page
-    .getByRole("button", { name: "View A surprise crew meetup details" })
+    .getByRole("button", {
+      name: "View A surprise crew meetup details",
+      exact: true,
+    })
     .click();
 
   await expect(page.getByTestId("map-tooltip")).toBeVisible();
   await expect(page.getByText("Chosen by Draw", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Beacon details" }).click();
+  await page
+    .getByRole("button", {
+      name: "Open A surprise crew meetup Beacon details",
+      exact: true,
+    })
+    .click();
+  await expect(page).toHaveURL(/\/activity\/demo-draw-beacon$/);
   await expect(
     page.getByRole("button", { name: "View Draw decision", exact: true }),
   ).toBeVisible();

@@ -126,6 +126,10 @@ test("planning migration enforces visibility, eligibility, one vote, safe resolu
     "202610010004_planning_threads.sql",
     "202610010005_beacon_controls.sql",
     "202610030001_profile_privacy.sql",
+    "202610030002_beacon_module_collections.sql",
+    "202610030003_beacon_media_teams.sql",
+    "202610040001_organization_audience_type.sql",
+    "202610040002_organizations_group_chat.sql",
   ])
     await applyMigration(migration);
 

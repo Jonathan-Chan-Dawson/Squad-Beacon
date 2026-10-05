@@ -1,9 +1,15 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
+  clusterPreviewOverflow,
   clusterMapPoints,
   markerVisualSize,
+  rankClusterMembers,
 } from "../src/features/maps/cluster";
+import { physicalDirectionsUrl } from "../src/features/maps/directions";
+import { deriveMapPointPriorities } from "../src/features/maps/relevance";
+import { makeDemo } from "@/src/shared/demo";
 
 const viewport = {
   centerLatitude: 41.885,
@@ -12,6 +18,26 @@ const viewport = {
   width: 390,
   height: 740,
 };
+
+test("native MapView receives current padding only after onMapReady", () => {
+  const source = readFileSync(
+    new URL("../src/features/maps/components/BeaconMap.native.tsx", import.meta.url),
+    "utf8",
+  );
+  const mapViewTag = source.match(/^\s*<MapView\s*\n[\s\S]*?^\s*>/m)?.[0];
+  assert.ok(mapViewTag, "native MapView JSX is present");
+  assert.match(source, /const \[ready, setReady\] = useState\(false\);/);
+  assert.match(mapViewTag, /onMapReady=\{\(\) => setReady\(true\)\}/);
+  assert.match(mapViewTag, /\{\.\.\.\(ready \? \{ mapPadding \} : \{\}\)\}/);
+  assert.doesNotMatch(mapViewTag, /\bmapPadding\s*=/);
+
+  const paddingCalculation = source.match(/const mapPadding = \{([\s\S]*?)\n  \};/)?.[1];
+  assert.ok(paddingCalculation, "map padding is derived from live render props");
+  assert.match(paddingCalculation, /top:\s*viewportInsets\?\.top/);
+  assert.match(paddingCalculation, /right:\s*viewportInsets\?\.right/);
+  assert.match(paddingCalculation, /bottom:\s*viewportInsets\?\.bottom/);
+  assert.match(paddingCalculation, /left:\s*viewportInsets\?\.left/);
+});
 
 test("clusters nearby Beacons and people in stable member order", () => {
   const points = [
@@ -99,4 +125,66 @@ test("marker visuals scale with zoom while keeping type hierarchy", () => {
     [22, 30],
   );
   assert.ok(markerVisualSize("beacon", 15) > markerVisualSize("person", 15));
+});
+
+test("cluster previews rank real items by relevance and report overflow", () => {
+  const members = [
+    { id: "beacon:other", kind: "beacon" as const, latitude: 0, longitude: 0 },
+    { id: "person:starred", kind: "person" as const, latitude: 0, longitude: 0 },
+    { id: "beacon:joined", kind: "beacon" as const, latitude: 0, longitude: 0 },
+    { id: "beacon:busy", kind: "beacon" as const, latitude: 0, longitude: 0 },
+  ];
+  const priorities = {
+    "beacon:joined": { tier: 0, attendance: 2 },
+    "person:starred": { tier: 1, attendance: 0 },
+    "beacon:busy": { tier: 4, attendance: 18 },
+    "beacon:other": { tier: 7, attendance: 1 },
+  };
+  assert.deepEqual(
+    rankClusterMembers(members, priorities).map((member) => member.id),
+    ["beacon:joined", "person:starred", "beacon:busy", "beacon:other"],
+  );
+  assert.equal(clusterPreviewOverflow(2), 0);
+  assert.equal(clusterPreviewOverflow(4), 1);
+});
+
+test("map relevance derives joined, starred, available, and nearby ranks centrally", () => {
+  const data = makeDemo();
+  const viewer = data.viewer_id ?? "demo-you";
+  const now = Date.now();
+  const future = new Date(now + 30 * 60 * 1000).toISOString();
+  data.activities = data.activities.map((activity, index) =>
+    index === 0
+      ? { ...activity, id: "joined", starts_at: future }
+      : activity,
+  );
+  data.rsvps.push({
+    activity_id: "joined",
+    user_id: viewer,
+    status: "going",
+    approved: true,
+  });
+  const priorities = deriveMapPointPriorities(
+    data,
+    viewer,
+    data.activities.map((activity) => activity.id),
+    ["neighbor-4", "sam"],
+    now,
+  );
+  assert.equal(priorities["beacon:joined"].tier, 0);
+  assert.equal(priorities["person:neighbor-4"].tier, 1);
+  assert.ok(priorities["person:sam"].tier <= 6);
+});
+
+test("directions URL rejects virtual or invalid coordinates", () => {
+  assert.equal(physicalDirectionsUrl(null, null), null);
+  assert.equal(physicalDirectionsUrl(91, 0), null);
+  assert.equal(
+    physicalDirectionsUrl(41.8, -87.6),
+    "https://www.google.com/maps/dir/?api=1&destination=41.8%2C-87.6",
+  );
+  assert.equal(
+    physicalDirectionsUrl(0, 0),
+    "https://www.google.com/maps/dir/?api=1&destination=0%2C0",
+  );
 });

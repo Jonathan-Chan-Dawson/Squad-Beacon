@@ -1,6 +1,14 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { isThemeName, themeNames, themes } from "@/src/shared/themes";
+import {
+  getInitialThemePreferences,
+  isAppearanceMode,
+  isThemeName,
+  resolveAppearanceMode,
+  themeNames,
+  themeVariants,
+  themes,
+} from "@/src/shared/themes";
 
 function luminance(color: string) {
   const channels = color
@@ -28,7 +36,7 @@ test("theme names are unique, accepted by persistence validation, and reject unk
     assert.equal(isThemeName(invalid), false);
 });
 
-test("palette text, controls, and Auth hero meet contrast targets in every theme", () => {
+test("legacy theme palettes keep their public shape", () => {
   for (const [name, palette] of Object.entries(themes)) {
     assert.ok(contrast(palette.ink, palette.bg) >= 4.5, `${name} primary text`);
     assert.ok(contrast(palette.ink, palette.white) >= 4.5, `${name} card text`);
@@ -42,4 +50,53 @@ test("palette text, controls, and Auth hero meet contrast targets in every theme
     assert.ok(contrast(palette.heroAccent, palette.heroBg) >= 3, `${name} Auth hero icon`);
     assert.ok(contrast(palette.green, palette.lime) >= 3, `${name} accent icon on lime`);
   }
+});
+
+test("every theme has readable light and dark variants", () => {
+  for (const name of themeNames) {
+    for (const appearance of ["light", "dark"] as const) {
+      const palette = themeVariants[name][appearance];
+      const label = `${name} ${appearance}`;
+      assert.ok(contrast(palette.ink, palette.bg) >= 4.5, `${label} primary text`);
+      assert.ok(contrast(palette.ink, palette.white) >= 4.5, `${label} card text`);
+      assert.ok(contrast(palette.muted, palette.bg) >= 4.5, `${label} muted text`);
+      assert.ok(contrast(palette.muted, palette.white) >= 4.5, `${label} muted card text`);
+      assert.ok(contrast(palette.green, palette.bg) >= 4.5, `${label} accent text`);
+      assert.ok(contrast(palette.green, palette.white) >= 4.5, `${label} accent on cards`);
+      assert.ok(contrast(palette.white, palette.ink) >= 4.5, `${label} primary button text`);
+      assert.ok(contrast(palette.ink, palette.lime) >= 4.5, `${label} compact action text`);
+      assert.ok(contrast(palette.heroText, palette.heroBg) >= 4.5, `${label} hero text`);
+      assert.ok(contrast(palette.heroAccent, palette.heroBg) >= 3, `${label} hero icon`);
+      assert.ok(contrast(palette.green, palette.lime) >= 3, `${label} accent icon on lime`);
+    }
+  }
+});
+
+test("appearance preference defaults dark and migrates saved legacy themes", () => {
+  assert.deepEqual(getInitialThemePreferences(null, null), {
+    theme: "Midnight",
+    appearanceMode: "dark",
+  });
+  assert.deepEqual(getInitialThemePreferences("Mint", null), {
+    theme: "Mint",
+    appearanceMode: "light",
+  });
+  assert.deepEqual(getInitialThemePreferences("Midnight", null), {
+    theme: "Midnight",
+    appearanceMode: "dark",
+  });
+  assert.deepEqual(getInitialThemePreferences("Ocean", "system"), {
+    theme: "Ocean",
+    appearanceMode: "system",
+  });
+  assert.equal(isAppearanceMode("system"), true);
+  assert.equal(isAppearanceMode("auto"), false);
+});
+
+test("system appearance follows the device and has a safe dark fallback", () => {
+  assert.equal(resolveAppearanceMode("system", "light"), "light");
+  assert.equal(resolveAppearanceMode("system", "dark"), "dark");
+  assert.equal(resolveAppearanceMode("system", "unspecified"), "dark");
+  assert.equal(resolveAppearanceMode("light", "dark"), "light");
+  assert.equal(resolveAppearanceMode("dark", "light"), "dark");
 });
