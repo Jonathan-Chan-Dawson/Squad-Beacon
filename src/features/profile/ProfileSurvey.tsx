@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { Check, Trash2 } from "lucide-react-native";
 import {
@@ -21,6 +21,7 @@ import {
   INTEREST_CATALOG,
 } from "@/src/shared/interestCatalog";
 import { ProfileAvatar } from "./ProfileAvatar";
+import { profileEditorDraft, profileEditorPayload, profileSavePayload, validateProfileEditor } from "./profileEditorDraft";
 
 export type { AspirationGoal } from "@/src/shared/types";
 export { getAspirationProgress } from "@/src/features/profile/aspirations";
@@ -37,6 +38,8 @@ type SurveyProps = {
   mode?: "onboarding" | "retake";
   onComplete?: () => void;
   onSkip?: () => void;
+  onSavingChange?: (saving: boolean) => void;
+  onProfileSaved?: (profile: Profile) => void;
 };
 
 function tagKey(group: string, tag: string) {
@@ -71,13 +74,13 @@ function SurveyChip({
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={`${selected ? "Remove" : "Choose"} ${label}`}
-      accessibilityState={{ selected }}
+      accessibilityState={{ selected, disabled }}
       disabled={disabled}
       onPress={onPress}
       style={[
         styles.chip,
         {
-          minHeight: 42,
+          minHeight: 44,
           flexDirection: "row",
           alignItems: "center",
           gap: 6,
@@ -111,9 +114,19 @@ function ProfileSurveyBody({
   mode = "onboarding",
   onComplete,
   onSkip,
+  onSavingChange,
+  onProfileSaved,
 }: SurveyProps) {
   const { styles, colors } = useTheme();
-  const { act, userId } = useBeacon();
+  const { act, userId, data } = useBeacon();
+  const [baseline] = useState(() => profileEditorDraft(profile));
+  const latest = useRef({ profile, userId });
+  const savingLock = useRef(false);
+  const active = useRef(true);
+  useEffect(() => {
+    latest.current = { profile: data.profiles.find((item) => item.id === profile.id) ?? profile, userId };
+  }, [data.profiles, profile, userId]);
+  useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
   const [step, setStep] = useState(0);
   const [showIdentity, setShowIdentity] = useState(mode === "retake");
   const [name, setName] = useState(profile.name);
@@ -194,25 +207,29 @@ function ProfileSurveyBody({
   }
 
   async function saveSurvey(status: "completed" | "skipped") {
+    if (savingLock.current) return;
+    if (status === "skipped" && mode === "retake") { onSkip?.(); return; }
+    savingLock.current = true;
     setSavingProfile(true);
+    onSavingChange?.(true);
     try {
-      if (status === "completed" && !name.trim())
-        throw new Error("Add your name so your friends recognize you.");
-      await act("save_profile", {
-        ...profile,
-        name: status === "skipped" ? profile.name : name.trim(),
-        bio: status === "skipped" ? profile.bio : bio.trim(),
-        identity_tags:
-          status === "skipped" ? (profile.identity_tags ?? []) : identityTags,
-        interests: status === "skipped" ? (profile.interests ?? []) : interests,
-        aspiration_goals:
-          status === "skipped" ? (profile.aspiration_goals ?? []) : aspirations,
-        onboarding_survey_status: status,
-      });
-      if (status === "completed") onComplete?.();
-      else onSkip?.();
+      const current = latest.current;
+      if (!current.userId || current.userId !== current.profile.id || current.profile.id !== profile.id)
+        throw new Error("Your profile session changed. Reopen the survey.");
+      const payload = status === "skipped" ? profileSavePayload(current.profile) : profileEditorPayload(
+        current.profile, baseline, validateProfileEditor({ ...baseline, name, bio, identity_tags: identityTags, interests, aspiration_goals: aspirations }),
+      );
+      await act("save_profile", { ...payload, onboarding_survey_status: status });
+      if (active.current) {
+        if (status === "completed") {
+          onProfileSaved?.({ ...current.profile, ...payload, onboarding_survey_status: status });
+          onComplete?.();
+        } else onSkip?.();
+      }
     } finally {
-      setSavingProfile(false);
+      savingLock.current = false;
+      if (active.current) setSavingProfile(false);
+      onSavingChange?.(false);
     }
   }
 
@@ -235,14 +252,16 @@ function ProfileSurveyBody({
   ][step];
 
   return (
-    <View style={{ gap: 14 }}>
+    <View testID="profile-survey" pointerEvents={savingProfile ? "none" : "auto"} style={{ gap: 14 }}>
       <View style={[styles.card, { gap: 12 }]}>
         <Text style={styles.label}>
           PART {step + 1} OF 3 · {stepCopy.label.toUpperCase()}
         </Text>
         <Text style={styles.h2}>{stepCopy.title}</Text>
         <Txt muted>{stepCopy.body}</Txt>
-        <View style={{ flexDirection: "row", gap: 6 }}>
+        <View accessibilityRole="progressbar" accessibilityLabel="Profile survey progress"
+          accessibilityValue={{ min: 1, max: 3, now: step + 1, text: `Step ${step + 1} of 3: ${stepCopy.label}` }}
+          style={{ flexDirection: "row", gap: 6 }}>
           {[0, 1, 2].map((number) => (
             <View
               key={number}
@@ -627,12 +646,12 @@ function ProfileSurveyBody({
       <View style={{ flexDirection: "row", gap: 10 }}>
         {step > 0 && (
           <View style={{ flex: 1 }}>
-            <Button secondary title="Back" onPress={() => setStep(step - 1)} />
+            <Button secondary title="Back" disabled={savingProfile} onPress={() => setStep(step - 1)} />
           </View>
         )}
         {step < 2 ? (
           <View style={{ flex: 1 }}>
-            <Button title="Continue" onPress={() => setStep(step + 1)} />
+            <Button title="Continue" disabled={savingProfile} onPress={() => setStep(step + 1)} />
           </View>
         ) : (
           <View style={{ flex: 1 }}>
@@ -644,14 +663,14 @@ function ProfileSurveyBody({
           </View>
         )}
       </View>
-      {mode === "onboarding" && (
+      {
         <Action
           secondary
           title="Skip for now"
           disabled={savingProfile}
           run={() => saveSurvey("skipped")}
         />
-      )}
+      }
       {step === 0 && mode === "retake" && (
         <Txt muted>
           You can update these choices again whenever you like from your

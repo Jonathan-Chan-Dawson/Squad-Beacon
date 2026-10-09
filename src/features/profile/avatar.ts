@@ -11,7 +11,7 @@ export async function uploadAvatar(userId: string) {
     quality: 1,
     exif: false,
   });
-  if (picked.canceled) return;
+  if (picked.canceled) return false;
   const asset = picked.assets[0],
     side = Math.min(asset.width, asset.height);
   const context = ImageManipulator.manipulate(asset.uri);
@@ -42,4 +42,5 @@ export async function uploadAvatar(userId: string) {
       cacheControl: "0",
     });
   if (error) throw error;
+  return true;
 }

@@ -36,6 +36,10 @@ export interface MapProps {
   focused?: { latitude: number; longitude: number } | null;
   explorationTarget?: ExplorationTarget | null;
   activities: Activity[];
+  /** Readable current solo activities used only for friend availability rings. */
+  availabilityActivities?: Activity[];
+  /** Screen-owned selection state used to emphasize one readable Beacon pin. */
+  selectedActivityId?: string | null;
   places: ActivityPlace[];
   locations: LocationSession[];
   profiles: Profile[];

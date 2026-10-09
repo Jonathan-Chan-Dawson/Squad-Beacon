@@ -1,9 +1,22 @@
-import React, { useRef, useState } from "react";
-import { ScrollView, Text, View } from "react-native";
+import React, { useEffect, useId, useRef, useState } from "react";
+import { Text, View } from "react-native";
+import { useRouter } from "expo-router";
 import { useBeacon } from "@/src/shared/store";
-import { Action, Field, Txt, useTheme } from "@/src/shared/ui";
+import { useDesignTheme } from "@/src/shared/design-system";
 import { canUseBeaconModules } from "@/src/features/beacons/beaconModules";
-import { canWriteBeaconModule, isBeaconModuleEnabled } from "@/src/features/beacons/permissions";
+import {
+  canWriteBeaconModule,
+  isBeaconModuleEnabled,
+} from "@/src/features/beacons/permissions";
+import { selectPersonPreview } from "@/src/features/people/previews/personPreview";
+import { canViewProfile } from "@/src/features/profile/privacy";
+import { activeSquadMembership } from "@/src/features/people/squadProfile";
+import { Button, Sheet } from "@/src/shared/ui";
+import { ChatKeyboardFrame } from "./ChatKeyboard";
+import { ChatBubbleList } from "./ChatBubbleList";
+import { ChatComposer } from "./ChatComposer";
+import { useOptimisticChat } from "./useOptimisticChat";
+
 export function ChatThread({
   activityId,
   personId,
@@ -11,131 +24,178 @@ export function ChatThread({
   activityId?: string;
   personId?: string;
 }) {
-  const { styles, colors } = useTheme();
-
+  const { colors } = useDesignTheme();
   const { data, userId, act } = useBeacon();
-  const [body, setBody] = useState("");
-  const scroll = useRef<ScrollView>(null);
+  const router = useRouter();
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const seed = useId();
+  const intent = useRef(0);
   const activity = activityId
     ? data.activities.find((item) => item.id === activityId)
     : undefined;
-  const canReadActivityChat = !!activity && !!userId &&
-    canUseBeaconModules(data, activity, userId);
-  const canWriteActivityChat = !!activity && !!userId &&
-    canWriteBeaconModule(data, activity, userId, "chat");
-  const messages = data.messages
-    .filter((m) =>
-      activityId
-        ? canReadActivityChat && m.activity_id === activityId
-        : !m.activity_id &&
-          ((m.author_id === userId && m.recipient_id === personId) ||
-            (m.author_id === personId && m.recipient_id === userId)),
-    )
-    .sort((a, b) => a.created_at.localeCompare(b.created_at));
-  return (
-    <View style={{ flex: 1, minHeight: 200, gap: 10 }}>
-      <ScrollView
-        ref={scroll}
-        onContentSizeChange={() =>
-          scroll.current?.scrollToEnd({ animated: true })
-        }
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ gap: 10, paddingVertical: 8, flexGrow: 1 }}
-      >
-        {!messages.length && (
-          <View style={{ padding: 18 }}>
-            <Text style={styles.h2}>Start with a hello.</Text>
-            <Txt muted>
-              {activityId
-                ? "Meet-up details, who's bringing what, and a quick 'on my way'. Only the host and people going can read this chat."
-                : "A little conversation can turn into a great plan."}
-            </Txt>
-          </View>
-        )}
-        {messages.map((m) => (
-          <View
-            key={m.id}
-            style={{
-              alignSelf: m.author_id === userId ? "flex-end" : "flex-start",
-              maxWidth: "90%",
-              padding: 12,
-              gap: 4,
-              borderRadius: 16,
-              backgroundColor:
-                m.author_id === userId ? colors.lime : colors.white,
-            }}
-          >
-            <Text style={styles.label}>
-              {m.author_id === userId
-                ? "You"
-                : (data.profiles.find((p) => p.id === m.author_id)?.name ??
-                  "Friend")}
-            </Text>
-            <Txt>{m.body}</Txt>
-            <Txt muted>
-              {new Date(m.created_at).toLocaleTimeString([], {
-                hour: "numeric",
-                minute: "2-digit",
-              })}
-            </Txt>
-          </View>
-        ))}
-      </ScrollView>
-      {activityId ? (
-        canWriteActivityChat ? (
-          <>
-            <Field
-              label="Message"
-              placeholder="Say something..."
-              value={body}
-              onChangeText={setBody}
-              maxLength={2000}
-            />
-            <Action
-              title="Send message"
-              run={async () => {
-                if (!body.trim()) throw new Error("Write a message first.");
-                await act("send_message", {
-                  activity_id: activityId,
-                  body: body.trim(),
-                });
-                setBody("");
-              }}
-            />
-          </>
-        ) : (
-          <Txt muted>
-            {activity && canReadActivityChat
-              ? activity.status === "cancelled"
-                ? "This beacon was cancelled. Chat is read-only; earlier messages stay visible."
-                : !isBeaconModuleEnabled(activity, "chat")
-                  ? "This beacon's chat is paused by the host. Earlier messages stay visible."
-                  : "Chat is unavailable for this beacon."
-              : "Only the host and approved Going participants can use this chat."}
-          </Txt>
+  const matchesViewer = !!userId && data.viewer_id === userId;
+  const person = personId
+    ? selectPersonPreview(data, personId, userId)
+    : undefined;
+  const canRead =
+    matchesViewer &&
+    (activityId
+      ? !!activity && canUseBeaconModules(data, activity, userId!)
+      : !!person?.canMessage);
+  const canWrite =
+    canRead &&
+    (activityId
+      ? !!activity && canWriteBeaconModule(data, activity, userId!, "chat")
+      : !!person?.canMessage);
+  const canonical = canRead
+    ? data.messages
+        .filter((message) =>
+          activityId
+            ? message.activity_id === activityId
+            : !message.activity_id &&
+              ((message.author_id === userId &&
+                message.recipient_id === personId) ||
+                (message.author_id === personId &&
+                  message.recipient_id === userId)),
         )
+        .map((message) => ({
+          id: message.id,
+          authorId: message.author_id,
+          body: message.body,
+          createdAt: message.created_at,
+        }))
+    : [];
+  const scope = `${userId ?? "signed-out"}:${activityId ? "beacon" : "dm"}:${activityId ?? personId ?? "unavailable"}`;
+  const actionScope = useRef(scope);
+  useEffect(() => {
+    actionScope.current = scope;
+    return () => {
+      actionScope.current = "unmounted";
+    };
+  }, [scope]);
+  const squadId =
+    activity?.audience === "squad" &&
+    activity.audience_id &&
+    activeSquadMembership(data, activity.audience_id, userId)
+      ? activity.audience_id
+      : undefined;
+  const navigateAfterClose = (navigate: () => void) => {
+    setActionsOpen(false);
+    const requestedScope = scope;
+    setTimeout(() => {
+      if (actionScope.current === requestedScope) navigate();
+    }, 320);
+  };
+  const chat = useOptimisticChat({
+    scope,
+    authorId: userId,
+    canonical,
+    canWrite,
+    send: (body) =>
+      act("send_message", {
+        ...(activityId
+          ? { activity_id: activityId }
+          : { recipient_id: personId }),
+        body,
+      }),
+  });
+  const events = [...canonical, ...(canRead ? chat.rows : [])]
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+    .map((message) => ({ kind: "message" as const, message }));
+  const readOnlyText = activityId
+    ? canRead && activity
+      ? activity.status === "cancelled"
+        ? "This Beacon was cancelled. Earlier messages stay visible."
+        : !isBeaconModuleEnabled(activity, "chat")
+          ? "The host has paused chat. Earlier messages stay visible."
+          : "Chat is read-only for this Beacon."
+      : "Only the host and approved Going participants can use this chat."
+    : "A current friendship is required to read and send messages.";
+  return (
+    <ChatKeyboardFrame>
+      <ChatBubbleList
+        events={events}
+        viewerId={userId}
+        scopeKey={scope}
+        profileForAuthor={(id) => {
+          const profile = data.profiles.find((item) => item.id === id);
+          return profile && userId && canViewProfile(data, profile, userId)
+            ? profile
+            : undefined;
+        }}
+        onRetry={(id) => {
+          void chat.submit(id);
+        }}
+        retryDisabled={!canWrite || chat.busy}
+        onOpener={chat.setDraft}
+      />
+      {canWrite ? (
+        <ChatComposer
+          body={chat.draft}
+          onChange={chat.setDraft}
+          onSend={() => {
+            void chat.submit();
+          }}
+          onMore={() => setActionsOpen(true)}
+          busy={chat.busy}
+          error={chat.error}
+        />
       ) : (
-        <>
-          <Field
-            label="Message"
-            placeholder="Say something..."
-            value={body}
-            onChangeText={setBody}
-            maxLength={2000}
-          />
-          <Action
-            title="Send message"
-            run={async () => {
-              if (!body.trim()) throw new Error("Write a message first.");
-              await act("send_message", {
-                recipient_id: personId ?? null,
-                body: body.trim(),
-              });
-              setBody("");
-            }}
-          />
-        </>
+        <View style={{ paddingVertical: 12 }}>
+          <Text style={{ color: colors.textSecondary }}>{readOnlyText}</Text>
+        </View>
       )}
-    </View>
+      <Sheet
+        title="Add to chat"
+        visible={actionsOpen && canWrite}
+        onClose={() => setActionsOpen(false)}
+      >
+        <Button
+          title="Ping"
+          onPress={() => {
+            const pingSeed = `${seed}-${++intent.current}`;
+            navigateAfterClose(() =>
+              squadId
+                ? router.push({
+                    pathname: "/councils",
+                    params: { squadId, newPing: "yes", pingSeed },
+                  })
+                : router.push("/councils"),
+            );
+          }}
+        />
+        <Button
+          secondary
+          title="Create Beacon"
+          onPress={() =>
+            navigateAfterClose(() =>
+              squadId
+                ? router.push({
+                    pathname: "/create",
+                    params: { kind: "squad", squadId },
+                  })
+                : router.push("/create"),
+            )
+          }
+        />
+        <Button
+          secondary
+          title="Plan"
+          onPress={() => {
+            const planSeed = `${seed}-plan-${++intent.current}`;
+            navigateAfterClose(() =>
+              router.push({
+                pathname: "/plans",
+                params: {
+                  ...(squadId ? { squadId } : {}),
+                  create: "yes",
+                  planSeed,
+                },
+              }),
+            );
+          }}
+        />
+      </Sheet>
+    </ChatKeyboardFrame>
   );
 }

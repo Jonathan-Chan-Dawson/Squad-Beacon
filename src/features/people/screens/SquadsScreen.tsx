@@ -3,12 +3,13 @@ import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
 import React, { useCallback, useState } from "react";
 import { Pressable, Share, Text, View } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { ArrowUpRight, MessageCircle, Plus, Search, X } from "lucide-react-native";
 import { useBeacon } from "@/src/shared/store";
 import { friendIds } from "@/src/shared/domain";
 import { InviteQR } from "@/src/features/people/InviteQR";
 import { CommunicationHub, type ChatFilter } from "@/src/features/people/CommunicationHub";
-import { squadCurrentAndNextActivities } from "@/src/features/people/squadProfile";
+import { canOpenSquadProfile, squadCurrentAndNextActivities } from "@/src/features/people/squadProfile";
 import { SquadProfilePreview } from "@/src/features/people/previews/SquadProfilePreview";
 import {
   DirectoryActions,
@@ -22,14 +23,13 @@ import {
   Empty,
   Field,
   IconButton,
-  Screen,
   Sheet,
   Txt,
   useTheme,
 } from "@/src/shared/ui";
 
 export default function SquadsScreen() {
-  const { styles, colors } = useTheme();
+  const { styles, colors, tokens } = useTheme();
   const params = useLocalSearchParams<{ tab?: string; peopleLists?: string }>();
   const { data, userId, act, demo } = useBeacon();
   const [filter, setFilter] = useState<DirectoryFilter>(
@@ -100,6 +100,7 @@ export default function SquadsScreen() {
   }
 
   function openSquadPreview(squadId: string) {
+    if (!canOpenSquadProfile(data, squadId, userId)) return;
     setDirectory(false);
     setSelected(null);
     setPreviewSquadId(squadId);
@@ -109,16 +110,13 @@ export default function SquadsScreen() {
     setSearchOpen(open);
     if (!open) {
       setSearchQuery("");
-      setConversationFilter("All");
     }
   }
 
   return (
-    <Screen
-      title="Squads"
-      eyebrow=""
-      showDemoNotice={false}
-      headerAction={
+    <SafeAreaView edges={["top"]} style={styles.screen}>
+      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 12 }}>
+        <Text accessibilityRole="header" style={[styles.title, tokens.type.display]}>Squads</Text>
         <View style={{ flexDirection: "row", gap: 4 }}>
           <IconButton
             label={searchOpen ? "Close search" : "Search conversations"}
@@ -132,8 +130,7 @@ export default function SquadsScreen() {
             <Plus size={20} color={colors.green} />
           </IconButton>
         </View>
-      }
-    >
+      </View>
       <CommunicationHub
         key={params.tab ?? "Chats"}
         initialSection={
@@ -157,6 +154,7 @@ export default function SquadsScreen() {
         onCreateOrganizationOpenChange={setCreateOrganizationOpen}
         openSquad={openSquadPreview}
         findFriends={() => router.push("/find-friends")}
+        inviteFriends={() => setInviteOpen(true)}
         createSquad={() => open("squad")}
       />
       <Sheet
@@ -602,6 +600,6 @@ export default function SquadsScreen() {
         visible={!!previewSquadId}
         onClose={() => setPreviewSquadId(null)}
       />
-    </Screen>
+    </SafeAreaView>
   );
 }

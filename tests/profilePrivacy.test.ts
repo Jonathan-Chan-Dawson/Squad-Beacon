@@ -4,6 +4,23 @@ import { DEMO_ID, demoAction, makeDemo } from "../src/shared/demo";
 import { canViewProfile } from "../src/features/profile/privacy";
 import { emptyData, type Data, type ID, type Profile } from "../src/shared/types";
 
+test("demo unblocking removes only your block and does not grant friendship or location access", () => {
+  const data = makeDemo();
+  const target = data.profiles.find((person) => person.id !== DEMO_ID)!.id;
+  data.blocks = [
+    { blocker_id: DEMO_ID, blocked_id: target },
+    { blocker_id: target, blocked_id: DEMO_ID },
+  ];
+  data.friendships = [];
+  data.location_recipients = [];
+  const result = demoAction(data, "unblock", { id: target });
+  assert.deepEqual(result.blocks, [{ blocker_id: target, blocked_id: DEMO_ID }]);
+  assert.deepEqual(result.friendships, []);
+  assert.deepEqual(result.location_recipients, []);
+  assert.equal(canViewProfile(result, target, DEMO_ID), false);
+  assert.throws(() => demoAction(data, "unblock", { id: DEMO_ID }), /blocked person/i);
+});
+
 function profile(id: ID, visibility: Profile["profile_visibility"] = "public"): Profile {
   return {
     id,

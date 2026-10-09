@@ -6,7 +6,7 @@ Project entry and configuration:
 - tsconfig.json, eslint.config.js: TypeScript aliases/checks and lint rules.
 - playwright.config.ts: browser smoke-test configuration.
 - eas.json: EAS build profiles.
-- README.md, CLAUDE.md, LICENSE: project overview, contributor guidance, and license.
+- README.md, APP_OVERVIEW.md, APP_OVERVIEW_SHORT.md, CLAUDE.md, LICENSE: setup and implementation guide, comprehensive feature guide, concise product summary, contributor guidance, and license.
 - REMAINING_UI_CHANGES.md: blueprint checkpoint status, remaining work, priorities, and dependencies.
 
 Authored product areas:

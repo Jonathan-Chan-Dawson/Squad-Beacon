@@ -17,15 +17,16 @@ async function create(page: Page) {
 
 async function openCurrentBeacon(page: Page, title: string) {
   await page.getByRole("tab", { name: "Beacons", exact: true }).click();
-  await page.getByRole("button", { name: "Current", exact: true }).click();
+  await page.getByRole("tab", { name: /^Now, \d+ Beacons$/ }).click();
   await page
     .getByRole("button", { name: `View ${title} details`, exact: true })
     .click();
-  await expect(page.getByTestId("map-tooltip")).toBeVisible();
-  await page
-    .getByRole("button", { name: `Open ${title} Beacon details` })
-    .click();
-  await expect(page).toHaveURL(/\/activity\/[^/]+$/);
+  await expect(page).toHaveURL(/\/activity\/[^/?]+$/);
+  await expect(
+    page
+      .getByTestId("activity-detail-hero")
+      .getByRole("heading", { name: title, exact: true }),
+  ).toBeVisible();
 }
 
 test("advanced beacon settings save and the host can manually mark arrival", async ({
@@ -46,7 +47,7 @@ test("advanced beacon settings save and the host can manually mark arrival", asy
     page.getByRole("button", { name: "Here now · selected" }),
   ).toBeVisible();
 
-  await page.getByRole("tab", { name: "More", exact: true }).click();
+  await page.getByRole("tab", { name: "Tools", exact: true }).click();
   await page
     .getByRole("button", { name: "Advanced options", exact: true })
     .click();
@@ -85,12 +86,16 @@ test("disabled modules disappear from Beacon details while shared history stays 
     .click();
   await expect(page.getByTestId("map-tooltip")).toBeVisible();
   await page
+    .getByTestId("map-tooltip")
+    .getByTestId("map-tooltip-card")
+    .first()
     .getByRole("button", {
       name: "Open Walk planning with the crew Beacon details",
     })
+    .first()
     .click();
   await expect(page).toHaveURL(/\/activity\/[^/]+$/);
-  await page.getByRole("tab", { name: "More", exact: true }).click();
+  await page.getByRole("tab", { name: "Tools", exact: true }).click();
   await expect(
     page.getByLabel("Collapse checklist", { exact: true }),
   ).toBeVisible();
@@ -152,13 +157,14 @@ test("demo admission supports I'm In, I'm Out, and rejoining", async ({
 }) => {
   await demo(page);
   await openBeaconFromMap(page, "A few rounds. Good company.");
-  const imIn = page.getByRole("button", { name: "I'm In", exact: true });
+  const preview = page.getByTestId("map-tooltip");
+  const imIn = preview.getByRole("button", { name: "I'm In", exact: true });
   await expect(imIn).toBeVisible();
   await imIn.click();
-  const imOut = page.getByRole("button", { name: "I'm Out", exact: true });
+  const imOut = preview.getByRole("button", { name: "I'm Out", exact: true });
   await expect(imOut).toBeVisible();
   await imOut.click();
   await expect(
-    page.getByRole("button", { name: "I'm In", exact: true }),
+    preview.getByRole("button", { name: "I'm In", exact: true }),
   ).toBeVisible();
 });

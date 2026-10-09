@@ -15,11 +15,11 @@ Test map
 - database.test.ts and planningThreads.database.test.ts: PGlite-backed migration/RLS/action coverage; database.test.ts applies the profile-privacy migration and validates profile/location/avatar privacy.
 - organizations.test.ts and organizations.database.test.ts: organization domain and PGlite role, membership, group-chat, audience, profile-grant, and account-deletion coverage; both migration loaders include the additive organization migrations.
 - planningDemo.test.ts: demo store planning action behavior.
-- browser/: Playwright journeys in library.spec.ts, pilot.spec.ts (including paired theme/appearance persistence), and planning.spec.ts.
+- browser/: Playwright journeys in library.spec.ts (including waiting for save sheets to finish closing), pilot.spec.ts (including paired theme/appearance persistence and semantic accent plus selected-state assertions), and planning.spec.ts.
 - fixtures/neighborhood.ts: reusable deterministic demo/test profiles and fixture data.
 - mapClusters.test.ts and browser/mapClusters.spec.ts: pure screen-space grouping plus browser map cluster drill-in/dismissal coverage.
 - mapFiltering.test.ts: shared discovery filters, date windows, joining eligibility and private meeting-place access.
-- browser/mapRefinement.spec.ts: inline quick filters, separate advanced/map controls, safe-area header and compact sharing control.
+- browser/mapRefinement.spec.ts: inline quick filters, advanced-sheet footer keyboard focus and background tab isolation, separate map controls, safe-area header and compact sharing control.
 - browser/uiPolish.spec.ts: compact layouts, clear selections, and normal/reduced-motion press feedback.
 - README.md: test setup and execution notes.
 

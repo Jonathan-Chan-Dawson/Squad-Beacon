@@ -3432,6 +3432,12 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
       (x) => ![x.sender_id, x.recipient_id].includes(id),
     );
   }
+  if (action === "unblock") {
+    if (!id || id === uid) throw new Error("Choose a blocked person.");
+    d.blocks = d.blocks.filter(
+      (block) => !(block.blocker_id === uid && block.blocked_id === id),
+    );
+  }
   if (action === "report")
     d.reports.push({
       id: newId(),

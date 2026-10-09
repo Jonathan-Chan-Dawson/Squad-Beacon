@@ -1,5 +1,15 @@
 import { expect, test, type Page } from "@playwright/test";
 import { openConversation } from "./chatHelpers";
+import { getDesignColorTheme } from "@/src/theme/data";
+
+function accentCss(appearance: "light" | "dark") {
+  const accent = getDesignColorTheme("Midnight", appearance).colors.accent;
+  const channels = accent
+    .slice(1)
+    .match(/.{2}/g)!
+    .map((channel) => parseInt(channel, 16));
+  return `rgb(${channels.join(", ")})`;
+}
 
 test("Chats accepts an inline Ping response without opening a separate inbox", async ({
   page,
@@ -59,7 +69,7 @@ test("saved-place exploration carries into Upcoming without adding Past shortcut
     .getByRole("button", { name: /^Explore The game room$/i })
     .first()
     .click();
-  await page.getByRole("button", { name: "View beacons", exact: true }).click();
+  await page.getByRole("tab", { name: "Beacons", exact: true }).click();
   await page.getByRole("button", { name: "Upcoming", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "Choose exploration area", exact: true }),
@@ -89,26 +99,27 @@ test("worldwide search is explicit and demo accounts get an honest sign-in messa
   page,
 }) => {
   await demo(page);
-  await page
-    .getByRole("textbox", {
-      name: "Search Beacons, People, and places",
-      exact: true,
-    })
+  await page.getByRole("button", { name: "Compass", exact: true }).click();
+  const compass = page.getByRole("dialog");
+  await expect(compass.getByText("Centering the map never shares your location.")).toBeVisible();
+  await compass
+    .getByRole("button", { name: "Search another place", exact: true })
     .click();
-  const search = page.getByRole("button", {
+  const placeSearch = compass.getByRole("textbox", {
+    name: "Search another place",
+    exact: true,
+  });
+  const search = compass.getByRole("button", {
     name: "Search worldwide places",
     exact: true,
   });
-  await expect(search).toHaveCount(0);
-  await page
-    .getByRole("textbox", {
-      name: "Search Beacons, People, and places",
-      exact: true,
-    })
-    .fill("Tokyo");
+  await expect(search).toBeVisible();
+  await expect(search).toBeDisabled();
+  await placeSearch.fill("Tokyo");
+  await expect(search).toBeEnabled();
   await search.click();
   await expect(
-    page.getByText(
+    compass.getByText(
       /Connect a real account to search worldwide places|Sign in to search worldwide places/,
     ),
   ).toBeVisible();
@@ -126,13 +137,13 @@ test("Midnight starts dark and Device appearance follows live system changes", a
   await expect(
     page.getByRole("button", { name: "Dark", exact: true }),
   ).toHaveAttribute("aria-selected", "true");
-  await expect(midnight).toHaveCSS("background-color", "rgb(239, 243, 255)");
+  await expect(midnight).toHaveCSS("background-color", accentCss("dark"));
   await page.getByRole("button", { name: "Device", exact: true }).click();
-  await expect(midnight).toHaveCSS("background-color", "rgb(32, 45, 74)");
+  await expect(midnight).toHaveCSS("background-color", accentCss("light"));
   await page.emulateMedia({ colorScheme: "dark" });
-  await expect(midnight).toHaveCSS("background-color", "rgb(239, 243, 255)");
+  await expect(midnight).toHaveCSS("background-color", accentCss("dark"));
   await page.getByRole("button", { name: "Light", exact: true }).click();
-  await expect(midnight).toHaveCSS("background-color", "rgb(32, 45, 74)");
+  await expect(midnight).toHaveCSS("background-color", accentCss("light"));
   expect(
     await page.evaluate(() => localStorage.getItem("beacon.appearance")),
   ).toBe("light");
@@ -156,11 +167,10 @@ test("a Routine pauses, resumes and creates a fresh ordered Plan", async ({
   await expect(
     page.getByRole("button", { name: "Open Beacon", exact: true }),
   ).toHaveCount(3);
-  await expect(
-    page.getByText("Dinner together", { exact: true }),
-  ).toBeVisible();
-  await expect(page.getByText("Bowling", { exact: true })).toBeVisible();
-  await expect(page.getByText("Wind down", { exact: true })).toBeVisible();
+  const steps = page.getByRole("button", { name: "Open Beacon", exact: true });
+  await expect(steps).toHaveCount(3);
+  for (const [index, title] of ["Dinner together", "Bowling", "Wind down"].entries())
+    await expect(steps.nth(index).locator("xpath=..")).toContainText(title);
 });
 
 test("Now keeps the useful actions close: status, friend star, message and profile", async ({

@@ -64,6 +64,7 @@ test("social directory and canonical actions preserve membership boundaries and 
     "202610040001_organization_audience_type.sql", "202610040002_organizations_group_chat.sql",
     "202610040003_plan_routines.sql", "202610040005_places_search_budget.sql", "202610040006_spaces.sql",
     "202610040007_social_architecture.sql",
+    "202610090001_profile_settings_unblock.sql",
   ]) await migration(file);
 
   await root();
@@ -284,4 +285,24 @@ test("social directory and canonical actions preserve membership boundaries and 
   await actor("member");
   assert.equal((await db.query("select * from public.social_directory_search('', 'squad', 50, 0, null, null)")).rows.some((row: any) => row.entity_id === roleSquad), false);
   await assert.rejects(action("join_squad", { squad_id: roleSquad }), /unavailable|banned/i);
+
+  // Unblocking is self-scoped and cannot remove somebody else's reverse block.
+  await root();
+  await db.query("insert into public.blocks(blocker_id,blocked_id) values($1,$2),($2,$1) on conflict do nothing", [ids.owner, ids.member]);
+  await actor("owner");
+  const unblockRequest = "f7777777-7777-4777-8777-777777777777";
+  const unblocked = await action("unblock", { id: ids.member }, unblockRequest);
+  assert.equal(unblocked.event, "unblock");
+  await root();
+  assert.deepEqual((await db.query("select blocker_id,blocked_id from public.blocks where (blocker_id=$1 and blocked_id=$2) or (blocker_id=$2 and blocked_id=$1)", [ids.owner, ids.member])).rows,
+    [{ blocker_id: ids.member, blocked_id: ids.owner }]);
+  await db.query("insert into public.blocks(blocker_id,blocked_id) values($1,$2)", [ids.owner, ids.member]);
+  await actor("owner");
+  assert.deepEqual(await action("unblock", { id: ids.member }, unblockRequest), unblocked);
+  await root();
+  assert.equal((await db.query("select 1 from public.blocks where blocker_id=$1 and blocked_id=$2", [ids.owner, ids.member])).rows.length, 1,
+    "a replayed request does not remove a later reblock");
+  await actor("owner");
+  await assert.rejects(action("unblock", { id: ids.owner }), /blocked person/i);
+  await assert.rejects(action("unblock", {}), /blocked person/i);
 });

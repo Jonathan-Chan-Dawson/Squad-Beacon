@@ -15,6 +15,7 @@ import {
   type PressableStateCallbackType,
   type ViewStyle,
 } from "react-native";
+import { tokens } from "@/src/theme";
 
 const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
 
@@ -142,12 +143,12 @@ export function MotionPressable({
       aria-checked={props["aria-checked"] ?? accessibilityState?.checked}
       onPressIn={(event) => {
         setPressed(true);
-        animateScale(0.98, 90);
+        animateScale(tokens.motion.pressScale, tokens.motion.pressDuration);
         onPressIn?.(event);
       }}
       onPressOut={(event) => {
         setPressed(false);
-        animateScale(1, 150);
+        animateScale(1, tokens.motion.pressDuration);
         onPressOut?.(event);
       }}
       style={animatedStyle}

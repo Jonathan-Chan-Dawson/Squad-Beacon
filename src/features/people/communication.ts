@@ -132,6 +132,9 @@ export function pendingSocialCount(
     (data.organization_members ?? []).filter(
       (row) => row.user_id === userId && row.status === "invited",
     ).length +
+    data.space_members.filter(
+      (row) => row.user_id === userId && row.status === "invited",
+    ).length +
     data.rsvps.filter((row) => {
       const beacon = data.activities.find(
         (activity) => activity.id === row.activity_id,

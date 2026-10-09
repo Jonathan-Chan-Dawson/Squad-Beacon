@@ -4,15 +4,19 @@ import { PreferencesProvider, usePreferences } from "@/src/shared/preferences";
 import { Stack, useSegments } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
+import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
 import "react-native-reanimated";
 import "@/src/platform/device";
 import { BeaconProvider, useBeacon } from "@/src/shared/store";
 import { Auth, Onboard } from "@/src/features/auth/Auth";
 import { ProfileSurvey } from "@/src/features/profile/ProfileSurvey";
-import { Loading, Screen, Action, Txt } from "@/src/shared/ui";
+import { Loading, Screen, Action, SheetIsolation, Txt } from "@/src/shared/ui";
+import { DemoNoticeProvider } from "@/src/shared/design-system";
 import { WidgetPreferencesProvider } from "@/src/features/widgets/preferences";
 import { WidgetSync } from "@/src/features/widgets/WidgetRuntime";
 import { ExplorationProvider } from "@/src/shared/exploration";
+import { ChatKeyboardProvider } from "@/src/features/messages/ChatKeyboard";
 export { ErrorBoundary } from "expo-router";
 function ThemedStatusBar() {
   const { resolvedAppearance } = usePreferences();
@@ -51,29 +55,42 @@ function Navigation() {
     <Stack screenOptions={{ headerShown: false }}>
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="create" options={{ presentation: "modal" }} />
+      <Stack.Screen name="profile/edit" options={{ presentation: "fullScreenModal" }} />
     </Stack>
   );
 }
 function AppRuntime() {
-  const { userId } = useBeacon();
+  const { userId, demo } = useBeacon();
   return (
-    <ExplorationProvider key={userId ?? "signed-out"}>
-      <WidgetPreferencesProvider accountId={userId}>
-        <WidgetSync />
-        <ThemedStatusBar />
-        <Navigation />
-      </WidgetPreferencesProvider>
-    </ExplorationProvider>
+    <DemoNoticeProvider
+      sessionKey={`${userId ?? "signed-out"}:${demo ? "demo" : "live"}`}
+    >
+      <ExplorationProvider key={userId ?? "signed-out"}>
+        <WidgetPreferencesProvider accountId={userId}>
+          <BottomSheetModalProvider>
+            <WidgetSync />
+            <ThemedStatusBar />
+            <SheetIsolation>
+              <Navigation />
+            </SheetIsolation>
+          </BottomSheetModalProvider>
+        </WidgetPreferencesProvider>
+      </ExplorationProvider>
+    </DemoNoticeProvider>
   );
 }
 export default function RootLayout() {
   return (
-    <SafeAreaProvider>
-      <PreferencesProvider>
-        <BeaconProvider>
-          <AppRuntime />
-        </BeaconProvider>
-      </PreferencesProvider>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <ChatKeyboardProvider>
+          <PreferencesProvider>
+            <BeaconProvider>
+              <AppRuntime />
+            </BeaconProvider>
+          </PreferencesProvider>
+        </ChatKeyboardProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }

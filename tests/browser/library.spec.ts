@@ -58,6 +58,7 @@ test("private Journals and saved Lists have dedicated editors and list handoff",
     .getByRole("textbox", { name: "Journal entry", exact: true })
     .fill("A private note from the library.");
   await page.getByRole("button", { name: "Save entry", exact: true }).click();
+  await expect(page.getByTestId("shared-sheet-dialog")).toHaveCount(0);
   await expect(
     page.getByText("A private note from the library.", { exact: true }),
   ).toBeVisible();
@@ -70,6 +71,7 @@ test("private Journals and saved Lists have dedicated editors and list handoff",
     .getByLabel("Items (one per line; optional Section :: item)")
     .fill("Pack :: Water bottle");
   await page.getByRole("button", { name: "Save list", exact: true }).click();
+  await expect(page.getByTestId("shared-sheet-dialog")).toHaveCount(0);
   const savedList = page
     .locator('[data-testid^="saved-checklist-"]')
     .filter({ hasText: "Quick hike kit" });

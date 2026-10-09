@@ -20,6 +20,7 @@ import { usePreferences } from "@/src/shared/preferences";
 import { ActivityBadge } from "./ActivityBadge";
 import { BeaconResponse } from "./BeaconResponse";
 import { canUseBeaconModules } from "./beaconModules";
+import { Card, useDesignTheme } from "@/src/shared/design-system";
 
 export function ActivityCard({
   activity,
@@ -30,7 +31,8 @@ export function ActivityCard({
   onOpen?: () => void;
   highlighted?: boolean;
 }) {
-  const { styles, colors } = useTheme();
+  const { styles } = useTheme();
+  const { colors: designColors, tokens } = useDesignTheme();
   const { data, userId, act } = useBeacon();
   const { showAvatars } = usePreferences();
   const [saving, setSaving] = useState(false);
@@ -52,6 +54,16 @@ export function ActivityCard({
     ? "Virtual"
     : place?.label ||
       (place ? "Place to be decided" : "Meeting details restricted");
+  const audienceLabel =
+    activity.audience === "friends"
+      ? "Friends"
+      : activity.audience === "list"
+        ? "List"
+        : activity.audience === "squad"
+          ? "Squad"
+          : activity.audience === "organization"
+            ? "Organization"
+            : "Private";
   const saved = data.beacon_favorites.some(
     (favorite) =>
       favorite.owner_id === userId && favorite.activity_id === activity.id,
@@ -95,21 +107,17 @@ export function ActivityCard({
   }
 
   return (
-    <View
-      style={[
-        styles.card,
-        {
-          padding: 12,
-          gap: 8,
-          borderRadius: 18,
+    <Card
+      style={{
+          padding: tokens.space.md,
+          gap: tokens.space.sm,
           borderLeftWidth: 4,
           borderLeftColor: highlighted
-            ? colors.lime
+            ? designColors.accent
             : live
-              ? colors.green
-              : colors.line,
-        },
-      ]}
+              ? designColors.accent
+              : designColors.border,
+        }}
     >
       <View style={[styles.row, { gap: 8 }]}>
         <Pressable
@@ -128,7 +136,8 @@ export function ActivityCard({
             {
               flex: 1,
               minWidth: 0,
-              gap: 9,
+              minHeight: tokens.layout.touchTarget,
+              gap: tokens.space.sm,
               opacity: pressed ? 0.78 : 1,
             },
           ]}
@@ -137,7 +146,8 @@ export function ActivityCard({
           <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
             <Text
               numberOfLines={2}
-              style={[styles.h2, { fontSize: 17, lineHeight: 21 }]}
+              maxFontSizeMultiplier={tokens.type.denseMaxMultiplier}
+              style={[styles.h2, tokens.type.headline]}
             >
               {activity.title}
             </Text>
@@ -155,8 +165,8 @@ export function ActivityCard({
           >
             <Star
               size={19}
-              color={colors.green}
-              fill={saved ? colors.green : "transparent"}
+              color={designColors.accent}
+              fill={saved ? designColors.accent : "transparent"}
             />
           </IconButton>
         </View>
@@ -165,26 +175,36 @@ export function ActivityCard({
       <View style={styles.between}>
         <View style={[styles.row, { flex: 1, minWidth: 0, gap: 6 }]}>
           {isVirtual ? (
-            <Monitor size={15} color={colors.green} />
+            <Monitor size={15} color={designColors.accent} />
           ) : (
-            <MapPin size={15} color={colors.green} />
+            <MapPin size={15} color={designColors.accent} />
           )}
           <Text numberOfLines={1} style={[styles.muted, { flex: 1 }]}>
             {location}
           </Text>
         </View>
         <View style={[styles.row, { gap: 5 }]}>
-          <Clock3 size={15} color={live ? colors.green : colors.muted} />
+          <Clock3
+            size={15}
+            color={live ? designColors.accent : designColors.textSecondary}
+          />
           <Text
             style={[
               styles.muted,
-              live && { color: colors.green, fontWeight: "700" },
+              live && { color: designColors.accent, fontWeight: "700" },
             ]}
           >
             {when}
           </Text>
         </View>
       </View>
+
+      <Text
+        accessibilityLabel={`Audience: ${audienceLabel}`}
+        style={styles.label}
+      >
+        Audience: {audienceLabel}
+      </Text>
 
       <View style={styles.between}>
         <View style={[styles.row, { gap: 7, flex: 1 }]}>
@@ -238,7 +258,7 @@ export function ActivityCard({
               })
             }
           >
-            <MapPin size={18} color={colors.green} />
+            <MapPin size={18} color={designColors.accent} />
           </IconButton>
         )}
         {(canOpenChat || canMessageHost) && (
@@ -260,7 +280,7 @@ export function ActivityCard({
                   })
             }
           >
-            <MessageCircle size={18} color={colors.green} />
+            <MessageCircle size={18} color={designColors.accent} />
           </IconButton>
         )}
       </View>
@@ -269,6 +289,6 @@ export function ActivityCard({
           {saveError}
         </Text>
       )}
-    </View>
+    </Card>
   );
 }

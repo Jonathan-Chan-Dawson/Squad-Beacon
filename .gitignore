@@ -52,4 +52,7 @@ playwright-report/
 test-results/
 supabase/.temp/
 
+APP_OVERVIEW.*
+APP_OVERVIEW_SHORT.*
+
 dist-native/

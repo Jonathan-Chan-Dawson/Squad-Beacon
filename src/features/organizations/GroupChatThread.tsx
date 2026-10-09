@@ -1,21 +1,21 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { ScrollView, Text, View } from "react-native";
+import React, { useEffect, useRef } from "react";
+import { Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import { Plus } from "lucide-react-native";
 import { canRespondToPlanningThread } from "@/src/features/planning/domain";
-import {
-  selectSquadChatPings,
-  visibleSquadPingResponses,
-} from "@/src/features/organizations/squadChat";
+import { selectSquadChatPings, visibleSquadPingResponses } from "./squadChat";
+import { canReadOrganizationMembers } from "./domain";
+import { activeSquadMembership } from "@/src/features/people/squadProfile";
+import { canViewProfile } from "@/src/features/profile/privacy";
+import { PlanningResponseCard } from "@/src/features/people/components/PlanningResponseCard";
 import { useBeacon } from "@/src/shared/store";
+import { useDesignTheme } from "@/src/shared/design-system";
+import { ChatKeyboardFrame } from "@/src/features/messages/ChatKeyboard";
 import {
-  Action,
-  Button,
-  Field,
-  IconButton,
-  Txt,
-  useTheme,
-} from "@/src/shared/ui";
+  ChatBubbleList,
+  type ChatListEvent,
+} from "@/src/features/messages/ChatBubbleList";
+import { ChatComposer } from "@/src/features/messages/ChatComposer";
+import { useOptimisticChat } from "@/src/features/messages/useOptimisticChat";
 import type { GroupMessageScope } from "./types";
 
 export function GroupChatThread({
@@ -31,287 +31,190 @@ export function GroupChatThread({
   focusedPingId?: string;
   onMoreActions?: () => void;
 }) {
-  const { styles, colors } = useTheme();
+  const { colors } = useDesignTheme();
   const { data, userId, act } = useBeacon();
   const router = useRouter();
-  const [body, setBody] = useState("");
-  const scroll = useRef<ScrollView>(null);
+  const scopeId = scope === "organization" ? organizationId : squadId;
+  const canWrite =
+    !!scopeId &&
+    !!userId &&
+    data.viewer_id === userId &&
+    (scope === "squad"
+      ? !!activeSquadMembership(data, scopeId, userId)
+      : canReadOrganizationMembers(data, scopeId, userId));
+  const group = canWrite
+    ? data.group_messages.filter(
+        (message) =>
+          message.scope === scope &&
+          (scope === "organization"
+            ? message.organization_id === scopeId
+            : message.squad_id === scopeId) &&
+          !data.blocks.some(
+            (block) =>
+              (block.blocker_id === userId &&
+                block.blocked_id === message.author_id) ||
+              (block.blocker_id === message.author_id &&
+                block.blocked_id === userId),
+          ),
+      )
+    : [];
+  const canonical = group.map((message) => ({
+    id: message.id,
+    authorId: message.author_id,
+    body: message.body,
+    createdAt: message.created_at,
+  }));
+  const conversationKey = `${userId ?? "signed-out"}:${scope}:${scopeId ?? "unavailable"}`;
+  const chat = useOptimisticChat({
+    scope: conversationKey,
+    authorId: userId,
+    canonical,
+    canWrite,
+    send: (body) =>
+      act("send_group_message", {
+        scope,
+        ...(scope === "organization"
+          ? { organization_id: scopeId }
+          : { squad_id: scopeId }),
+        body,
+      }),
+  });
+  const pings =
+    canWrite && scope === "squad" && scopeId && userId
+      ? selectSquadChatPings(data, scopeId, userId)
+      : [];
+  const sourceLabel =
+    scope === "squad"
+      ? (data.squads.find((item) => item.id === scopeId)?.name ?? "Squad")
+      : (data.organizations.find((item) => item.id === scopeId)?.name ??
+        "Organization");
+  const events: ChatListEvent[] = [
+    ...canonical,
+    ...(canWrite ? chat.rows : []),
+  ].map((message) => ({ kind: "message", message }));
+  for (const thread of pings) {
+    const responses = userId
+      ? visibleSquadPingResponses(data, thread, userId)
+      : [];
+    const selected = responses.find(
+      (response) => response.user_id === userId,
+    )?.response;
+    const canReply =
+      !!userId &&
+      canWrite &&
+      thread.owner_id !== userId &&
+      canRespondToPlanningThread(data, thread, userId);
+    events.push({
+      kind: "card",
+      id: thread.id,
+      createdAt: thread.created_at,
+      content: (
+        <PlanningResponseCard
+          key={thread.id}
+          id={thread.id}
+          kind="ping"
+          title={thread.title}
+          sourceLabel={sourceLabel}
+          deadline={thread.deadline_at}
+          selected={selected}
+          disabled={!canReply}
+          counts={(["interested", "maybe", "pass"] as const).map(
+            (response) => ({
+              label: response[0].toUpperCase() + response.slice(1),
+              value: responses.filter((item) => item.response === response)
+                .length,
+            }),
+          )}
+          onOpen={() =>
+            router.push({
+              pathname: "/council/[id]",
+              params: { id: thread.id },
+            })
+          }
+          onRespond={async (response) => {
+            if (
+              !userId ||
+              data.viewer_id !== userId ||
+              !activeSquadMembership(data, scopeId!, userId) ||
+              !canRespondToPlanningThread(data, thread, userId)
+            )
+              throw new Error("This Ping is unavailable.");
+            await act("respond_planning_ping", {
+              thread_id: thread.id,
+              response,
+              auto_rsvp: false,
+            });
+            return true;
+          }}
+        />
+      ),
+    });
+  }
+  const eventDate = (event: ChatListEvent) =>
+    event.kind === "message" ? event.message.createdAt : event.createdAt;
+  events.sort((a, b) => eventDate(a).localeCompare(eventDate(b)));
+  const latestCanonicalAt =
+    [
+      ...group.map((message) => message.created_at),
+      ...pings.map((thread) => thread.created_at),
+    ]
+      .sort()
+      .at(-1) ?? "";
   const actRef = useRef(act);
-  const pingOffsets = useRef(new Map<string, number>());
   useEffect(() => {
     actRef.current = act;
   }, [act]);
-
-  const scopeId = scope === "organization" ? organizationId : squadId;
-  const group = useMemo(
-    () =>
-      data.group_messages
-        .filter(
-          (message) =>
-            message.scope === scope &&
-            (scope === "organization"
-              ? message.organization_id === scopeId
-              : message.squad_id === scopeId) &&
-            !data.blocks.some(
-              (block) =>
-                (block.blocker_id === userId &&
-                  block.blocked_id === message.author_id) ||
-                (block.blocker_id === message.author_id &&
-                  block.blocked_id === userId),
-            ),
-        )
-        .sort((first, second) =>
-          first.created_at.localeCompare(second.created_at),
-        ),
-    [data.group_messages, data.blocks, scope, scopeId, userId],
-  );
-  const pings = useMemo(
-    () =>
-      scope === "squad" && scopeId && userId
-        ? selectSquadChatPings(data, scopeId, userId)
-        : [],
-    [data, scope, scopeId, userId],
-  );
-  const events = useMemo(
-    () =>
-      [
-        ...group.map((message) => ({
-          kind: "message" as const,
-          id: message.id,
-          created_at: message.created_at,
-          message,
-        })),
-        ...pings.map((thread) => ({
-          kind: "ping" as const,
-          id: thread.id,
-          created_at: thread.created_at,
-          thread,
-          responses: userId
-            ? visibleSquadPingResponses(data, thread, userId)
-            : [],
-        })),
-      ].sort(
-        (first, second) =>
-          first.created_at.localeCompare(second.created_at) ||
-          first.id.localeCompare(second.id),
-      ),
-    [data, group, pings, userId],
-  );
-  const latestEventAt = events.at(-1)?.created_at ?? "";
-
   useEffect(() => {
-    if (!scopeId) return;
-    void actRef.current("mark_group_chat_read", {
-      scope,
-      ...(scope === "organization"
-        ? { organization_id: scopeId }
-        : { squad_id: scopeId }),
-    }).catch(() => undefined);
-  }, [scope, scopeId, latestEventAt]);
-
-  useEffect(() => {
-    if (!focusedPingId) return;
-    const offset = pingOffsets.current.get(focusedPingId);
-    if (offset != null)
-      scroll.current?.scrollTo({
-        y: Math.max(0, offset - 12),
-        animated: false,
-      });
-  }, [focusedPingId, events.length]);
-
+    if (!canWrite || !scopeId) return;
+    void actRef
+      .current("mark_group_chat_read", {
+        scope,
+        ...(scope === "organization"
+          ? { organization_id: scopeId }
+          : { squad_id: scopeId }),
+      })
+      .catch(() => undefined);
+  }, [scope, scopeId, userId, canWrite, latestCanonicalAt]);
   return (
-    <View style={{ flex: 1, minHeight: 260, gap: 10 }}>
-      <ScrollView
-        ref={scroll}
-        onContentSizeChange={() => {
-          const offset = focusedPingId
-            ? pingOffsets.current.get(focusedPingId)
+    <ChatKeyboardFrame>
+      <ChatBubbleList
+        events={events}
+        viewerId={userId}
+        scopeKey={conversationKey}
+        focusedId={focusedPingId}
+        profileForAuthor={(id) => {
+          const profile = data.profiles.find((item) => item.id === id);
+          return profile && userId && canViewProfile(data, profile, userId)
+            ? profile
             : undefined;
-          if (offset != null)
-            scroll.current?.scrollTo({
-              y: Math.max(0, offset - 12),
-              animated: false,
-            });
-          else scroll.current?.scrollToEnd({ animated: false });
         }}
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ gap: 10, paddingVertical: 8, flexGrow: 1 }}
-      >
-        {!events.length && (
-          <View style={{ padding: 18 }}>
-            <Text style={styles.h2}>A good place to start.</Text>
-            <Txt muted>
-              {scope === "organization"
-                ? "Share a plan, ask a question, or send the first hello."
-                : "Keep the squad in the loop and make the next meetup happen."}
-            </Txt>
-          </View>
-        )}
-        {events.map((event) => {
-          if (event.kind === "message") {
-            const { message } = event;
-            return (
-              <View
-                key={`message:${message.id}`}
-                style={{
-                  alignSelf:
-                    message.author_id === userId ? "flex-end" : "flex-start",
-                  maxWidth: "90%",
-                  padding: 12,
-                  gap: 4,
-                  borderRadius: 16,
-                  backgroundColor:
-                    message.author_id === userId ? colors.lime : colors.white,
-                }}
-              >
-                <Text style={styles.label}>
-                  {message.author_id === userId
-                    ? "You"
-                    : data.profiles.find(
-                        (profile) => profile.id === message.author_id,
-                      )?.name ?? "Member"}
-                </Text>
-                <Txt>{message.body}</Txt>
-                <Txt muted>
-                  {new Date(message.created_at).toLocaleTimeString([], {
-                    hour: "numeric",
-                    minute: "2-digit",
-                  })}
-                </Txt>
-              </View>
-            );
+        onRetry={(id) => {
+          void chat.submit(id);
+        }}
+        retryDisabled={!canWrite || chat.busy}
+        onOpener={chat.setDraft}
+      />
+      {canWrite ? (
+        <ChatComposer
+          body={chat.draft}
+          onChange={chat.setDraft}
+          onSend={() => {
+            void chat.submit();
+          }}
+          onMore={onMoreActions}
+          busy={chat.busy}
+          error={chat.error}
+          placeholder={
+            scope === "squad" ? "Write to the Squad?" : "Write to the group?"
           }
-
-          const { thread, responses } = event;
-          const counts = {
-            interested: responses.filter(
-              (response) => response.response === "interested",
-            ).length,
-            maybe: responses.filter((response) => response.response === "maybe")
-              .length,
-            pass: responses.filter((response) => response.response === "pass")
-              .length,
-          };
-          const myResponse = userId
-            ? responses.find((response) => response.user_id === userId)
-            : undefined;
-          const canReply =
-            !!userId &&
-            data.viewer_id === userId &&
-            thread.owner_id !== userId &&
-            canRespondToPlanningThread(data, thread, userId);
-          const focused = focusedPingId === thread.id;
-          return (
-            <View
-              key={`ping:${thread.id}`}
-              onLayout={(event) => {
-                const offset = event.nativeEvent.layout.y;
-                pingOffsets.current.set(thread.id, offset);
-                if (focusedPingId === thread.id)
-                  scroll.current?.scrollTo({
-                    y: Math.max(0, offset - 12),
-                    animated: false,
-                  });
-              }}
-              accessibilityLabel={`Squad Ping: ${thread.title}`}
-              style={[
-                styles.card,
-                {
-                  alignSelf: "stretch",
-                  padding: 12,
-                  gap: 8,
-                  borderWidth: focused ? 2 : 1,
-                  borderColor: focused ? colors.green : colors.line,
-                  backgroundColor: focused ? colors.lime : colors.white,
-                },
-              ]}
-            >
-              <Text style={styles.label}>SQUAD PING</Text>
-              <Text style={styles.h2}>{thread.title}</Text>
-              {thread.body ? <Txt>{thread.body}</Txt> : null}
-              {myResponse ? (
-                <Txt muted>
-                  You said {myResponse.response[0].toUpperCase() + myResponse.response.slice(1)}
-                </Txt>
-              ) : null}
-              <Txt muted>
-                {counts.interested} Interested · {counts.maybe} Maybe · {counts.pass} Pass
-              </Txt>
-              {canReply ? (
-                <View style={{ flexDirection: "row", gap: 6 }}>
-                  {(["interested", "maybe", "pass"] as const).map(
-                    (response) => (
-                      <View key={response} style={{ flex: 1, minWidth: 0 }}>
-                        <Action
-                          compact
-                          secondary={response !== "interested"}
-                          title={response[0].toUpperCase() + response.slice(1)}
-                          run={() =>
-                            act("respond_planning_ping", {
-                              thread_id: thread.id,
-                              response,
-                              auto_rsvp: false,
-                            })
-                          }
-                        />
-                      </View>
-                    ),
-                  )}
-                </View>
-              ) : null}
-              <Button
-                compact
-                secondary
-                title="Open Ping details"
-                onPress={() =>
-                  router.push({
-                    pathname: "/council/[id]",
-                    params: { id: thread.id },
-                  })
-                }
-              />
-            </View>
-          );
-        })}
-      </ScrollView>
-      <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 8 }}>
-        {onMoreActions ? (
-          <IconButton label="Add to Squad chat" onPress={onMoreActions}>
-            <Plus size={20} color={colors.green} />
-          </IconButton>
-        ) : null}
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <Field
-            label="Message"
-            placeholder={
-              scope === "squad" ? "Write to the squad…" : "Write to the group…"
-            }
-            value={body}
-            onChangeText={setBody}
-            maxLength={2000}
-            multiline
-            style={{ minHeight: 48, maxHeight: 110 }}
-          />
+        />
+      ) : (
+        <View style={{ paddingVertical: 12 }}>
+          <Text style={{ color: colors.textSecondary }}>
+            Only current members can use this chat.
+          </Text>
         </View>
-        <View style={{ width: 112 }}>
-          <Action
-            compact
-            title="Send message"
-            run={async () => {
-              if (!scopeId) throw new Error("That group chat is unavailable.");
-              if (!body.trim()) throw new Error("Write a message first.");
-              await act("send_group_message", {
-                scope,
-                ...(scope === "organization"
-                  ? { organization_id: scopeId }
-                  : { squad_id: scopeId }),
-                body: body.trim(),
-              });
-              setBody("");
-            }}
-          />
-        </View>
-      </View>
-    </View>
+      )}
+    </ChatKeyboardFrame>
   );
 }

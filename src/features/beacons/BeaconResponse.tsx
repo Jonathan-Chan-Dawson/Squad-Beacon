@@ -5,6 +5,7 @@ import { useNow } from "@/src/shared/useNow";
 import { Action, useTheme } from "@/src/shared/ui";
 import { beaconCapacity } from "@/src/features/beacons/permissions";
 import type { Activity } from "@/src/shared/types";
+import { uiHaptics } from "@/src/shared/design-system";
 export function BeaconResponse({
   activity: a,
   compact = false,
@@ -19,6 +20,10 @@ export function BeaconResponse({
   const rsvp = data.rsvps.find(
     (r) => r.activity_id === a.id && r.user_id === userId,
   );
+  async function respond(status: "going" | "interested" | "withdraw") {
+    await act("rsvp", { id: a.id, status });
+    if (status !== "withdraw") uiHaptics.success();
+  }
   if (
     a.owner_id === userId ||
     a.mode === "solo" ||
@@ -53,12 +58,7 @@ export function BeaconResponse({
             }
             disabled={pending || closed}
             secondary={pending || going || closed}
-            run={() =>
-              act("rsvp", {
-                id: a.id,
-                status: going ? "withdraw" : "going",
-              })
-            }
+            run={() => respond(going ? "withdraw" : "going")}
           />
         </View>
         {pending ? (
@@ -67,7 +67,7 @@ export function BeaconResponse({
               title="Cancel request"
               secondary
               compact
-              run={() => act("rsvp", { id: a.id, status: "withdraw" })}
+              run={() => respond("withdraw")}
             />
           </View>
         ) : !going && !closed ? (
@@ -77,7 +77,7 @@ export function BeaconResponse({
               disabled={rsvp?.status === "interested"}
               secondary
               compact
-              run={() => act("rsvp", { id: a.id, status: "interested" })}
+              run={() => respond("interested")}
             />
           </View>
         ) : null}
@@ -111,14 +111,14 @@ export function BeaconResponse({
             }
             disabled={pending || rsvp?.status === "going"}
             secondary={rsvp?.status === "going"}
-            run={() => act("rsvp", { id: a.id, status: "going" })}
+            run={() => respond("going")}
           />
         </View>
         <View style={{ flex: 1 }}>
           <Action
             title="Maybe"
             secondary={rsvp?.status !== "interested"}
-            run={() => act("rsvp", { id: a.id, status: "interested" })}
+            run={() => respond("interested")}
           />
         </View>
         {rsvp && (
@@ -126,7 +126,7 @@ export function BeaconResponse({
             <Action
               title="I'm Out"
               secondary
-              run={() => act("rsvp", { id: a.id, status: "withdraw" })}
+              run={() => respond("withdraw")}
             />
           </View>
         )}

@@ -132,6 +132,7 @@ function matchesAudience(
   if (audience === "Everyone") return true;
   if (audience === "Friends")
     return friendIds(data, userId).includes(activity.owner_id);
+  if (audience === "Squads") return activity.audience === "squad";
   if (audience === "Public") return String(activity.audience) === "public";
   return activity.audience_id === audience;
 }

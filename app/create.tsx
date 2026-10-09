@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import {
@@ -37,6 +37,8 @@ import {
 } from "@/src/features/beacons/controls";
 import { useBeacon } from "@/src/shared/store";
 import { useNow } from "@/src/shared/useNow";
+import { readViewerDeviceDefaults } from "@/src/features/profile/settings/deviceDefaults";
+import { resolveDefaultAudience } from "@/src/features/profile/settings/beaconDefaults";
 import { canOpenSquadProfile } from "@/src/features/people/squadProfile";
 import { canReadSpace, activeSpaceRole } from "@/src/features/spaces/domain";
 import { canReadOrganization, activeOrganizationRole } from "@/src/features/organizations/domain";
@@ -222,7 +224,10 @@ export default function CreateActivity() {
   const [category, setCategory] = useState<Category>(
     saved?.category ?? previous?.category ?? "Social",
   );
-  const [audience, setAudience] = useState<Audience>(
+  const audienceEdited = useRef(false);
+  const appliedDeviceDefault = useRef<string | null>(null);
+  const [defaultNotice, setDefaultNotice] = useState("");
+  const [audience, setAudienceValue] = useState<Audience>(
     params.organizationId
       ? "organization"
       : params.kind === "squad"
@@ -233,6 +238,30 @@ export default function CreateActivity() {
   const [audienceId, setAudienceId] = useState<string | null>(
     params.organizationId ?? params.squadId ?? null,
   );
+  const setAudience = (value: Audience) => {
+    audienceEdited.current = true;
+    setDefaultNotice("");
+    setAudienceValue(value);
+  };
+  useEffect(() => {
+    if (!userId || data.viewer_id !== userId || params.kind || params.squadId || params.organizationId || params.spaceId || saved || previous || templateEditor) return;
+    const key = `${userId}:${controlsRouteKey}`;
+    if (appliedDeviceDefault.current === key || audienceEdited.current) return;
+    let active = true;
+    // Device storage is an external source. Apply its initial audience once;
+    // never replace an audience the viewer has already chosen in this draft.
+    void readViewerDeviceDefaults(userId).then((preferences) => {
+      if (!active || audienceEdited.current) return;
+      const resolved = resolveDefaultAudience(data, userId, preferences);
+      appliedDeviceDefault.current = key;
+      setAudienceValue(resolved.audience);
+      setAudienceId(resolved.audienceId);
+      if (resolved.fellBack) setDefaultNotice("Your saved audience target is no longer available. Using your account default.");
+    }).catch(() => {
+      if (active) setDefaultNotice("This device’s default could not be loaded. Using your account default.");
+    });
+    return () => { active = false; };
+  }, [userId, data, params.kind, params.squadId, params.organizationId, params.spaceId, saved, previous, templateEditor, controlsRouteKey]);
   const [target, setTarget] = useState(
     saved?.target_count ? String(saved.target_count) : "",
   );
@@ -667,6 +696,7 @@ export default function CreateActivity() {
           setAudienceId(id);
         }}
       />
+      {defaultNotice ? <Txt muted>{defaultNotice}</Txt> : null}
       {kind !== "Status" ? (
         <View style={[styles.card, { gap: 7 }]}>
           <Text style={styles.label}>COMMUNITY CONTEXT</Text>

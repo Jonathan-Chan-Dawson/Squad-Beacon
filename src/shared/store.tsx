@@ -37,11 +37,17 @@ type Store = {
 };
 const Context = createContext<Store | null>(null);
 export function BeaconProvider({ children }: { children: React.ReactNode }) {
-  const [data, setData] = useState<Data>(emptyData),
+  const [data, setDataState] = useState<Data>(emptyData),
     [demo, setDemo] = useState(false),
     [session, setSession] = useState<Session | null>(null),
     [loading, setLoading] = useState(!!supabase),
     [error, setError] = useState<string | null>(null);
+  const dataRef = useRef(data);
+  const setData = useCallback((next: Data) => {
+    // Sequential actions can reuse a callback before React commits the next render.
+    dataRef.current = next;
+    setDataState(next);
+  }, []);
   const epoch = useRef(0),
     fetchId = useRef(0);
   useEffect(() => {
@@ -64,7 +70,7 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
       if (event === "SIGNED_IN") setLoading(true);
     });
     return () => subscription.unsubscribe();
-  }, []);
+  }, [setData]);
   const refresh = useCallback(async () => {
     if (demo || !session || !supabase) return;
     const generation = epoch.current,
@@ -87,7 +93,7 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
       setError(null);
     }
     setLoading(false);
-  }, [session, demo]);
+  }, [session, demo, setData]);
   const searchDirectory = useCallback(async (input: SocialDirectoryQuery) => {
     const query = normalizeSocialDirectoryQuery(input);
     if (!query) return [];
@@ -162,24 +168,27 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
       listener.remove();
       void supabase!.removeChannel(channel);
     };
-  }, [session, demo, refresh]);
+  }, [session, demo, refresh, setData]);
   const act = useCallback(
     async (action: string, payload: Payload = {}) => {
       if (demo) {
-        const next = demoAction(data, action, payload);
+        const baseData = dataRef.current;
+        if (baseData.viewer_id !== DEMO_ID)
+          throw new Error("The demo session ended. Open the demo again to continue.");
+        const next = demoAction(baseData, action, payload);
         setData(next);
         if (action === "create_space") {
           const space = next.spaces.find(
-            (item) => !data.spaces.some((old) => old.id === item.id),
+            (item) => !baseData.spaces.some((old) => old.id === item.id),
           );
           return space ? { id: space.id, space_id: space.id } : {};
         }
         if (action === "create_space_from_squads") {
-          const space = next.spaces.find((item) => !data.spaces.some((old) => old.id === item.id));
+          const space = next.spaces.find((item) => !baseData.spaces.some((old) => old.id === item.id));
           return space ? { id: space.id, space_id: space.id, linked_squad_count: next.space_squads.filter((row) => row.space_id === space.id).length } : {};
         }
         if (action === "organize_squad_into_space") {
-          const space = next.spaces.find((item) => !data.spaces.some((old) => old.id === item.id));
+          const space = next.spaces.find((item) => !baseData.spaces.some((old) => old.id === item.id));
           if (!space) return {};
           const sourceSquadId = String(payload.squad_id ?? "");
           return {
@@ -187,12 +196,12 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
             space_id: space.id,
             source_squad_id: sourceSquadId,
             copied_member_count: next.space_members.filter((row) => row.space_id === space.id && row.user_id !== space.owner_id).length,
-            skipped_member_count: Math.max(0, data.squad_members.filter((row) => row.squad_id === sourceSquadId && row.user_id !== space.owner_id).length - next.space_members.filter((row) => row.space_id === space.id && row.user_id !== space.owner_id).length),
+            skipped_member_count: Math.max(0, baseData.squad_members.filter((row) => row.squad_id === sourceSquadId && row.user_id !== space.owner_id).length - next.space_members.filter((row) => row.space_id === space.id && row.user_id !== space.owner_id).length),
           };
         }
         if (action === "create_organization") {
           const organization = next.organizations.find(
-            (item) => !data.organizations.some((old) => old.id === item.id),
+            (item) => !baseData.organizations.some((old) => old.id === item.id),
           );
           return organization
             ? { id: organization.id, organization_id: organization.id }
@@ -200,13 +209,13 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
         }
         if (action === "create_activity") {
           const activity = next.activities.find(
-            (item) => !data.activities.some((old) => old.id === item.id),
+            (item) => !baseData.activities.some((old) => old.id === item.id),
           );
           return activity ? { id: activity.id } : {};
         }
         if (action === "create_plan" || action === "run_routine_once") {
           const plan = next.plans.find(
-            (item) => !data.plans.some((old) => old.id === item.id),
+            (item) => !baseData.plans.some((old) => old.id === item.id),
           );
           return plan
             ? { id: plan.id, plan_id: plan.id, occurrence_plan_id: plan.id }
@@ -214,7 +223,7 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
         }
         if (action === "create_routine") {
           const routine = next.plan_routines.find(
-            (item) => !data.plan_routines.some((old) => old.id === item.id),
+            (item) => !baseData.plan_routines.some((old) => old.id === item.id),
           );
           return routine
             ? {
@@ -226,7 +235,7 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
         }
         if (action === "send_group_message") {
           const message = next.group_messages.find(
-            (item) => !data.group_messages.some((old) => old.id === item.id),
+            (item) => !baseData.group_messages.some((old) => old.id === item.id),
           );
           return message
             ? {
@@ -262,7 +271,7 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
             next.planning_threads.find((item) => item.id === payload.id) ??
             next.planning_threads.find(
               (item) =>
-                !data.planning_threads.some((old) => old.id === item.id),
+                !baseData.planning_threads.some((old) => old.id === item.id),
             );
           return thread ? { id: thread.id, status: thread.status } : {};
         }
@@ -283,7 +292,7 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
             next.planning_proposals.find((item) => item.id === payload.id) ??
             next.planning_proposals.find(
               (item) =>
-                !data.planning_proposals.some((old) => old.id === item.id),
+                !baseData.planning_proposals.some((old) => old.id === item.id),
             );
           return proposal
             ? { id: proposal.id, thread_id: proposal.thread_id }
@@ -317,7 +326,7 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
       if (generation === epoch.current) await refresh();
       return result;
     },
-    [demo, session, refresh, data],
+    [demo, session, refresh, setData],
   );
   async function signOut() {
     if (!demo && session) {

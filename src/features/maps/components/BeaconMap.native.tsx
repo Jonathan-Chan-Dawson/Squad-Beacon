@@ -1,26 +1,39 @@
-import { ActivityBadge } from "@/src/features/beacons/ActivityBadge";
-import React, { useEffect, useRef, useState } from "react";
-import {
-  Platform,
-  View,
-  Text,
-  Pressable,
-  useWindowDimensions,
-} from "react-native";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { Platform, View, Pressable, useWindowDimensions } from "react-native";
 import { LocateFixed, SlidersHorizontal } from "lucide-react-native";
 import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
-import { locationIsFresh } from "@/src/shared/domain";
+import { friendAvailabilityState, locationIsFresh } from "@/src/shared/domain";
 import { isValidCoordinate } from "@/src/shared/exploration";
 import { useTheme } from "@/src/shared/ui";
 import { usePreferences } from "@/src/shared/preferences";
-import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
+import { useDesignTheme } from "@/src/theme";
+import { googleMapStyles } from "@/src/theme/map";
+import { useNow } from "@/src/shared/useNow";
 import type { MapProps } from "@/src/features/maps/components/BeaconMap";
 import {
   clusterMapPoints,
-  markerVisualSize,
   rankClusterMembers,
   clusterPreviewOverflow,
+  clusterCategoryMix,
+  clusterBounds,
+  formatLocationAge,
+  MAP_MAX_ZOOM,
+  MAX_RENDERED_MAP_FEATURES,
 } from "@/src/features/maps/cluster";
+import type { MapPointGroup } from "@/src/features/maps/cluster";
+import {
+  BeaconMapPin,
+  ClusterMapPin,
+  FriendMapPin,
+  NowBeaconHalo,
+} from "@/src/features/maps/components/BeaconMapMarkers.native";
+import type { Category } from "@/src/shared/types";
 const fitEdgePadding = { top: 24, right: 24, bottom: 24, left: 24 };
 function hasUsableMapViewport(size: { width: number; height: number }) {
   return (
@@ -32,7 +45,7 @@ function hasUsableMapViewport(size: { width: number; height: number }) {
 }
 
 function isValidMapZoom(zoom: number) {
-  return Number.isFinite(zoom) && zoom >= 0 && zoom <= 22;
+  return Number.isFinite(zoom) && zoom >= 0 && zoom <= MAP_MAX_ZOOM;
 }
 
 function isValidMapRegion(region: {
@@ -49,8 +62,43 @@ function isValidMapRegion(region: {
     region.longitudeDelta > 0
   );
 }
+
+function nativeMapZoom(longitudeDelta: number, width: number) {
+  if (
+    !Number.isFinite(longitudeDelta) ||
+    longitudeDelta <= 0 ||
+    !Number.isFinite(width) ||
+    width <= 0
+  )
+    return 0;
+  return Math.max(
+    0,
+    Math.min(MAP_MAX_ZOOM, Math.log2((width * 360) / (256 * longitudeDelta))),
+  );
+}
+
+function isNowBeacon(activity: MapProps["activities"][number], now: number) {
+  return (
+    activity.status === "scheduled" &&
+    Date.parse(activity.starts_at) <= now &&
+    Date.parse(activity.ends_at) > now
+  );
+}
+
+function mapTimeChip(activity: MapProps["activities"][number], now: number) {
+  const startsAt = Date.parse(activity.starts_at);
+  const endsAt = Date.parse(activity.ends_at);
+  if (startsAt <= now && endsAt > now)
+    return `${Math.max(1, Math.ceil((endsAt - now) / 60_000))}m left`;
+  if (!Number.isFinite(startsAt)) return "";
+  return new Date(startsAt).toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}
 export default function BeaconMap({
   activities,
+  availabilityActivities,
   places,
   locations,
   profiles,
@@ -74,8 +122,10 @@ export default function BeaconMap({
   onRecenter,
   controlCommand,
   mapStyle,
+  selectedActivityId = null,
 }: MapProps) {
   const { colors, resolvedAppearance } = useTheme();
+  const { categories, availability } = useDesignTheme();
 
   const map = useRef<MapView>(null);
   const projectionBusy = useRef(false);
@@ -94,6 +144,30 @@ export default function BeaconMap({
   const appliedFocusedTarget = useRef<string | null>(null);
   const { height } = useWindowDimensions();
   const { showAvatars } = usePreferences();
+  const now = useNow();
+  const categoryColors = useMemo(
+    () =>
+      Object.fromEntries(
+        (Object.keys(categories) as Category[]).map((category) => [
+          category,
+          categories[category].color,
+        ]),
+      ) as Record<Category, string>,
+    [categories],
+  );
+  const latestSelectionActions = useRef({ onActivity, onPerson });
+  useEffect(() => {
+    latestSelectionActions.current = { onActivity, onPerson };
+  }, [onActivity, onPerson]);
+  const selectActivity = useCallback(
+    (id: string) => latestSelectionActions.current.onActivity(id),
+    [],
+  );
+  const selectPerson = useCallback(
+    (id: string) => latestSelectionActions.current.onPerson(id),
+    [],
+  );
+  const appearanceKey = `${resolvedAppearance}:${colors.bg}:${colors.green}`;
   const mapPadding = {
     top: viewportInsets?.top ?? (fullScreen ? controlsTop : 10),
     right: viewportInsets?.right ?? 10,
@@ -111,7 +185,8 @@ export default function BeaconMap({
   const freshLocations = showAvatars
     ? locations.filter(
         (location) =>
-          locationIsFresh(location) &&
+          locationIsFresh(location, new Date(now)) &&
+          formatLocationAge(location.updated_at, now) !== null &&
           location.latitude != null &&
           location.longitude != null &&
           isValidCoordinate({
@@ -153,12 +228,7 @@ export default function BeaconMap({
     }
   }, [coordinates, ready, mapSize, onPick, explorationTarget]);
   useEffect(() => {
-    if (
-      !ready ||
-      !hasUsableMapViewport(mapSize) ||
-      onPick ||
-      !controlCommand
-    )
+    if (!ready || !hasUsableMapViewport(mapSize) || onPick || !controlCommand)
       return;
     if (appliedControlRevision.current === controlCommand.revision) return;
     const currentMap = map.current;
@@ -193,14 +263,7 @@ export default function BeaconMap({
       250,
     );
     appliedControlRevision.current = controlCommand.revision;
-  }, [
-    controlCommand,
-    coordinates,
-    onPick,
-    ready,
-    region,
-    mapSize,
-  ]);
+  }, [controlCommand, coordinates, onPick, ready, region, mapSize]);
   const focusedLat = focused?.latitude,
     focusedLng = focused?.longitude;
   useEffect(() => {
@@ -265,7 +328,11 @@ export default function BeaconMap({
       });
   }
   async function updateAnchor() {
-    if (!focused || !isValidCoordinate(focused) || !hasUsableMapViewport(mapSize)) {
+    if (
+      !focused ||
+      !isValidCoordinate(focused) ||
+      !hasUsableMapViewport(mapSize)
+    ) {
       onAnchor?.(null);
       return;
     }
@@ -280,10 +347,8 @@ export default function BeaconMap({
       projectionBusy.current = false;
     }
   }
-  const first =
-    (selected && isValidCoordinate(selected) ? selected : null) ??
-    pins[0] ??
-    { latitude: 41.885, longitude: -87.642 };
+  const first = (selected && isValidCoordinate(selected) ? selected : null) ??
+    pins[0] ?? { latitude: 41.885, longitude: -87.642 };
   const initialTargetIsValid =
     explorationTarget != null &&
     isValidCoordinate(explorationTarget.center) &&
@@ -294,6 +359,8 @@ export default function BeaconMap({
       kind: "beacon" as const,
       latitude: place.latitude!,
       longitude: place.longitude!,
+      category: activities.find((activity) => activity.id === place.activity_id)
+        ?.category,
     })),
     ...freshLocations.map((location) => ({
       id: `person:${location.owner_id}`,
@@ -305,12 +372,98 @@ export default function BeaconMap({
   const groups = clusterMapPoints(mapPoints, {
     centerLatitude: region.latitude,
     centerLongitude: region.longitude,
-    zoom: Math.log2(
-      (360 * Math.max(1, mapSize.width)) / (256 * region.longitudeDelta),
-    ),
+    zoom: nativeMapZoom(region.longitudeDelta, mapSize.width),
     width: mapSize.width,
     height: mapSize.height,
   });
+  const clusterGroups = groups.filter((group) => group.members.length > 1);
+  const renderedSingletonIds = new Set(
+    groups
+      .filter((group) => group.members.length === 1)
+      .map((group) => group.members[0].id),
+  );
+  const availableHaloSlots = Math.max(
+    0,
+    MAX_RENDERED_MAP_FEATURES - groups.length,
+  );
+  const nowHaloIds = new Set(
+    pins
+      .filter((place) =>
+        renderedSingletonIds.has(`beacon:${place.activity_id}`),
+      )
+      .filter((place) => {
+        const activity = activities.find(
+          (item) => item.id === place.activity_id,
+        );
+        return !!activity && isNowBeacon(activity, now);
+      })
+      .slice(0, availableHaloSlots)
+      .map((place) => `beacon:${place.activity_id}`),
+  );
+  async function pressCluster(group: MapPointGroup) {
+    const currentMap = map.current;
+    if (!currentMap) return;
+    const zoom = nativeMapZoom(region.longitudeDelta, mapSize.width);
+    const expansionZoom =
+      group.expansionZoom ?? Math.min(MAP_MAX_ZOOM, Math.floor(zoom) + 1);
+    if (zoom < expansionZoom && zoom < MAP_MAX_ZOOM) {
+      const bounds = clusterBounds(group.members);
+      if (bounds) {
+        const latitudeSpan = bounds.north - bounds.south;
+        const coordinateList = group.members.map((member) => ({
+          latitude: member.latitude,
+          longitude: member.longitude,
+        }));
+        if (
+          bounds.east < bounds.west ||
+          (latitudeSpan < 0.0001 && bounds.longitudeSpan < 0.0001)
+        ) {
+          const targetZoom = Math.min(
+            MAP_MAX_ZOOM,
+            Math.max(zoom + 1, expansionZoom),
+          );
+          const minimumDelta = 360 / 2 ** targetZoom;
+          currentMap.animateToRegion(
+            {
+              latitude: (bounds.north + bounds.south) / 2,
+              longitude: bounds.centerLongitude,
+              latitudeDelta: Math.max(minimumDelta, latitudeSpan * 1.35),
+              longitudeDelta: Math.max(
+                minimumDelta,
+                bounds.longitudeSpan * 1.35,
+              ),
+            },
+            420,
+          );
+        } else {
+          currentMap.fitToCoordinates(coordinateList, {
+            edgePadding: fitEdgePadding,
+            animated: true,
+          });
+        }
+        return;
+      }
+    }
+    try {
+      const anchor = await currentMap.pointForCoordinate({
+        latitude: group.latitude,
+        longitude: group.longitude,
+      });
+      onCluster?.(group, anchor ?? null);
+    } catch {
+      onCluster?.(group, null);
+    }
+  }
+  const latestClusterAction = useRef<(group: MapPointGroup) => void>(() => {});
+  useEffect(() => {
+    latestClusterAction.current = (group) => {
+      void pressCluster(group);
+    };
+  });
+  const selectCluster = useCallback(
+    (group: MapPointGroup) => latestClusterAction.current(group),
+    [],
+  );
   return (
     <View
       onLayout={(event) =>
@@ -338,19 +491,23 @@ export default function BeaconMap({
         onRegionChangeComplete={(nextRegion, details) => {
           if (!isValidMapRegion(nextRegion)) return;
           setRegion(nextRegion);
-          if (hasUsableMapViewport(mapSize)) onViewportChange?.({
-            center: {
-              latitude: nextRegion.latitude,
-              longitude: nextRegion.longitude,
-            },
-            zoom: Math.log2(360 / nextRegion.longitudeDelta),
-            bounds: {
-              north: nextRegion.latitude + nextRegion.latitudeDelta / 2,
-              south: nextRegion.latitude - nextRegion.latitudeDelta / 2,
-              east: nextRegion.longitude + nextRegion.longitudeDelta / 2,
-              west: nextRegion.longitude - nextRegion.longitudeDelta / 2,
-            },
-          }, details?.isGesture ?? gestureActive.current);
+          if (hasUsableMapViewport(mapSize))
+            onViewportChange?.(
+              {
+                center: {
+                  latitude: nextRegion.latitude,
+                  longitude: nextRegion.longitude,
+                },
+                zoom: Math.log2(360 / nextRegion.longitudeDelta),
+                bounds: {
+                  north: nextRegion.latitude + nextRegion.latitudeDelta / 2,
+                  south: nextRegion.latitude - nextRegion.latitudeDelta / 2,
+                  east: nextRegion.longitude + nextRegion.longitudeDelta / 2,
+                  west: nextRegion.longitude - nextRegion.longitudeDelta / 2,
+                },
+              },
+              details?.isGesture ?? gestureActive.current,
+            );
           gestureActive.current = false;
           void updateAnchor();
         }}
@@ -359,40 +516,19 @@ export default function BeaconMap({
         }}
         onRegionChange={updateAnchor}
         userInterfaceStyle={resolvedAppearance}
-        customMapStyle={[
-          {
-            featureType: "poi",
-            elementType: "labels",
-            stylers: [{ visibility: "off" }],
-          },
-          { elementType: "geometry", stylers: [{ color: colors.bg }] },
-          {
-            elementType: "labels.text.fill",
-            stylers: [{ color: colors.muted }],
-          },
-          {
-            elementType: "labels.text.stroke",
-            stylers: [{ color: colors.bg }],
-          },
-          {
-            featureType: "road",
-            elementType: "geometry",
-            stylers: [{ color: colors.white }],
-          },
-          {
-            featureType: "water",
-            elementType: "geometry",
-            stylers: [
-              { color: resolvedAppearance === "dark" ? "#253C59" : "#C7E4E9" },
-            ],
-          },
-          {
-            featureType: "poi.park",
-            elementType: "geometry",
-            stylers: [{ color: colors.lime }],
-          },
-        ]}
-        mapType={mapStyle ?? "standard"}
+        customMapStyle={
+          Platform.OS === "android" && mapStyle !== "satellite"
+            ? googleMapStyles(resolvedAppearance)
+            : []
+        }
+        mapType={
+          mapStyle === "satellite"
+            ? "satellite"
+            : Platform.OS === "ios"
+              ? "mutedStandard"
+              : "standard"
+        }
+        maxZoomLevel={MAP_MAX_ZOOM}
         {...(ready ? { mapPadding } : {})}
         showsScale
         rotateEnabled
@@ -431,286 +567,131 @@ export default function BeaconMap({
         }
         showsUserLocation={false}
       >
-        {groups
-          .filter((group) => group.members.length > 1)
-          .map((group) => {
-            const beacons = group.members.filter(
-              (member) => member.kind === "beacon",
-            ).length;
-            const people = group.members.length - beacons;
-            const ranked = rankClusterMembers(group.members, clusterPriorities);
-            const previewLabels = ranked
-              .slice(0, 3)
-              .map((member) =>
-                member.kind === "beacon"
-                  ? activities.find(
-                      (candidate) => `beacon:${candidate.id}` === member.id,
-                    )?.title
-                  : profiles.find(
-                      (candidate) => `person:${candidate.id}` === member.id,
-                    )?.name,
-              )
-              .filter((label): label is string => !!label);
+        {pins
+          .filter((place) => nowHaloIds.has(`beacon:${place.activity_id}`))
+          .map((place) => {
+            const activity = activities.find(
+              (item) => item.id === place.activity_id,
+            );
+            if (!activity || !isNowBeacon(activity, now)) return null;
             return (
-              <Marker
-                key={group.id}
-                anchor={{ x: 0.5, y: 0.5 }}
+              <NowBeaconHalo
+                key={`now-halo:${activity.id}`}
                 coordinate={{
-                  latitude: group.latitude,
-                  longitude: group.longitude,
+                  latitude: place.latitude!,
+                  longitude: place.longitude!,
                 }}
-                accessibilityLabel={`Map cluster: ${beacons} beacons, ${people} people. Preview: ${previewLabels.join(", ")}${clusterPreviewOverflow(group.members.length) ? `, plus ${clusterPreviewOverflow(group.members.length)} more` : ""}`}
-                onPress={(event) => {
-                  event.stopPropagation();
-                  void map.current
-                    ?.pointForCoordinate({
-                      latitude: group.latitude,
-                      longitude: group.longitude,
-                    })
-                    .then((point) => onCluster?.(group, point ?? null))
-                    .catch(() => onCluster?.(group, null));
-                }}
-              >
-                <View
-                  style={{
-                    minWidth: 58,
-                    height: 52,
-                    paddingHorizontal: 7,
-                    alignItems: "center",
-                    justifyContent: "center",
-                    flexDirection: "row",
-                    borderRadius: 26,
-                    backgroundColor: colors.white,
-                    borderWidth: 2,
-                    borderColor: colors.lime,
-                    elevation: 4,
-                  }}
-                >
-                  {ranked.slice(0, 3).map((member, index) => {
-                    const activity =
-                      member.kind === "beacon"
-                        ? activities.find(
-                            (candidate) =>
-                              `beacon:${candidate.id}` === member.id,
-                          )
-                        : undefined;
-                    const profile =
-                      member.kind === "person"
-                        ? profiles.find(
-                            (candidate) =>
-                              `person:${candidate.id}` === member.id,
-                          )
-                        : undefined;
-                    return (
-                      <View
-                        key={member.id}
-                        style={{
-                          width: 30,
-                          height: 30,
-                          marginLeft: index ? -5 : 0,
-                          borderRadius: 16,
-                          overflow: "hidden",
-                          borderWidth: 2,
-                          borderColor: colors.white,
-                          zIndex: 4 - index,
-                          alignItems: "center",
-                          justifyContent: "center",
-                          backgroundColor: colors.lime,
-                        }}
-                      >
-                        {activity ? (
-                          <ActivityBadge
-                            category={activity.category}
-                            size={26}
-                          />
-                        ) : profile ? (
-                          <ProfileAvatar profile={profile} size={26} />
-                        ) : null}
-                      </View>
-                    );
-                  })}
-                  {clusterPreviewOverflow(group.members.length) > 0 && (
-                    <Text
-                      style={{
-                        marginLeft: 2,
-                        color: colors.ink,
-                        fontSize: 11,
-                        fontWeight: "800",
-                      }}
-                    >
-                      +{clusterPreviewOverflow(group.members.length)}
-                    </Text>
-                  )}
-                </View>
-              </Marker>
+                color={categoryColors[activity.category]}
+              />
             );
           })}
+        {clusterGroups.map((group) => {
+          const beaconCount = group.members.filter(
+            (member) => member.kind === "beacon",
+          ).length;
+          const peopleCount = group.members.length - beaconCount;
+          const ranked = rankClusterMembers(group.members, clusterPriorities);
+          const previewLabels = ranked
+            .slice(0, 3)
+            .map((member) =>
+              member.kind === "beacon"
+                ? activities.find(
+                    (activity) => `beacon:${activity.id}` === member.id,
+                  )?.title
+                : profiles.find(
+                    (profile) => `person:${profile.id}` === member.id,
+                  )?.name,
+            )
+            .filter((label): label is string => !!label);
+          const categoryMix = clusterCategoryMix(group.members)
+            .map((entry) => `${entry.category} ${entry.count}`)
+            .join(", ");
+          const overflow = clusterPreviewOverflow(group.members.length);
+          const accessibilityLabel = `Map cluster: ${beaconCount} beacons, ${peopleCount} people. Preview: ${previewLabels.join(", ")}${overflow ? `, plus ${overflow} more` : ""}. Category mix: ${categoryMix}.`;
+          return (
+            <ClusterMapPin
+              key={group.id}
+              group={group}
+              categoryColors={categoryColors}
+              appearanceKey={appearanceKey}
+              accessibilityLabel={accessibilityLabel}
+              onPress={selectCluster}
+            />
+          );
+        })}
         {pins
-          .filter((p) =>
-            groups.every(
-              (group) =>
-                group.members.length === 1 ||
-                !group.members.some(
-                  (member) => member.id === `beacon:${p.activity_id}`,
-                ),
-            ),
+          .filter((place) =>
+            renderedSingletonIds.has(`beacon:${place.activity_id}`),
           )
-          .map((p) => (
-            <Marker
-              key={p.activity_id}
-              anchor={{ x: 0.5, y: 1 }}
-              coordinate={{ latitude: p.latitude!, longitude: p.longitude! }}
-              accessibilityLabel={
-                activities.find((a) => a.id === p.activity_id)?.title
-              }
-              description={"Meeting place · " + p.label}
-              tracksViewChanges
-              pinColor={colors.green}
-              onPress={(event) => {
-                event.stopPropagation();
-                if (!onPick) onActivity(p.activity_id);
-              }}
-            >
-              <View
-                style={{
-                  width: 44,
-                  height: 52,
-                  alignItems: "center",
-                  justifyContent: "flex-start",
+          .map((place) => {
+            const activity = activities.find(
+              (item) => item.id === place.activity_id,
+            );
+            if (!activity) return null;
+            const selectedPin = selectedActivityId === activity.id;
+            const streetTime =
+              nativeMapZoom(region.longitudeDelta, mapSize.width) >= 16
+                ? mapTimeChip(activity, now)
+                : undefined;
+            return (
+              <BeaconMapPin
+                key={`beacon:${activity.id}`}
+                id={activity.id}
+                title={activity.title}
+                coordinate={{
+                  latitude: place.latitude!,
+                  longitude: place.longitude!,
                 }}
-              >
-                <View
-                  style={{
-                    position: "absolute",
-                    bottom: 3,
-                    width: 13,
-                    height: 13,
-                    borderRadius: 3,
-                    backgroundColor: colors.green,
-                    transform: [{ rotate: "45deg" }],
-                  }}
-                />
-                <View
-                  style={{
-                    width: markerVisualSize(
-                      "beacon",
-                      Math.log2(
-                        (360 * Math.max(1, mapSize.width)) /
-                          (256 * region.longitudeDelta),
-                      ),
-                    ),
-                    height: markerVisualSize(
-                      "beacon",
-                      Math.log2(
-                        (360 * Math.max(1, mapSize.width)) /
-                          (256 * region.longitudeDelta),
-                      ),
-                    ),
-                    borderRadius:
-                      markerVisualSize(
-                        "beacon",
-                        Math.log2(
-                          (360 * Math.max(1, mapSize.width)) /
-                            (256 * region.longitudeDelta),
-                        ),
-                      ) / 2,
-                    backgroundColor: colors.white,
-                    borderWidth: 2,
-                    borderColor: colors.green,
-                    alignItems: "center",
-                    justifyContent: "center",
-                    elevation: 4,
-                  }}
-                >
-                  <ActivityBadge
-                    category={
-                      activities.find((a) => a.id === p.activity_id)!.category
-                    }
-                    size={markerVisualSize(
-                      "beacon",
-                      Math.log2(
-                        (360 * Math.max(1, mapSize.width)) /
-                          (256 * region.longitudeDelta),
-                      ) - 1,
-                    )}
-                  />
-                </View>
-              </View>
-            </Marker>
-          ))}
+                category={activity.category}
+                categoryColor={categoryColors[activity.category]}
+                selected={selectedPin}
+                dimmed={!!selectedActivityId && !selectedPin}
+                streetTime={streetTime}
+                appearanceKey={appearanceKey}
+                disabled={!!onPick}
+                onPress={selectActivity}
+              />
+            );
+          })}
         {freshLocations
-          .filter((l) =>
-            groups.every(
-              (group) =>
-                group.members.length === 1 ||
-                !group.members.some(
-                  (member) => member.id === `person:${l.owner_id}`,
-                ),
-            ),
+          .filter((location) =>
+            renderedSingletonIds.has(`person:${location.owner_id}`),
           )
-          .map((l) => (
-            <Marker
-              key={l.id}
-              anchor={{ x: 0.5, y: 0.5 }}
-              coordinate={{ latitude: l.latitude!, longitude: l.longitude! }}
-              onPress={(event) => {
-                event.stopPropagation();
-                onPerson(l.owner_id);
-              }}
-            >
-              <View
-                style={{
-                  width: 44,
-                  height: 44,
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <View
-                  style={{
-                    width: markerVisualSize(
-                      "person",
-                      Math.log2(
-                        (360 * Math.max(1, mapSize.width)) /
-                          (256 * region.longitudeDelta),
-                      ),
-                    ),
-                    height: markerVisualSize(
-                      "person",
-                      Math.log2(
-                        (360 * Math.max(1, mapSize.width)) /
-                          (256 * region.longitudeDelta),
-                      ),
-                    ),
-                    borderRadius: 18,
-                    backgroundColor: colors.lime,
-                    borderColor: colors.green,
-                    borderWidth: 2,
-                    alignItems: "center",
-                    justifyContent: "center",
-                    overflow: "hidden",
-                  }}
-                >
-                  {showAvatars ? (
-                    <ProfileAvatar
-                      profile={profiles.find((p) => p.id === l.owner_id)}
-                      size={markerVisualSize(
-                        "person",
-                        Math.log2(
-                          (360 * Math.max(1, mapSize.width)) /
-                            (256 * region.longitudeDelta),
-                        ) - 1,
-                      )}
-                    />
-                  ) : (
-                    <Text style={{ fontWeight: "700" }}>●</Text>
-                  )}
-                </View>
-              </View>
-            </Marker>
-          ))}
+          .map((location) => {
+            const profile = profiles.find(
+              (item) => item.id === location.owner_id,
+            );
+            if (!profile) return null;
+            const ownerAvailability =
+              (availabilityActivities ?? activities)
+                .filter((activity) => activity.owner_id === location.owner_id)
+                .map((activity) => friendAvailabilityState(activity, now))
+                .find((state) => state !== "unknown") ?? "unknown";
+            const availabilityKey =
+              ownerAvailability === "ending-soon"
+                ? "endingSoon"
+                : ownerAvailability;
+            const ageLabel =
+              formatLocationAge(location.updated_at, now) ?? "now";
+            return (
+              <FriendMapPin
+                key={`person:${location.owner_id}`}
+                location={location}
+                profile={profile}
+                availabilityColor={availability[availabilityKey].color}
+                availabilityLabel={ownerAvailability.replace("-", " ")}
+                ageLabel={ageLabel}
+                appearanceKey={appearanceKey}
+                onPress={selectPerson}
+              />
+            );
+          })}
         {selected && isValidCoordinate(selected) && (
-          <Marker coordinate={selected} title="Selected meeting place" />
+          <Marker
+            coordinate={selected}
+            accessibilityLabel="Selected meeting place"
+            tracksViewChanges={false}
+          />
         )}
       </MapView>
       {!onPick && !hideControls && (

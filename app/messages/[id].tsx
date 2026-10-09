@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { KeyboardAvoidingView, Platform, View } from "react-native";
+import { View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams } from "expo-router";
 import { useBeacon } from "@/src/shared/store";
@@ -23,46 +23,47 @@ export default function Messages() {
       : "Conversation";
   return (
     <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }}>
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={{ flex: 1 }}
-      >
-        <View style={[styles.content, { flex: 1 }]}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            <BackButton />
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <ChatIdentityHeader
-                name={name}
-                subtitle={selection.canMessage ? "Tap for profile" : undefined}
-                avatar={
-                  <ProfileAvatar
-                    profile={
-                      selection.canViewFullProfile
-                        ? selection.profile
-                        : undefined
-                    }
-                    size={42}
-                  />
-                }
-                accessibilityLabel={
-                  selection.canMessage
-                    ? `View ${name}'s profile`
-                    : "Profile preview unavailable"
-                }
-                onPress={() => setPreviewVisible(true)}
-              />
-            </View>
+      <View style={[styles.content, { flex: 1 }]}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <BackButton />
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <ChatIdentityHeader
+              name={name}
+              subtitle={
+                selection.availability === "available"
+                  ? "Available now"
+                  : selection.availability === "ending-soon"
+                    ? "Wrapping up soon"
+                    : selection.availability === "unavailable"
+                      ? "Not available right now"
+                      : undefined
+              }
+              avatar={
+                <ProfileAvatar
+                  profile={
+                    selection.canViewFullProfile ? selection.profile : undefined
+                  }
+                  size={42}
+                />
+              }
+              accessibilityLabel={
+                selection.canMessage
+                  ? `View ${name}'s profile`
+                  : "Profile preview unavailable"
+              }
+              onPress={() => setPreviewVisible(true)}
+            />
           </View>
-          {selection.canMessage ? (
-            <ChatThread personId={id} />
-          ) : (
-            <Txt>
-              This conversation is unavailable. A current friendship is required
-              to send and read messages.
-            </Txt>
-          )}
         </View>
-      </KeyboardAvoidingView>
+        {selection.canMessage ? (
+          <ChatThread key={`${userId}:${id}`} personId={id} />
+        ) : (
+          <Txt>
+            This conversation is unavailable. A current friendship is required
+            to send and read messages.
+          </Txt>
+        )}
+      </View>
       <PersonProfilePreview
         personId={id}
         visible={previewVisible}

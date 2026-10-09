@@ -677,14 +677,31 @@ svg.leaflet-image-layer.leaflet-interactive path {
   }
 }
 
-.map-midnight .leaflet-tile-pane {
-  filter: brightness(0.55) saturate(0.55) hue-rotate(175deg);
-}
 .beacon-marker button:hover {
-  transform: translateY(-3px);
+  filter: brightness(0.98);
 }
-.beacon-marker button {
-  transition: transform 0.15s ease;
+.map-now-halo {
+  transform-origin: center;
+  animation: map-now-pulse 2s ease-out infinite;
 }
-
-.map-day .leaflet-tile-pane {filter:saturate(.5) contrast(.92) brightness(1.03);}
+@keyframes map-now-pulse {
+  0% {
+    transform: scale(0.66);
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(1.45);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .beacon-marker,
+  .beacon-marker * {
+    transition: none !important;
+  }
+  .map-now-halo {
+    animation: none;
+    opacity: 0.24;
+    transform: scale(1);
+  }
+}

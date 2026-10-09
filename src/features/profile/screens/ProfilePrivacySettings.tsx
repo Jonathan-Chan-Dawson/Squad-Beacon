@@ -11,12 +11,12 @@ import type {
 import {
   Action,
   Button,
-  Chips,
   Field,
   Screen,
   Txt,
   useTheme,
 } from "@/src/shared/ui";
+import { SegmentedControl } from "@/src/shared/design-system";
 import { activeOrganizationRole } from "@/src/features/organizations/domain";
 
 type Visibility = "public" | "friends" | "custom";
@@ -45,18 +45,21 @@ function AudienceToggle({
   label,
   selected,
   onToggle,
+  disabled = false,
 }: {
   id: string;
   label: string;
   selected: boolean;
   onToggle: (id: string) => void;
+  disabled?: boolean;
 }) {
   const { styles, colors } = useTheme();
   return (
     <Pressable
       accessibilityRole="checkbox"
       accessibilityLabel={label}
-      accessibilityState={{ checked: selected }}
+      accessibilityState={{ checked: selected, disabled }}
+      disabled={disabled}
       aria-checked={selected}
       onPress={() => onToggle(id)}
       style={({ pressed }) => [
@@ -65,6 +68,8 @@ function AudienceToggle({
           flexDirection: "row",
           alignItems: "center",
           padding: 12,
+          minHeight: 44,
+          gap: 12,
           borderColor: selected ? colors.green : colors.line,
           opacity: pressed ? 0.8 : 1,
         },
@@ -90,13 +95,18 @@ function AudienceToggle({
 }
 
 export default function ProfilePrivacySettings() {
+  return <Screen title="Profile visibility" eyebrow="PRIVACY" create={false}>
+    <ProfileVisibilityContent />
+    <Button secondary title="Back to profile" onPress={() => router.back()} />
+  </Screen>;
+}
+
+export function ProfileVisibilityContent({ onSaved }: { onSaved?: () => void }) {
   const { data, userId, act } = useBeacon();
   const profile = data.profiles.find((item) => item.id === userId);
-  if (!profile)
+  if (!profile || !userId || data.viewer_id !== userId)
     return (
-      <Screen title="Settings" eyebrow="PROFILE PRIVACY" create={false}>
-        <Txt muted>Profile settings are unavailable.</Txt>
-      </Screen>
+      <Txt muted>Profile settings are unavailable.</Txt>
     );
   const saved = selectedTargets(data.profile_visibility_grants, userId ?? "");
   const savedSignature = JSON.stringify({
@@ -114,6 +124,7 @@ export default function ProfilePrivacySettings() {
       userId={userId}
       act={act}
       savedSignature={savedSignature}
+      onSaved={onSaved}
     />
   );
 }
@@ -123,11 +134,13 @@ function ProfilePrivacyForm({
   userId,
   act,
   savedSignature,
+  onSaved,
 }: {
   data: Data;
   userId: ID | null;
   act: (action: string, payload?: Payload) => Promise<Record<string, unknown>>;
   savedSignature: string;
+  onSaved?: () => void;
 }) {
   const { styles } = useTheme();
   const saved = JSON.parse(savedSignature) as {
@@ -145,6 +158,8 @@ function ProfilePrivacyForm({
     saved.organizations ?? [],
   );
   const [peopleQuery, setPeopleQuery] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [savedMessage, setSavedMessage] = useState("");
 
   const selectablePeople = data.profiles.filter(
     (person) =>
@@ -184,7 +199,7 @@ function ProfilePrivacyForm({
       );
 
   return (
-    <Screen title="Settings" eyebrow="PROFILE PRIVACY" create={false}>
+    <View style={{ gap: 16 }} testID="profile-visibility-form">
       <View style={styles.card}>
         <Text style={styles.h2}>Who can see your full profile?</Text>
         <Txt muted>
@@ -192,15 +207,14 @@ function ProfilePrivacyForm({
           This controls your bio, interests, aspirations, and other profile
           details.
         </Txt>
-        <Chips
-          options={["Public", "Friends", "Custom"] as const}
-          value={
-            (visibility.charAt(0).toUpperCase() + visibility.slice(1)) as
-              "Public" | "Friends" | "Custom"
-          }
-          onChange={(value) => setVisibility(value.toLowerCase() as Visibility)}
-          accessibilityPrefix="Full profile audience"
+        <SegmentedControl
+          options={[{ value: "public", label: "Public" }, { value: "friends", label: "Friends" }, { value: "custom", label: "Custom" }]}
+          value={visibility}
+          onChange={(value) => { if (!saving) setVisibility(value); }}
+          accessibilityLabel="Full profile audience"
+          testID="profile-visibility-segments"
         />
+        <Txt muted>These grants control profile details only. They never grant Beacon access or share your location.</Txt>
         {visibility === "public" && (
           <Txt muted>
             People who can already find you in the app. This preserves the
@@ -232,6 +246,7 @@ function ProfilePrivacyForm({
                 id={org.id}
                 label={org.name}
                 selected={organizations.includes(org.id)}
+                disabled={saving}
                 onToggle={toggle(organizations, setOrganizations)}
               />
             ))}
@@ -243,6 +258,7 @@ function ProfilePrivacyForm({
               value={peopleQuery}
               onChangeText={setPeopleQuery}
               autoCapitalize="none"
+              editable={!saving}
             />
             {!visiblePeople.length && (
               <Txt muted>No people are available to select right now.</Txt>
@@ -253,6 +269,7 @@ function ProfilePrivacyForm({
                 id={person.id}
                 label={person.name}
                 selected={people.includes(person.id)}
+                disabled={saving}
                 onToggle={toggle(people, setPeople)}
               />
             ))}
@@ -268,6 +285,7 @@ function ProfilePrivacyForm({
                 id={squad.id}
                 label={squad.name}
                 selected={squads.includes(squad.id)}
+                disabled={saving}
                 onToggle={toggle(squads, setSquads)}
               />
             ))}
@@ -283,6 +301,7 @@ function ProfilePrivacyForm({
                 id={list.id}
                 label={list.name}
                 selected={lists.includes(list.id)}
+                disabled={saving}
                 onToggle={toggle(lists, setLists)}
               />
             ))}
@@ -291,17 +310,25 @@ function ProfilePrivacyForm({
       )}
       <Action
         title="Save profile privacy"
-        run={() =>
-          act("save_profile_privacy", {
+        disabled={saving || !userId || data.viewer_id !== userId}
+        run={async () => {
+          if (!userId || data.viewer_id !== userId) throw new Error("Refresh your profile before changing visibility.");
+          setSaving(true);
+          setSavedMessage("");
+          try {
+            await act("save_profile_privacy", {
             profile_visibility: visibility,
-            person_ids: visibility === "custom" ? people : [],
-            squad_ids: visibility === "custom" ? squads : [],
-            list_ids: visibility === "custom" ? lists : [],
-            organization_ids: visibility === "custom" ? organizations : [],
-          })
-        }
+            person_ids: visibility === "custom" ? people.filter((id) => selectablePeople.some((person) => person.id === id)) : [],
+            squad_ids: visibility === "custom" ? squads.filter((id) => selectableSquads.some((squad) => squad.id === id)) : [],
+            list_ids: visibility === "custom" ? lists.filter((id) => selectableLists.some((list) => list.id === id)) : [],
+            organization_ids: visibility === "custom" ? organizations.filter((id) => selectableOrganizations.some((organization) => organization.id === id)) : [],
+            });
+            setSavedMessage("Profile visibility saved.");
+            onSaved?.();
+          } finally { setSaving(false); }
+        }}
       />
-      <Button secondary title="Back to profile" onPress={() => router.back()} />
-    </Screen>
+      {!!savedMessage && <Txt>{savedMessage}</Txt>}
+    </View>
   );
 }

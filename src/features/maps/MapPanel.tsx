@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { router } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   X,
   Maximize2,
@@ -42,7 +43,8 @@ export function MapPanel({
   onExpand: (value: boolean) => void;
   initialTab?: "Overview" | "People" | "Chat";
 }) {
-  const { styles, colors } = useTheme();
+  const { styles, colors, tokens } = useTheme();
+  const insets = useSafeAreaInsets();
 
   const { data, userId, act } = useBeacon();
   const now = useNow();
@@ -117,7 +119,7 @@ export function MapPanel({
             expanded ? "Collapse map panel" : "Expand map panel"
           }
           onPress={() => onExpand(!expanded)}
-          style={{ padding: 10 }}
+          style={{ minWidth: tokens.layout.touchTarget, minHeight: tokens.layout.touchTarget, alignItems: "center", justifyContent: "center" }}
         >
           {expanded ? (
             <Minimize2 color={colors.ink} size={20} />
@@ -129,7 +131,7 @@ export function MapPanel({
           accessibilityRole="button"
           accessibilityLabel="Back to map tooltip"
           onPress={onClose}
-          style={{ padding: 10 }}
+          style={{ minWidth: tokens.layout.touchTarget, minHeight: tokens.layout.touchTarget, alignItems: "center", justifyContent: "center" }}
         >
           <X color={colors.ink} size={22} />
         </Pressable>
@@ -184,7 +186,7 @@ export function MapPanel({
       ) : (
         <ScrollView
           keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ gap: 12, paddingBottom: 16 }}
+          contentContainerStyle={{ gap: tokens.space.md, paddingBottom: tokens.layout.tabBarHeight + insets.bottom + tokens.layout.scrollClearance }}
         >
           {person && activeTab === "Overview" && (
             <View style={styles.row}>

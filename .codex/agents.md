@@ -7,7 +7,7 @@
 
 ## Subagent Definitions
 
-- **Explore & Summarize Subagent:** Luna / Medium
+- **Explore & Summarize Subagent:** Luna / High
   - **Scope:** Use for fast context gathering, codebase exploration, file extraction, and structured summaries.
 - **Implementation Subagent:** Luna / XHigh
   - **Scope:** Use for bounded, repeatable, or targeted code implementation packets with explicit success criteria.
