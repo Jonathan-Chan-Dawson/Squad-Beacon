@@ -251,6 +251,7 @@ export function Chip({
             color: selected ? colors.onAccent : colors.textPrimary,
             ...type.secondary,
             fontWeight: type.weight.semibold,
+            flexShrink: 1,
           },
           textStyle,
         ]}
@@ -488,6 +489,7 @@ function DesignButton({
               ...type.secondary,
               fontWeight: type.weight.bold,
               textAlign: "center",
+              flexShrink: 1,
             },
             textStyle,
           ]}

@@ -189,6 +189,7 @@ function BeaconMapPinComponent({
   appearanceKey,
   onPress,
   disabled = false,
+  dot = false,
 }: {
   id: string;
   title: string;
@@ -201,11 +202,45 @@ function BeaconMapPinComponent({
   appearanceKey: string;
   onPress: (id: string) => void;
   disabled?: boolean;
+  dot?: boolean;
 }) {
   const tracking = useMarkerTracking(
-    `${id}:${categoryColor}:${selected}:${dimmed}:${streetTime ?? ""}:${appearanceKey}`,
+    `${id}:${categoryColor}:${selected}:${dimmed}:${streetTime ?? ""}:${appearanceKey}:${dot}`,
   );
   const visualSize = markerVisualSize("beacon");
+  if (dot)
+    return (
+      <Marker
+        coordinate={coordinate}
+        anchor={{ x: 0.5, y: 0.5 }}
+        tracksViewChanges={tracking}
+        accessibilityLabel={`Map: ${title}`}
+        onPress={(event) => {
+          event.stopPropagation();
+          if (!disabled) onPress(id);
+        }}
+      >
+        <View
+          style={{
+            width: 24,
+            height: 24,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <View
+            style={{
+              width: 10,
+              height: 10,
+              borderRadius: 5,
+              backgroundColor: categoryColor,
+              borderWidth: 1,
+              borderColor: "#FFFFFF",
+            }}
+          />
+        </View>
+      </Marker>
+    );
   return (
     <Marker
       key={id}
@@ -297,6 +332,7 @@ export const BeaconMapPin = React.memo(
     left.streetTime === right.streetTime &&
     left.appearanceKey === right.appearanceKey &&
     left.disabled === right.disabled &&
+    left.dot === right.dot &&
     left.onPress === right.onPress,
 );
 

@@ -14,14 +14,16 @@ import {
   type NativeSyntheticEvent,
   type TextInputProps,
 } from "react-native";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import { BlurView } from "expo-blur";
 import {
   BottomSheetBackdrop,
   BottomSheetFooter,
   BottomSheetModal,
   BottomSheetScrollView,
-  BottomSheetView,
   useBottomSheetSpringConfigs,
   type BottomSheetBackdropProps,
   type BottomSheetFooterProps,
@@ -104,7 +106,9 @@ function unregisterActiveSheet(sheetId: string) {
 }
 
 function isTopActiveSheet(sheetId: string) {
-  return activeSheetStack.at(-1) === sheetId && sheetVisibility.get(sheetId) === true;
+  return (
+    activeSheetStack.at(-1) === sheetId && sheetVisibility.get(sheetId) === true
+  );
 }
 
 function setSheetVisibility(sheetId: string, visible: boolean) {
@@ -128,9 +132,7 @@ export function SheetIsolation({ children }: { children: React.ReactNode }) {
   return (
     <View
       accessibilityElementsHidden={hasOpenSheet}
-      importantForAccessibility={
-        hasOpenSheet ? "no-hide-descendants" : "auto"
-      }
+      importantForAccessibility={hasOpenSheet ? "no-hide-descendants" : "auto"}
       aria-hidden={hasOpenSheet}
       style={{ flex: 1 }}
     >
@@ -255,8 +257,14 @@ const themedStyles = Object.fromEntries(
   themeNames.map((name) => [
     name,
     {
-      light: makeStyles(getDesignTheme(name, "light").colors, getDesignTheme(name, "light").tokens),
-      dark: makeStyles(getDesignTheme(name, "dark").colors, getDesignTheme(name, "dark").tokens),
+      light: makeStyles(
+        getDesignTheme(name, "light").colors,
+        getDesignTheme(name, "light").tokens,
+      ),
+      dark: makeStyles(
+        getDesignTheme(name, "dark").colors,
+        getDesignTheme(name, "dark").tokens,
+      ),
     },
   ]),
 ) as Record<
@@ -267,24 +275,21 @@ export const styles = themedStyles.Midnight.dark;
 export function useTheme() {
   const { theme, resolvedAppearance } = usePreferences();
   const design = useDesignTheme();
-  const legacyColors = useMemo(
-    () => {
-      const palette = themeVariants[theme][resolvedAppearance];
-      const semantic = getDesignTheme(theme, resolvedAppearance).colors;
-      return {
-        ...palette,
-        bg: semantic.bg,
-        ink: semantic.textPrimary,
-        muted: semantic.textSecondary,
-        line: semantic.border,
-        green: semantic.accent,
-        lime: semantic.surfaceRaised,
-        white: semantic.surface,
-        red: semantic.danger,
-      };
-    },
-    [theme, resolvedAppearance],
-  );
+  const legacyColors = useMemo(() => {
+    const palette = themeVariants[theme][resolvedAppearance];
+    const semantic = getDesignTheme(theme, resolvedAppearance).colors;
+    return {
+      ...palette,
+      bg: semantic.bg,
+      ink: semantic.textPrimary,
+      muted: semantic.textSecondary,
+      line: semantic.border,
+      green: semantic.accent,
+      lime: semantic.surfaceRaised,
+      white: semantic.surface,
+      red: semantic.danger,
+    };
+  }, [theme, resolvedAppearance]);
   return {
     colors: legacyColors,
     styles: themedStyles[theme][resolvedAppearance],
@@ -363,7 +368,9 @@ export function IconButton({
       selected={selected}
       disabled={disabled}
       onPress={onPress}
-      style={selected ? { backgroundColor: semanticColors.surfaceRaised } : undefined}
+      style={
+        selected ? { backgroundColor: semanticColors.surfaceRaised } : undefined
+      }
     >
       {children}
     </DesignIconButton>
@@ -490,9 +497,7 @@ export function Chips<T extends string>({
             key={option}
             label={label}
             accessibilityLabel={
-              accessibilityPrefix
-                ? `${accessibilityPrefix}: ${option}`
-                : option
+              accessibilityPrefix ? `${accessibilityPrefix}: ${option}` : option
             }
             accessibilityState={{ selected }}
             aria-selected={selected}
@@ -548,6 +553,7 @@ export function Sheet({
   onClose,
   children,
   maxHeightPercent = 94,
+  snapHeight,
   footer,
 }: {
   title: string;
@@ -555,6 +561,7 @@ export function Sheet({
   onClose: () => void;
   children: React.ReactNode;
   maxHeightPercent?: number;
+  snapHeight?: number;
   footer?: React.ReactNode;
 }) {
   const { semanticColors: colors, resolvedAppearance, tokens } = useTheme();
@@ -577,7 +584,21 @@ export function Sheet({
   const scrollLockRef = React.useRef(false);
   const isRegisteredRef = React.useRef(false);
   const capPercent = Math.max(35, Math.min(94, maxHeightPercent));
-  const snapPoints = React.useMemo(() => [`${capPercent}%`], [capPercent]);
+  const snapPoints = React.useMemo(
+    () =>
+      snapHeight === undefined
+        ? [`${capPercent}%`]
+        : [
+            Math.min(
+              Math.max(240, snapHeight),
+              Math.max(
+                240,
+                ((height - insets.top - insets.bottom) * capPercent) / 100,
+              ),
+            ),
+          ],
+    [capPercent, height, insets.top, insets.bottom, snapHeight],
+  );
   const animationConfigs = useBottomSheetSpringConfigs({
     damping: tokens.motion.spring.damping,
     stiffness: tokens.motion.spring.stiffness,
@@ -587,10 +608,13 @@ export function Sheet({
     240,
     (height - insets.top - insets.bottom) * (capPercent / 100),
   );
-  const modalStyle =
-    Platform.OS === "web" || width >= tokens.layout.tabletBreakpoint
-      ? { alignSelf: "center" as const, maxWidth: tokens.layout.contentMaxWidth, width: "100%" as const }
-      : undefined;
+  // BottomSheet positions its container absolutely with left/right = 0.
+  // Flex alignment cannot center that container once its width is capped;
+  // the library also overrides left/right, so inset it with equal margins.
+  const sheetWidth = Math.min(width, tokens.layout.contentMaxWidth);
+  const modalStyle = {
+    marginHorizontal: (width - sheetWidth) / 2,
+  };
   const focusDialog = useCallback(() => {
     if (Platform.OS !== "web" || typeof document === "undefined") return;
     const dialog = dialogRef.current as unknown as HTMLElement | null;
@@ -599,7 +623,8 @@ export function Sheet({
       dialog.querySelector<HTMLElement>('[aria-label="Close"]') ??
       dialog.querySelector<HTMLElement>(
         'button:not([disabled]), [role="button"][tabindex="0"], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex="0"]',
-      ) ?? dialog;
+      ) ??
+      dialog;
     target.focus({ preventScroll: true });
   }, []);
   const dialogContainerComponent = useMemo(() => {
@@ -624,9 +649,7 @@ export function Sheet({
           accessibilityLabel={dialogTitle}
           accessibilityViewIsModal={presented}
           accessibilityElementsHidden={!presented}
-          importantForAccessibility={
-            presented ? "yes" : "no-hide-descendants"
-          }
+          importantForAccessibility={presented ? "yes" : "no-hide-descendants"}
           aria-modal={Platform.OS === "web" ? presented : undefined}
           aria-hidden={!presented}
           testID="shared-sheet-dialog"
@@ -694,12 +717,20 @@ export function Sheet({
             borderTopColor: colors.border,
             paddingHorizontal: tokens.space.md,
             paddingTop: tokens.space.sm,
+            paddingBottom: tokens.space.sm,
           }}
         >
           {footer}
         </BottomSheetFooter>
       ) : null,
-    [colors.bg, colors.border, footer, insets.bottom, tokens.space.md, tokens.space.sm],
+    [
+      colors.bg,
+      colors.border,
+      footer,
+      insets.bottom,
+      tokens.space.md,
+      tokens.space.sm,
+    ],
   );
 
   React.useEffect(() => {
@@ -730,8 +761,7 @@ export function Sheet({
       return;
     }
     const dialog = () => dialogRef.current as unknown as HTMLElement | null;
-    const isTopSheet = () =>
-      visibleRef.current && isTopActiveSheet(sheetId);
+    const isTopSheet = () => visibleRef.current && isTopActiveSheet(sheetId);
     const focusInSheet = (event: FocusEvent) => {
       const node = dialog();
       if (
@@ -773,7 +803,10 @@ export function Sheet({
       if (event.shiftKey && (active === first || !node.contains(active))) {
         event.preventDefault();
         last.focus();
-      } else if (!event.shiftKey && (active === last || !node.contains(active))) {
+      } else if (
+        !event.shiftKey &&
+        (active === last || !node.contains(active))
+      ) {
         event.preventDefault();
         first.focus();
       }
@@ -816,7 +849,7 @@ export function Sheet({
       index={0}
       snapPoints={snapPoints}
       maxDynamicContentSize={maxContentHeight}
-      enableDynamicSizing
+      enableDynamicSizing={snapHeight === undefined}
       enablePanDownToClose
       enableBlurKeyboardOnGesture
       keyboardBehavior="interactive"
@@ -866,49 +899,54 @@ export function Sheet({
         if (visibleRef.current) onClose();
       }}
     >
-      <BottomSheetView
-        style={{ flex: 1, maxWidth: tokens.layout.contentMaxWidth, alignSelf: "center", width: "100%" }}
+      <BottomSheetScrollView
+        keyboardShouldPersistTaps="handled"
+        nestedScrollEnabled
+        enableFooterMarginAdjustment={!!footer}
+        stickyHeaderIndices={[0]}
+        contentContainerStyle={{
+          paddingBottom: tokens.space.xxl,
+        }}
       >
-        <View
-          style={{
-            minHeight: tokens.layout.minTapTarget + tokens.space.md,
-            paddingHorizontal: tokens.space.md,
-            paddingTop: tokens.space.xs,
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: tokens.space.sm,
-          }}
-        >
-          <Text
-            accessibilityRole="header"
+        <View style={{ backgroundColor: colors.bg }}>
+          <View
             style={{
-              ...tokens.type.title,
-              color: colors.textPrimary,
-              flex: 1,
-              fontWeight: tokens.type.weight.semibold,
+              minHeight: tokens.layout.minTapTarget + tokens.space.md,
+              paddingHorizontal: tokens.space.md,
+              paddingTop: tokens.space.xs,
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: tokens.space.sm,
+              backgroundColor: colors.bg,
             }}
           >
-            {title}
-          </Text>
-          <IconButton label="Close" onPress={requestDismiss}>
-            <X color={colors.textPrimary} />
-          </IconButton>
+            <Text
+              accessibilityRole="header"
+              style={{
+                ...tokens.type.title,
+                color: colors.textPrimary,
+                flex: 1,
+                fontWeight: tokens.type.weight.semibold,
+              }}
+            >
+              {title}
+            </Text>
+            <IconButton label="Close" onPress={requestDismiss}>
+              <X color={colors.textPrimary} />
+            </IconButton>
+          </View>
         </View>
-        <BottomSheetScrollView
-          keyboardShouldPersistTaps="handled"
-          nestedScrollEnabled
-          enableFooterMarginAdjustment={!!footer}
-          contentContainerStyle={{
+        <View
+          style={{
             paddingHorizontal: tokens.space.md,
             paddingTop: tokens.space.xs,
-            paddingBottom: tokens.space.xxl,
             gap: tokens.space.md,
           }}
         >
           {children}
-        </BottomSheetScrollView>
-      </BottomSheetView>
+        </View>
+      </BottomSheetScrollView>
     </BottomSheetModal>
   );
 }
@@ -963,11 +1001,21 @@ export function Screen({
         tokens.space.xxs
       : 0);
   const expandedHeight = back
-    ? tokens.space.xs + tokens.layout.minTapTarget + tokens.space.xs + titleBlockHeight + tokens.space.sm
+    ? tokens.space.xs +
+      tokens.layout.minTapTarget +
+      tokens.space.xs +
+      titleBlockHeight +
+      tokens.space.sm
     : tokens.space.md + titleBlockHeight + tokens.space.sm;
   const collapsedHeight = back
-    ? tokens.space.xs + tokens.layout.minTapTarget + tokens.space.xs + tokens.type.title.lineHeight * fontScale + tokens.space.sm
-    : tokens.space.md + tokens.type.title.lineHeight * fontScale + tokens.space.sm;
+    ? tokens.space.xs +
+      tokens.layout.minTapTarget +
+      tokens.space.xs +
+      tokens.type.title.lineHeight * fontScale +
+      tokens.space.sm
+    : tokens.space.md +
+      tokens.type.title.lineHeight * fontScale +
+      tokens.space.sm;
   const headerHeight = reducedMotion
     ? expandedHeight
     : collapse.interpolate({
@@ -984,7 +1032,10 @@ export function Screen({
     ? tokens.type.display.lineHeight
     : collapse.interpolate({
         inputRange: [0, 1],
-        outputRange: [tokens.type.display.lineHeight, tokens.type.title.lineHeight],
+        outputRange: [
+          tokens.type.display.lineHeight,
+          tokens.type.title.lineHeight,
+        ],
       });
   const maxContentWidth =
     Platform.OS === "web" || width >= tokens.layout.tabletBreakpoint
@@ -992,7 +1043,7 @@ export function Screen({
       : undefined;
   const bottomContentPadding = inTabs
     ? tokens.layout.tabBarHeight + insets.bottom + tokens.layout.scrollClearance
-    : tokens.space.xxl;
+    : tokens.space.xxl + insets.bottom;
   const action = headerAction ?? (inTabs ? <InboxButton /> : null);
 
   return (
@@ -1081,16 +1132,21 @@ export function Screen({
                 style={{
                   flex: 1,
                   gap: tokens.space.xxs,
-                  marginLeft: back ? tokens.space.xxxl + tokens.space.sm : 0,
+                  minWidth: 0,
                 }}
               >
                 {!!eyebrow && (
                   <Animated.Text
                     maxFontSizeMultiplier={tokens.type.denseMaxMultiplier}
-                    style={[styles.label, { opacity: collapse.interpolate({
-                      inputRange: [0, 0.65, 1],
-                      outputRange: [1, 0.2, 0],
-                    }) }]}
+                    style={[
+                      styles.label,
+                      {
+                        opacity: collapse.interpolate({
+                          inputRange: [0, 0.65, 1],
+                          outputRange: [1, 0.2, 0],
+                        }),
+                      },
+                    ]}
                   >
                     {eyebrow}
                   </Animated.Text>
@@ -1107,7 +1163,9 @@ export function Screen({
                     }
                     const nextHeight = event.nativeEvent.layout.height;
                     setMeasuredTitleHeight((current) =>
-                      Math.abs(current - nextHeight) > 0.5 ? nextHeight : current,
+                      Math.abs(current - nextHeight) > 0.5
+                        ? nextHeight
+                        : current,
                     );
                   }}
                   style={[
@@ -1275,33 +1333,33 @@ export function InboxButton() {
       >
         <View style={{ alignItems: "center", justifyContent: "center" }}>
           <Bell size={tokens.iconSize.md} color={semanticColors.textPrimary} />
-        {unread > 0 && (
-          <View
-            style={{
-              position: "absolute",
-              top: -tokens.space.sm,
-              right: -tokens.space.sm,
-              borderRadius: tokens.radius.circle,
-              backgroundColor: semanticColors.accent,
-              minWidth: tokens.type.caption.lineHeight + tokens.space.sm,
-              minHeight: tokens.type.caption.lineHeight + tokens.space.sm,
-              alignItems: "center",
-              justifyContent: "center",
-              paddingHorizontal: tokens.space.xs,
-            }}
-          >
-            <Text
-              maxFontSizeMultiplier={tokens.type.denseMaxMultiplier}
+          {unread > 0 && (
+            <View
               style={{
-                ...tokens.type.caption,
-                color: semanticColors.onAccent,
-                fontWeight: tokens.type.weight.bold,
+                position: "absolute",
+                top: -tokens.space.sm,
+                right: -tokens.space.sm,
+                borderRadius: tokens.radius.circle,
+                backgroundColor: semanticColors.accent,
+                minWidth: tokens.type.caption.lineHeight + tokens.space.sm,
+                minHeight: tokens.type.caption.lineHeight + tokens.space.sm,
+                alignItems: "center",
+                justifyContent: "center",
+                paddingHorizontal: tokens.space.xs,
               }}
             >
-              {unread > 99 ? "99+" : unread}
-            </Text>
-          </View>
-        )}
+              <Text
+                maxFontSizeMultiplier={tokens.type.denseMaxMultiplier}
+                style={{
+                  ...tokens.type.caption,
+                  color: semanticColors.onAccent,
+                  fontWeight: tokens.type.weight.bold,
+                }}
+              >
+                {unread > 99 ? "99+" : unread}
+              </Text>
+            </View>
+          )}
         </View>
       </IconButton>
       <Sheet

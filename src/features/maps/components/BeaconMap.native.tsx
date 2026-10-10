@@ -33,6 +33,14 @@ import {
   FriendMapPin,
   NowBeaconHalo,
 } from "@/src/features/maps/components/BeaconMapMarkers.native";
+import { pulseLayerPolicy } from "@/src/features/pulse/pulseLayerPolicy";
+import {
+  collidePulseBadges,
+  pulseHasBeacon,
+  type ProjectedPulse,
+} from "@/src/features/maps/pulseMapPolicy";
+import { providerMapBounds } from "../mapBounds";
+import { PulseMapOverlay } from "./PulseMapOverlay";
 import type { Category } from "@/src/shared/types";
 const fitEdgePadding = { top: 24, right: 24, bottom: 24, left: 24 };
 function hasUsableMapViewport(size: { width: number; height: number }) {
@@ -123,6 +131,14 @@ export default function BeaconMap({
   controlCommand,
   mapStyle,
   selectedActivityId = null,
+  onLongPress,
+  onPlace,
+  onGestureChange,
+  pulseSummaries = [],
+  pulsePlaces = [],
+  pulsePopToken,
+  pulsePopPlaceKey,
+  calm = false,
 }: MapProps) {
   const { colors, resolvedAppearance } = useTheme();
   const { categories, availability } = useDesignTheme();
@@ -131,6 +147,8 @@ export default function BeaconMap({
   const projectionBusy = useRef(false);
   const gestureActive = useRef(false);
   const [ready, setReady] = useState(false);
+  const [pulsePoints, setPulsePoints] = useState<ProjectedPulse[]>([]);
+  const [pulseHalos, setPulseHalos] = useState<ProjectedPulse[]>([]);
   const [region, setRegion] = useState({
     latitude: 41.885,
     longitude: -87.642,
@@ -155,6 +173,71 @@ export default function BeaconMap({
       ) as Record<Category, string>,
     [categories],
   );
+  useEffect(() => {
+    let active = true;
+    if (
+      !ready ||
+      !map.current ||
+      !mapSize.width ||
+      !mapSize.height ||
+      !pulseSummaries.length
+    ) {
+      setPulsePoints([]);
+      setPulseHalos([]);
+      return;
+    }
+    const bounds = providerMapBounds(
+      region.latitude + region.latitudeDelta / 2,
+      region.latitude - region.latitudeDelta / 2,
+      region.longitude + region.longitudeDelta / 2,
+      region.longitude - region.longitudeDelta / 2,
+    );
+    const policy = pulseLayerPolicy(
+      nativeMapZoom(region.longitudeDelta, mapSize.width),
+      bounds,
+      pulseSummaries,
+    );
+    const project = async (summaries: typeof policy.badges) =>
+      Promise.all(
+        summaries.map(async (summary) => {
+          const point = await map.current!.pointForCoordinate({
+            latitude: summary.lat,
+            longitude: summary.lng,
+          });
+          return {
+            summary,
+            x: point.x,
+            y: point.y,
+            satellite: pulseHasBeacon(
+              summary,
+              places.filter((place) =>
+                activities.some(
+                  (activity) => activity.id === place.activity_id,
+                ),
+              ),
+            ),
+          };
+        }),
+      );
+    void Promise.all([project(policy.badges), project(policy.halos)])
+      .then(([badges, halos]) => {
+        if (active) {
+          setPulsePoints(
+            collidePulseBadges(badges, mapSize.width, mapSize.height),
+          );
+          setPulseHalos(halos);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setPulsePoints([]);
+          setPulseHalos([]);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [ready, region, mapSize, pulseSummaries, places, activities]);
   const latestSelectionActions = useRef({ onActivity, onPerson });
   useEffect(() => {
     latestSelectionActions.current = { onActivity, onPerson };
@@ -498,23 +581,31 @@ export default function BeaconMap({
                   latitude: nextRegion.latitude,
                   longitude: nextRegion.longitude,
                 },
-                zoom: Math.log2(360 / nextRegion.longitudeDelta),
-                bounds: {
-                  north: nextRegion.latitude + nextRegion.latitudeDelta / 2,
-                  south: nextRegion.latitude - nextRegion.latitudeDelta / 2,
-                  east: nextRegion.longitude + nextRegion.longitudeDelta / 2,
-                  west: nextRegion.longitude - nextRegion.longitudeDelta / 2,
-                },
+                zoom: nativeMapZoom(nextRegion.longitudeDelta, mapSize.width),
+                bounds: providerMapBounds(
+                  nextRegion.latitude + nextRegion.latitudeDelta / 2,
+                  nextRegion.latitude - nextRegion.latitudeDelta / 2,
+                  nextRegion.longitude + nextRegion.longitudeDelta / 2,
+                  nextRegion.longitude - nextRegion.longitudeDelta / 2,
+                ),
               },
               details?.isGesture ?? gestureActive.current,
             );
           gestureActive.current = false;
+          onGestureChange?.(false);
           void updateAnchor();
         }}
         onPanDrag={() => {
           gestureActive.current = true;
+          onGestureChange?.(true);
         }}
-        onRegionChange={updateAnchor}
+        onRegionChange={(next, details) => {
+          if (details?.isGesture) {
+            gestureActive.current = true;
+            onGestureChange?.(true);
+          }
+          void updateAnchor();
+        }}
         userInterfaceStyle={resolvedAppearance}
         customMapStyle={
           Platform.OS === "android" && mapStyle !== "satellite"
@@ -565,6 +656,28 @@ export default function BeaconMap({
                 )
             : () => onMapTap?.()
         }
+        onLongPress={(event) => {
+          if (!onPick)
+            onLongPress?.({
+              coordinate: event.nativeEvent.coordinate,
+              point: event.nativeEvent.position,
+            });
+        }}
+        onPoiClick={(event) => {
+          if (!onPick) {
+            const value = event.nativeEvent;
+            onPlace?.(
+              {
+                placeKey: value.placeId,
+                name: value.name,
+                lat: value.coordinate.latitude,
+                lng: value.coordinate.longitude,
+                category: "unknown",
+              },
+              value.position,
+            );
+          }
+        }}
         showsUserLocation={false}
       >
         {pins
@@ -630,7 +743,7 @@ export default function BeaconMap({
             if (!activity) return null;
             const selectedPin = selectedActivityId === activity.id;
             const streetTime =
-              nativeMapZoom(region.longitudeDelta, mapSize.width) >= 16
+              nativeMapZoom(region.longitudeDelta, mapSize.width) >= 15
                 ? mapTimeChip(activity, now)
                 : undefined;
             return (
@@ -647,6 +760,7 @@ export default function BeaconMap({
                 selected={selectedPin}
                 dimmed={!!selectedActivityId && !selectedPin}
                 streetTime={streetTime}
+                dot={nativeMapZoom(region.longitudeDelta, mapSize.width) < 12}
                 appearanceKey={appearanceKey}
                 disabled={!!onPick}
                 onPress={selectActivity}
@@ -694,6 +808,15 @@ export default function BeaconMap({
           />
         )}
       </MapView>
+      <PulseMapOverlay
+        points={pulsePoints}
+        halos={pulseHalos}
+        places={pulsePlaces}
+        onPlace={onPlace}
+        popToken={pulsePopToken}
+        popPlaceKey={pulsePopPlaceKey}
+        calm={calm}
+      />
       {!onPick && !hideControls && (
         <View
           style={{ position: "absolute", top: controlsTop, right: 16, gap: 8 }}

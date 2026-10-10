@@ -14,6 +14,11 @@ import type {
   MapPointPriority,
 } from "@/src/features/maps/cluster";
 import type { ExplorationTarget, MapViewport } from "@/src/shared/exploration";
+import type { PulsePlace, PulseSummary } from "@/src/features/pulse/types";
+export type MapTouchPoint = {
+  coordinate: { latitude: number; longitude: number };
+  point: { x: number; y: number };
+};
 export type MapControlCommand = {
   kind: "zoom-in" | "zoom-out" | "fit";
   revision: number;
@@ -51,6 +56,14 @@ export interface MapProps {
   ) => void;
   clusterPriorities?: Record<string, MapPointPriority>;
   onMapTap?: () => void;
+  onLongPress?: (touch: MapTouchPoint) => void;
+  onPlace?: (place: PulsePlace, point?: { x: number; y: number }) => void;
+  onGestureChange?: (active: boolean) => void;
+  pulseSummaries?: readonly PulseSummary[];
+  pulsePlaces?: readonly PulsePlace[];
+  pulsePopToken?: string | number;
+  pulsePopPlaceKey?: string;
+  calm?: boolean;
   onViewportChange?: (viewport: MapViewport, userMoved?: boolean) => void;
   onOptions?: () => void;
   onRecenter?: () => void;

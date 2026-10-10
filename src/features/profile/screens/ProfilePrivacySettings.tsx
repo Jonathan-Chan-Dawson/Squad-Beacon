@@ -17,7 +17,8 @@ import {
   useTheme,
 } from "@/src/shared/ui";
 import { SegmentedControl } from "@/src/shared/design-system";
-import { activeOrganizationRole } from "@/src/features/organizations/domain";
+import { activeOrganizationRole, canReadOrganization } from "@/src/features/organizations/domain";
+import { canOpenSquadProfile } from "@/src/features/people/squadProfile";
 
 type Visibility = "public" | "friends" | "custom";
 
@@ -170,15 +171,12 @@ function ProfilePrivacyForm({
           (block.blocker_id === person.id && block.blocked_id === userId),
       ),
   );
-  const selectableSquads = data.squads.filter((squad) =>
-    data.squad_members.some(
-      (member) => member.squad_id === squad.id && member.user_id === userId,
-    ),
-  );
+  const selectableSquads = data.squads.filter((squad) => canOpenSquadProfile(data, squad.id, userId));
   const selectableLists = data.lists.filter((list) => list.owner_id === userId);
   const selectableOrganizations = data.organizations.filter(
     (org) =>
       !!userId &&
+      canReadOrganization(data, org.id, userId) &&
       !!activeOrganizationRole(org, data.organization_members, userId),
   );
   const visiblePeople = selectablePeople.filter((person) => {

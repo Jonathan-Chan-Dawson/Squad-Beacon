@@ -16,18 +16,19 @@ for (const phone of phones) {
     await page.getByRole("button", { name: /Explore the demo/ }).click();
     await page.getByRole("tab", { name: "Beacons", exact: true }).click();
 
-    const current = page.getByRole("button", { name: "Current", exact: true });
+    const periods = page.getByRole("tablist", { name: "Beacon time period" });
+    const current = periods.getByRole("tab", { name: /^Now, / });
     await expect(current).toBeVisible();
     await expect(current).toHaveAttribute("aria-selected", "true");
-    for (const name of ["Current", "Upcoming", "Past"]) {
-      const bounds = await page.getByRole("button", { name, exact: true }).boundingBox();
+    for (const name of [/^Now, /, /^Upcoming, /, /^Past$/]) {
+      const bounds = await periods.getByRole("tab", { name }).boundingBox();
       expect(bounds?.width).toBeGreaterThanOrEqual(44);
       expect(bounds?.height).toBeGreaterThanOrEqual(44);
     }
-    await page.getByRole("button", { name: "Upcoming", exact: true }).click();
-    await expect(page.getByText("Coming up", { exact: true })).toBeVisible();
-    await page.getByRole("button", { name: "Past", exact: true }).click();
-    await expect(page.getByText("Beacon history", { exact: true })).toBeVisible();
+    await periods.getByRole("tab", { name: /^Upcoming, / }).click();
+    await expect(page.getByText("This week", { exact: true })).toBeInViewport();
+    await periods.getByRole("tab", { name: "Past", exact: true }).click();
+    await expect(page.getByRole("button", { name: /^Beacon Plans, \d+$/ })).toBeInViewport();
     await current.click();
 
     const create = page.getByRole("button", { name: "Create Beacon", exact: true });

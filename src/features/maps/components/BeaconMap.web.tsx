@@ -3,6 +3,14 @@ import { miniAvatarSvg, avatarSeed } from "@/src/features/profile/avatarArt";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, View } from "react-native";
 import { LocateFixed, SlidersHorizontal } from "lucide-react-native";
+import { pulseLayerPolicy } from "@/src/features/pulse/pulseLayerPolicy";
+import {
+  collidePulseBadges,
+  pulseHasBeacon,
+  type ProjectedPulse,
+} from "@/src/features/maps/pulseMapPolicy";
+import { providerMapBounds } from "../mapBounds";
+import { PulseMapOverlay } from "./PulseMapOverlay";
 import type * as Leaflet from "leaflet";
 import "@/components/leaflet.web.css";
 import type { MapProps } from "@/src/features/maps/components/BeaconMap";
@@ -98,6 +106,8 @@ export default function BeaconMap(props: MapProps) {
     removeGestureListeners = useRef<(() => void) | null>(null),
     appliedControlRevision = useRef<number | null>(null);
   const [ready, setReady] = useState(false);
+  const [pulsePoints, setPulsePoints] = useState<ProjectedPulse[]>([]);
+  const [pulseHalos, setPulseHalos] = useState<ProjectedPulse[]>([]);
   const [viewVersion, setViewVersion] = useState(0);
   const [layoutVersion, setLayoutVersion] = useState(0);
   const { showAvatars } = usePreferences();
@@ -131,9 +141,13 @@ export default function BeaconMap(props: MapProps) {
       const markGesture = () => {
         programmaticMove.current = false;
         gestureActive.current = true;
+        latest.current.onGestureChange?.(true);
       };
       const markZoomGesture = () => {
-        if (!programmaticMove.current) gestureActive.current = true;
+        if (!programmaticMove.current) {
+          gestureActive.current = true;
+          latest.current.onGestureChange?.(true);
+        }
       };
       const markPinchGesture = (event: TouchEvent) => {
         if (event.touches.length > 1) markGesture();
@@ -166,16 +180,17 @@ export default function BeaconMap(props: MapProps) {
                 longitude: m.getCenter().lng,
               },
               zoom: m.getZoom(),
-              bounds: {
-                north: northEast.lat,
-                south: southWest.lat,
-                east: northEast.lng,
-                west: southWest.lng,
-              },
+              bounds: providerMapBounds(
+                northEast.lat,
+                southWest.lat,
+                northEast.lng,
+                southWest.lng,
+              ),
             },
             gestureActive.current && !programmaticMove.current,
           );
         gestureActive.current = false;
+        latest.current.onGestureChange?.(false);
         programmaticMove.current = false;
         setViewVersion((version) => version + 1);
       });
@@ -183,6 +198,16 @@ export default function BeaconMap(props: MapProps) {
         if (latest.current.onPick)
           latest.current.onPick(e.latlng.lat, e.latlng.lng);
         else latest.current.onMapTap?.();
+      });
+      m.on("contextmenu", (event) => {
+        if (!latest.current.onPick)
+          latest.current.onLongPress?.({
+            coordinate: {
+              latitude: event.latlng.lat,
+              longitude: event.latlng.lng,
+            },
+            point: event.containerPoint,
+          });
       });
       setReady(true);
     });
@@ -211,6 +236,49 @@ export default function BeaconMap(props: MapProps) {
       attribution: cartoAttribution,
     }).addTo(currentMap);
   }, [ready, resolvedAppearance]);
+  useEffect(() => {
+    const m = map.current;
+    if (!ready || !m || !hasUsableMapViewport(m)) return;
+    const bounds = m.getBounds();
+    const policy = pulseLayerPolicy(
+      m.getZoom(),
+      providerMapBounds(
+        bounds.getNorth(),
+        bounds.getSouth(),
+        bounds.getEast(),
+        bounds.getWest(),
+      ),
+      props.pulseSummaries ?? [],
+    );
+    const project = (summaries: typeof policy.badges) =>
+      summaries.map((summary) => {
+        const point = m.latLngToContainerPoint([summary.lat, summary.lng]);
+        return {
+          summary,
+          x: point.x,
+          y: point.y,
+          satellite: pulseHasBeacon(
+            summary,
+            props.places.filter((place) =>
+              props.activities.some(
+                (activity) => activity.id === place.activity_id,
+              ),
+            ),
+          ),
+        };
+      });
+    setPulsePoints(
+      collidePulseBadges(project(policy.badges), m.getSize().x, m.getSize().y),
+    );
+    setPulseHalos(project(policy.halos));
+  }, [
+    ready,
+    viewVersion,
+    layoutVersion,
+    props.pulseSummaries,
+    props.places,
+    props.activities,
+  ]);
   const {
     activities,
     availabilityActivities = activities,
@@ -299,7 +367,10 @@ export default function BeaconMap(props: MapProps) {
       timeChip = "",
     ) => {
       const node = document.createElement("button");
-      const visualSize = markerVisualSize(friend ? "person" : "beacon");
+      const dot = !friend && m.getZoom() < 12;
+      const visualSize = dot
+        ? 10
+        : markerVisualSize(friend ? "person" : "beacon");
       const iconWidth = 64;
       const iconHeight = friend ? 52 : timeChip ? 68 : 48;
       node.type = "button";
@@ -334,11 +405,12 @@ export default function BeaconMap(props: MapProps) {
         node.append(age);
       } else {
         const notch = document.createElement("span");
-        notch.style.cssText = `position:absolute;top:34px;width:12px;height:12px;background:${tone};transform:rotate(45deg);border-radius:2px;z-index:-1;`;
+        if (dot) notch.style.display = "none";
+        notch.style.cssText = `display:${dot ? "none" : "block"};position:absolute;top:34px;width:12px;height:12px;background:${tone};transform:rotate(45deg);border-radius:2px;z-index:-1;`;
         node.append(notch);
         const badge = document.createElement("span");
-        badge.textContent = text;
-        badge.style.cssText = `position:relative;width:${visualSize}px;height:${visualSize}px;border:3px solid ${tone};border-radius:50%;background:${colors.white};display:flex;align-items:center;justify-content:center;box-shadow:0 3px 10px #172c2940;font-size:22px;`;
+        badge.textContent = dot ? "" : text;
+        badge.style.cssText = `position:relative;width:${visualSize}px;height:${visualSize}px;border:${dot ? 1 : 3}px solid ${dot ? colors.white : tone};border-radius:50%;background:${dot ? tone : colors.white};display:flex;align-items:center;justify-content:center;box-shadow:0 3px 10px #172c2940;font-size:22px;`;
         node.append(badge);
         if (timeChip) {
           const chip = document.createElement("span");
@@ -641,7 +713,7 @@ export default function BeaconMap(props: MapProps) {
           "",
           "unknown",
           isNowBeacon(a, now),
-          m.getZoom() >= 16 ? mapTimeChip(a, now) : "",
+          m.getZoom() >= 15 ? mapTimeChip(a, now) : "",
         );
     });
     if (showAvatars)
@@ -910,6 +982,15 @@ export default function BeaconMap(props: MapProps) {
           zIndex: 0,
           background: colors.bg,
         }}
+      />
+      <PulseMapOverlay
+        points={pulsePoints}
+        halos={pulseHalos}
+        places={props.pulsePlaces ?? []}
+        onPlace={props.onPlace}
+        popToken={props.pulsePopToken}
+        popPlaceKey={props.pulsePopPlaceKey}
+        calm={props.calm}
       />
       {!onPick && !hideControls ? (
         <View

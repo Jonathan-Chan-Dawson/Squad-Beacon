@@ -5,7 +5,9 @@ import Constants from "expo-constants";
 import type { DeviceNotificationState } from "./notificationState.types";
 export type { DeviceNotificationState } from "./notificationState.types";
 const receiptKey = "beacon-push-registration-viewer";
-export async function readDeviceNotificationState(viewerId: string): Promise<DeviceNotificationState> {
+export async function readDeviceNotificationState(
+  viewerId: string,
+): Promise<DeviceNotificationState> {
   const [permission, token, receipt] = await Promise.all([
     Notifications.getPermissionsAsync(),
     SecureStore.getItemAsync("beacon-push-token"),
@@ -14,13 +16,31 @@ export async function readDeviceNotificationState(viewerId: string): Promise<Dev
   return {
     supported: true,
     physicalDevice: Device.isDevice,
-    projectConfigured: !!(Constants.expoConfig?.extra?.eas?.projectId ?? Constants.easConfig?.projectId),
-    permission: permission.granted || permission.ios?.status === Notifications.IosAuthorizationStatus.PROVISIONAL ? "granted" : permission.status === "denied" ? "denied" : "undetermined",
+    projectConfigured: !!(
+      Constants.expoConfig?.extra?.eas?.projectId ??
+      Constants.easConfig?.projectId
+    ),
+    permission:
+      permission.granted ||
+      permission.ios?.status ===
+        Notifications.IosAuthorizationStatus.PROVISIONAL
+        ? "granted"
+        : permission.status === "denied"
+          ? "denied"
+          : "undetermined",
     canAskAgain: permission.canAskAgain,
-    registration: !token ? "none" : receipt === viewerId ? "verified" : "unknown",
+    registration: !token
+      ? "none"
+      : receipt === viewerId
+        ? "verified"
+        : "unknown",
   };
 }
 export async function acknowledgePushRegistration(viewerId: string) {
-  await SecureStore.setItemAsync(receiptKey, viewerId, { keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY });
+  await SecureStore.setItemAsync(receiptKey, viewerId, {
+    keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK_THIS_DEVICE_ONLY,
+  });
 }
-export async function clearPushRegistrationReceipt() { await SecureStore.deleteItemAsync(receiptKey); }
+export async function clearPushRegistrationReceipt() {
+  await SecureStore.deleteItemAsync(receiptKey);
+}

@@ -21,7 +21,13 @@ import {
   INTEREST_CATALOG,
 } from "@/src/shared/interestCatalog";
 import { ProfileAvatar } from "./ProfileAvatar";
-import { profileEditorDraft, profileEditorPayload, profileSavePayload, validateProfileEditor } from "./profileEditorDraft";
+import {
+  profileEditorDraft,
+  profileEditorPayload,
+  profileSavePayload,
+  requireProfileOwner,
+  validateProfileEditor,
+} from "./profileEditorDraft";
 
 export type { AspirationGoal } from "@/src/shared/types";
 export { getAspirationProgress } from "@/src/features/profile/aspirations";
@@ -118,15 +124,16 @@ function ProfileSurveyBody({
   onProfileSaved,
 }: SurveyProps) {
   const { styles, colors } = useTheme();
-  const { act, userId, data } = useBeacon();
+  const { act, userId, getCurrentProfile } = useBeacon();
   const [baseline] = useState(() => profileEditorDraft(profile));
-  const latest = useRef({ profile, userId });
   const savingLock = useRef(false);
   const active = useRef(true);
   useEffect(() => {
-    latest.current = { profile: data.profiles.find((item) => item.id === profile.id) ?? profile, userId };
-  }, [data.profiles, profile, userId]);
-  useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
+    active.current = true;
+    return () => {
+      active.current = false;
+    };
+  }, []);
   const [step, setStep] = useState(0);
   const [showIdentity, setShowIdentity] = useState(mode === "retake");
   const [name, setName] = useState(profile.name);
@@ -208,21 +215,41 @@ function ProfileSurveyBody({
 
   async function saveSurvey(status: "completed" | "skipped") {
     if (savingLock.current) return;
-    if (status === "skipped" && mode === "retake") { onSkip?.(); return; }
+    if (status === "skipped" && mode === "retake") {
+      onSkip?.();
+      return;
+    }
     savingLock.current = true;
     setSavingProfile(true);
     onSavingChange?.(true);
     try {
-      const current = latest.current;
-      if (!current.userId || current.userId !== current.profile.id || current.profile.id !== profile.id)
-        throw new Error("Your profile session changed. Reopen the survey.");
-      const payload = status === "skipped" ? profileSavePayload(current.profile) : profileEditorPayload(
-        current.profile, baseline, validateProfileEditor({ ...baseline, name, bio, identity_tags: identityTags, interests, aspiration_goals: aspirations }),
-      );
-      await act("save_profile", { ...payload, onboarding_survey_status: status });
+      const current = requireProfileOwner(getCurrentProfile(), profile.id);
+      const payload =
+        status === "skipped"
+          ? profileSavePayload(current)
+          : profileEditorPayload(
+              current,
+              baseline,
+              validateProfileEditor({
+                ...baseline,
+                name,
+                bio,
+                identity_tags: identityTags,
+                interests,
+                aspiration_goals: aspirations,
+              }),
+            );
+      await act("save_profile", {
+        ...payload,
+        onboarding_survey_status: status,
+      });
       if (active.current) {
         if (status === "completed") {
-          onProfileSaved?.({ ...current.profile, ...payload, onboarding_survey_status: status });
+          onProfileSaved?.({
+            ...current,
+            ...payload,
+            onboarding_survey_status: status,
+          });
           onComplete?.();
         } else onSkip?.();
       }
@@ -252,16 +279,28 @@ function ProfileSurveyBody({
   ][step];
 
   return (
-    <View testID="profile-survey" pointerEvents={savingProfile ? "none" : "auto"} style={{ gap: 14 }}>
+    <View
+      testID="profile-survey"
+      pointerEvents={savingProfile ? "none" : "auto"}
+      style={{ gap: 14 }}
+    >
       <View style={[styles.card, { gap: 12 }]}>
         <Text style={styles.label}>
           PART {step + 1} OF 3 · {stepCopy.label.toUpperCase()}
         </Text>
         <Text style={styles.h2}>{stepCopy.title}</Text>
         <Txt muted>{stepCopy.body}</Txt>
-        <View accessibilityRole="progressbar" accessibilityLabel="Profile survey progress"
-          accessibilityValue={{ min: 1, max: 3, now: step + 1, text: `Step ${step + 1} of 3: ${stepCopy.label}` }}
-          style={{ flexDirection: "row", gap: 6 }}>
+        <View
+          accessibilityRole="progressbar"
+          accessibilityLabel="Profile survey progress"
+          accessibilityValue={{
+            min: 1,
+            max: 3,
+            now: step + 1,
+            text: `Step ${step + 1} of 3: ${stepCopy.label}`,
+          }}
+          style={{ flexDirection: "row", gap: 6 }}
+        >
           {[0, 1, 2].map((number) => (
             <View
               key={number}
@@ -282,16 +321,18 @@ function ProfileSurveyBody({
             <ProfileAvatar profile={profile} size={64} />
           </View>
           <Field
+            editable={!savingProfile}
             label="Name"
             value={name}
             onChangeText={setName}
             maxLength={80}
           />
           <Field
+            editable={!savingProfile}
             label="About me (optional)"
             value={bio}
             onChangeText={setBio}
-            maxLength={280}
+            maxLength={500}
             multiline
           />
           <Button
@@ -339,6 +380,7 @@ function ProfileSurveyBody({
             })}
           </View>
           <Field
+            editable={!savingProfile}
             label="Add your own identity tag"
             value={identityCustom}
             onChangeText={setIdentityCustom}
@@ -398,6 +440,7 @@ function ProfileSurveyBody({
             <Txt muted>You can choose up to 50 identity tags.</Txt>
           )}
           <Field
+            editable={!savingProfile}
             label="Search interests"
             value={interestSearch}
             onChangeText={setInterestSearch}
@@ -447,6 +490,7 @@ function ProfileSurveyBody({
             <Txt muted>Keep typing to narrow these results.</Txt>
           )}
           <Field
+            editable={!savingProfile}
             label="Add an interest that is not listed"
             value={interestCustom}
             onChangeText={setInterestCustom}
@@ -573,6 +617,7 @@ function ProfileSurveyBody({
                   </Pressable>
                 </View>
                 <Field
+                  editable={!savingProfile}
                   label="Aspiration"
                   value={aspiration.title}
                   onChangeText={(title) =>
@@ -601,6 +646,7 @@ function ProfileSurveyBody({
             );
           })}
           <Field
+            editable={!savingProfile}
             label="A new aspiration"
             value={aspirationTitle}
             onChangeText={setAspirationTitle}
@@ -646,12 +692,21 @@ function ProfileSurveyBody({
       <View style={{ flexDirection: "row", gap: 10 }}>
         {step > 0 && (
           <View style={{ flex: 1 }}>
-            <Button secondary title="Back" disabled={savingProfile} onPress={() => setStep(step - 1)} />
+            <Button
+              secondary
+              title="Back"
+              disabled={savingProfile}
+              onPress={() => setStep(step - 1)}
+            />
           </View>
         )}
         {step < 2 ? (
           <View style={{ flex: 1 }}>
-            <Button title="Continue" disabled={savingProfile} onPress={() => setStep(step + 1)} />
+            <Button
+              title="Continue"
+              disabled={savingProfile}
+              onPress={() => setStep(step + 1)}
+            />
           </View>
         ) : (
           <View style={{ flex: 1 }}>

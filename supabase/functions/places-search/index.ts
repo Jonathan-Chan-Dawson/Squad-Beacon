@@ -44,7 +44,7 @@ Deno.serve(async (request) => {
           "Content-Type": "application/json",
           "X-Goog-Api-Key": apiKey,
           "X-Goog-FieldMask":
-            "places.id,places.displayName,places.formattedAddress,places.location,places.viewport,places.attributions,places.googleMapsUri",
+            "places.id,places.displayName,places.formattedAddress,places.location,places.viewport,places.attributions,places.googleMapsUri,places.primaryType",
         },
         body: JSON.stringify({ textQuery: query.trim(), pageSize: 6 }),
         signal: AbortSignal.timeout(10000),
@@ -67,6 +67,7 @@ Deno.serve(async (request) => {
         viewport: place.viewport,
         attributions: place.attributions ?? [],
         googleMapsUri: place.googleMapsUri,
+        primaryType: place.primaryType,
       }));
     return new Response(JSON.stringify({ places }), {
       headers: { ...cors, "Cache-Control": "no-store" },

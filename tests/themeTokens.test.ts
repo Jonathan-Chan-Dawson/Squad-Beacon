@@ -28,12 +28,12 @@ test("semantic foreground colors meet contrast on every palette and soft tint", 
         appearance,
       );
       const context = `${name} ${appearance}`;
-      for (const background of [colors.background, colors.surface]) {
+      for (const background of [colors.bg, colors.surface]) {
         assert.ok(contrast(colors.textPrimary, background) >= 4.5, `${context} body text`);
         assert.ok(contrast(colors.textSecondary, background) >= 4.5, `${context} supporting text`);
         assert.ok(contrast(colors.danger, background) >= 4.5, `${context} destructive row text`);
       }
-      assert.ok(contrast(colors.background, colors.danger) >= 4.5, `${context} destructive button text`);
+      assert.ok(contrast(colors.bg, colors.danger) >= 4.5, `${context} destructive button text`);
       assert.ok(
         contrast(colors.onAccent, colors.accent) >= 4.5,
         `${context} button text`,

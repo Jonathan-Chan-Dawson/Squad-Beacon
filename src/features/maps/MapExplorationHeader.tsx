@@ -12,7 +12,7 @@ import {
   type LayoutChangeEvent,
 } from "react-native";
 import { useReducedMotion } from "react-native-reanimated";
-import { Compass, Search, SlidersHorizontal, X } from "lucide-react-native";
+import { Search, SlidersHorizontal, X } from "lucide-react-native";
 import { GlassBar } from "@/src/shared/design-system";
 import { MotionPressable } from "@/src/shared/MotionPressable";
 import { useTheme } from "@/src/shared/ui";
@@ -64,7 +64,6 @@ export function MapExplorationHeader({
   query,
   onQueryChange,
   onQuerySubmit,
-  onCompass,
   onQuickFilter,
   selectedQuickFilter,
   onOpenFilters,
@@ -78,12 +77,12 @@ export function MapExplorationHeader({
   onSearchFocus,
   sharingIndicator,
   loading,
+  calm = false,
   onHeightChange,
 }: {
   query: string;
   onQueryChange: (value: string) => void;
   onQuerySubmit: (value: string) => void;
-  onCompass: () => void;
   onQuickFilter: (filter: MapQuickFilter) => void;
   selectedQuickFilter: MapQuickFilter | null;
   onOpenFilters: () => void;
@@ -97,6 +96,7 @@ export function MapExplorationHeader({
   onSearchFocus: () => void;
   sharingIndicator?: React.ReactNode;
   loading?: boolean;
+  calm?: boolean;
   onHeightChange: (height: number) => void;
 }) {
   const { colors } = useTheme();
@@ -109,7 +109,13 @@ export function MapExplorationHeader({
   const [areaAnimation] = useState(() => new Animated.Value(0));
   const [shimmerProgress] = useState(() => new Animated.Value(0));
   const [railWidth, setRailWidth] = useState(0);
-  const quickFilters: MapQuickFilter[] = ["All", "Friends", "Squads", "Public", "Now"];
+  const quickFilters: MapQuickFilter[] = [
+    "All",
+    "Friends",
+    "Squads",
+    "Public",
+    "Now",
+  ];
 
   useEffect(() => {
     if (!selectedQuickFilter) return;
@@ -136,7 +142,13 @@ export function MapExplorationHeader({
         useNativeDriver: false,
       }),
     ]).start();
-  }, [indicatorWidth, indicatorX, railLayouts, reducedMotion, selectedQuickFilter]);
+  }, [
+    indicatorWidth,
+    indicatorX,
+    railLayouts,
+    reducedMotion,
+    selectedQuickFilter,
+  ]);
 
   useEffect(() => {
     if (Platform.OS === "web") return;
@@ -183,7 +195,7 @@ export function MapExplorationHeader({
     <View
       testID="map-exploration-header"
       onLayout={(event) => onHeightChange(event.nativeEvent.layout.height)}
-      style={{ width: "100%", gap: 6, paddingHorizontal: 12 }}
+      style={{ width: "100%", gap: 6, paddingHorizontal: 16 }}
     >
       <View style={{ flexDirection: "row", alignItems: "center", gap: 7 }}>
         <GlassBar
@@ -200,82 +212,99 @@ export function MapExplorationHeader({
         >
           <Search size={18} color={colors.green} />
           <TextInput
-            accessibilityLabel="Search Beacons, People, and places"
+            accessibilityLabel="Search places, Beacons, people and communities"
             placeholder="Search Beacons, people, places"
             placeholderTextColor={colors.muted}
             value={query}
             onChangeText={onQueryChange}
             onFocus={onSearchFocus}
-            onSubmitEditing={({ nativeEvent }) => onQuerySubmit(nativeEvent.text)}
+            onSubmitEditing={({ nativeEvent }) =>
+              onQuerySubmit(nativeEvent.text)
+            }
             returnKeyType="search"
-            style={{
-              flex: 1,
-              minWidth: 0,
-              height: 46,
-              color: colors.ink,
-              fontSize: 14,
-              paddingVertical: 8,
-              outlineStyle: "none",
-            } as never}
+            style={
+              {
+                flex: 1,
+                minWidth: 0,
+                height: 46,
+                color: colors.ink,
+                fontSize: 14,
+                paddingVertical: 8,
+                outlineStyle: "none",
+              } as never
+            }
           />
         </GlassBar>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Compass"
-          onPress={onCompass}
-          style={{
-            width: 44,
-            height: 44,
-            borderRadius: 22,
-            alignItems: "center",
-            justifyContent: "center",
-            backgroundColor: colors.white + "E8",
-            borderWidth: 1,
-            borderColor: colors.line,
-          }}
-        >
-          <Compass size={19} color={colors.green} />
-        </Pressable>
       </View>
 
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 7 }}>
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 7,
+          opacity: calm ? 0.65 : 1,
+          transform: reducedMotion ? [] : [{ scaleY: calm ? 0.92 : 1 }],
+        }}
+      >
         <View
           onLayout={(event) => setRailWidth(event.nativeEvent.layout.width)}
-          style={{ flex: 1, minWidth: 0, height: 44, position: "relative", overflow: "hidden" }}
+          style={{
+            flex: 1,
+            minWidth: 0,
+            height: 44,
+            position: "relative",
+            overflow: "hidden",
+          }}
         >
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
             style={{ flex: 1, minWidth: 0, height: 44, overflow: "hidden" }}
-            contentContainerStyle={{ alignItems: "center", gap: 3, minHeight: 42 }}
+            contentContainerStyle={{
+              alignItems: "center",
+              gap: 3,
+              minHeight: 42,
+            }}
           >
-          <View pointerEvents="none" style={{ position: "absolute", top: 1, bottom: 1, left: 0, right: 0 }}>
-            {selectedQuickFilter ? (
-              <Animated.View
-                style={{
-                  position: "absolute",
-                  top: 1,
-                  left: indicatorX,
-                  width: indicatorWidth,
-                  height: 44,
-                  borderRadius: 20,
-                  backgroundColor: colors.green,
+            <View
+              pointerEvents="none"
+              style={{
+                position: "absolute",
+                top: 1,
+                bottom: 1,
+                left: 0,
+                right: 0,
+              }}
+            >
+              {selectedQuickFilter ? (
+                <Animated.View
+                  style={{
+                    position: "absolute",
+                    top: 1,
+                    left: indicatorX,
+                    width: indicatorWidth,
+                    height: 44,
+                    borderRadius: 20,
+                    backgroundColor: colors.green,
+                  }}
+                />
+              ) : null}
+            </View>
+            {quickFilters.map((label) => (
+              <QuickChip
+                key={label}
+                label={label}
+                selected={selectedQuickFilter === label}
+                onPress={() => onQuickFilter(label)}
+                onLayout={(event) => {
+                  const { x, width } = event.nativeEvent.layout;
+                  setRailLayouts((current) => ({
+                    ...current,
+                    [label]: { x, width },
+                  }));
                 }}
               />
-            ) : null}
-          </View>
-          {quickFilters.map((label) => (
-            <QuickChip
-              key={label}
-              label={label}
-              selected={selectedQuickFilter === label}
-              onPress={() => onQuickFilter(label)}
-              onLayout={(event) => {
-                const { x, width } = event.nativeEvent.layout;
-                setRailLayouts((current) => ({ ...current, [label]: { x, width } }));
-              }}
-            />
-          ))}
+            ))}
           </ScrollView>
           {loading ? (
             <Animated.View
@@ -289,7 +318,14 @@ export function MapExplorationHeader({
                 borderRadius: 16,
                 backgroundColor: colors.white,
                 opacity: reducedMotion ? 0.1 : 0.17,
-                transform: [{ translateX: shimmerProgress.interpolate({ inputRange: [0, 1], outputRange: [-64, railWidth + 16] }) }],
+                transform: [
+                  {
+                    translateX: shimmerProgress.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [-64, railWidth + 16],
+                    }),
+                  },
+                ],
               }}
             />
           ) : null}
@@ -297,7 +333,11 @@ export function MapExplorationHeader({
         <Pressable
           testID="map-filter-toggle"
           accessibilityRole="button"
-          accessibilityLabel={activeFilterCount ? `Filters, ${activeFilterCount} active` : "Filters"}
+          accessibilityLabel={
+            activeFilterCount
+              ? `Filters, ${activeFilterCount} active`
+              : "Filters"
+          }
           onPress={onOpenFilters}
           style={{
             minHeight: 44,
@@ -330,7 +370,9 @@ export function MapExplorationHeader({
                 backgroundColor: colors.green,
               }}
             >
-              <Text style={{ color: colors.white, fontSize: 10, fontWeight: "800" }}>
+              <Text
+                style={{ color: colors.white, fontSize: 10, fontWeight: "800" }}
+              >
                 {activeFilterCount}
               </Text>
             </View>
@@ -363,7 +405,9 @@ export function MapExplorationHeader({
                 backgroundColor: colors.white + "E6",
               }}
             >
-              <Text style={{ color: colors.ink, fontSize: 12, fontWeight: "600" }}>
+              <Text
+                style={{ color: colors.ink, fontSize: 12, fontWeight: "600" }}
+              >
                 {chip.label}
               </Text>
               <X size={13} color={colors.muted} />
@@ -374,68 +418,78 @@ export function MapExplorationHeader({
 
       {sharingIndicator}
 
-      {searchAreaVisible ? (() => {
-        const action = (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Search this area"
-            accessibilityState={{ busy: searchAreaState === "loading" }}
-            onPress={onSearchThisArea}
-            disabled={searchAreaState === "loading"}
-            hitSlop={10}
-            style={{
+      {searchAreaVisible
+        ? (() => {
+            const action = (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Search this area"
+                accessibilityState={{ busy: searchAreaState === "loading" }}
+                onPress={onSearchThisArea}
+                disabled={searchAreaState === "loading"}
+                hitSlop={10}
+                style={{
+                  minHeight: 44,
+                  zIndex: 31,
+                  elevation: 31,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 7,
+                  paddingHorizontal: 14,
+                  borderRadius: 19,
+                  backgroundColor: colors.ink,
+                  opacity: searchAreaState === "loading" ? 0.9 : 1,
+                }}
+              >
+                {searchAreaState === "loading" ? (
+                  <ActivityIndicator size="small" color={colors.white} />
+                ) : null}
+                <Text
+                  style={{
+                    color: colors.white,
+                    fontSize: 13,
+                    fontWeight: "700",
+                  }}
+                >
+                  {searchAreaState === "loading"
+                    ? "Searching this area"
+                    : searchAreaState === "count"
+                      ? `${searchAreaCount} Beacons here`
+                      : "Search this area"}
+                </Text>
+              </Pressable>
+            );
+            const wrapperStyle = {
+              position: "relative" as const,
+              zIndex: 30,
+              elevation: 30,
               minHeight: 44,
-              zIndex: 31,
-              elevation: 31,
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 7,
-              paddingHorizontal: 14,
-              borderRadius: 19,
-              backgroundColor: colors.ink,
-              opacity: searchAreaState === "loading" ? 0.9 : 1,
-            }}
-          >
-            {searchAreaState === "loading" ? (
-              <ActivityIndicator size="small" color={colors.white} />
-            ) : null}
-            <Text style={{ color: colors.white, fontSize: 13, fontWeight: "700" }}>
-              {searchAreaState === "loading"
-                ? "Searching this area"
-                : searchAreaState === "count"
-                  ? `${searchAreaCount} Beacons here`
-                  : "Search this area"}
-            </Text>
-          </Pressable>
-        );
-        const wrapperStyle = {
-          position: "relative" as const,
-          zIndex: 30,
-          elevation: 30,
-          minHeight: 44,
-          alignItems: "center" as const,
-        };
-        return Platform.OS === "web" ? (
-          <View style={wrapperStyle}>{action}</View>
-        ) : (
-          <Animated.View
-            style={[
-              wrapperStyle,
-              {
-                opacity: areaAnimation,
-                transform: [{
-                  translateY: areaAnimation.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [-7, 0],
-                  }),
-                }],
-              },
-            ]}
-          >
-            {action}
-          </Animated.View>
-        );
-      })() : null}
+              alignItems: "center" as const,
+            };
+            return Platform.OS === "web" ? (
+              <View style={wrapperStyle}>{action}</View>
+            ) : (
+              <Animated.View
+                style={[
+                  wrapperStyle,
+                  {
+                    opacity: areaAnimation,
+                    transform: [
+                      {
+                        translateY: areaAnimation.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [-7, 0],
+                        }),
+                      },
+                    ],
+                  },
+                ]}
+              >
+                {action}
+              </Animated.View>
+            );
+          })()
+        : null}
     </View>
   );
 }

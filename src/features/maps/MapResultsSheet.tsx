@@ -42,6 +42,11 @@ import {
 } from "@/src/shared/design-system";
 import { Button, IconButton } from "@/src/shared/ui";
 
+import type { PulsePlace, PulseSummary } from "@/src/features/pulse/types";
+import { pulseSummaryLabel } from "@/src/features/pulse/wording";
+import { pulseCopy } from "@/src/features/pulse/copy/pulse";
+import { summaryPulsePlace } from "@/src/features/maps/pulseMapPolicy";
+
 export type MapViewerCoordinate = { latitude: number; longitude: number };
 
 export type MapResultsSheetRef = {
@@ -54,6 +59,11 @@ export type MapResultsSheetProps = {
   /** Already filtered to readable Beacons in the current visible map region. */
   visibleActivities: readonly Activity[];
   selectedId: ID | null;
+  pulseSummaries?: readonly PulseSummary[];
+  pulsePlaces?: readonly PulsePlace[];
+  onSelectPlace?: (place: PulsePlace) => void;
+  pulseError?: string | null;
+  onRefreshPulse?: () => void;
   viewerCoordinate?: MapViewerCoordinate | null;
   /** Permission-safe Plan count from the current visible map query. */
   planCount?: number;
@@ -76,7 +86,8 @@ export type MapResultsSheetProps = {
 
 type MapResultItem =
   | { type: "activity"; id: ID; activity: Activity }
-  | { type: "person"; id: ID; profile: Profile };
+  | { type: "person"; id: ID; profile: Profile }
+  | { type: "update"; id: ID; summary: PulseSummary; place: PulsePlace };
 
 function distanceMiles(
   origin: MapViewerCoordinate | null | undefined,
@@ -381,6 +392,7 @@ function SheetList({
   onOpenDetail,
   onDirections,
   onListLayoutReady,
+  onSelectPlace,
 }: {
   items: readonly MapResultItem[];
   selectedId: ID | null;
@@ -391,8 +403,10 @@ function SheetList({
   onOpenDetail: (id: ID) => void;
   onDirections?: (id: ID) => void;
   onListLayoutReady: () => void;
+  onSelectPlace?: (place: PulsePlace) => void;
 }) {
   const renderScrollComponent = useBottomSheetScrollableCreator();
+  const { colors } = useDesignTheme();
   const renderItem = useCallback(
     ({ item }: { item: MapResultItem }) =>
       item.type === "activity" ? (
@@ -404,6 +418,36 @@ function SheetList({
           onOpenDetail={onOpenDetail}
           onDirections={onDirections}
         />
+      ) : item.type === "update" ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${item.place.name}: ${pulseSummaryLabel(item.summary)}`}
+          onPress={() => onSelectPlace?.(item.place)}
+          style={{
+            minHeight: 64,
+            padding: 12,
+            borderRadius: 14,
+            borderWidth: 1,
+            borderColor: colors.border,
+            backgroundColor: colors.surfaceRaised,
+          }}
+        >
+          <Text style={{ color: colors.textSecondary, fontSize: 11 }}>
+            {pulseCopy.liveUpdate}
+          </Text>
+          <Text
+            style={{
+              color: colors.textPrimary,
+              fontSize: 15,
+              fontWeight: "700",
+            }}
+          >
+            {item.place.name}
+          </Text>
+          <Text style={{ color: colors.textSecondary, fontSize: 12 }}>
+            {pulseSummaryLabel(item.summary)}
+          </Text>
+        </Pressable>
       ) : (
         <PersonResultRow profile={item.profile} onSelect={onSelectPerson} />
       ),
@@ -412,8 +456,10 @@ function SheetList({
       onOpenDetail,
       onSelect,
       onSelectPerson,
+      onSelectPlace,
       selectedId,
       viewerCoordinate,
+      colors,
     ],
   );
   const keyExtractor = useCallback(
@@ -453,6 +499,11 @@ export const MapResultsSheet = forwardRef<
   {
     visibleActivities,
     selectedId,
+    pulseSummaries = [],
+    pulsePlaces = [],
+    onSelectPlace,
+    pulseError,
+    onRefreshPulse,
     viewerCoordinate,
     planCount: suppliedPlanCount,
     clusterActivityIds,
@@ -543,8 +594,16 @@ export const MapResultsSheet = forwardRef<
         id: profile.id,
         profile,
       })),
+      ...(!isClusterView
+        ? pulseSummaries.map((summary) => ({
+            type: "update" as const,
+            id: summary.placeKey,
+            summary,
+            place: summaryPulsePlace(summary, pulsePlaces),
+          }))
+        : []),
     ],
-    [activities, people],
+    [activities, people, isClusterView, pulseSummaries, pulsePlaces],
   );
 
   const flushPendingScroll = useCallback(() => {
@@ -559,7 +618,8 @@ export const MapResultsSheet = forwardRef<
       !committedData ||
       index >= committedData.length ||
       committedData[index]?.id !== id
-    ) return;
+    )
+      return;
     let layout: ReturnType<typeof list.getLayout>;
     try {
       layout = list.getLayout(index);
@@ -567,7 +627,8 @@ export const MapResultsSheet = forwardRef<
       if (
         error instanceof Error &&
         error.message === "index out of bounds, not enough layouts"
-      ) return;
+      )
+        return;
       throw error;
     }
     if (
@@ -578,7 +639,8 @@ export const MapResultsSheet = forwardRef<
       !Number.isFinite(layout.height) ||
       layout.width <= 0 ||
       layout.height <= 0
-    ) return;
+    )
+      return;
     const layoutRevisionAtRequest = layoutReadyRevision.current;
     scrollingId.current = id;
     const handleScrollError = (error: unknown) => {
@@ -602,7 +664,10 @@ export const MapResultsSheet = forwardRef<
         }
         return;
       }
-      console.error("[MapResultsSheet] Failed to scroll to the selected result", error);
+      console.error(
+        "[MapResultsSheet] Failed to scroll to the selected result",
+        error,
+      );
     };
     try {
       void list
@@ -643,10 +708,13 @@ export const MapResultsSheet = forwardRef<
     schedulePendingScroll();
   }, [schedulePendingScroll]);
 
-  const scrollToActivity = useCallback((id: ID) => {
-    pendingScrollId.current = id;
-    schedulePendingScroll();
-  }, [schedulePendingScroll]);
+  const scrollToActivity = useCallback(
+    (id: ID) => {
+      pendingScrollId.current = id;
+      schedulePendingScroll();
+    },
+    [schedulePendingScroll],
+  );
 
   useEffect(() => {
     latestItems.current = items;
@@ -666,10 +734,14 @@ export const MapResultsSheet = forwardRef<
     listLayoutReady.current = false;
   }, [loading]);
 
-  useEffect(() => () => {
-    if (scrollFrame.current != null) cancelAnimationFrame(scrollFrame.current);
-    pendingScrollId.current = null;
-  }, []);
+  useEffect(
+    () => () => {
+      if (scrollFrame.current != null)
+        cancelAnimationFrame(scrollFrame.current);
+      pendingScrollId.current = null;
+    },
+    [],
+  );
 
   useImperativeHandle(
     forwardedRef,
@@ -744,7 +816,9 @@ export const MapResultsSheet = forwardRef<
       enablePanDownToClose={false}
       topInset={insets.top}
       bottomInset={0}
-      containerStyle={Platform.OS === "web" ? undefined : { zIndex: 20, elevation: 20 }}
+      containerStyle={
+        Platform.OS === "web" ? undefined : { zIndex: 20, elevation: 20 }
+      }
       onChange={onSheetChange}
       backgroundStyle={{
         backgroundColor: colors.surface,
@@ -760,7 +834,9 @@ export const MapResultsSheet = forwardRef<
         height: 4,
         opacity: 0.45,
       }}
-      style={Platform.OS === "web" ? { zIndex: 20 } : { zIndex: 20, elevation: 20 }}
+      style={
+        Platform.OS === "web" ? { zIndex: 20 } : { zIndex: 20, elevation: 20 }
+      }
     >
       <View style={{ flex: 1, minHeight: 0 }}>
         <View
@@ -846,6 +922,19 @@ export const MapResultsSheet = forwardRef<
             </Text>
           </Pressable>
         </View>
+        {pulseError ? (
+          <View style={{ paddingHorizontal: 16, paddingBottom: 8 }}>
+            <Text style={{ color: colors.textSecondary }}>
+              {pulseCopy.unavailable}
+            </Text>
+            <Button
+              title={pulseCopy.retry}
+              secondary
+              compact
+              onPress={() => onRefreshPulse?.()}
+            />
+          </View>
+        ) : null}
         {loading ? (
           <View style={{ flex: 1, minHeight: 0 }}>
             <LoadingRows />
@@ -861,6 +950,7 @@ export const MapResultsSheet = forwardRef<
               listRef={listRef}
               onSelect={onSelect}
               onSelectPerson={onSelectPerson}
+              onSelectPlace={onSelectPlace}
               onOpenDetail={onOpenDetail}
               onDirections={onDirections}
               onListLayoutReady={onListLayoutReady}
@@ -870,7 +960,9 @@ export const MapResultsSheet = forwardRef<
       </View>
     </BottomSheet>
   );
-  return Platform.OS === "web" ? sheet : (
+  return Platform.OS === "web" ? (
+    sheet
+  ) : (
     <View
       pointerEvents="box-none"
       style={{

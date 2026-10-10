@@ -5,6 +5,7 @@ export type WorldwidePlace = {
   coordinate: { latitude: number; longitude: number };
   attributions: { name: string; uri?: string }[];
   googleMapsUri?: string;
+  primaryType?: string;
 };
 
 const record = (value: unknown): Record<string, unknown> =>
@@ -69,6 +70,8 @@ export function parseWorldwidePlaces(value: unknown): WorldwidePlace[] {
         coordinate: { latitude, longitude },
         attributions,
         googleMapsUri: httpsUrl(place.googleMapsUri),
+        primaryType:
+          typeof place.primaryType === "string" ? place.primaryType : undefined,
       },
     ];
   });

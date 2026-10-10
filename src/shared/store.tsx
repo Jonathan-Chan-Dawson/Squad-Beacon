@@ -11,7 +11,13 @@ import * as Network from "expo-network";
 import type { Session } from "@supabase/supabase-js";
 import { supabase, rpc, clearPendingRequests } from "@/src/shared/supabase";
 import { DEMO_ID, demoAction, makeDemo } from "@/src/shared/demo";
-import { Data, Payload, emptyData, normalizeData } from "@/src/shared/types";
+import {
+  Data,
+  Payload,
+  emptyData,
+  normalizeData,
+  type Profile,
+} from "@/src/shared/types";
 import { clearPush, stopDeviceLocation } from "@/src/platform/device";
 import {
   normalizeSocialDirectoryQuery,
@@ -30,8 +36,13 @@ type Store = {
   error: string | null;
   session: Session | null;
   refresh: () => Promise<void>;
+  getCurrentProfile: () => Profile | null;
+  getViewerEpoch: () => number;
+  viewerEpoch: number;
   act: (action: string, payload?: Payload) => Promise<Record<string, unknown>>;
-  searchDirectory: (input: SocialDirectoryQuery) => Promise<SocialDirectorySummary[]>;
+  searchDirectory: (
+    input: SocialDirectoryQuery,
+  ) => Promise<SocialDirectorySummary[]>;
   startDemo: () => void;
   signOut: () => Promise<void>;
 };
@@ -48,8 +59,18 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
     dataRef.current = next;
     setDataState(next);
   }, []);
+  const getCurrentProfile = useCallback(() => {
+    const viewer = demo ? DEMO_ID : (session?.user.id ?? null);
+    const snapshot = dataRef.current;
+    if (!viewer || snapshot.viewer_id !== viewer) return null;
+    const profile = snapshot.profiles.find((person) => person.id === viewer);
+    return profile ? structuredClone(profile) : null;
+  }, [demo, session?.user.id]);
   const epoch = useRef(0),
     fetchId = useRef(0);
+  const [viewerEpoch, setViewerEpoch] = useState(0);
+  const viewerEpochRef = useRef(0);
+  const getViewerEpoch = useCallback(() => viewerEpochRef.current, []);
   useEffect(() => {
     if (!supabase) return;
     supabase.auth.getSession().then(({ data, error }) => {
@@ -62,6 +83,8 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
     } = supabase.auth.onAuthStateChange((event, next) => {
       if (event === "SIGNED_OUT" || event === "SIGNED_IN") {
         epoch.current++;
+        viewerEpochRef.current++;
+        setViewerEpoch(viewerEpochRef.current);
         setData(emptyData());
         if (event === "SIGNED_OUT") clearPendingRequests();
       }
@@ -94,30 +117,39 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
     }
     setLoading(false);
   }, [session, demo, setData]);
-  const searchDirectory = useCallback(async (input: SocialDirectoryQuery) => {
-    const query = normalizeSocialDirectoryQuery(input);
-    if (!query) return [];
-    if (demo) return searchSocialDirectoryInData(data, DEMO_ID, query);
-    if (!session || !supabase || data.viewer_id !== session.user.id) return [];
-    const viewerId = session.user.id;
-    const generation = epoch.current;
-    const { data: rows, error: failure } = await supabase.rpc("social_directory_search", {
-      p_query: query.query,
-      p_entity_type: query.entityType ?? "all",
-      p_page_size: query.pageSize ?? 20,
-      p_page_offset: query.pageOffset ?? 0,
-      p_parent_type: query.parentType ?? null,
-      p_parent_id: query.parentId ?? null,
-    });
-    const { data: currentAuth } = await supabase.auth.getSession();
-    if (
-      generation !== epoch.current ||
-      currentAuth.session?.user.id !== viewerId ||
-      !session || session.user.id !== viewerId
-    ) return [];
-    if (failure) throw new Error(failure.message);
-    return parseSocialDirectoryRows(rows);
-  }, [data, demo, session]);
+  const searchDirectory = useCallback(
+    async (input: SocialDirectoryQuery) => {
+      const query = normalizeSocialDirectoryQuery(input);
+      if (!query) return [];
+      if (demo) return searchSocialDirectoryInData(data, DEMO_ID, query);
+      if (!session || !supabase || data.viewer_id !== session.user.id)
+        return [];
+      const viewerId = session.user.id;
+      const generation = epoch.current;
+      const { data: rows, error: failure } = await supabase.rpc(
+        "social_directory_search",
+        {
+          p_query: query.query,
+          p_entity_type: query.entityType ?? "all",
+          p_page_size: query.pageSize ?? 20,
+          p_page_offset: query.pageOffset ?? 0,
+          p_parent_type: query.parentType ?? null,
+          p_parent_id: query.parentId ?? null,
+        },
+      );
+      const { data: currentAuth } = await supabase.auth.getSession();
+      if (
+        generation !== epoch.current ||
+        currentAuth.session?.user.id !== viewerId ||
+        !session ||
+        session.user.id !== viewerId
+      )
+        return [];
+      if (failure) throw new Error(failure.message);
+      return parseSocialDirectoryRows(rows);
+    },
+    [data, demo, session],
+  );
   useEffect(() => {
     if (demo || !session || !supabase) return;
     // Refresh crosses an async database boundary; state changes happen after the response.
@@ -174,7 +206,9 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
       if (demo) {
         const baseData = dataRef.current;
         if (baseData.viewer_id !== DEMO_ID)
-          throw new Error("The demo session ended. Open the demo again to continue.");
+          throw new Error(
+            "The demo session ended. Open the demo again to continue.",
+          );
         const next = demoAction(baseData, action, payload);
         setData(next);
         if (action === "create_space") {
@@ -184,19 +218,45 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
           return space ? { id: space.id, space_id: space.id } : {};
         }
         if (action === "create_space_from_squads") {
-          const space = next.spaces.find((item) => !baseData.spaces.some((old) => old.id === item.id));
-          return space ? { id: space.id, space_id: space.id, linked_squad_count: next.space_squads.filter((row) => row.space_id === space.id).length } : {};
+          const space = next.spaces.find(
+            (item) => !baseData.spaces.some((old) => old.id === item.id),
+          );
+          return space
+            ? {
+                id: space.id,
+                space_id: space.id,
+                linked_squad_count: next.space_squads.filter(
+                  (row) => row.space_id === space.id,
+                ).length,
+              }
+            : {};
         }
         if (action === "organize_squad_into_space") {
-          const space = next.spaces.find((item) => !baseData.spaces.some((old) => old.id === item.id));
+          const space = next.spaces.find(
+            (item) => !baseData.spaces.some((old) => old.id === item.id),
+          );
           if (!space) return {};
           const sourceSquadId = String(payload.squad_id ?? "");
           return {
             id: space.id,
             space_id: space.id,
             source_squad_id: sourceSquadId,
-            copied_member_count: next.space_members.filter((row) => row.space_id === space.id && row.user_id !== space.owner_id).length,
-            skipped_member_count: Math.max(0, baseData.squad_members.filter((row) => row.squad_id === sourceSquadId && row.user_id !== space.owner_id).length - next.space_members.filter((row) => row.space_id === space.id && row.user_id !== space.owner_id).length),
+            copied_member_count: next.space_members.filter(
+              (row) =>
+                row.space_id === space.id && row.user_id !== space.owner_id,
+            ).length,
+            skipped_member_count: Math.max(
+              0,
+              baseData.squad_members.filter(
+                (row) =>
+                  row.squad_id === sourceSquadId &&
+                  row.user_id !== space.owner_id,
+              ).length -
+                next.space_members.filter(
+                  (row) =>
+                    row.space_id === space.id && row.user_id !== space.owner_id,
+                ).length,
+            ),
           };
         }
         if (action === "create_organization") {
@@ -235,7 +295,8 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
         }
         if (action === "send_group_message") {
           const message = next.group_messages.find(
-            (item) => !baseData.group_messages.some((old) => old.id === item.id),
+            (item) =>
+              !baseData.group_messages.some((old) => old.id === item.id),
           );
           return message
             ? {
@@ -337,6 +398,8 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
       if (error) throw error;
     }
     epoch.current++;
+    viewerEpochRef.current++;
+    setViewerEpoch(viewerEpochRef.current);
     clearPendingRequests();
     setDemo(false);
     setSession(null);
@@ -353,10 +416,15 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
         loading,
         error,
         refresh,
+        getCurrentProfile,
+        getViewerEpoch,
+        viewerEpoch,
         act,
         searchDirectory,
         startDemo: () => {
           epoch.current++;
+          viewerEpochRef.current++;
+          setViewerEpoch(viewerEpochRef.current);
           setDemo(true);
           setData(normalizeData(makeDemo()));
           setLoading(false);
