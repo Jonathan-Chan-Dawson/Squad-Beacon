@@ -18,16 +18,14 @@ test("advanced map filters keep multi-category selection and reset cleanly", asy
       name: "Search Beacons, People, and places",
     }),
   ).toBeVisible();
-  await expect(page.getByRole("button", { name: "All", exact: true })).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
+  await expect(
+    page.getByRole("button", { name: "All", exact: true }),
+  ).toHaveAttribute("aria-selected", "true");
 
   await page.getByRole("button", { name: "Now", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Now", exact: true })).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
+  await expect(
+    page.getByRole("button", { name: "Now", exact: true }),
+  ).toHaveAttribute("aria-selected", "true");
   await page.getByRole("button", { name: "All", exact: true }).click();
 
   await page.getByRole("button", { name: "Filters", exact: true }).click();
@@ -35,19 +33,21 @@ test("advanced map filters keep multi-category selection and reset cleanly", asy
   await expect(filters).toBeVisible();
   await expect(filters.getByTestId("advanced-map-filters")).toBeVisible();
   for (const section of ["When", "Category", "Join"])
-    await expect(filters.getByText(section.toUpperCase(), { exact: true })).toBeVisible();
+    await expect(
+      filters.getByText(section.toUpperCase(), { exact: true }),
+    ).toBeVisible();
 
   await filters.getByRole("button", { name: "Study", exact: true }).click();
   await filters.getByRole("button", { name: "Gaming", exact: true }).click();
-  await expect(filters.getByRole("button", { name: "Study", exact: true })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
-  await expect(filters.getByRole("button", { name: "Gaming", exact: true })).toHaveAttribute(
-    "aria-pressed",
-    "true",
-  );
-  const showResults = filters.getByRole("button", { name: /^Show \d+ Beacons$/ });
+  await expect(
+    filters.getByRole("button", { name: "Study", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(
+    filters.getByRole("button", { name: "Gaming", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  const showResults = filters.getByRole("button", {
+    name: /^Show \d+ Beacons$/,
+  });
   await expect(showResults).toBeInViewport();
   await showResults.click();
   await expect(filters).toHaveCount(0);
@@ -62,25 +62,28 @@ test("advanced map filters keep multi-category selection and reset cleanly", asy
     page.getByRole("button", { name: "Filters, 2 active", exact: true }),
   ).toBeVisible();
 
-  await page.getByRole("button", { name: "Filters, 2 active", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Filters, 2 active", exact: true })
+    .click();
   const reopened = page.getByRole("dialog");
-  const reset = reopened.getByRole("button", { name: "Reset filters", exact: true });
+  const reset = reopened.getByRole("button", {
+    name: "Reset filters",
+    exact: true,
+  });
   await expect(reset).toContainText("2");
   await reset.click();
-  await expect(filters.getByRole("button", { name: "Study", exact: true })).toHaveAttribute(
-    "aria-pressed",
-    "false",
-  );
-  await expect(filters.getByRole("button", { name: "Gaming", exact: true })).toHaveAttribute(
-    "aria-pressed",
-    "false",
-  );
+  await expect(
+    filters.getByRole("button", { name: "Study", exact: true }),
+  ).toHaveAttribute("aria-pressed", "false");
+  await expect(
+    filters.getByRole("button", { name: "Gaming", exact: true }),
+  ).toHaveAttribute("aria-pressed", "false");
   await expect(reset).not.toContainText("2");
   await reopened.getByRole("button", { name: /^Show \d+ Beacons$/ }).click();
   await expect(reopened).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Remove Study filter", exact: true })).toHaveCount(
-    0,
-  );
+  await expect(
+    page.getByRole("button", { name: "Remove Study filter", exact: true }),
+  ).toHaveCount(0);
   await page.screenshot({ path: "test-results/map-redesign-filters-390.png" });
 });
 
@@ -108,14 +111,18 @@ test("Compass opens without requesting location, and selecting a result opens it
   await page.getByRole("button", { name: "Compass", exact: true }).click();
   const compass = page.getByRole("dialog");
   await expect(compass).toBeVisible();
-  await expect(compass.getByText("Centering the map never shares your location.")).toBeVisible();
+  await expect(
+    compass.getByText("Centering the map never shares your location."),
+  ).toBeVisible();
   for (const action of [
     "Use my location",
     "Return to overview",
     "Explore everywhere",
     "Search another place",
   ])
-    await expect(compass.getByRole("button", { name: action, exact: true })).toBeVisible();
+    await expect(
+      compass.getByRole("button", { name: action, exact: true }),
+    ).toBeVisible();
   expect(
     await page.evaluate(
       () => (window as Window & { __mapGeoCalls?: number }).__mapGeoCalls,
@@ -134,9 +141,14 @@ test("Compass opens without requesting location, and selecting a result opens it
   });
   await expect(match).toBeVisible();
   await match.click();
-  const preview = page.getByTestId("map-tooltip").getByTestId("map-tooltip-card").first();
+  const preview = page
+    .getByTestId("map-tooltip")
+    .getByTestId("map-tooltip-card")
+    .first();
   await expect(preview).toBeVisible();
-  await page.getByRole("button", { name: "Open Beacon list", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Open Beacon list", exact: true })
+    .click();
   const selectedRow = page.getByRole("button", {
     name: "Select Coffee & a little focus Beacon",
     exact: true,
@@ -147,9 +159,8 @@ test("Compass opens without requesting location, and selecting a result opens it
     .evaluateAll((rows) =>
       rows.map((row) => ({
         label: row.getAttribute("aria-label"),
-        borderColor: getComputedStyle(
-          row.parentElement?.parentElement ?? row,
-        ).borderColor,
+        borderColor: getComputedStyle(row.parentElement?.parentElement ?? row)
+          .borderColor,
       })),
     );
   const selectedStyle = rowStyles.find(
@@ -158,25 +169,39 @@ test("Compass opens without requesting location, and selecting a result opens it
   const unselectedStyle = rowStyles.find(
     (row) => row.label !== "Select Coffee & a little focus Beacon",
   );
-  expect(selectedStyle, "the selected Beacon row should be rendered").toBeDefined();
-  expect(unselectedStyle, "another visible row should provide an unselected comparison").toBeDefined();
+  expect(
+    selectedStyle,
+    "the selected Beacon row should be rendered",
+  ).toBeDefined();
+  expect(
+    unselectedStyle,
+    "another visible row should provide an unselected comparison",
+  ).toBeDefined();
   expect(selectedStyle!.borderColor).not.toBe(unselectedStyle!.borderColor);
-  await page.getByRole("button", { name: "Return to map", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Return to map", exact: true })
+    .click();
   await expect(preview).toContainText("Coffee & a little focus");
   await expect(preview).toContainText("going");
   await page.screenshot({ path: "test-results/map-redesign-preview-390.png" });
 
-  await page.getByRole("button", { name: "Open Beacon list", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Open Beacon list", exact: true })
+    .click();
   const row = page.getByRole("button", {
     name: "Select Coffee & a little focus Beacon",
     exact: true,
   });
   await row.click();
-  await page.getByRole("button", { name: "Return to map", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Return to map", exact: true })
+    .click();
   await expect(page.getByTestId("map-tooltip-card").first()).toContainText(
     "Coffee & a little focus",
   );
-  await page.getByRole("button", { name: "Open Beacon list", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Open Beacon list", exact: true })
+    .click();
   await page
     .getByRole("button", {
       name: "Open Coffee & a little focus Beacon details",
@@ -201,7 +226,9 @@ test("map controls and persistent results stay inside four phone viewports", asy
     await page.setViewportSize(phone);
     await demo(page);
     await expect(page.getByTestId("map-exploration-header")).toBeVisible();
-    const header = await page.getByTestId("map-exploration-header").boundingBox();
+    const header = await page
+      .getByTestId("map-exploration-header")
+      .boundingBox();
     expect(header).not.toBeNull();
 
     const controls = [];
@@ -214,98 +241,59 @@ test("map controls and persistent results stay inside four phone viewports", asy
       expect(bounds!.y).toBeGreaterThanOrEqual(header!.y + header!.height);
       controls.push(bounds!);
     }
-    expect(controls[0].y + controls[0].height).toBeLessThanOrEqual(controls[1].y);
-    expect(controls[1].y + controls[1].height).toBeLessThanOrEqual(controls[2].y);
+    expect(controls[0].y + controls[0].height).toBeLessThanOrEqual(
+      controls[1].y,
+    );
+    expect(controls[1].y + controls[1].height).toBeLessThanOrEqual(
+      controls[2].y,
+    );
 
-    await page.getByRole("button", { name: "Open Beacon list", exact: true }).click();
-    await expect(page.getByRole("button", { name: "Return to map", exact: true })).toBeVisible();
+    await page
+      .getByRole("button", { name: "Open Beacon list", exact: true })
+      .click();
+    await expect(
+      page.getByRole("button", { name: "Return to map", exact: true }),
+    ).toBeVisible();
     expect(
       await page.evaluate(
-        () => Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) <= innerWidth,
+        () =>
+          Math.max(
+            document.documentElement.scrollWidth,
+            document.body.scrollWidth,
+          ) <= innerWidth,
       ),
     ).toBe(true);
-    await page.screenshot({ path: `test-results/map-redesign-${phone.width}x${phone.height}.png` });
+    await page.screenshot({
+      path: `test-results/map-redesign-${phone.width}x${phone.height}.png`,
+    });
   }
 });
 
-test("panning offers an actionable Search this area control", async ({ page }) => {
-  test.setTimeout(15_000);
+test("panning updates map markers without a Search this area action", async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await demo(page);
-  const search = page.getByRole("textbox", {
-    name: "Search Beacons, People, and places",
-  });
-  await search.fill("game room");
-  await page.getByRole("button", { name: /^Explore The game room$/i }).first().click();
-  await expect(page.locator(".leaflet-container")).toBeVisible();
-
+  const map = page.locator(".leaflet-container");
+  await expect(map).toBeVisible();
+  const scale = page.locator(".leaflet-control-scale-line").first();
+  await expect(scale).not.toHaveText("");
+  const before = await scale.textContent();
   await page.mouse.move(210, 430);
-  await page.mouse.wheel(0, 600);
+  await page.mouse.wheel(0, 900);
+  await expect(scale).not.toHaveText(before!);
   await page.mouse.move(210, 430);
   await page.mouse.down();
   await page.mouse.move(80, 510, { steps: 12 });
   await page.mouse.up();
-
-  const searchArea = page.getByRole("button", {
-    name: "Search this area",
-    exact: true,
-  });
-  await expect(searchArea).toBeVisible();
-  await expect(searchArea).toBeEnabled();
-  const header = await page.getByTestId("map-exploration-header").boundingBox();
-  const button = await searchArea.boundingBox();
-  expect(button).not.toBeNull();
-  expect(button!.y).toBeLessThan(844 * 0.4);
-  expect(button!.y).toBeGreaterThan(header!.y);
-  const hitTest = await page.evaluate(({ x, y }) => {
-    const describe = (element: Element | null) => {
-      if (!element) return null;
-      const bounds = element.getBoundingClientRect();
-      const style = getComputedStyle(element);
-      return {
-        tag: element.tagName,
-        testID: element.getAttribute("data-testid"),
-        role: element.getAttribute("role"),
-        label: element.getAttribute("aria-label"),
-        className: typeof element.className === "string" ? element.className : "",
-        rect: {
-          x: bounds.x,
-          y: bounds.y,
-          width: bounds.width,
-          height: bounds.height,
-        },
-        position: style.position,
-        zIndex: style.zIndex,
-        pointerEvents: style.pointerEvents,
-        transform: style.transform,
-        overflow: style.overflow,
-        overflowX: style.overflowX,
-        overflowY: style.overflowY,
-        opacity: style.opacity,
-      };
-    };
-    const stack: Array<Record<string, unknown>> = [];
-    let element = document.elementFromPoint(x, y);
-    while (element && stack.length < 8) {
-      stack.push(describe(element)!);
-      element = element.parentElement;
-    }
-    const area = document.querySelector('[aria-label="Search this area"]');
-    const header = document.querySelector('[data-testid="map-exploration-header"]');
-    return {
-      pointStack: stack,
-      areaAncestors: [area, area?.parentElement, area?.parentElement?.parentElement, area?.parentElement?.parentElement?.parentElement, area?.parentElement?.parentElement?.parentElement?.parentElement].map(describe),
-      headerWrapper: describe(header?.parentElement ?? null),
-      fullMapScreen: describe(document.querySelector('[data-testid="full-map-screen"]')),
-      mapRoot: describe(document.querySelector('[aria-label="Beacon map"]')),
-    };
-  }, { x: button!.x + button!.width / 2, y: button!.y + button!.height / 2 });
-  expect(
-    hitTest.pointStack.some((element) => element.label === "Search this area"),
-    `the search action should receive center-point pointer hits: ${JSON.stringify({ button, hitTest })}`,
-  ).toBe(true);
-  await searchArea.click();
-  await expect(page.getByRole("button", { name: "Search this area", exact: true })).toHaveCount(
-    0,
-  );
+  await expect(
+    page
+      .locator(
+        'button[aria-label^="Map cluster:"], .leaflet-marker-icon[title^="Map:"]',
+      )
+      .first(),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Search this area", exact: true }),
+  ).toHaveCount(0);
 });

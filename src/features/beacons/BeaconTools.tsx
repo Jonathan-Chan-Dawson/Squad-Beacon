@@ -36,24 +36,52 @@ import {
 } from "@/src/features/beacons/focusTimer";
 import { canViewProfile } from "@/src/features/profile/privacy";
 import { useBeacon } from "@/src/shared/store";
-import { Action, Button, Chips, Field, Sheet, Txt, useTheme } from "@/src/shared/ui";
-import type { Activity, BeaconChecklistItem, BeaconChecklistSection, Payload } from "@/src/shared/types";
+import {
+  Action,
+  Button,
+  Chips,
+  Field,
+  Sheet,
+  Txt,
+  useTheme,
+} from "@/src/shared/ui";
+import type {
+  Activity,
+  BeaconChecklistItem,
+  BeaconChecklistSection,
+  Payload,
+} from "@/src/shared/types";
 
 type ToolSection = "checklist" | "journal" | "focus";
 type TimerMode = "Standard" | "Pomodoro";
 type PomodoroPhase = "Focus" | "Break";
 
 function formatTime(seconds: number) {
-  return String(Math.floor(seconds / 60)).padStart(2, "0") + ":" +
-    String(seconds % 60).padStart(2, "0");
+  return (
+    String(Math.floor(seconds / 60)).padStart(2, "0") +
+    ":" +
+    String(seconds % 60).padStart(2, "0")
+  );
 }
 
-export function BeaconTools({ activity }: { activity: Activity }) {
+export function BeaconTools({
+  activity,
+  section,
+}: {
+  activity: Activity;
+  section?: ToolSection;
+}) {
   const { colors, styles } = useTheme();
   const { data, userId, act, refresh } = useBeacon();
-  const checklistEnabled = isBeaconModuleEnabled(activity, "checklist");
-  const journalEnabled = isBeaconModuleEnabled(activity, "journal");
-  const focusEnabled = isBeaconModuleEnabled(activity, "focus");
+  const checklistEnabled =
+    isBeaconModuleEnabled(activity, "checklist") &&
+    (!section || section === "checklist");
+  const journalEnabled =
+    isBeaconModuleEnabled(activity, "journal") &&
+    (!section || section === "journal");
+  const focusEnabled =
+    isBeaconModuleEnabled(activity, "focus") &&
+    (!section || section === "focus");
   const enabledSections: ToolSection[] = [];
   if (checklistEnabled) enabledSections.push("checklist");
   if (journalEnabled) enabledSections.push("journal");
@@ -61,29 +89,40 @@ export function BeaconTools({ activity }: { activity: Activity }) {
   const [activeSection, setActiveSection] = useState<ToolSection | null>(
     enabledSections[0] ?? null,
   );
-  const displayedSection = enabledSections.includes(activeSection as ToolSection)
-    ? activeSection
-    : enabledSections[0] ?? null;
+  const displayedSection =
+    section ??
+    (enabledSections.includes(activeSection as ToolSection)
+      ? activeSection
+      : (enabledSections[0] ?? null));
 
   const [checklistText, setChecklistText] = useState("");
-  const [checklistDraftId, setChecklistDraftId] = useState(() => Crypto.randomUUID());
+  const [checklistDraftId, setChecklistDraftId] = useState(() =>
+    Crypto.randomUUID(),
+  );
   const [checklistSaving, setChecklistSaving] = useState(false);
   const [sectionText, setSectionText] = useState("");
-  const [sectionDraftId, setSectionDraftId] = useState(() => Crypto.randomUUID());
+  const [sectionDraftId, setSectionDraftId] = useState(() =>
+    Crypto.randomUUID(),
+  );
   const [sectionBusy, setSectionBusy] = useState(false);
   const [newItemSectionId, setNewItemSectionId] = useState<string | null>(null);
-  const [editingItem, setEditingItem] = useState<BeaconChecklistItem | null>(null);
+  const [editingItem, setEditingItem] = useState<BeaconChecklistItem | null>(
+    null,
+  );
   const [itemText, setItemText] = useState("");
   const [itemSectionId, setItemSectionId] = useState<string | null>(null);
   const [itemAssigneeId, setItemAssigneeId] = useState<string | null>(null);
   const [itemSaving, setItemSaving] = useState(false);
-  const [editingSection, setEditingSection] = useState<BeaconChecklistSection | null>(null);
+  const [editingSection, setEditingSection] =
+    useState<BeaconChecklistSection | null>(null);
   const [sectionEditTitle, setSectionEditTitle] = useState("");
   const [sectionEditBusy, setSectionEditBusy] = useState(false);
 
   const [noteBody, setNoteBody] = useState<string | null>(null);
   const [noteHeading, setNoteHeading] = useState<string | null>(null);
-  const [noteVisibility, setNoteVisibility] = useState<"private" | "shared" | null>(null);
+  const [noteVisibility, setNoteVisibility] = useState<
+    "private" | "shared" | null
+  >(null);
   const [noteSaving, setNoteSaving] = useState(false);
   const [noteError, setNoteError] = useState("");
 
@@ -133,8 +172,7 @@ export function BeaconTools({ activity }: { activity: Activity }) {
       ...data.rsvps
         .filter(
           (rsvp) =>
-            rsvp.activity_id === activity.id &&
-            isApprovedGoing(activity, rsvp),
+            rsvp.activity_id === activity.id && isApprovedGoing(activity, rsvp),
         )
         .map((rsvp) => rsvp.user_id),
     ]),
@@ -147,7 +185,12 @@ export function BeaconTools({ activity }: { activity: Activity }) {
       (id === userId || canViewProfile(data, profile, userId));
     return {
       id,
-      label: id === userId ? "You" : visible ? profile?.name ?? "Participant" : "Participant",
+      label:
+        id === userId
+          ? "You"
+          : visible
+            ? (profile?.name ?? "Participant")
+            : "Participant",
     };
   });
   const completedCount = checklist.filter((item) => item.completed).length;
@@ -181,8 +224,9 @@ export function BeaconTools({ activity }: { activity: Activity }) {
     )
       return;
     ensuredCopyActivity.current = activity.id;
-    void act("ensure_saved_checklist_copy", { activity_id: activity.id })
-      .catch(() => undefined);
+    void act("ensure_saved_checklist_copy", { activity_id: activity.id }).catch(
+      () => undefined,
+    );
   }, [act, activity.id, allowed, checklistEnabled, userId]);
 
   const run = async (action: string, payload: Payload) => {
@@ -192,7 +236,9 @@ export function BeaconTools({ activity }: { activity: Activity }) {
       await act(action, payload);
     } catch (failure) {
       setInlineError(
-        failure instanceof Error ? failure.message : "Could not save that change.",
+        failure instanceof Error
+          ? failure.message
+          : "Could not save that change.",
       );
     } finally {
       setBusy(false);
@@ -211,8 +257,7 @@ export function BeaconTools({ activity }: { activity: Activity }) {
       canManage ||
       item.author_id === userId);
   const deleteItem = (authorId: string) =>
-    !!userId &&
-    canDeleteBeaconModuleEntry(data, activity, authorId, userId);
+    !!userId && canDeleteBeaconModuleEntry(data, activity, authorId, userId);
   const openEditItem = (item: BeaconChecklistItem) => {
     setEditingItem(item);
     setItemText(item.text);
@@ -236,7 +281,11 @@ export function BeaconTools({ activity }: { activity: Activity }) {
       });
       setEditingItem(null);
     } catch (failure) {
-      setInlineError(failure instanceof Error ? failure.message : "Could not edit that item.");
+      setInlineError(
+        failure instanceof Error
+          ? failure.message
+          : "Could not edit that item.",
+      );
     } finally {
       setItemSaving(false);
     }
@@ -245,11 +294,11 @@ export function BeaconTools({ activity }: { activity: Activity }) {
     const body = (noteBody ?? ownNote?.body ?? "").trim();
     const heading = (noteHeading ?? ownNote?.section_heading ?? "").trim();
     if (!body || body.length > 1000) {
-      setNoteError("Write a Beacon Note of 1 to 1000 characters.");
+      setNoteError("Write a note of 1 to 1000 characters.");
       return;
     }
     if (!notesWritable || !userId) {
-      setNoteError("You need current access to save a Beacon Note.");
+      setNoteError("You need current access to save a Beacon Sketchboard.");
       return;
     }
     setNoteSaving(true);
@@ -267,7 +316,11 @@ export function BeaconTools({ activity }: { activity: Activity }) {
       setNoteHeading(null);
       setNoteVisibility(null);
     } catch (failure) {
-      setNoteError(failure instanceof Error ? failure.message : "Could not save your Beacon Note.");
+      setNoteError(
+        failure instanceof Error
+          ? failure.message
+          : "Could not save your note.",
+      );
       await refresh().catch(() => undefined);
     } finally {
       setNoteSaving(false);
@@ -285,7 +338,11 @@ export function BeaconTools({ activity }: { activity: Activity }) {
         expected_revision: ownNote.revision,
       });
     } catch (failure) {
-      setNoteError(failure instanceof Error ? failure.message : "Could not change Beacon Note visibility.");
+      setNoteError(
+        failure instanceof Error
+          ? failure.message
+          : "Could not change Beacon Sketchboard visibility.",
+      );
       setNoteVisibility(ownNote.visibility);
       await refresh().catch(() => undefined);
     } finally {
@@ -294,21 +351,24 @@ export function BeaconTools({ activity }: { activity: Activity }) {
   };
   const resetTimer = () => {
     setPomodoroPhase("Focus");
-    const duration = timerMode === "Pomodoro"
-      ? 25 * 60
-      : Math.max(1, Math.min(1440, Number(standardMinutes) || 25)) * 60;
+    const duration =
+      timerMode === "Pomodoro"
+        ? 25 * 60
+        : Math.max(1, Math.min(1440, Number(standardMinutes) || 25)) * 60;
     setTimer(createFocusTimer(duration));
   };
   const switchTimerMode = (mode: TimerMode) => {
     setTimerMode(mode);
     setPomodoroPhase("Focus");
-    const duration = mode === "Pomodoro"
-      ? 25 * 60
-      : Math.max(1, Math.min(1440, Number(standardMinutes) || 25)) * 60;
+    const duration =
+      mode === "Pomodoro"
+        ? 25 * 60
+        : Math.max(1, Math.min(1440, Number(standardMinutes) || 25)) * 60;
     setTimer(createFocusTimer(duration));
   };
   const startNextPomodoroPhase = () => {
-    const nextPhase: PomodoroPhase = pomodoroPhase === "Focus" ? "Break" : "Focus";
+    const nextPhase: PomodoroPhase =
+      pomodoroPhase === "Focus" ? "Break" : "Focus";
     const nextTimer = createFocusTimer((nextPhase === "Break" ? 5 : 25) * 60);
     setPomodoroPhase(nextPhase);
     setTimer(startFocusTimer(nextTimer, Date.now()));
@@ -320,7 +380,10 @@ export function BeaconTools({ activity }: { activity: Activity }) {
         <View style={styles.card}>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={(displayedSection === "checklist" ? "Collapse" : "Expand") + " checklist"}
+            accessibilityLabel={
+              (displayedSection === "checklist" ? "Collapse" : "Expand") +
+              " checklist"
+            }
             accessibilityState={{ expanded: displayedSection === "checklist" }}
             onPress={() =>
               setActiveSection((current) =>
@@ -350,15 +413,22 @@ export function BeaconTools({ activity }: { activity: Activity }) {
             <View style={{ gap: 9 }}>
               {canManage && activity.status === "scheduled" ? (
                 <View style={{ gap: 5 }}>
-                  <Text style={styles.label}>Who can edit checklist items?</Text>
+                  <Text style={styles.label}>
+                    Who can edit checklist items?
+                  </Text>
                   <Chips
                     accessibilityPrefix="Checklist editors"
                     options={["Participants", "Managers"]}
-                    value={activity.checklist_edit_policy === "managers" ? "Managers" : "Participants"}
+                    value={
+                      activity.checklist_edit_policy === "managers"
+                        ? "Managers"
+                        : "Participants"
+                    }
                     onChange={(choice) =>
                       void run("set_checklist_edit_policy", {
                         activity_id: activity.id,
-                        policy: choice === "Managers" ? "managers" : "participants",
+                        policy:
+                          choice === "Managers" ? "managers" : "participants",
                       })
                     }
                   />
@@ -371,7 +441,9 @@ export function BeaconTools({ activity }: { activity: Activity }) {
                 return (
                   <View key={section.id} style={{ gap: 5 }}>
                     <View style={[styles.row, { minHeight: 44 }]}>
-                      <Text style={[styles.label, { flex: 1 }]}>{section.title}</Text>
+                      <Text style={[styles.label, { flex: 1 }]}>
+                        {section.title}
+                      </Text>
                       {checklistEditable ? (
                         <Pressable
                           accessibilityRole="button"
@@ -380,7 +452,12 @@ export function BeaconTools({ activity }: { activity: Activity }) {
                             setEditingSection(section);
                             setSectionEditTitle(section.title);
                           }}
-                          style={{ width: 44, height: 44, alignItems: "center", justifyContent: "center" }}
+                          style={{
+                            width: 44,
+                            height: 44,
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
                         >
                           <Pencil size={17} color={colors.green} />
                         </Pressable>
@@ -389,8 +466,17 @@ export function BeaconTools({ activity }: { activity: Activity }) {
                         <Pressable
                           accessibilityRole="button"
                           accessibilityLabel={"Delete section " + section.title}
-                          onPress={() => void run("delete_checklist_section", { id: section.id })}
-                          style={{ width: 44, height: 44, alignItems: "center", justifyContent: "center" }}
+                          onPress={() =>
+                            void run("delete_checklist_section", {
+                              id: section.id,
+                            })
+                          }
+                          style={{
+                            width: 44,
+                            height: 44,
+                            alignItems: "center",
+                            justifyContent: "center",
+                          }}
                         >
                           <Trash size={17} color={colors.muted} />
                         </Pressable>
@@ -405,7 +491,9 @@ export function BeaconTools({ activity }: { activity: Activity }) {
                         editable={canEditItem(item)}
                         deletable={deleteItem(item.author_id)}
                         assignedName={
-                          assignees.find((assignee) => assignee.id === item.assignee_id)?.label
+                          assignees.find(
+                            (assignee) => assignee.id === item.assignee_id,
+                          )?.label
                         }
                         authorName={noteAuthorName(item.author_id)}
                         busy={busy}
@@ -416,7 +504,9 @@ export function BeaconTools({ activity }: { activity: Activity }) {
                           })
                         }
                         onEdit={() => openEditItem(item)}
-                        onDelete={() => void run("delete_checklist_item", { id: item.id })}
+                        onDelete={() =>
+                          void run("delete_checklist_item", { id: item.id })
+                        }
                       />
                     ))}
                   </View>
@@ -427,7 +517,9 @@ export function BeaconTools({ activity }: { activity: Activity }) {
                 if (!items.length && sections.length) return null;
                 return (
                   <View style={{ gap: 5 }}>
-                    {sections.length ? <Text style={styles.label}>Unsectioned</Text> : null}
+                    {sections.length ? (
+                      <Text style={styles.label}>Unsectioned</Text>
+                    ) : null}
                     {items.map((item) => (
                       <ChecklistItemRow
                         key={item.id}
@@ -437,7 +529,9 @@ export function BeaconTools({ activity }: { activity: Activity }) {
                         editable={canEditItem(item)}
                         deletable={deleteItem(item.author_id)}
                         assignedName={
-                          assignees.find((assignee) => assignee.id === item.assignee_id)?.label
+                          assignees.find(
+                            (assignee) => assignee.id === item.assignee_id,
+                          )?.label
                         }
                         authorName={noteAuthorName(item.author_id)}
                         busy={busy}
@@ -448,26 +542,36 @@ export function BeaconTools({ activity }: { activity: Activity }) {
                           })
                         }
                         onEdit={() => openEditItem(item)}
-                        onDelete={() => void run("delete_checklist_item", { id: item.id })}
+                        onDelete={() =>
+                          void run("delete_checklist_item", { id: item.id })
+                        }
                       />
                     ))}
                   </View>
                 );
               })()}
-              {!checklist.length ? <Txt muted>No checklist items yet.</Txt> : null}
+              {!checklist.length ? (
+                <Txt muted>No checklist items yet.</Txt>
+              ) : null}
               {checklistEditable && checklist.length < 50 ? (
                 <>
                   {sections.length > 0 ? (
                     <Chips
                       accessibilityPrefix="Add item to section"
-                      options={["Unsectioned", ...sections.map((section) => section.title)]}
+                      options={[
+                        "Unsectioned",
+                        ...sections.map((section) => section.title),
+                      ]}
                       value={
-                        sections.find((section) => section.id === newItemSectionId)?.title ??
-                        "Unsectioned"
+                        sections.find(
+                          (section) => section.id === newItemSectionId,
+                        )?.title ?? "Unsectioned"
                       }
                       onChange={(selection) =>
                         setNewItemSectionId(
-                          sections.find((section) => section.title === selection)?.id ?? null,
+                          sections.find(
+                            (section) => section.title === selection,
+                          )?.id ?? null,
                         )
                       }
                     />
@@ -490,7 +594,8 @@ export function BeaconTools({ activity }: { activity: Activity }) {
                     disabled={!checklistText.trim() || checklistSaving}
                     run={async () => {
                       const text = checklistText.trim();
-                      if (!text) throw new Error("Write a checklist item first.");
+                      if (!text)
+                        throw new Error("Write a checklist item first.");
                       setChecklistSaving(true);
                       try {
                         await act("add_checklist_item", {
@@ -536,7 +641,11 @@ export function BeaconTools({ activity }: { activity: Activity }) {
                         setSectionText("");
                         setSectionDraftId(Crypto.randomUUID());
                       } catch (failure) {
-                        setInlineError(failure instanceof Error ? failure.message : "Could not add that section.");
+                        setInlineError(
+                          failure instanceof Error
+                            ? failure.message
+                            : "Could not add that section.",
+                        );
                       } finally {
                         setSectionBusy(false);
                       }
@@ -556,7 +665,10 @@ export function BeaconTools({ activity }: { activity: Activity }) {
         <View style={styles.card}>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={(displayedSection === "journal" ? "Collapse" : "Expand") + " Beacon Note"}
+            accessibilityLabel={
+              (displayedSection === "journal" ? "Collapse" : "Expand") +
+              " Beacon Sketchboard"
+            }
             accessibilityState={{ expanded: displayedSection === "journal" }}
             onPress={() =>
               setActiveSection((current) =>
@@ -572,7 +684,7 @@ export function BeaconTools({ activity }: { activity: Activity }) {
             })}
           >
             <StickyNote size={20} color={colors.green} />
-            <Text style={[styles.h2, { flex: 1 }]}>Beacon Note</Text>
+            <Text style={[styles.h2, { flex: 1 }]}>Beacon Sketchboard</Text>
             <Text style={styles.muted}>{notes.length}/50</Text>
             {displayedSection === "journal" ? (
               <ChevronUp size={20} color={colors.muted} />
@@ -583,37 +695,48 @@ export function BeaconTools({ activity }: { activity: Activity }) {
           {displayedSection === "journal" ? (
             <View style={{ gap: 9 }}>
               <Txt muted>
-                Your note starts private. Share it with this Beacon only when you choose.
+                Your note starts private. Share it with this Beacon only when
+                you choose.
               </Txt>
-              {notes.filter((note) => note.author_id !== userId || note.id !== ownNote?.id).map((note) => {
-                const heading = note.section_heading?.trim();
-                return (
-                  <View
-                    key={note.id}
-                    style={{
-                      borderTopWidth: 1,
-                      borderTopColor: colors.line,
-                      paddingTop: 9,
-                      gap: 4,
-                    }}
-                  >
-                    <Text style={styles.muted}>
-                      {noteAuthorName(note.author_id)} · {note.visibility === "private" ? "Private" : "Shared"} ·{" "}
-                      {new Date(note.created_at).toLocaleDateString()}
-                    </Text>
-                    {heading ? <Text style={styles.label}>{heading}</Text> : null}
-                    <Text style={styles.body}>{note.body}</Text>
-                    {deleteNoteAllowed(note, userId, data, activity) ? (
-                      <Button
-                        compact
-                        secondary
-                        title="Delete Beacon Note"
-                        onPress={() => void run("delete_beacon_note", { id: note.id })}
-                      />
-                    ) : null}
-                  </View>
-                );
-              })}
+              {notes
+                .filter(
+                  (note) =>
+                    note.author_id !== userId || note.id !== ownNote?.id,
+                )
+                .map((note) => {
+                  const heading = note.section_heading?.trim();
+                  return (
+                    <View
+                      key={note.id}
+                      style={{
+                        borderTopWidth: 1,
+                        borderTopColor: colors.line,
+                        paddingTop: 9,
+                        gap: 4,
+                      }}
+                    >
+                      <Text style={styles.muted}>
+                        {noteAuthorName(note.author_id)} ·{" "}
+                        {note.visibility === "private" ? "Private" : "Shared"} ·{" "}
+                        {new Date(note.created_at).toLocaleDateString()}
+                      </Text>
+                      {heading ? (
+                        <Text style={styles.label}>{heading}</Text>
+                      ) : null}
+                      <Text style={styles.body}>{note.body}</Text>
+                      {deleteNoteAllowed(note, userId, data, activity) ? (
+                        <Button
+                          compact
+                          secondary
+                          title="Delete note"
+                          onPress={() =>
+                            void run("delete_beacon_note", { id: note.id })
+                          }
+                        />
+                      ) : null}
+                    </View>
+                  );
+                })}
               {ownNote || noteBody != null ? (
                 <>
                   <Field
@@ -623,7 +746,7 @@ export function BeaconTools({ activity }: { activity: Activity }) {
                     maxLength={80}
                   />
                   <Field
-                    label="Your Beacon Note"
+                    label="Your note"
                     value={noteBody ?? ownNote?.body ?? ""}
                     onChangeText={setNoteBody}
                     placeholder="A detail you want to remember"
@@ -632,10 +755,11 @@ export function BeaconTools({ activity }: { activity: Activity }) {
                     editable={!noteSaving && notesWritable}
                   />
                   <Chips
-                    accessibilityPrefix="Beacon Note visibility"
+                    accessibilityPrefix="Beacon Sketchboard visibility"
                     options={["Private", "Share with Beacon"]}
                     value={
-                      (noteVisibility ?? ownNote?.visibility ?? "private") === "shared"
+                      (noteVisibility ?? ownNote?.visibility ?? "private") ===
+                      "shared"
                         ? "Share with Beacon"
                         : "Private"
                     }
@@ -645,11 +769,13 @@ export function BeaconTools({ activity }: { activity: Activity }) {
                       )
                     }
                   />
-                  {ownNote && notesWritable ? (
+                  {notesWritable ? (
                     <Action
-                      title="Save Beacon Note"
+                      title="Save note"
                       secondary
-                      disabled={noteSaving || !(noteBody ?? ownNote.body).trim()}
+                      disabled={
+                        noteSaving || !(noteBody ?? ownNote?.body ?? "").trim()
+                      }
                       run={saveNote}
                     />
                   ) : null}
@@ -663,7 +789,7 @@ export function BeaconTools({ activity }: { activity: Activity }) {
                     maxLength={80}
                   />
                   <Field
-                    label="Your Beacon Note"
+                    label="Your note"
                     value={noteBody ?? ""}
                     onChangeText={setNoteBody}
                     placeholder="A detail you want to remember"
@@ -671,9 +797,13 @@ export function BeaconTools({ activity }: { activity: Activity }) {
                     multiline
                   />
                   <Chips
-                    accessibilityPrefix="Beacon Note visibility"
+                    accessibilityPrefix="Beacon Sketchboard visibility"
                     options={["Private", "Share with Beacon"]}
-                    value={(noteVisibility ?? "private") === "shared" ? "Share with Beacon" : "Private"}
+                    value={
+                      (noteVisibility ?? "private") === "shared"
+                        ? "Share with Beacon"
+                        : "Private"
+                    }
                     onChange={(choice) =>
                       setNoteVisibility(
                         choice === "Share with Beacon" ? "shared" : "private",
@@ -681,20 +811,22 @@ export function BeaconTools({ activity }: { activity: Activity }) {
                     }
                   />
                   <Action
-                    title="Save Beacon Note"
+                    title="Save note"
                     secondary
                     disabled={noteSaving || !(noteBody ?? "").trim()}
                     run={saveNote}
                   />
                 </>
               ) : (
-                <Txt muted>No Beacon Notes yet.</Txt>
+                <Txt muted>No notes yet.</Txt>
               )}
               {noteError ? (
-                <Text accessibilityRole="alert" style={styles.error}>{noteError}</Text>
+                <Text accessibilityRole="alert" style={styles.error}>
+                  {noteError}
+                </Text>
               ) : null}
               {activity.status === "cancelled" ? (
-                <Txt muted>Cancelled Beacon Notes are read-only.</Txt>
+                <Txt muted>Cancelled notes are read-only.</Txt>
               ) : null}
             </View>
           ) : null}
@@ -705,7 +837,9 @@ export function BeaconTools({ activity }: { activity: Activity }) {
         <View style={styles.card}>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={(displayedSection === "focus" ? "Collapse" : "Expand") + " timer"}
+            accessibilityLabel={
+              (displayedSection === "focus" ? "Collapse" : "Expand") + " timer"
+            }
             accessibilityState={{ expanded: displayedSection === "focus" }}
             onPress={() =>
               setActiveSection((current) =>
@@ -740,7 +874,9 @@ export function BeaconTools({ activity }: { activity: Activity }) {
                 <Field
                   label="Timer minutes"
                   value={standardMinutes}
-                  onChangeText={(value) => setStandardMinutes(value.replace(/[^0-9]/g, "").slice(0, 4))}
+                  onChangeText={(value) =>
+                    setStandardMinutes(value.replace(/[^0-9]/g, "").slice(0, 4))
+                  }
                   keyboardType="number-pad"
                   maxLength={4}
                 />
@@ -831,7 +967,11 @@ export function BeaconTools({ activity }: { activity: Activity }) {
                 {timer.phase === "complete" && timerMode === "Pomodoro" ? (
                   <Button
                     secondary
-                    title={pomodoroPhase === "Focus" ? "Start 5-minute break" : "Start next focus"}
+                    title={
+                      pomodoroPhase === "Focus"
+                        ? "Start 5-minute break"
+                        : "Start next focus"
+                    }
                     onPress={startNextPomodoroPhase}
                   />
                 ) : null}
@@ -843,11 +983,15 @@ export function BeaconTools({ activity }: { activity: Activity }) {
 
       {!allowed && (checklistEnabled || journalEnabled) ? (
         <View style={styles.card}>
-          <Txt muted>Join this Beacon to use its shared Checklist and Beacon Note.</Txt>
+          <Txt muted>
+            Join this Beacon to use its shared Checklist and Beacon Sketchboard.
+          </Txt>
         </View>
       ) : null}
       {inlineError ? (
-        <Text accessibilityRole="alert" style={styles.error}>{inlineError}</Text>
+        <Text accessibilityRole="alert" style={styles.error}>
+          {inlineError}
+        </Text>
       ) : null}
 
       <Sheet
@@ -864,14 +1008,18 @@ export function BeaconTools({ activity }: { activity: Activity }) {
         {sections.length ? (
           <Chips
             accessibilityPrefix="Move to section"
-            options={["Unsectioned", ...sections.map((section) => section.title)]}
+            options={[
+              "Unsectioned",
+              ...sections.map((section) => section.title),
+            ]}
             value={
               sections.find((section) => section.id === itemSectionId)?.title ??
               "Unsectioned"
             }
             onChange={(selection) =>
               setItemSectionId(
-                sections.find((section) => section.title === selection)?.id ?? null,
+                sections.find((section) => section.title === selection)?.id ??
+                  null,
               )
             }
           />
@@ -879,14 +1027,18 @@ export function BeaconTools({ activity }: { activity: Activity }) {
         <Txt muted>Assign to an approved participant</Txt>
         <Chips
           accessibilityPrefix="Assignee"
-          options={["Unassigned", ...assignees.map((assignee) => assignee.label)]}
+          options={[
+            "Unassigned",
+            ...assignees.map((assignee) => assignee.label),
+          ]}
           value={
-            assignees.find((assignee) => assignee.id === itemAssigneeId)?.label ??
-            "Unassigned"
+            assignees.find((assignee) => assignee.id === itemAssigneeId)
+              ?.label ?? "Unassigned"
           }
           onChange={(selection) =>
             setItemAssigneeId(
-              assignees.find((assignee) => assignee.label === selection)?.id ?? null,
+              assignees.find((assignee) => assignee.label === selection)?.id ??
+                null,
             )
           }
         />
@@ -920,7 +1072,11 @@ export function BeaconTools({ activity }: { activity: Activity }) {
               });
               setEditingSection(null);
             } catch (failure) {
-              setInlineError(failure instanceof Error ? failure.message : "Could not edit that section.");
+              setInlineError(
+                failure instanceof Error
+                  ? failure.message
+                  : "Could not edit that section.",
+              );
             } finally {
               setSectionEditBusy(false);
             }
@@ -928,7 +1084,8 @@ export function BeaconTools({ activity }: { activity: Activity }) {
         />
       </Sheet>
       <Txt muted>
-        Shared tool access follows the Beacon’s current access and block settings.
+        Shared tool access follows the Beacon’s current access and block
+        settings.
       </Txt>
     </View>
   );
@@ -973,7 +1130,9 @@ function ChecklistItemRow({
     >
       <Pressable
         accessibilityRole="checkbox"
-        accessibilityLabel={(item.completed ? "Uncheck " : "Check ") + item.text}
+        accessibilityLabel={
+          (item.completed ? "Uncheck " : "Check ") + item.text
+        }
         accessibilityState={{
           checked: item.completed,
           disabled: !allowed || activity.status !== "scheduled" || busy,
@@ -1018,7 +1177,12 @@ function ChecklistItemRow({
           accessibilityLabel={"Edit checklist item " + item.text}
           disabled={busy}
           onPress={onEdit}
-          style={{ width: 44, height: 44, alignItems: "center", justifyContent: "center" }}
+          style={{
+            width: 44,
+            height: 44,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
         >
           <Pencil size={17} color={colors.green} />
         </Pressable>
@@ -1030,7 +1194,12 @@ function ChecklistItemRow({
           accessibilityState={{ disabled: busy }}
           disabled={busy}
           onPress={onDelete}
-          style={{ width: 44, height: 44, alignItems: "center", justifyContent: "center" }}
+          style={{
+            width: 44,
+            height: 44,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
         >
           <Trash size={17} color={colors.muted} />
         </Pressable>
@@ -1040,7 +1209,11 @@ function ChecklistItemRow({
 }
 
 function deleteNoteAllowed(
-  note: { author_id: string; activity_id: string | null; visibility: "private" | "shared" },
+  note: {
+    author_id: string;
+    activity_id: string | null;
+    visibility: "private" | "shared";
+  },
   userId: string | null,
   data: ReturnType<typeof useBeacon>["data"],
   activity: Activity,

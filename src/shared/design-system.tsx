@@ -719,10 +719,12 @@ export function AvatarStack({
 export function CategoryBadge({
   category,
   size,
+  iconSize,
   showLabel = false,
 }: {
   category: Category;
   size?: number;
+  iconSize?: number;
   showLabel?: boolean;
 }) {
   const { colors, tokens: themeTokens } = useDesignTheme();
@@ -754,7 +756,7 @@ export function CategoryBadge({
           backgroundColor: token.tint,
         }}
       >
-        <Icon size={badgeSize * 0.5} color={token.color} />
+        <Icon size={iconSize ?? badgeSize * 0.5} color={token.color} />
       </View>
       {showLabel && (
         <Text

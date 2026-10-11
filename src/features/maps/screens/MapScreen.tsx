@@ -24,7 +24,7 @@ import {
 } from "expo-router";
 import * as Location from "expo-location";
 import * as Network from "expo-network";
-import { LocateFixed, SlidersHorizontal } from "lucide-react-native";
+import { Compass, LocateFixed, SlidersHorizontal } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import BeaconMap, {
   type MapControlCommand,
@@ -64,8 +64,16 @@ import {
   matchesBeaconFilters,
   canReadBeaconMeetingDetails,
 } from "@/src/features/maps/filtering";
-import { isApprovedGoing } from "@/src/features/beacons/permissions";
-import { PersonProfilePreview } from "@/src/features/people/previews/PersonProfilePreview";
+import { MapPersonPreview } from "@/src/features/maps/MapPersonPreview";
+import { MapNearbyPanel } from "@/src/features/maps/MapNearbyPanel";
+import { MapCallout } from "@/src/features/maps/MapCallout";
+import { MapPanel } from "@/src/features/maps/MapPanel";
+import {
+  beaconHasSquadParticipant,
+  clusterPeople,
+  showBeaconOnMap,
+} from "@/src/features/maps/mapDiscovery";
+import type { MapBeaconFeature } from "@/src/features/maps/mapBeaconFeatures";
 import { SquadProfilePreview } from "@/src/features/people/previews/SquadProfilePreview";
 import { canOpenSquadProfile } from "@/src/features/people/squadProfile";
 import { SpaceProfilePreview } from "@/src/features/spaces/SpaceProfilePreview";
@@ -89,16 +97,9 @@ import {
   rememberMapSearchQuery,
 } from "@/src/features/maps/sessionHelpers";
 import {
-  includeSelectedActivity,
   mapAdvancedFilterCount,
   matchesSelectedCategories,
-  shouldSearchNewViewport,
 } from "@/src/features/maps/mapUIselectors";
-import {
-  MapResultsSheet,
-  type MapResultsSheetRef,
-} from "@/src/features/maps/MapResultsSheet";
-import { MapPreviewCarousel } from "@/src/features/maps/MapPreviewCarousel";
 import { MapTooltip } from "@/src/features/maps/MapTooltip";
 import { physicalDirectionsUrl } from "@/src/features/maps/directions";
 import { usePulse } from "@/src/features/pulse/usePulse";
@@ -187,7 +188,6 @@ export default function MapScreen() {
   const [calm, setCalm] = useState(false);
   const [rightOpacity] = useState(() => new Animated.Value(1));
   const idleTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const restoreSnap = useRef<0 | 1 | 2 | null>(null);
   const gestureInProgress = useRef(false);
   const [pulseSelection, setPulseSelection] = useState<{
     scope: string;
@@ -224,7 +224,7 @@ export default function MapScreen() {
   const [mapSize, setMapSize] = useState({ width, height });
   const now = useNow();
   const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
-  const [personPreviewId, setPersonPreviewId] = useState<string | null>(null);
+  const [detailTab, setDetailTab] = useState<MapBeaconFeature | null>(null);
   const [squadPreviewId, setSquadPreviewId] = useState<string | null>(null);
   const [organizationPreviewId, setOrganizationPreviewId] = useState<
     string | null
@@ -234,6 +234,27 @@ export default function MapScreen() {
   const [compassSheetOpen, setCompassSheetOpen] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [person, setPerson] = useState<string | null>(null);
+  const [mapAnchor, setMapAnchor] = useState<{ x: number; y: number } | null>(
+    null,
+  );
+  const [clusterCenter, setClusterCenter] = useState<Coordinate | null>(null);
+  const [clusterCoordinates, setClusterCoordinates] = useState<Coordinate[]>(
+    [],
+  );
+  const countClusterPeople = useCallback(
+    (members: import("@/src/features/maps/cluster").ClusterPoint[]) =>
+      clusterPeople(
+        data,
+        members
+          .filter((row) => row.kind === "beacon")
+          .map((row) => row.id.slice(7)),
+        members
+          .filter((row) => row.kind === "person")
+          .map((row) => row.id.slice(7)),
+        userId,
+      ).length,
+    [data, userId],
+  );
   const [clusterActivityIds, setClusterActivityIds] = useState<string[] | null>(
     null,
   );
@@ -306,13 +327,6 @@ export default function MapScreen() {
   const [controlCommand, setControlCommand] = useState<
     MapControlCommand | undefined
   >();
-  const [searchAreaState, setSearchAreaState] = useState<
-    "idle" | "loading" | "count"
-  >("idle");
-  const [searchAreaCount, setSearchAreaCount] = useState(0);
-  const [viewerCoordinate, setViewerCoordinate] = useState<Coordinate | null>(
-    null,
-  );
   const [selectedCategories, setSelectedCategories] = useState<Category[]>(
     () =>
       exploration.filters.category === "All categories"
@@ -330,13 +344,7 @@ export default function MapScreen() {
     longitude: number;
     label: string;
   } | null>(null);
-  const [searchAreaVisible, setSearchAreaVisible] = useState(false);
-  const [filterSheetSnap, setFilterSheetSnap] = useState<0 | 1 | 2>(0);
-  const mapResultsRef = useRef<MapResultsSheetRef>(null);
-  const searchBaseline = useRef<MapViewport | null>(null);
-  const latestViewport = useRef<MapViewport | null>(null);
   const processedRouteSelection = useRef<string | null>(null);
-  const searchAreaTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
   useEffect(() => {
     if (
       !preferencesReady ||
@@ -410,18 +418,13 @@ export default function MapScreen() {
     if (idleTimer.current) clearTimeout(idleTimer.current);
     if (active) {
       if (gestureInProgress.current) return;
-      if (!gestureInProgress.current) restoreSnap.current = filterSheetSnap;
       gestureInProgress.current = true;
       setCalm(true);
-      mapResultsRef.current?.snapToIndex(0);
       setContextPoint(null);
     } else
       idleTimer.current = setTimeout(() => {
         setCalm(false);
         gestureInProgress.current = false;
-        if (restoreSnap.current !== null)
-          mapResultsRef.current?.snapToIndex(restoreSnap.current);
-        restoreSnap.current = null;
       }, 400);
   }
   function choosePulsePlace(place: PulsePlace) {
@@ -441,7 +444,6 @@ export default function MapScreen() {
           category: existing.category,
         }
       : place;
-    restoreSnap.current = null;
     clearRouteSelection();
     setSelected(null);
     setPerson(null);
@@ -454,7 +456,6 @@ export default function MapScreen() {
     setPlaceSearchOpen(false);
     setPickMode(false);
     setPickedMapPoint(null);
-    mapResultsRef.current?.snapToIndex(0);
   }
   function openAddUpdate(answers?: PulseAnswers) {
     if (!mapPreferences.liveUpdates) updateMapPreference({ liveUpdates: true });
@@ -492,7 +493,6 @@ export default function MapScreen() {
       clearTimeout(hide);
     };
   }, [params.created]);
-  useEffect(() => () => searchAreaTimers.current.forEach(clearTimeout), []);
   useEffect(() => {
     let mounted = true;
     const checkNetwork = async () => {
@@ -536,6 +536,9 @@ export default function MapScreen() {
 
   const safeActivities = useMemo(() => {
     if (!userId || data.viewer_id !== userId) return [];
+    const selectedSquad = data.squads.find(
+      (row) => row.id === exploration.filters.audience,
+    );
     const categories = selectedCategories.length
       ? selectedCategories
       : exploration.filters.category === "All categories"
@@ -548,9 +551,23 @@ export default function MapScreen() {
           activity.status === "scheduled" && Date.parse(activity.ends_at) > now,
       )
       .filter((activity) =>
-        matchesBeaconFilters(data, activity, userId, exploration.filters, now, {
-          query: exploration.query,
-        }),
+        matchesBeaconFilters(
+          data,
+          activity,
+          userId,
+          selectedSquad
+            ? { ...exploration.filters, audience: "Everyone" }
+            : exploration.filters,
+          now,
+          {
+            query: exploration.query,
+          },
+        ),
+      )
+      .filter(
+        (activity) =>
+          !selectedSquad ||
+          beaconHasSquadParticipant(data, activity, selectedSquad.id, userId),
       )
       .filter((activity) =>
         matchesSelectedCategories(activity.category, categories),
@@ -593,20 +610,31 @@ export default function MapScreen() {
   const activities = useMemo(
     () =>
       safeActivities.filter((activity) => {
-        const place = safePlaces.find(
-          (candidate) => candidate.activity_id === activity.id,
-        );
-        return (
-          place?.online_url != null ||
-          matchesExplorationArea(
-            exploration.area,
-            place && validPhysicalPlace(place)
-              ? { latitude: place.latitude, longitude: place.longitude }
-              : null,
+        if (
+          !userId ||
+          !showBeaconOnMap(
+            data,
+            activity,
+            userId,
+            {
+              personId: person,
+              squadId: squadPreviewId ?? exploration.filters.audience,
+            },
+            now,
           )
-        );
+        )
+          return false;
+        return true;
       }),
-    [exploration.area, safeActivities, safePlaces],
+    [
+      data,
+      userId,
+      person,
+      squadPreviewId,
+      now,
+      exploration.filters.audience,
+      safeActivities,
+    ],
   );
 
   const visibleActivities = useMemo(() => {
@@ -799,17 +827,10 @@ export default function MapScreen() {
           !canViewProfile(data, location.owner_id, userId)
         )
           return false;
-        return (
-          isSelectedPerson ||
-          matchesExplorationArea(exploration.area, {
-            latitude: location.latitude,
-            longitude: location.longitude,
-          })
-        );
+        return true;
       }),
     [
       data,
-      exploration.area,
       exploration.filters.audience,
       friends,
       now,
@@ -860,21 +881,6 @@ export default function MapScreen() {
             canReadBeaconActivity(data, activity, userId),
         )
       : undefined;
-  const synchronizedActivities = useMemo(
-    () => includeSelectedActivity(visibleActivities, focusedBeacon),
-    [focusedBeacon, visibleActivities],
-  );
-  const synchronizedPlanCount = useMemo(() => {
-    const linkedPlanIds = new Set(
-      synchronizedActivities.flatMap((activity) =>
-        activity.plan_id ? [activity.plan_id] : [],
-      ),
-    );
-    return visiblePlans.reduce(
-      (count, plan) => count + Number(linkedPlanIds.has(plan.id)),
-      0,
-    );
-  }, [synchronizedActivities, visiblePlans]);
   const focusedPlace = focusedBeacon
     ? safePlaces.find(
         (place) =>
@@ -996,7 +1002,8 @@ export default function MapScreen() {
             activity.id === params.beacon &&
             canReadBeaconActivity(data, activity, userId),
         );
-      const validPerson = !!params.person && !!routeSelectedPersonLocation;
+      const validPerson =
+        !!params.person && canViewProfile(data, params.person, userId);
       if (validBeacon || validPerson) {
         setClusterActivityIds(null);
         setClusterPersonIds(null);
@@ -1026,14 +1033,11 @@ export default function MapScreen() {
         setSelected(null);
         router.setParams({ beacon: undefined });
       }
-      if (
-        person &&
-        !selectFreshVisiblePersonLocation(data, person, userId, now)
-      ) {
+      if (person && !canViewProfile(data, person, userId)) {
         setPerson(null);
         router.setParams({ person: undefined });
       }
-    }, [data, now, person, selected, snapshotReady, userId]),
+    }, [data, person, selected, snapshotReady, userId]),
   );
 
   useEffect(() => {
@@ -1054,11 +1058,8 @@ export default function MapScreen() {
     setRecentSearchState({ viewerId: userId, queries: next });
   }
 
-  function chooseBeacon(
-    id: string,
-    source: "map" | "list" | "preview" | "search" = "map",
-  ) {
-    restoreSnap.current = null;
+  function chooseBeacon(id: string) {
+    setDetailTab(null);
     if (
       !userId ||
       !data.activities.some(
@@ -1078,36 +1079,24 @@ export default function MapScreen() {
     setPlaceSearchOpen(false);
     setPickMode(false);
     setPickedMapPoint(null);
-    if (source === "map" || source === "preview" || source === "search")
-      mapResultsRef.current?.snapToIndex(0);
   }
 
   function choosePerson(id: string) {
-    if (!userId || !selectFreshVisiblePersonLocation(data, id, userId, now))
+    if (
+      !userId ||
+      data.viewer_id !== userId ||
+      !canViewProfile(data, id, userId)
+    )
       return;
     uiHaptics.light();
+    setDetailTab(null);
     setPulsePlace(null);
     setContextPoint(null);
     clearRouteSelection();
     setClusterActivityIds(null);
     setClusterPersonIds(null);
     setPerson(id);
-    const beacon =
-      safeActivities.find(
-        (activity) =>
-          activity.owner_id === id &&
-          activity.mode === "solo" &&
-          Date.parse(activity.starts_at) <= now &&
-          Date.parse(activity.ends_at) > now,
-      ) ??
-      safeActivities.find((activity) => {
-        const rsvp = data.rsvps.find(
-          (row) => row.activity_id === activity.id && row.user_id === id,
-        );
-        return !!rsvp && isApprovedGoing(activity, rsvp);
-      }) ??
-      safeActivities.find((activity) => activity.owner_id === id);
-    setSelected(beacon?.id ?? null);
+    setSelected(null);
     setPlaceSearchOpen(false);
   }
 
@@ -1189,81 +1178,13 @@ export default function MapScreen() {
   }
 
   function handleViewportChange(next: MapViewport, userMoved = true) {
-    const previous = latestViewport.current;
-    latestViewport.current = next;
     setViewport(next);
     if (preferencesReady)
       void writeMapDevicePreferences({ camera: next }).catch(() => {});
-    if (!searchBaseline.current) searchBaseline.current = next;
-    if (!userMoved) {
-      // Leaflet reports the final camera more than once (for example, on both
-      // zoomend and moveend). Treat the duplicate completion as one gesture so
-      // it cannot immediately dismiss the explicit area-search affordance.
-      const sameCamera =
-        previous != null &&
-        previous.center.latitude === next.center.latitude &&
-        previous.center.longitude === next.center.longitude &&
-        previous.zoom === next.zoom &&
-        previous.bounds.north === next.bounds.north &&
-        previous.bounds.south === next.bounds.south &&
-        previous.bounds.east === next.bounds.east &&
-        previous.bounds.west === next.bounds.west;
-      if (sameCamera) return;
-      searchBaseline.current = next;
-      setSearchAreaVisible(false);
+    if (userMoved) {
       setClusterActivityIds(null);
       setClusterPersonIds(null);
-      return;
     }
-    setClusterActivityIds(null);
-    setClusterPersonIds(null);
-    if (pickMode || pickedMapPoint) {
-      setSearchAreaVisible(false);
-      return;
-    }
-    setSearchAreaVisible(shouldSearchNewViewport(searchBaseline.current, next));
-  }
-
-  function runSearchThisArea() {
-    if (!viewport || searchAreaState === "loading") return;
-    const area: ExplorationArea = {
-      kind: "viewport",
-      label: "Selected area",
-      coordinate: viewport.center,
-      zoom: viewport.zoom,
-      bounds: viewport.bounds,
-    };
-    const resultCount = safeActivities.filter((activity) => {
-      const place = safePlaces.find(
-        (candidate) => candidate.activity_id === activity.id,
-      );
-      return (
-        place?.online_url != null ||
-        matchesExplorationArea(
-          area,
-          place && validPhysicalPlace(place)
-            ? { latitude: place.latitude, longitude: place.longitude }
-            : null,
-        )
-      );
-    }).length;
-    setSearchAreaCount(resultCount);
-    setSearchAreaState("loading");
-    searchBaseline.current = viewport;
-    setSearchAreaVisible(true);
-    exploration.setArea(area);
-    pulse.refresh();
-    setClusterActivityIds(null);
-    setClusterPersonIds(null);
-    const showCount = setTimeout(() => {
-      setSearchAreaState("count");
-      const hide = setTimeout(() => {
-        setSearchAreaState("idle");
-        setSearchAreaVisible(false);
-      }, 2000);
-      searchAreaTimers.current.push(hide);
-    }, 450);
-    searchAreaTimers.current.push(showCount);
   }
 
   function resetFilters() {
@@ -1359,7 +1280,6 @@ export default function MapScreen() {
       };
       if (!isValidCoordinate(coordinate))
         throw new Error("The device returned an invalid location.");
-      setViewerCoordinate(coordinate);
       exploration.setArea({
         kind: "near-me",
         label: "Near me",
@@ -1367,7 +1287,6 @@ export default function MapScreen() {
         zoom: 13,
       });
       setCompassMessage("");
-      setSearchAreaVisible(false);
       setCompassSheetOpen(false);
     } catch (failure) {
       setCompassMessage(
@@ -1401,32 +1320,19 @@ export default function MapScreen() {
     setSearchPlaceOpen(false);
   }
 
-  function openActivityDetails(id: string) {
+  function openActivityDetails(id: string, tab: MapBeaconFeature = "overview") {
     if (
       !userId ||
+      data.viewer_id !== userId ||
       !data.activities.some(
         (activity) =>
           activity.id === id && canReadBeaconActivity(data, activity, userId),
       )
     )
       return;
-    router.push({ pathname: "/activity/[id]", params: { id, from: "map" } });
-  }
-
-  function openDirections(id: string) {
-    const activity = data.activities.find((candidate) => candidate.id === id);
-    const place = safePlaces.find((candidate) => candidate.activity_id === id);
-    if (
-      !userId ||
-      !activity ||
-      !canReadBeaconActivity(data, activity, userId) ||
-      !canReadBeaconMeetingDetails(data, activity, userId) ||
-      !place ||
-      !validPhysicalPlace(place)
-    )
-      return;
-    const url = physicalDirectionsUrl(place.latitude, place.longitude);
-    if (url) void Linking.openURL(url).catch(() => undefined);
+    setSelected(id);
+    setPerson(null);
+    setDetailTab(tab);
   }
 
   function createBeaconHere() {
@@ -1479,9 +1385,8 @@ export default function MapScreen() {
         })
     : [];
   const headerTop = insets.top + 7;
-  const mapBottomClearance = 108;
+  const mapBottomClearance = 24;
   const activeAreaTarget = explorationTarget;
-  const resultResetKey = `${exploration.query}:${JSON.stringify(exploration.filters)}:${activeCategories.join(",")}:${exploration.areaRevision}:${viewport ? JSON.stringify(viewport.bounds) : ""}`;
   const activeSearchVisible = placeSearchOpen || params.search === "yes";
   const shareIndicator = (
     <View style={{ flexDirection: "row", alignItems: "center", gap: 7 }}>
@@ -1498,9 +1403,13 @@ export default function MapScreen() {
     <KeyboardAvoidingView
       testID="full-map-screen"
       onLayout={(event) => {
-        const { width: nextWidth, height: nextHeight } = event.nativeEvent.layout;
-        setMapSize((current) => current.width === nextWidth && current.height === nextHeight
-          ? current : { width: nextWidth, height: nextHeight });
+        const { width: nextWidth, height: nextHeight } =
+          event.nativeEvent.layout;
+        setMapSize((current) =>
+          current.width === nextWidth && current.height === nextHeight
+            ? current
+            : { width: nextWidth, height: nextHeight },
+        );
       }}
       style={{ flex: 1, backgroundColor: colors.bg }}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -1532,6 +1441,10 @@ export default function MapScreen() {
             left: 12,
           }}
           focused={pickedMapPoint ?? focusedCoordinate}
+          anchorCoordinate={
+            clusterActivityIds ? clusterCenter : focusedCoordinate
+          }
+          onAnchor={setMapAnchor}
           activities={
             focusedBeacon &&
             !activities.some((activity) => activity.id === selected)
@@ -1555,18 +1468,35 @@ export default function MapScreen() {
               : undefined
           }
           selected={pickedMapPoint}
-          onActivity={(id) => chooseBeacon(id, "map")}
+          onActivity={(id) => chooseBeacon(id)}
           onPerson={choosePerson}
-          onCluster={(nextCluster) => {
+          clusterPersonCount={countClusterPeople}
+          onCluster={(nextCluster, anchor) => {
+            setMapAnchor(anchor ?? null);
+            setClusterCenter({
+              latitude: nextCluster.latitude,
+              longitude: nextCluster.longitude,
+            });
+            setClusterCoordinates(
+              nextCluster.members.map((row) => ({
+                latitude: row.latitude,
+                longitude: row.longitude,
+              })),
+            );
             uiHaptics.light();
             clearRouteSelection();
+            setDetailTab(null);
+            setPulsePlace(null);
+            setContextPoint(null);
             setSelected(null);
             setPerson(null);
             const memberIds = nextCluster.members
               .filter((member) => member.kind === "beacon")
               .map((member) => member.id.slice("beacon:".length))
-              .filter((id) =>
-                activities.some((activity) => activity.id === id),
+              .filter(
+                (id) =>
+                  activities.some((activity) => activity.id === id) ||
+                  focusedBeacon?.id === id,
               );
             const peopleIds = nextCluster.members
               .filter((member) => member.kind === "person")
@@ -1584,10 +1514,6 @@ export default function MapScreen() {
             if (memberIds.length || peopleIds.length) {
               setClusterActivityIds(memberIds);
               setClusterPersonIds(peopleIds);
-              requestAnimationFrame(() => {
-                mapResultsRef.current?.showClusterMembers(memberIds);
-                mapResultsRef.current?.snapToIndex(1);
-              });
             } else {
               setClusterActivityIds(null);
               setClusterPersonIds(null);
@@ -1621,8 +1547,14 @@ export default function MapScreen() {
         style={{
           position: "absolute",
           top: headerTop,
-          left: Math.max(0, (mapSize.width - tokens.layout.contentMaxWidth) / 2),
-          right: Math.max(0, (mapSize.width - tokens.layout.contentMaxWidth) / 2),
+          left: Math.max(
+            0,
+            (mapSize.width - tokens.layout.contentMaxWidth) / 2,
+          ),
+          right: Math.max(
+            0,
+            (mapSize.width - tokens.layout.contentMaxWidth) / 2,
+          ),
           zIndex: 20,
           elevation: 20,
         }}
@@ -1638,10 +1570,6 @@ export default function MapScreen() {
           activeFilterCount={activeFilterCount}
           activeChips={activeChips}
           onRemoveChip={removeActiveChip}
-          searchAreaVisible={searchAreaVisible && !pickMode && !pickedMapPoint}
-          searchAreaState={searchAreaState}
-          searchAreaCount={searchAreaCount}
-          onSearchThisArea={runSearchThisArea}
           onSearchFocus={() => setPlaceSearchOpen(true)}
           loading={loading}
           sharingIndicator={shareIndicator}
@@ -1654,15 +1582,31 @@ export default function MapScreen() {
           style={{
             position: "absolute",
             top: headerTop + headerHeight,
-            left: Math.max(0, (mapSize.width - tokens.layout.contentMaxWidth) / 2),
-            right: Math.max(0, (mapSize.width - tokens.layout.contentMaxWidth) / 2),
+            left: Math.max(
+              0,
+              (mapSize.width - tokens.layout.contentMaxWidth) / 2,
+            ),
+            right: Math.max(
+              0,
+              (mapSize.width - tokens.layout.contentMaxWidth) / 2,
+            ),
             zIndex: 13,
             paddingHorizontal: tokens.layout.screenGutter,
           }}
         >
           <MapSearchOverlay
             visible
-            maxHeight={Math.max(120, Math.min(430, mapSize.height - headerTop - headerHeight - mapBottomClearance - 16))}
+            maxHeight={Math.max(
+              120,
+              Math.min(
+                430,
+                mapSize.height -
+                  headerTop -
+                  headerHeight -
+                  mapBottomClearance -
+                  16,
+              ),
+            )}
             query={exploration.query}
             beacons={searchActivityResults}
             people={searchPeopleResults}
@@ -1672,18 +1616,13 @@ export default function MapScreen() {
               rememberSearch(exploration.query);
               exploration.setQuery("");
               setPlaceSearchOpen(false);
-              chooseBeacon(activity.id, "search");
+              chooseBeacon(activity.id);
             }}
             onSelectPerson={(profile) => {
               rememberSearch(exploration.query);
               exploration.setQuery("");
               setPlaceSearchOpen(false);
-              if (
-                userId &&
-                selectFreshVisiblePersonLocation(data, profile.id, userId, now)
-              )
-                choosePerson(profile.id);
-              else setPersonPreviewId(profile.id);
+              choosePerson(profile.id);
             }}
             onSelectPlace={(place) => {
               rememberSearch(exploration.query);
@@ -1849,6 +1788,10 @@ export default function MapScreen() {
             opacity: rightOpacity,
           }}
         >
+          {offline && <Text style={styles.label}>Offline</Text>}
+          <MapControl label="Compass" onPress={() => setCompassSheetOpen(true)}>
+            <Compass size={19} color={colors.green} />
+          </MapControl>
           <MapControl label="Locate" onPress={() => void handleUseMyLocation()}>
             <LocateFixed size={19} color={colors.green} />
           </MapControl>
@@ -1863,8 +1806,14 @@ export default function MapScreen() {
           style={{
             position: "absolute",
             bottom: insets.bottom + tokens.layout.tabBarHeight + 18,
-            left: Math.max(tokens.layout.screenGutter, (mapSize.width - tokens.layout.contentMaxWidth) / 2),
-            right: Math.max(tokens.layout.screenGutter, (mapSize.width - tokens.layout.contentMaxWidth) / 2),
+            left: Math.max(
+              tokens.layout.screenGutter,
+              (mapSize.width - tokens.layout.contentMaxWidth) / 2,
+            ),
+            right: Math.max(
+              tokens.layout.screenGutter,
+              (mapSize.width - tokens.layout.contentMaxWidth) / 2,
+            ),
             padding: tokens.space.md,
             gap: 8,
             borderRadius: 20,
@@ -1904,130 +1853,143 @@ export default function MapScreen() {
         </View>
       ) : null}
 
-      {person && !selected ? (
-        <View
+      {person || (selected && !detailTab) ? (
+        <MapCallout
           testID="map-tooltip"
-          style={{
-            position: "absolute",
-            width: Math.min(width - 40, 350),
-            left: Math.max(12, (width - Math.min(width - 40, 350)) / 2),
-            top: Math.max(
-              headerTop + headerHeight + 10,
-              Math.min(height - 320, height * 0.34),
-            ),
-            zIndex: 9,
+          anchor={mapAnchor}
+          bounds={{
+            ...mapSize,
+            top: headerTop + headerHeight + 12,
+            bottom: 24,
           }}
         >
-          <MapTooltip
-            beaconId={null}
-            personId={person}
-            pinned={!!selectedPersonLocation}
-            onDetails={() =>
-              router.push({ pathname: "/person/[id]", params: { id: person } })
-            }
-            onMessage={() =>
-              router.push({
-                pathname: "/messages/[id]",
-                params: { id: person },
-              })
-            }
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ paddingBottom: 8 }}
+          >
+            {person ? (
+              <MapPersonPreview
+                personId={person}
+                onBeacon={chooseBeacon}
+                onClose={() => {
+                  clearRouteSelection();
+                  setPerson(null);
+                }}
+              />
+            ) : (
+              <MapTooltip
+                beaconId={selected}
+                personId={null}
+                pinned={!!focusedPlace}
+                onDetails={() => selected && openActivityDetails(selected)}
+                onFeature={(tab) =>
+                  selected && openActivityDetails(selected, tab)
+                }
+                onPerson={choosePerson}
+                onMessage={() =>
+                  selected && openActivityDetails(selected, "chat")
+                }
+                onClose={() => {
+                  clearRouteSelection();
+                  setSelected(null);
+                  setDetailTab(null);
+                }}
+              />
+            )}
+          </ScrollView>
+        </MapCallout>
+      ) : null}
+      {clusterActivityIds && clusterPersonIds ? (
+        <MapCallout
+          anchor={mapAnchor}
+          height={400}
+          bounds={{
+            ...mapSize,
+            top: headerTop + headerHeight + 12,
+            bottom: 24,
+          }}
+        >
+          <MapNearbyPanel
+            key={`${clusterActivityIds.join()}:${clusterPersonIds.join()}`}
+            beaconIds={clusterActivityIds}
+            personIds={clusterPersonIds}
+            onBeacon={chooseBeacon}
+            onPerson={choosePerson}
             onClose={() => {
-              clearRouteSelection();
-              setPerson(null);
+              setClusterActivityIds(null);
+              setClusterPersonIds(null);
+            }}
+            onFit={() => {
+              setControlCommand((previous) => ({
+                kind: "fit",
+                coordinates: clusterCoordinates,
+                revision: (previous?.revision ?? 0) + 1,
+              }));
             }}
           />
-        </View>
+        </MapCallout>
+      ) : null}
+      {selected && detailTab ? (
+        <MapCallout
+          anchor={mapAnchor}
+          height={450}
+          bounds={{
+            ...mapSize,
+            top: headerTop + headerHeight + 12,
+            bottom: 24,
+          }}
+        >
+          <MapPanel
+            key={`${selected}:${detailTab}`}
+            beaconId={selected}
+            initialTab={detailTab}
+            onPerson={choosePerson}
+            onClose={() => setDetailTab(null)}
+          />
+        </MapCallout>
       ) : null}
 
-      <MapResultsSheet
-        ref={mapResultsRef}
-        visibleActivities={synchronizedActivities}
-        selectedId={selected}
-        pulseSummaries={mapPreferences.liveUpdates ? pulse.summaries : []}
-        pulsePlaces={knownPulsePlaces}
-        onSelectPlace={choosePulsePlace}
-        pulseError={mapPreferences.liveUpdates ? pulse.error : undefined}
-        onRefreshPulse={pulse.refresh}
-        viewerCoordinate={viewerCoordinate}
-        planCount={synchronizedPlanCount}
-        loading={loading}
-        offline={offline}
-        clusterActivityIds={clusterActivityIds}
-        clusterPeople={
-          clusterPersonIds && userId
-            ? data.profiles.filter(
-                (profile) =>
-                  clusterPersonIds.includes(profile.id) &&
-                  canViewProfile(data, profile, userId),
-              )
-            : []
-        }
-        clusterResetKey={resultResetKey}
-        onSnapChange={(index) =>
-          setFilterSheetSnap(Math.max(0, Math.min(2, index)) as 0 | 1 | 2)
-        }
-        onSelect={(id) => chooseBeacon(id, "list")}
-        onSelectPerson={choosePerson}
-        onOpenDetail={openActivityDetails}
-        onDirections={openDirections}
-        onDismiss={() => {
-          clearRouteSelection();
-          setSelected(null);
-          setPerson(null);
-        }}
-        onClearFilters={resetFilters}
-        onSearchWider={() => {
-          exploration.setArea(null);
-          setSearchAreaVisible(false);
-          setControlCommand((previous) => ({
-            kind: "fit",
-            revision: (previous?.revision ?? 0) + 1,
-          }));
-        }}
-      />
-
-      <MapPreviewCarousel
-        visibleActivities={synchronizedActivities}
-        selectedId={selected}
-        viewerCoordinate={viewerCoordinate}
-        onSelect={(id) => chooseBeacon(id, "preview")}
-        onOpenDetail={openActivityDetails}
-        onDirections={openDirections}
-        onDismiss={() => {
-          clearRouteSelection();
-          setSelected(null);
-        }}
-        hidden={filterSheetSnap > 0 || !!pulsePlace}
-      />
-
-      {pulsePlace && !contextPoint && filterSheetSnap === 0 ? (
+      {pulsePlace && !contextPoint ? (
         <View
           testID="map-place-preview-slot"
           style={{
             position: "absolute",
-            left: Math.max(tokens.layout.screenGutter, (mapSize.width - tokens.layout.contentMaxWidth) / 2),
-            right: Math.max(tokens.layout.screenGutter, (mapSize.width - tokens.layout.contentMaxWidth) / 2),
+            left: Math.max(
+              tokens.layout.screenGutter,
+              (mapSize.width - tokens.layout.contentMaxWidth) / 2,
+            ),
+            right: Math.max(
+              tokens.layout.screenGutter,
+              (mapSize.width - tokens.layout.contentMaxWidth) / 2,
+            ),
             bottom: mapBottomClearance + 8,
-            maxHeight: Math.max(120, mapSize.height - headerTop - headerHeight - mapBottomClearance - 24),
+            maxHeight: Math.max(
+              120,
+              mapSize.height -
+                headerTop -
+                headerHeight -
+                mapBottomClearance -
+                24,
+            ),
             zIndex: 22,
             elevation: 22,
           }}
         >
           <ScrollView keyboardShouldPersistTaps="handled">
             <PulsePlacePreview
-            scopeKey={pulseScopeKey}
-            place={pulsePlace}
-            summary={placeSummary}
-            onClose={() => setPulsePlace(null)}
-            onAdd={openAddUpdate}
-            onConfirm={pulse.confirm}
-            confirmedUntil={pulse.confirmedUntil(pulsePlace.placeKey)}
-            lastAnswers={pulse.lastAnswers(pulsePlace.placeKey)}
-            onCreateBeacon={createAtPulsePlace}
-            onReportNote={pulse.reportNote}
-            happeningHere={
-              happeningHereRows.length ? happeningHereRows : undefined
-            }
+              scopeKey={pulseScopeKey}
+              place={pulsePlace}
+              summary={placeSummary}
+              onClose={() => setPulsePlace(null)}
+              onAdd={openAddUpdate}
+              onConfirm={pulse.confirm}
+              confirmedUntil={pulse.confirmedUntil(pulsePlace.placeKey)}
+              lastAnswers={pulse.lastAnswers(pulsePlace.placeKey)}
+              onCreateBeacon={createAtPulsePlace}
+              onReportNote={pulse.reportNote}
+              happeningHere={
+                happeningHereRows.length ? happeningHereRows : undefined
+              }
             />
           </ScrollView>
         </View>
@@ -2035,7 +1997,11 @@ export default function MapScreen() {
       {contextPoint && pulsePlace ? (
         <MapContextMenu
           point={contextPoint}
-          bounds={{ ...mapSize, top: headerTop + headerHeight + 8, bottom: mapBottomClearance + 8 }}
+          bounds={{
+            ...mapSize,
+            top: headerTop + headerHeight + 8,
+            bottom: mapBottomClearance + 8,
+          }}
           onUpdate={() => openAddUpdate()}
           onCreate={createAtPulsePlace}
           onDirections={() => {
@@ -2168,7 +2134,6 @@ export default function MapScreen() {
             kind: "fit",
             revision: (previous?.revision ?? 0) + 1,
           }));
-          setSearchAreaVisible(false);
         }}
         onExploreEverywhere={() => {
           exploration.setArea(null);
@@ -2177,7 +2142,6 @@ export default function MapScreen() {
             kind: "fit",
             revision: (previous?.revision ?? 0) + 1,
           }));
-          setSearchAreaVisible(false);
         }}
         query={compassSearchQuery}
         onQueryChange={exploration.setQuery}
@@ -2193,13 +2157,6 @@ export default function MapScreen() {
         }
       />
 
-      {personPreviewId ? (
-        <PersonProfilePreview
-          personId={personPreviewId}
-          visible
-          onClose={() => setPersonPreviewId(null)}
-        />
-      ) : null}
       {squadPreviewId ? (
         <SquadProfilePreview
           squadId={squadPreviewId}

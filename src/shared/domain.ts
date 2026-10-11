@@ -132,6 +132,8 @@ export function friendAvailabilityState(
 export function activityWhen(activity: Activity, now = new Date()) {
   if (activity.status === "cancelled") return "Cancelled";
   if (activity.status === "completed") return "Completed";
+  if (activity.plan_step && activity.plan_started_at === null) return activity.plan_step.start_mode === "manual" ? "Manual start" : "After previous ends";
+  if (activity.plan_step?.end_mode === "manual" && Date.parse(activity.starts_at) <= +now) return "Active · manual end";
   if (Date.parse(activity.ends_at) <= +now) return "Ended";
   if (Date.parse(activity.starts_at) <= +now) {
     const minutes = Math.max(

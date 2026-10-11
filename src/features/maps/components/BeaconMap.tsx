@@ -22,6 +22,7 @@ export type MapTouchPoint = {
 export type MapControlCommand = {
   kind: "zoom-in" | "zoom-out" | "fit";
   revision: number;
+  coordinates?: { latitude: number; longitude: number }[];
 };
 export type MapStyle = "standard" | "satellite";
 /** Screen-space clearances reserved for overlays around the interactive map. */
@@ -32,6 +33,7 @@ export type MapViewportInsets = {
   left?: number;
 };
 export interface MapProps {
+  anchorCoordinate?: { latitude: number; longitude: number } | null;
   onAnchor?: (point: { x: number; y: number } | null) => void;
   fullScreen?: boolean;
   hideControls?: boolean;
@@ -54,6 +56,9 @@ export interface MapProps {
     cluster: MapPointGroup,
     anchor?: { x: number; y: number } | null,
   ) => void;
+  clusterPersonCount?: (
+    members: import("@/src/features/maps/cluster").ClusterPoint[],
+  ) => number;
   clusterPriorities?: Record<string, MapPointPriority>;
   onMapTap?: () => void;
   onLongPress?: (touch: MapTouchPoint) => void;

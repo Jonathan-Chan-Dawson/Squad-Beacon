@@ -481,7 +481,7 @@ export function LibraryScreen() {
           ) : (
             <Empty
               title="No journal entries yet"
-              body="Beacon Notes you write and private entries you add will appear here."
+              body="Beacon Sketchboard notes you write and private entries you add will appear here."
             />
           )}
           <Pressable
@@ -957,7 +957,7 @@ export function LibraryScreen() {
         ) : null}
         {journalEditTarget?.activity_id ? (
           <Chips
-            accessibilityPrefix="Beacon Note visibility"
+            accessibilityPrefix="Beacon Sketchboard visibility"
             options={["Private", "Shared"]}
             value={journalVisibilityDraft === "private" ? "Private" : "Shared"}
             onChange={(value) =>

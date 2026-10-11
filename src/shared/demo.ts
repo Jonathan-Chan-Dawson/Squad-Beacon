@@ -50,6 +50,7 @@ import {
 } from "@/src/features/planning/domain";
 import {
   buildPlanSchedule,
+  planBeaconEndAt,
   detectPlanStepOverlaps,
   validatePlanSteps,
 } from "@/src/features/plans/domain";
@@ -1675,6 +1676,7 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
       "end_routine",
       "edit_routine",
       "run_routine_once",
+      "run_routine_now",
     ].includes(action)
   ) {
     const additions = applyPlanRoutineDemo(
@@ -2217,7 +2219,7 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
       thread_id: thread.id,
       author_id: uid,
       payload: structuredClone(draft),
-      approved: false,
+      approved: p.approve_if_manager === true && canManageThread(thread),
       disqualified_at: null,
       created_at: new Date().toISOString(),
       activity_id: null,
@@ -2998,10 +3000,17 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
         habit_id: null,
         plan_id: planId,
         plan_step_index: occurrence.step_index,
+        plan_step: { ...step },
+        plan_started_at: step.start_mode === "manual" || (step.start_mode === "after_previous" && d.activities.some((item) => item.plan_id === planId && item.plan_step_index === occurrence.step_index - 1 && (!item.plan_started_at || item.plan_step?.end_mode === "manual"))) ? null : occurrence.starts_at,
         aspiration_ids: checkAspirationIds(step.aspiration_ids ?? []),
         audience: squadId ? "squad" : "private",
         audience_id: squadId,
       });
+      const inserted = d.activities.at(-1)!;
+      if (inserted.plan_started_at === null) {
+        inserted.starts_at = new Date(Date.parse(occurrence.starts_at) + 366 * 86400000).toISOString();
+        inserted.ends_at = new Date(Date.parse(inserted.starts_at) + step.duration_minutes * 60000).toISOString();
+      } else if (step.end_mode === "manual") inserted.ends_at = new Date(Date.parse(inserted.starts_at) + 366 * 86400000).toISOString();
       d.places.push({
         activity_id: activityId,
         label: step.location_name,
@@ -3020,6 +3029,45 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
     for (const activity of d.activities) {
       if (activity.plan_id === plan.id && activity.status === "scheduled")
         activity.status = "cancelled";
+    }
+  }
+  if (action === "create_plan_beacon") {
+    const plan = d.plans.find((item) => item.id === p.plan_id && item.owner_id === uid && item.status === "scheduled");
+    if (!plan) throw new Error("Plan unavailable.");
+    const existing = d.activities.filter((item) => item.plan_id === plan.id);
+    const position = Number(p.position);
+    if (existing.length >= 30 || !Number.isInteger(position) || position < 0 || position > existing.length) throw new Error("Choose a valid position in this Plan.");
+    if (p.audience !== (plan.squad_id ? "squad" : "private") || p.audience_id !== plan.squad_id) throw new Error("Use the Plan audience for this Beacon.");
+    if (existing.some((item) => item.status === "scheduled" && Date.parse(String(p.starts_at)) < Date.parse(item.ends_at) && Date.parse(String(p.ends_at)) > Date.parse(item.starts_at))) throw new Error("This Beacon overlaps another Beacon in the Plan.");
+    const next = demoAction(d, "create_activity", p);
+    const added = next.activities.find((item) => !d.activities.some((old) => old.id === item.id));
+    if (!added) throw new Error("The Beacon could not be created.");
+    next.activities.filter((item) => item.plan_id === plan.id && (item.plan_step_index ?? 0) >= position).forEach((item) => { item.plan_step_index = (item.plan_step_index ?? 0) + 1; });
+    added.plan_id = plan.id; added.plan_step_index = position; added.plan_started_at = added.starts_at;
+    return next;
+  }
+  if (action === "start_plan_beacon" || action === "end_plan_beacon") {
+    const activity = d.activities.find((item) => item.id === id && item.owner_id === uid && item.plan_id && item.status === "scheduled");
+    if (!activity || d.plans.find((item) => item.id === activity.plan_id)?.status !== "scheduled") throw new Error("Plan Beacon unavailable.");
+    const now = Date.now();
+    if (action === "start_plan_beacon") {
+      if (activity.plan_started_at != null) throw new Error("This Beacon has already started or is scheduled to start.");
+      if (activity.plan_step?.start_mode === "after_previous") {
+        const previous = d.activities.find((item) => item.plan_id === activity.plan_id && item.plan_step_index === (activity.plan_step_index ?? 0) - 1);
+        if (!previous || (previous.status !== "completed" && (!previous.plan_started_at || previous.plan_step?.end_mode === "manual" || Date.parse(previous.ends_at) > now))) throw new Error("End the previous Beacon first.");
+      }
+      activity.starts_at = new Date(now).toISOString(); activity.plan_started_at = activity.starts_at;
+      activity.ends_at = planBeaconEndAt(activity.plan_step!, now, activity.timezone);
+    } else {
+      if (!activity.plan_started_at || Date.parse(activity.starts_at) > now) throw new Error("Start this Beacon first.");
+      activity.status = "completed"; activity.ends_at = new Date(Math.max(Date.parse(activity.starts_at) + 1000, now)).toISOString();
+    }
+    let previous = activity;
+    for (const next of d.activities.filter((item) => item.plan_id === activity.plan_id && (item.plan_step_index ?? 0) > (activity.plan_step_index ?? 0)).sort((a, b) => (a.plan_step_index ?? 0) - (b.plan_step_index ?? 0))) {
+      if (next.plan_step?.start_mode !== "after_previous" || next.status !== "scheduled" || (previous.status !== "completed" && previous.plan_step?.end_mode === "manual")) break;
+      next.starts_at = previous.ends_at; next.plan_started_at = next.starts_at;
+      next.ends_at = planBeaconEndAt(next.plan_step, Date.parse(next.starts_at), next.timezone);
+      previous = next;
     }
   }
   if (action === "create_activity") {
@@ -3108,6 +3156,8 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
       longitude: p.longitude as number | null,
       online_url: p.online_url as string | null,
     });
+    const created = d.activities.find((item) => !previous.activities.some((old) => old.id === item.id));
+    if (created) created.template_source_id = typeof p.template_source_id === "string" ? p.template_source_id.slice(0, 200) : null;
   }
   if (action === "rsvp") {
     const activity = d.activities.find((item) => item.id === id),

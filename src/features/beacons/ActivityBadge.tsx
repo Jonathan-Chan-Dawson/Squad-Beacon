@@ -6,9 +6,11 @@ export { activityTones };
 export function ActivityBadge({
   category,
   size = 40,
+  iconSize,
 }: {
   category: Category;
   size?: number;
+  iconSize?: number;
 }) {
-  return <CategoryBadge category={category} size={size} />;
+  return <CategoryBadge category={category} size={size} iconSize={iconSize} />;
 }

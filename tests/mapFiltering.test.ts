@@ -266,3 +266,112 @@ test("join filters exclude solo, closed, and ineligible invite-only Beacons", ()
   });
   assert.equal(matches(data, invite, { join: "Request Approval" }), true);
 });
+
+// Map discovery hides readable statuses and unavailable meetings unless selected.
+import {
+  showBeaconOnMap,
+  clusterPeople,
+} from "../src/features/maps/mapDiscovery";
+import { makeDemo } from "../src/shared/demo";
+
+test("Map hides solo, closed and strict-full Beacons until a relevant person is selected", () => {
+  const data = makeDemo();
+  const viewer = data.viewer_id!;
+  const open = beacon("open", {
+    owner_id: viewer,
+    ends_at: new Date(now + 3600000).toISOString(),
+  });
+  for (const patch of [
+    { mode: "solo" as const },
+    { manual_closed: true },
+    {
+      capacity_policy: "strict" as const,
+      capacity_limit: 1,
+      accepted_seat_count: 1,
+    },
+  ]) {
+    const activity = { ...open, ...patch };
+    data.activities = [activity];
+    assert.equal(showBeaconOnMap(data, activity, viewer, {}, now), false);
+    assert.equal(
+      showBeaconOnMap(data, activity, viewer, { personId: viewer }, now),
+      true,
+    );
+    assert.equal(
+      showBeaconOnMap(data, activity, viewer, { personId: "unrelated" }, now),
+      false,
+    );
+  }
+  data.activities = [open];
+  assert.equal(showBeaconOnMap(data, open, viewer, {}, now), true);
+  const soft = {
+    ...open,
+    capacity_policy: "soft" as const,
+    capacity_limit: 1,
+    accepted_seat_count: 3,
+  };
+  data.activities = [soft];
+  assert.equal(showBeaconOnMap(data, soft, viewer, {}, now), true);
+  assert.equal(
+    showBeaconOnMap(
+      { ...data, viewer_id: "other" },
+      soft,
+      viewer,
+      { beaconId: soft.id },
+      now,
+    ),
+    false,
+  );
+});
+
+test("Cluster people include approved Beacon participants without GPS, deduplicate pins, and protect profiles", () => {
+  const data = makeDemo();
+  const viewer = data.viewer_id!;
+  const attendee = data.profiles.find((row) => row.id !== viewer)!;
+  attendee.profile_visibility = "public";
+  const activity = beacon("cluster", {
+    owner_id: viewer,
+    approval_required: true,
+  });
+  data.activities = [activity];
+  data.rsvps = [
+    {
+      activity_id: activity.id,
+      user_id: attendee.id,
+      status: "going",
+      approved: true,
+    },
+  ];
+  const people = clusterPeople(
+    data,
+    [activity.id],
+    [attendee.id, viewer],
+    viewer,
+  );
+  assert.equal(people.filter((row) => row.id === attendee.id).length, 1);
+  assert.ok(people.some((row) => row.id === viewer));
+  data.rsvps[0].approved = false;
+  assert.equal(
+    clusterPeople(data, [activity.id], [], viewer).some(
+      (row) => row.id === attendee.id,
+    ),
+    false,
+  );
+  data.rsvps[0].approved = true;
+  data.blocks.push({ blocker_id: viewer, blocked_id: attendee.id });
+  assert.equal(
+    clusterPeople(data, [activity.id], [attendee.id], viewer).some(
+      (row) => row.id === attendee.id,
+    ),
+    false,
+  );
+  assert.deepEqual(
+    clusterPeople(
+      { ...data, viewer_id: "other" },
+      [activity.id],
+      [attendee.id],
+      viewer,
+    ),
+    [],
+  );
+});

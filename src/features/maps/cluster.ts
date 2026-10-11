@@ -49,6 +49,8 @@ export interface MapPointPriority {
 }
 
 export const MAX_RENDERED_MAP_FEATURES = 150;
+export const CLUSTER_PREVIEW_ICON_SIZE = 28;
+export const CLUSTER_PREVIEW_GAP = 2;
 const CLUSTER_MIN_ZOOM = 0;
 export const MAP_MAX_ZOOM = 22;
 const CLUSTER_MAX_ZOOM = MAP_MAX_ZOOM;
@@ -82,7 +84,7 @@ export function rankClusterMembers(
   });
 }
 
-export function clusterPreviewOverflow(memberCount: number, previewCount = 3) {
+export function clusterPreviewOverflow(memberCount: number, previewCount = 14) {
   return Math.max(0, memberCount - previewCount);
 }
 

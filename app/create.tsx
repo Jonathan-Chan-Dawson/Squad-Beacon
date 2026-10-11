@@ -1,30 +1,9 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import {
-  ArrowLeft,
-  ArrowRight,
-  BookOpen,
-  Briefcase,
-  CarFront,
-  ChevronRight,
-  Dumbbell,
-  Gamepad2,
-  HeartPulse,
-  Landmark,
-  ListChecks,
-  Map,
-  Palette,
-  PartyPopper,
-  Repeat,
-  ShoppingBag,
-  Sparkles,
-  Ticket,
-  Trees,
-  Utensils,
-  UsersRound,
-  type LucideIcon,
-} from "lucide-react-native";
+import { CreateHome } from "@/src/features/beacons/CreateHome";
+import { canReadPlanningThread } from "@/src/features/planning/domain";
+import type { BeaconDraft } from "@/src/features/planning/types";
 import BeaconMap from "@/src/features/maps/components/BeaconMap";
 import DateField from "@/components/DateField";
 import { BeaconSettings } from "@/src/features/beacons/BeaconSettings";
@@ -41,7 +20,10 @@ import { readViewerDeviceDefaults } from "@/src/features/profile/settings/device
 import { resolveDefaultAudience } from "@/src/features/profile/settings/beaconDefaults";
 import { canOpenSquadProfile } from "@/src/features/people/squadProfile";
 import { canReadSpace, activeSpaceRole } from "@/src/features/spaces/domain";
-import { canReadOrganization, activeOrganizationRole } from "@/src/features/organizations/domain";
+import {
+  canReadOrganization,
+  activeOrganizationRole,
+} from "@/src/features/organizations/domain";
 import type { SocialEntityType } from "@/src/features/social/types";
 import type {
   Audience,
@@ -55,10 +37,6 @@ import {
   resolveActivityEndAt,
 } from "@/src/features/beacons/createTiming";
 import {
-  templates,
-  beaconTemplateGroups,
-  searchBeaconTemplates,
-  repeatSuggestions,
   type SuggestedTool,
   type BeaconTemplate,
 } from "@/src/shared/templates";
@@ -75,31 +53,10 @@ import {
   useTheme,
 } from "@/src/shared/ui";
 
-const templateGroupIcons: Record<string, LucideIcon> = {
-  "study-learning": BookOpen,
-  "sports-fitness": Dumbbell,
-  "hangout-social": UsersRound,
-  "food-dining": Utensils,
-  "nature-outdoors": Trees,
-  gaming: Gamepad2,
-  entertainment: Ticket,
-  "travel-trip": Map,
-  "work-project": Briefcase,
-  "productivity-errands": ListChecks,
-  creative: Palette,
-  "wellness-self-improvement": HeartPulse,
-  "community-club": Landmark,
-  "event-celebration": PartyPopper,
-  "shopping-local-discovery": ShoppingBag,
-  "transportation-meetup": CarFront,
-  "routine-repeating": Repeat,
-  "custom-other": Sparkles,
-};
-
 const suggestedToolNames: Record<SuggestedTool, string> = {
   chat: "Chat",
   checklist: "Checklist",
-  notes: "Beacon Note",
+  notes: "Beacon Sketchboard",
   focus: "Timer",
   memories: "Beacon Memories",
   music: "Music",
@@ -120,12 +77,20 @@ function moduleDefaultsFromControls(
   };
 }
 export default function CreateActivity() {
+  const params = useLocalSearchParams();
+  return <CreateEditor key={JSON.stringify(params)} />;
+}
+
+function CreateEditor() {
   const { colors, styles } = useTheme();
 
   const { data, userId, act } = useBeacon();
   const currentTime = useNow();
   const params = useLocalSearchParams<{
     kind?: string;
+    editor?: string;
+    planId?: string;
+    threadId?: string;
     squadId?: string;
     spaceId?: string;
     organizationId?: string;
@@ -154,19 +119,44 @@ export default function CreateActivity() {
   const templateEditor =
     params.editTemplate === "yes" || params.saveTemplate === "yes";
   const previous = data.activities.find((a) => a.id === params.repeat);
-  const associationCandidates = userId && data.viewer_id === userId
-    ? [
-        ...data.squads
-          .filter((squad) => canOpenSquadProfile(data, squad.id, userId))
-          .map((squad) => ({ entity_type: "squad" as const, entity_id: squad.id, name: squad.name })),
-        ...data.spaces
-          .filter((space) => canReadSpace(data, space.id, userId) && !!activeSpaceRole(space, data.space_members, userId))
-          .map((space) => ({ entity_type: "space" as const, entity_id: space.id, name: space.name })),
-        ...data.organizations
-          .filter((organization) => canReadOrganization(data, organization.id, userId) && !!activeOrganizationRole(organization, data.organization_members, userId))
-          .map((organization) => ({ entity_type: "organization" as const, entity_id: organization.id, name: organization.name })),
-      ].sort((first, second) => first.name.localeCompare(second.name))
-    : [];
+  const associationCandidates =
+    userId && data.viewer_id === userId
+      ? [
+          ...data.squads
+            .filter((squad) => canOpenSquadProfile(data, squad.id, userId))
+            .map((squad) => ({
+              entity_type: "squad" as const,
+              entity_id: squad.id,
+              name: squad.name,
+            })),
+          ...data.spaces
+            .filter(
+              (space) =>
+                canReadSpace(data, space.id, userId) &&
+                !!activeSpaceRole(space, data.space_members, userId),
+            )
+            .map((space) => ({
+              entity_type: "space" as const,
+              entity_id: space.id,
+              name: space.name,
+            })),
+          ...data.organizations
+            .filter(
+              (organization) =>
+                canReadOrganization(data, organization.id, userId) &&
+                !!activeOrganizationRole(
+                  organization,
+                  data.organization_members,
+                  userId,
+                ),
+            )
+            .map((organization) => ({
+              entity_type: "organization" as const,
+              entity_id: organization.id,
+              name: organization.name,
+            })),
+        ].sort((first, second) => first.name.localeCompare(second.name))
+      : [];
   const associationRouteSeed = params.organizationId
     ? { entity_type: "organization" as const, entity_id: params.organizationId }
     : params.spaceId
@@ -183,24 +173,81 @@ export default function CreateActivity() {
     routeKey: string;
     value: { entity_type: SocialEntityType; entity_id: string } | null;
   }>(() => ({ routeKey: associationRouteKey, value: associationRouteSeed }));
-  const selectedAssociation = associationDraft.routeKey === associationRouteKey
-    ? associationDraft.value
-    : associationRouteSeed;
+  const selectedAssociation =
+    associationDraft.routeKey === associationRouteKey
+      ? associationDraft.value
+      : associationRouteSeed;
   const selectedAssociationRow = selectedAssociation
-    ? associationCandidates.find((row) => row.entity_type === selectedAssociation.entity_type && row.entity_id === selectedAssociation.entity_id)
+    ? associationCandidates.find(
+        (row) =>
+          row.entity_type === selectedAssociation.entity_type &&
+          row.entity_id === selectedAssociation.entity_id,
+      )
     : undefined;
+  const routePlan = data.plans.find((item) => item.id === params.planId);
+  const routeDecision = data.planning_threads.find(
+    (item) => item.id === params.threadId,
+  );
+  const routeStart = routeDecision
+    ? Date.parse(routeDecision.deadline_at) + 3600000
+    : routePlan
+      ? Math.max(
+          currentTime + 1800000,
+          ...data.activities
+            .filter(
+              (item) =>
+                item.plan_id === routePlan.id &&
+                item.plan_started_at !== null &&
+                item.plan_step?.end_mode !== "manual",
+            )
+            .map((item) => Date.parse(item.ends_at)),
+        )
+      : currentTime;
   const aspirations =
     data.profiles.find((p) => p.id === userId)?.aspiration_goals ?? [];
   const currentAspirationIds = new Set(
     aspirations.map((aspiration) => aspiration.id),
   );
+  const [home, setHome] = useState(
+    !params.editor &&
+      !params.template &&
+      !params.repeat &&
+      !params.editTemplate &&
+      !params.saveTemplate &&
+      !params.savedChecklist &&
+      !params.planId &&
+      !params.threadId &&
+      !params.squadId &&
+      !params.spaceId &&
+      !params.organizationId &&
+      !params.latitude &&
+      (!params.kind || params.kind === "beacon"),
+  );
+  const [addTo, setAddTo] = useState(
+    params.threadId ? "Vote / Draw" : params.planId ? "Plan" : "Standalone",
+  );
+  const [decisionKind, setDecisionKind] = useState("Vote");
+  const [decisionTitle, setDecisionTitle] = useState("");
+  const [decisionId, setDecisionId] = useState(params.threadId ?? "");
+  const [selectedPlanId, setSelectedPlanId] = useState(params.planId ?? "");
+  const [planPosition, setPlanPosition] = useState("End");
+  const decisions = data.planning_threads.filter(
+    (thread) =>
+      thread.kind !== "ping" &&
+      thread.status === "open" &&
+      Date.parse(thread.deadline_at) > currentTime &&
+      canReadPlanningThread(data, thread, userId ?? ""),
+  );
+  const decision = data.planning_threads.find(
+    (thread) => thread.id === decisionId,
+  );
+  const ownPlans = data.plans.filter(
+    (plan) => plan.owner_id === userId && plan.status === "scheduled",
+  );
   const [timing, setTiming] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [templateBrowser, setTemplateBrowser] = useState(false);
   const [associationOpen, setAssociationOpen] = useState(false);
   const [associationSearch, setAssociationSearch] = useState("");
-  const [templateSearch, setTemplateSearch] = useState("");
-  const [templateGroup, setTemplateGroup] = useState<string | null>(null);
   const [selectedRecipe, setSelectedRecipe] = useState<BeaconTemplate | null>(
     null,
   );
@@ -228,15 +275,25 @@ export default function CreateActivity() {
   const appliedDeviceDefault = useRef<string | null>(null);
   const [defaultNotice, setDefaultNotice] = useState("");
   const [audience, setAudienceValue] = useState<Audience>(
-    params.organizationId
-      ? "organization"
-      : params.kind === "squad"
-        ? "squad"
-        : (data.profiles.find((p) => p.id === userId)?.default_audience ??
-          "friends"),
+    routeDecision
+      ? routeDecision.audience
+      : routePlan
+        ? routePlan.squad_id
+          ? "squad"
+          : "private"
+        : params.organizationId
+          ? "organization"
+          : params.kind === "squad"
+            ? "squad"
+            : (data.profiles.find((p) => p.id === userId)?.default_audience ??
+              "friends"),
   );
   const [audienceId, setAudienceId] = useState<string | null>(
-    params.organizationId ?? params.squadId ?? null,
+    routeDecision?.audience_id ??
+      routePlan?.squad_id ??
+      params.organizationId ??
+      params.squadId ??
+      null,
   );
   const setAudience = (value: Audience) => {
     audienceEdited.current = true;
@@ -244,37 +301,77 @@ export default function CreateActivity() {
     setAudienceValue(value);
   };
   useEffect(() => {
-    if (!userId || data.viewer_id !== userId || params.kind || params.squadId || params.organizationId || params.spaceId || saved || previous || templateEditor) return;
+    if (
+      !userId ||
+      data.viewer_id !== userId ||
+      params.planId ||
+      params.threadId ||
+      params.kind ||
+      params.squadId ||
+      params.organizationId ||
+      params.spaceId ||
+      saved ||
+      previous ||
+      templateEditor
+    )
+      return;
     const key = `${userId}:${controlsRouteKey}`;
     if (appliedDeviceDefault.current === key || audienceEdited.current) return;
     let active = true;
     // Device storage is an external source. Apply its initial audience once;
     // never replace an audience the viewer has already chosen in this draft.
-    void readViewerDeviceDefaults(userId).then((preferences) => {
-      if (!active || audienceEdited.current) return;
-      const resolved = resolveDefaultAudience(data, userId, preferences);
-      appliedDeviceDefault.current = key;
-      setAudienceValue(resolved.audience);
-      setAudienceId(resolved.audienceId);
-      if (resolved.fellBack) setDefaultNotice("Your saved audience target is no longer available. Using your account default.");
-    }).catch(() => {
-      if (active) setDefaultNotice("This device’s default could not be loaded. Using your account default.");
-    });
-    return () => { active = false; };
-  }, [userId, data, params.kind, params.squadId, params.organizationId, params.spaceId, saved, previous, templateEditor, controlsRouteKey]);
+    void readViewerDeviceDefaults(userId)
+      .then((preferences) => {
+        if (!active || audienceEdited.current) return;
+        const resolved = resolveDefaultAudience(data, userId, preferences);
+        appliedDeviceDefault.current = key;
+        setAudienceValue(resolved.audience);
+        setAudienceId(resolved.audienceId);
+        if (resolved.fellBack)
+          setDefaultNotice(
+            "Your saved audience target is no longer available. Using your account default.",
+          );
+      })
+      .catch(() => {
+        if (active)
+          setDefaultNotice(
+            "This device’s default could not be loaded. Using your account default.",
+          );
+      });
+    return () => {
+      active = false;
+    };
+  }, [
+    userId,
+    data,
+    params.kind,
+    params.squadId,
+    params.organizationId,
+    params.spaceId,
+    params.planId,
+    params.threadId,
+    saved,
+    previous,
+    templateEditor,
+    controlsRouteKey,
+  ]);
   const [target, setTarget] = useState(
     saved?.target_count ? String(saved.target_count) : "",
   );
   const [approval, setApproval] = useState(
     saved?.approval_required ? "Host approval" : "Open joining",
   );
-  const [when, setWhen] = useState("Now"),
+  const [when, setWhen] = useState(
+      params.threadId || params.planId ? "Pick time" : "Now",
+    ),
     [duration, setDuration] = useState(
       formatDurationLabel(saved?.minutes ?? 60),
     );
-  const [starts, setStarts] = useState(() => new Date().toISOString());
+  const [starts, setStarts] = useState(() =>
+    new Date(routeStart).toISOString(),
+  );
   const [ends, setEnds] = useState(() =>
-    new Date(Date.now() + (saved?.minutes ?? 60) * 60000).toISOString(),
+    new Date(routeStart + (saved?.minutes ?? 60) * 60000).toISOString(),
   );
   const [label, setLabel] = useState(params.placeLabel ?? saved?.label ?? "");
   const [placeType, setPlaceType] = useState("In person"),
@@ -316,7 +413,6 @@ export default function CreateActivity() {
       currentAspirationIds.has(id),
     ),
   );
-  const suggestions = repeatSuggestions(data.activities, userId!);
   function applyTemplate(t: BeaconTemplate) {
     setTitle(t.title);
     setCategory(t.category);
@@ -399,6 +495,11 @@ export default function CreateActivity() {
         `Combined details are ${finalDescription.length}/2000 characters. Shorten the description or template answers before publishing.`,
       );
     const payload = {
+      template_source_id: saved
+        ? `mine:${saved.id}`
+        : selectedRecipe?.id
+          ? `app:${selectedRecipe.id}`
+          : null,
       title: title.trim(),
       description: finalDescription,
       available: kind === "Status" && available,
@@ -410,7 +511,10 @@ export default function CreateActivity() {
       audience,
       audience_id: audienceId,
       ...(selectedAssociationRow
-        ? { social_entity_type: selectedAssociationRow.entity_type, social_entity_id: selectedAssociationRow.entity_id }
+        ? {
+            social_entity_type: selectedAssociationRow.entity_type,
+            social_entity_id: selectedAssociationRow.entity_id,
+          }
         : {}),
       target_count: kind === "Status" || !target.trim() ? null : Number(target),
       approval_required: kind !== "Status" && approval === "Host approval",
@@ -442,7 +546,64 @@ export default function CreateActivity() {
     )
       throw new Error("Choose who to share with first.");
     if (selectedAssociation && !selectedAssociationRow)
-      throw new Error("That community is no longer available for this Beacon. Clear the association or choose another community.");
+      throw new Error(
+        "That community is no longer available for this Beacon. Clear the association or choose another community.",
+      );
+    if (addTo === "Vote / Draw") {
+      if (start <= currentTime + 120000)
+        throw new Error(
+          "Choose a future time so people can decide before the Beacon starts.",
+        );
+      const thread = decision;
+      if (
+        thread &&
+        (thread.audience !== audience || thread.audience_id !== audienceId)
+      )
+        throw new Error("Use the same audience as this Vote / Draw.");
+      if (thread && start <= Date.parse(thread.deadline_at))
+        throw new Error("Choose a Beacon time after the decision deadline.");
+      let threadId = decisionId;
+      if (!threadId) {
+        const created = await act("create_planning_thread", {
+          kind: decisionKind.toLowerCase(),
+          title: decisionTitle.trim() || title.trim(),
+          body: "",
+          audience,
+          audience_id: audienceId,
+          coowner_ids: [],
+          deadline_at: new Date(
+            Math.min(currentTime + 86400000, start - 60000),
+          ).toISOString(),
+        });
+        if (typeof created.id !== "string")
+          throw new Error("The decision could not be opened.");
+        threadId = created.id;
+        setDecisionId(threadId);
+      }
+      await act("add_council_proposal", {
+        thread_id: threadId,
+        payload: payload as BeaconDraft,
+        approve_if_manager: true,
+      });
+      router.replace({ pathname: "/council/[id]", params: { id: threadId } });
+      return;
+    }
+    if (addTo === "Plan") {
+      const plan = ownPlans.find((item) => item.id === selectedPlanId);
+      if (!plan) throw new Error("Choose a Plan first.");
+      const count = data.activities.filter(
+        (item) => item.plan_id === plan.id,
+      ).length;
+      const result = await act("create_plan_beacon", {
+        ...payload,
+        plan_id: plan.id,
+        position: planPosition === "End" ? count : Number(planPosition) - 1,
+      });
+      if (!result.id)
+        throw new Error("The Beacon could not be added to this Plan.");
+      router.replace({ pathname: "/plan/[id]", params: { id: plan.id } });
+      return;
+    }
     const result = await act("create_activity", payload);
     router.replace({
       pathname: "/(tabs)",
@@ -452,19 +613,6 @@ export default function CreateActivity() {
       },
     });
   }
-  const activeTemplateGroup = beaconTemplateGroups.find(
-      (group) => group.id === templateGroup,
-    ),
-    recipeResults = searchBeaconTemplates(
-      templateSearch,
-      templateGroup ?? undefined,
-    ),
-    templateResultGroups = beaconTemplateGroups
-      .map((group) => ({
-        group,
-        recipes: recipeResults.filter((recipe) => recipe.groupId === group.id),
-      }))
-      .filter((group) => group.recipes.length > 0);
   const standardDurations = ["30 min", "1 hour", "2 hours"];
   const durationOptions = [
     ...(standardDurations.includes(duration) || duration === "Custom"
@@ -472,50 +620,33 @@ export default function CreateActivity() {
       : [duration, ...standardDurations]),
     "Custom",
   ];
-  const renderCatalogTemplate = (recipe: BeaconTemplate) => (
-    <Pressable
-      key={recipe.id}
-      accessibilityRole="button"
-      accessibilityLabel={`Use ${recipe.title}, ${recipe.minutes} minutes, ${recipe.category}`}
-      onPress={() => {
-        applyTemplate(recipe);
-        setTemplateBrowser(false);
-        setTemplateSearch("");
-        setTemplateGroup(null);
-      }}
-      style={({ pressed }) => [
-        styles.card,
-        {
-          minHeight: 58,
-          padding: 12,
-          borderRadius: 16,
-          flexDirection: "row",
-          alignItems: "center",
-          gap: 10,
-          opacity: pressed ? 0.78 : 1,
-        },
-      ]}
-    >
-      <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
-        <Text style={[styles.body, { fontWeight: "700" }]}>{recipe.title}</Text>
-        <Text style={styles.muted}>
-          {recipe.category} · {recipe.minutes} min
-        </Text>
-        <Text numberOfLines={2} style={styles.muted}>
-          {recipe.prepPrompts?.[0] ?? recipe.description}
-        </Text>
-      </View>
-      <ArrowRight size={18} color={colors.green} />
-    </Pressable>
-  );
+  if (home)
+    return (
+      <CreateHome
+        onBlank={() =>
+          router.push({
+            pathname: "/create",
+            params: {
+              editor: "yes",
+              ...(params.threadId ? { threadId: params.threadId } : {}),
+              ...(params.planId ? { planId: params.planId } : {}),
+            },
+          })
+        }
+        onTemplate={(recipe) => {
+          applyTemplate(recipe);
+          setHome(false);
+        }}
+      />
+    );
   return (
     <Screen
       title={
         templateEditor
-          ? "Your repeat plan"
+          ? "Beacon Template"
           : kind === "Status"
             ? "Share a little update"
-            : "Create a beacon"
+            : "Beacon Quick Editor"
       }
       eyebrow="SMALL PLANS. GOOD COMPANY."
       create={false}
@@ -526,49 +657,24 @@ export default function CreateActivity() {
               ? "Save template"
               : kind === "Status"
                 ? "Share my status"
-                : "Light up this beacon"
+                : addTo === "Vote / Draw"
+                  ? "Add Suggested Beacon"
+                  : addTo === "Plan"
+                    ? "Add Beacon to Plan"
+                    : "Create Beacon"
           }
           run={templateEditor ? saveTemplate : publish}
         />
       }
     >
-      <View style={styles.between}>
+      {!templateEditor && kind === "Beacon" && (
         <Button
           compact
           secondary
-          title={view === "Advanced" ? "Hide more options" : "More options"}
-          onPress={() => setView(view === "Advanced" ? "Normal" : "Advanced")}
+          title="← Blank or template"
+          onPress={() => setHome(true)}
         />
-        <Text style={styles.label}>{kind}</Text>
-      </View>
-      <View style={styles.between}>
-        <Text style={styles.h2}>Quick starts</Text>
-        <Button
-          compact
-          secondary
-          title="Browse template library"
-          onPress={() => {
-            setTemplateSearch("");
-            setTemplateGroup(null);
-            setTemplateBrowser(true);
-          }}
-        />
-      </View>
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ gap: 8 }}
-      >
-        {[...suggestions.slice(0, 2), ...templates.slice(0, 5)].map((t) => (
-          <Button
-            key={t.id ?? t.sourceId ?? t.label}
-            compact
-            secondary
-            title={t.label}
-            onPress={() => applyTemplate(t)}
-          />
-        ))}
-      </ScrollView>
+      )}
       {templateEditor && (
         <Field
           label="Template name"
@@ -585,13 +691,13 @@ export default function CreateActivity() {
         />
       )}
       <Field
-        label="What are you doing?"
+        label="Title / Activity"
         placeholder="A tiny adventure with your people"
         value={title}
         onChangeText={setTitle}
         maxLength={120}
       />
-      {!!selectedRecipe?.prepPrompts?.length && (
+      {view === "Advanced" && !!selectedRecipe?.prepPrompts?.length && (
         <View style={[styles.card, { padding: 13, gap: 10 }]}>
           <Text style={styles.h2}>A few helpful details</Text>
           <Txt muted>
@@ -619,20 +725,30 @@ export default function CreateActivity() {
           </Txt>
         </View>
       )}
-      {kind !== "Status" && !!selectedRecipe?.suggestedTools?.length && (
-        <View style={[styles.card, { padding: 13, gap: 5 }]}>
-          <Text style={styles.label}>READY WITH</Text>
-          <Text style={[styles.body, { fontWeight: "700" }]}>
-            {selectedRecipe.suggestedTools
-              .map((tool) => suggestedToolNames[tool])
-              .join(" · ")}
-          </Text>
-          <Txt muted>
-            These module defaults are ready for this recipe. Adjust them in
-            Advanced options before publishing.
-          </Txt>
-        </View>
-      )}
+      {view === "Advanced" &&
+        kind !== "Status" &&
+        !!selectedRecipe?.suggestedTools?.length && (
+          <View style={[styles.card, { padding: 13, gap: 5 }]}>
+            <Text style={styles.label}>READY WITH</Text>
+            <Text style={[styles.body, { fontWeight: "700" }]}>
+              {selectedRecipe.suggestedTools
+                .map((tool) => suggestedToolNames[tool])
+                .join(" · ")}
+            </Text>
+            <Txt muted>
+              These module defaults are ready for this recipe. Adjust them in
+              Advanced options before publishing.
+            </Txt>
+          </View>
+        )}
+      <Field
+        label="Where? (optional)"
+        placeholder="Your usual spot, or decide together"
+        value={label}
+        onChangeText={setLabel}
+        maxLength={160}
+      />
+      <Text style={styles.label}>TIME</Text>
       <View style={styles.row}>
         <View style={{ flex: 1 }}>
           <Button
@@ -681,13 +797,7 @@ export default function CreateActivity() {
         )}
         <Button title="Done" onPress={() => setTiming(false)} />
       </Sheet>
-      <Field
-        label="Where? (optional)"
-        placeholder="Your usual spot, or decide together"
-        value={label}
-        onChangeText={setLabel}
-        maxLength={160}
-      />
+      <Text style={styles.label}>PEOPLE / AUDIENCE</Text>
       <AudiencePicker
         value={audience}
         id={audienceId}
@@ -697,14 +807,21 @@ export default function CreateActivity() {
         }}
       />
       {defaultNotice ? <Txt muted>{defaultNotice}</Txt> : null}
-      {kind !== "Status" ? (
+      {view === "Advanced" && kind !== "Status" ? (
         <View style={[styles.card, { gap: 7 }]}>
           <Text style={styles.label}>COMMUNITY CONTEXT</Text>
-          <Txt muted>This optional association is separate from the audience and does not change who can see or join the Beacon.</Txt>
+          <Txt muted>
+            This optional association is separate from the audience and does not
+            change who can see or join the Beacon.
+          </Txt>
           <Button
             compact
             secondary
-            title={selectedAssociationRow ? `Associated with ${selectedAssociationRow.name}` : "Choose a community"}
+            title={
+              selectedAssociationRow
+                ? `Associated with ${selectedAssociationRow.name}`
+                : "Choose a community"
+            }
             onPress={() => setAssociationOpen(true)}
           />
         </View>
@@ -714,7 +831,10 @@ export default function CreateActivity() {
         visible={associationOpen}
         onClose={() => setAssociationOpen(false)}
       >
-        <Txt muted>Association organizes community activity; the Beacon’s audience remains unchanged.</Txt>
+        <Txt muted>
+          Association organizes community activity; the Beacon’s audience
+          remains unchanged.
+        </Txt>
         <Button
           compact
           secondary
@@ -731,7 +851,11 @@ export default function CreateActivity() {
           onChangeText={setAssociationSearch}
         />
         {associationCandidates
-          .filter((row) => `${row.name} ${row.entity_type}`.toLowerCase().includes(associationSearch.trim().toLowerCase()))
+          .filter((row) =>
+            `${row.name} ${row.entity_type}`
+              .toLowerCase()
+              .includes(associationSearch.trim().toLowerCase()),
+          )
           .map((row) => (
             <Button
               key={`${row.entity_type}:${row.entity_id}`}
@@ -739,13 +863,24 @@ export default function CreateActivity() {
               secondary
               title={`${row.entity_type === "organization" ? "Organization" : row.entity_type === "space" ? "Space" : "Squad"} · ${row.name}`}
               onPress={() => {
-                setAssociationDraft({ routeKey: associationRouteKey, value: { entity_type: row.entity_type, entity_id: row.entity_id } });
+                setAssociationDraft({
+                  routeKey: associationRouteKey,
+                  value: {
+                    entity_type: row.entity_type,
+                    entity_id: row.entity_id,
+                  },
+                });
                 setAssociationOpen(false);
                 setAssociationSearch("");
               }}
             />
           ))}
-        {!associationCandidates.length ? <Empty title="No communities available" body="You can associate Beacons with communities you currently belong to." /> : null}
+        {!associationCandidates.length ? (
+          <Empty
+            title="No communities available"
+            body="You can associate Beacons with communities you currently belong to."
+          />
+        ) : null}
       </Sheet>
       <Chips
         options={["In person", "Online"]}
@@ -762,7 +897,7 @@ export default function CreateActivity() {
           keyboardType="url"
         />
       ) : null}
-      {kind !== "Status" ? (
+      {view === "Advanced" && kind !== "Status" ? (
         <View style={{ gap: 6 }}>
           <Text style={styles.label}>JOINING</Text>
           <Chips
@@ -773,6 +908,146 @@ export default function CreateActivity() {
           />
         </View>
       ) : null}
+      {!templateEditor && kind !== "Status" && (
+        <View style={{ gap: 8 }}>
+          <Text style={styles.label}>ADD TO</Text>
+          <Chips
+            options={["Standalone", "Vote / Draw", "Plan"]}
+            value={addTo}
+            onChange={setAddTo}
+            showSelectedCheckmark={false}
+          />
+          {addTo === "Vote / Draw" && (
+            <>
+              <Txt muted>
+                A Suggested Beacon is an option. Vote lets participants choose;
+                Draw picks one at random. The winner becomes a Beacon.
+              </Txt>
+              <Button
+                compact
+                secondary={!decisionId}
+                title="New Vote / Draw"
+                onPress={() => setDecisionId("")}
+              />
+              {!decisionId && (
+                <>
+                  <Chips
+                    options={["Vote", "Draw"]}
+                    value={decisionKind}
+                    onChange={setDecisionKind}
+                  />
+                  <Field
+                    label="Decision name (optional)"
+                    value={decisionTitle}
+                    onChangeText={setDecisionTitle}
+                    placeholder="What should we do?"
+                    maxLength={100}
+                  />
+                </>
+              )}
+              {decisions.map((item) => (
+                <Button
+                  key={item.id}
+                  compact
+                  secondary={decisionId !== item.id}
+                  title={`${item.kind === "vote" ? "Vote" : "Draw"} · ${item.title}`}
+                  onPress={() => {
+                    setDecisionId(item.id);
+                    setAudience(item.audience);
+                    setAudienceId(item.audience_id);
+                  }}
+                />
+              ))}
+              {decision && (
+                <Txt muted>
+                  Decide by {new Date(decision.deadline_at).toLocaleString()}.
+                  Add more suggestions in this decision.
+                </Txt>
+              )}
+            </>
+          )}
+          {addTo === "Plan" && (
+            <>
+              <Button
+                compact
+                secondary
+                title="+ New Plan with this Beacon"
+                onPress={() =>
+                  router.push({
+                    pathname: "/plans",
+                    params: {
+                      create: "yes",
+                      beaconDraft: JSON.stringify({
+                        title,
+                        description: descriptionWithPrep(),
+                        category,
+                        location_name: label,
+                        lat: pin?.latitude ?? null,
+                        lng: pin?.longitude ?? null,
+                        day_offset: 0,
+                        start_time: new Date(
+                          effectiveStartAt(),
+                        ).toLocaleTimeString("en-GB", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                          hourCycle: "h23",
+                        }),
+                        duration_minutes: durationMinutesForLabel(
+                          duration,
+                          starts,
+                          ends,
+                        ),
+                        aspiration_ids: aspirationIds,
+                      }),
+                    },
+                  })
+                }
+              />
+              {ownPlans.map((item) => (
+                <Button
+                  key={item.id}
+                  compact
+                  secondary={selectedPlanId !== item.id}
+                  title={item.title}
+                  onPress={() => {
+                    setSelectedPlanId(item.id);
+                    setPlanPosition("End");
+                    setAudience(item.squad_id ? "squad" : "private");
+                    setAudienceId(item.squad_id);
+                  }}
+                />
+              ))}
+              {!!selectedPlanId && (
+                <>
+                  <Txt muted>Where in the Plan?</Txt>
+                  <Chips
+                    options={[
+                      ...data.activities
+                        .filter((item) => item.plan_id === selectedPlanId)
+                        .map((_, index) => String(index + 1)),
+                      "End",
+                    ]}
+                    value={planPosition}
+                    onChange={setPlanPosition}
+                  />
+                  <Txt muted>
+                    Plan Beacons use the Plan audience. Check this Beacon?s time
+                    against the itinerary.
+                  </Txt>
+                </>
+              )}
+            </>
+          )}
+        </View>
+      )}
+      <Button
+        compact
+        secondary
+        title={
+          view === "Advanced" ? "Advanced Options ↑" : "Advanced Options ↓"
+        }
+        onPress={() => setView(view === "Advanced" ? "Normal" : "Advanced")}
+      />
       {view === "Advanced" && kind !== "Status" && aspirations.length > 0 && (
         <View style={styles.card}>
           <Text style={styles.h2}>Connect to an aspiration</Text>
@@ -958,7 +1233,11 @@ export default function CreateActivity() {
                   ? "Virtual"
                   : label.trim() || "Place to be decided"}
               </Txt>
-              {selectedAssociationRow ? <Txt muted>Community context · {selectedAssociationRow.name}</Txt> : null}
+              {selectedAssociationRow ? (
+                <Txt muted>
+                  Community context · {selectedAssociationRow.name}
+                </Txt>
+              ) : null}
               <Txt muted>
                 {when === "Pick time" && Number.isFinite(Date.parse(starts))
                   ? new Date(starts).toLocaleString()
@@ -979,111 +1258,6 @@ export default function CreateActivity() {
           )}
         </View>
       )}
-      <Sheet
-        title={activeTemplateGroup?.title ?? "Beacon template library"}
-        visible={templateBrowser}
-        onClose={() => setTemplateBrowser(false)}
-      >
-        <Field
-          label="Search templates"
-          placeholder="Study, walking, local food…"
-          value={templateSearch}
-          onChangeText={setTemplateSearch}
-          autoCapitalize="none"
-        />
-        {templateGroup && (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="All template categories"
-            onPress={() => setTemplateGroup(null)}
-            style={{
-              minHeight: 44,
-              alignSelf: "flex-start",
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 5,
-            }}
-          >
-            <ArrowLeft size={16} color={colors.green} />
-            <Text style={[styles.body, { fontWeight: "700" }]}>
-              All categories
-            </Text>
-          </Pressable>
-        )}
-        {!templateGroup && !templateSearch.trim() ? (
-          <>
-            <Txt muted>
-              Choose one of 18 categories to see ready-to-edit ideas.
-            </Txt>
-            {beaconTemplateGroups.map((group) => {
-              const Icon = templateGroupIcons[group.id] ?? Sparkles;
-              return (
-                <Pressable
-                  key={group.id}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${group.title}, ${group.recipes.length} ideas`}
-                  onPress={() => setTemplateGroup(group.id)}
-                  style={({ pressed }) => [
-                    styles.card,
-                    {
-                      minHeight: 58,
-                      padding: 12,
-                      borderRadius: 16,
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: 11,
-                      opacity: pressed ? 0.78 : 1,
-                    },
-                  ]}
-                >
-                  <Icon size={20} color={colors.green} />
-                  <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                    <Text style={[styles.body, { fontWeight: "700" }]}>
-                      {group.title}
-                    </Text>
-                    <Text style={styles.muted}>{group.category}</Text>
-                  </View>
-                  <Text style={styles.label}>{group.recipes.length} IDEAS</Text>
-                  <ChevronRight size={17} color={colors.green} />
-                </Pressable>
-              );
-            })}
-          </>
-        ) : (
-          <>
-            {templateSearch.trim() && (
-              <Txt muted>
-                {recipeResults.length} matching{" "}
-                {recipeResults.length === 1 ? "idea" : "ideas"}
-              </Txt>
-            )}
-            {!templateResultGroups.length ? (
-              <Empty
-                title="No matching templates"
-                body="Try another activity or category name."
-              />
-            ) : (
-              templateResultGroups.map(({ group, recipes }) => {
-                const Icon = templateGroupIcons[group.id] ?? Sparkles;
-                return (
-                  <View key={group.id} style={{ gap: 8 }}>
-                    <View style={styles.row}>
-                      <Icon size={17} color={colors.green} />
-                      <Text style={styles.h2}>{group.title}</Text>
-                    </View>
-                    {recipes.map(renderCatalogTemplate)}
-                  </View>
-                );
-              })
-            )}
-          </>
-        )}
-        <Button
-          title="Done"
-          secondary
-          onPress={() => setTemplateBrowser(false)}
-        />
-      </Sheet>
     </Screen>
   );
 }

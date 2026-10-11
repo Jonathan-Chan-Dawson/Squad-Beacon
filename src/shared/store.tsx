@@ -267,13 +267,13 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
             ? { id: organization.id, organization_id: organization.id }
             : {};
         }
-        if (action === "create_activity") {
+        if (action === "create_activity" || action === "create_plan_beacon") {
           const activity = next.activities.find(
             (item) => !baseData.activities.some((old) => old.id === item.id),
           );
           return activity ? { id: activity.id } : {};
         }
-        if (action === "create_plan" || action === "run_routine_once") {
+        if (action === "create_plan" || action === "run_routine_once" || action === "run_routine_now") {
           const plan = next.plans.find(
             (item) => !baseData.plans.some((old) => old.id === item.id),
           );

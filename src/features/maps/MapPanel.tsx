@@ -1,431 +1,357 @@
 import React, { useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
+import { Linking, Pressable, ScrollView, Text, View } from "react-native";
 import { router } from "expo-router";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import {
-  X,
-  Maximize2,
-  Minimize2,
-  Info,
-  Users,
-  MessagesSquare,
-} from "lucide-react-native";
+import { canReadPlanningThread } from "@/src/features/planning/domain";
+import { X } from "lucide-react-native";
 import { useBeacon } from "@/src/shared/store";
 import { useNow } from "@/src/shared/useNow";
-import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
-import { canViewProfile } from "@/src/features/profile/privacy";
-import { canReadPlanningThread } from "@/src/features/planning/domain";
 import {
-  BeaconMomentum,
-  BeaconResponse,
-} from "@/src/features/beacons/BeaconResponse";
+  Action,
+  Button,
+  Field,
+  IconButton,
+  Txt,
+  useTheme,
+} from "@/src/shared/ui";
+import { uiHaptics } from "@/src/shared/design-system";
+import {
+  canReadBeaconActivity,
+  canUseBeaconModules,
+} from "@/src/features/beacons/beaconModules";
+import {
+  canManageBeaconSettings,
+  canWriteBeaconModule,
+} from "@/src/features/beacons/permissions";
+import { canReadBeaconMeetingDetails } from "./filtering";
+import { activityWhen } from "@/src/shared/domain";
+import { canViewProfile } from "@/src/features/profile/privacy";
+import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
+import { BeaconResponse } from "@/src/features/beacons/BeaconResponse";
+import { BeaconTools } from "@/src/features/beacons/BeaconTools";
+import { BeaconMemories } from "@/src/features/beacons/BeaconMemories";
+import { BeaconScoreboard } from "@/src/features/beacons/BeaconScoreboard";
+import { BeaconSettings } from "@/src/features/beacons/BeaconSettings";
+import { AttendanceControls } from "@/src/features/beacons/AttendanceControls";
 import { ChatThread } from "@/src/features/messages/ChatThread";
-import { canChat, crew } from "@/src/shared/browsing";
-import { isBeaconModuleEnabled } from "@/src/features/beacons/permissions";
-import { canUseBeaconModules } from "@/src/features/beacons/beaconModules";
-import { canReadBeaconMeetingDetails } from "@/src/features/maps/filtering";
-import { activityWhen, friendIds } from "@/src/shared/domain";
-import { Action, Button, Field, Txt, useTheme } from "@/src/shared/ui";
+import {
+  enabledMapBeaconFeatures,
+  beaconFeatureLabels,
+  type MapBeaconFeature,
+} from "./mapBeaconFeatures";
+import { clusterPeople } from "./mapDiscovery";
+
 export function MapPanel({
   beaconId,
-  personId,
-  onBeacon,
+  initialTab = "overview",
   onClose,
-  expanded,
-  onExpand,
-  initialTab = "Overview",
+  onPerson,
 }: {
-  beaconId: string | null;
-  personId: string | null;
-  onBeacon: (id: string) => void;
-  onClose: () => void;
-  expanded: boolean;
-  onExpand: (value: boolean) => void;
-  initialTab?: "Overview" | "People" | "Chat";
+  beaconId: string;
+  initialTab?: MapBeaconFeature;
+  onClose(): void;
+  onPerson(id: string): void;
 }) {
-  const { styles, colors, tokens } = useTheme();
-  const insets = useSafeAreaInsets();
-
   const { data, userId, act } = useBeacon();
+  const { styles, colors, semanticColors, tokens } = useTheme();
   const now = useNow();
-  const [tab, setTab] = useState(initialTab),
-    [comment, setComment] = useState("");
-  const a = data.activities.find((a) => a.id === beaconId);
-  const personCandidate = data.profiles.find((p) => p.id === personId);
-  const person =
-    personCandidate && userId && canViewProfile(data, personCandidate, userId)
-      ? personCandidate
-      : undefined;
-  const place = a && userId && canReadBeaconMeetingDetails(data, a, userId)
-    ? data.places.find((p) => p.activity_id === beaconId)
+  const [tab, setTab] = useState(initialTab);
+  const [comment, setComment] = useState("");
+  const activity = data.activities.find((item) => item.id === beaconId);
+  const readable =
+    !!activity &&
+    !!userId &&
+    data.viewer_id === userId &&
+    canReadBeaconActivity(data, activity, userId);
+  if (!readable) return null;
+  const features = enabledMapBeaconFeatures(activity);
+  const manage = canManageBeaconSettings(data, activity, userId);
+  if (manage) features.push("settings");
+  const activeTab = features.includes(tab) ? tab : "overview";
+  const allowed = canUseBeaconModules(data, activity, userId);
+  const place = canReadBeaconMeetingDetails(data, activity, userId)
+    ? data.places.find((row) => row.activity_id === activity.id)
     : undefined;
-  const eligible = a && canChat(data, a, userId!);
-  const mine = a?.owner_id === userId;
-  const canComment =
-    !!a &&
-    a.enable_comments !== false &&
-    a.status !== "cancelled" &&
-    !!userId &&
-    canUseBeaconModules(data, a, userId);
-  const chatEnabled =
-    !!a &&
-    isBeaconModuleEnabled(a, "chat") &&
-    !!userId &&
-    canUseBeaconModules(data, a, userId);
-  const tabOptions = a
-    ? (["Overview", "People", ...(chatEnabled ? ["Chat"] : [])] as const)
-    : (["Overview"] as const);
-  const activeTab =
-    personId || !tabOptions.some((option) => option === tab)
-      ? "Overview"
-      : tab;
-  const open = a?.status === "scheduled" && Date.parse(a.ends_at) > now;
-  const decisionThread =
-    a && userId && data.viewer_id === userId
-      ? data.planning_threads.find(
-          (thread) =>
-            (thread.kind === "vote" || thread.kind === "draw") &&
-            thread.materialized_activity_id === a.id &&
-            canReadPlanningThread(data, thread, userId),
-        )
-      : undefined;
+  const owner = data.profiles.find(
+    (row) => row.id === activity.owner_id && canViewProfile(data, row, userId),
+  );
+  const people = clusterPeople(data, [activity.id], [], userId);
+  const decision = data.planning_threads.find(
+    (row) =>
+      row.materialized_activity_id === activity.id &&
+      (row.kind === "vote" || row.kind === "draw") &&
+      canReadPlanningThread(data, row, userId),
+  );
+  const comments = allowed
+    ? data.comments.filter((row) => row.activity_id === activity.id)
+    : [];
   return (
     <View
       testID="map-panel"
-      style={{
-        flex: 1,
-        backgroundColor: colors.white + "ED",
-        borderTopLeftRadius: 26,
-        borderTopRightRadius: 26,
-        borderWidth: 1,
-        borderColor: colors.line,
-        padding: 16,
-        gap: 12,
-        boxShadow: "0 -5px 24px #132d2920",
-      }}
+      style={[
+        styles.card,
+        { flex: 1, minHeight: 0, padding: 0, overflow: "hidden" },
+      ]}
     >
-      <View style={styles.between}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.label}>
-            {person ? person.name : "ON THE MAP"}
-          </Text>
-          <Text style={styles.h2} numberOfLines={2}>
-            {a?.title ?? person?.name ?? "Beacon unavailable"}
-          </Text>
-        </View>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={
-            expanded ? "Collapse map panel" : "Expand map panel"
-          }
-          onPress={() => onExpand(!expanded)}
-          style={{ minWidth: tokens.layout.touchTarget, minHeight: tokens.layout.touchTarget, alignItems: "center", justifyContent: "center" }}
-        >
-          {expanded ? (
-            <Minimize2 color={colors.ink} size={20} />
-          ) : (
-            <Maximize2 color={colors.ink} size={20} />
-          )}
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Back to map tooltip"
-          onPress={onClose}
-          style={{ minWidth: tokens.layout.touchTarget, minHeight: tokens.layout.touchTarget, alignItems: "center", justifyContent: "center" }}
-        >
-          <X color={colors.ink} size={22} />
-        </Pressable>
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          gap: tokens.space.sm,
+          padding: tokens.layout.screenGutter,
+        }}
+      >
+        <Text style={[styles.h2, { flex: 1 }]} numberOfLines={2}>
+          {activity.title}
+        </Text>
+        <IconButton label="Close Beacon panel" onPress={onClose}>
+          <X color={colors.ink} size={20} />
+        </IconButton>
       </View>
-      {a && (
-        <View style={{ flexDirection: "row", gap: 4 }}>
-          {tabOptions.map((t) => (
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{
+          padding: tokens.layout.screenGutter,
+          paddingBottom: tokens.space.xxl,
+          gap: tokens.space.md,
+        }}
+      >
+        <View
+          accessibilityRole="tablist"
+          accessibilityLabel="Beacon features"
+          style={{
+            flexDirection: "row",
+            flexWrap: "wrap",
+            gap: tokens.space.sm,
+          }}
+        >
+          {features.map((feature) => (
             <Pressable
-              key={t}
+              key={feature}
               accessibilityRole="tab"
-              accessibilityLabel={t}
-              accessibilityState={{ selected: activeTab === t }}
-              onPress={() => {
-                setTab(t as "Overview" | "People" | "Chat");
-                if (t === "Chat") onExpand(true);
-              }}
+              accessibilityLabel={beaconFeatureLabels[feature]}
+              accessibilityState={{ selected: activeTab === feature }}
+              aria-selected={activeTab === feature}
+              onPress={() => setTab(feature)}
               style={{
-                flex: 1,
-                paddingVertical: 10,
-                gap: 5,
-                borderRadius: 14,
-                alignItems: "center",
-                minHeight: 48,
-                backgroundColor: activeTab === t ? colors.ink : colors.bg + "99",
+                minHeight: tokens.layout.minTapTarget,
+                paddingHorizontal: tokens.space.md,
+                paddingVertical: tokens.space.sm,
+                borderRadius: tokens.radius.button,
+                borderWidth: 1,
+                borderColor: colors.line,
+                backgroundColor:
+                  activeTab === feature ? colors.green : colors.white,
               }}
             >
-              {React.createElement(
-                (
-                  {
-                    Overview: Info,
-                    People: Users,
-                    Chat: MessagesSquare,
-                  } as const
-                )[t as "Overview" | "People" | "Chat"],
-                { size: 18, color: activeTab === t ? colors.white : colors.green },
-              )}
               <Text
-                style={{
-                  color: activeTab === t ? colors.white : colors.ink,
-                  fontSize: 12,
-                  fontWeight: "700",
-                }}
+                style={[
+                  styles.muted,
+                  {
+                    color:
+                      activeTab === feature
+                        ? semanticColors.onAccent
+                        : colors.ink,
+                  },
+                ]}
               >
-                {t}
+                {beaconFeatureLabels[feature]}
               </Text>
             </Pressable>
           ))}
         </View>
-      )}
-      {a && activeTab === "Chat" && eligible ? (
-        <ChatThread key={a.id} activityId={a.id} />
-      ) : (
-        <ScrollView
-          keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ gap: tokens.space.md, paddingBottom: tokens.layout.tabBarHeight + insets.bottom + tokens.layout.scrollClearance }}
-        >
-          {person && activeTab === "Overview" && (
-            <View style={styles.row}>
+        {activeTab === "overview" && (
+          <View style={{ gap: tokens.space.md }}>
+            <Text style={styles.muted}>
+              {activityWhen(activity, new Date(now))}
+            </Text>
+            <Text style={styles.body}>
+              {activity.description || "A little time together."}
+            </Text>
+            <Text style={styles.muted}>
+              {place?.online_url
+                ? "Virtual"
+                : place?.label || "Meeting details are not shared."}
+            </Text>
+            {owner && (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`View ${owner.name}'s profile`}
+                onPress={() => onPerson(owner.id)}
+                style={styles.row}
+              >
+                <ProfileAvatar profile={owner} />
+                <Text style={styles.body}>Hosted by {owner.name}</Text>
+              </Pressable>
+            )}
+            {decision && (
+              <Button
+                title={`View ${decision.kind === "vote" ? "Vote" : "Draw"} decision`}
+                secondary
+                onPress={() =>
+                  router.push({
+                    pathname: "/council/[id]",
+                    params: { id: decision.id },
+                  })
+                }
+              />
+            )}
+            <BeaconResponse activity={activity} compact />
+            {allowed && <AttendanceControls activity={activity} />}
+          </View>
+        )}
+        {activeTab === "people" &&
+          people.map((person) => (
+            <Pressable
+              key={person.id}
+              accessibilityRole="button"
+              accessibilityLabel={`View ${person.name}'s profile`}
+              onPress={() => onPerson(person.id)}
+              style={[styles.card, styles.row]}
+            >
               <ProfileAvatar profile={person} />
-              <View style={{ flex: 1 }}>
-                <Txt>{person.bio || "A little company goes a long way."}</Txt>
-                <Button
-                  title="View profile"
-                  secondary
-                  onPress={() =>
-                    router.push({
-                      pathname: "/person/[id]",
-                      params: { id: person.id },
-                    })
-                  }
-                />
-              </View>
-            </View>
-          )}
-          {!a && (
-            <>
-              <Txt muted>
-                {person
-                  ? "No active beacon right now. Start a conversation or make a plan together."
-                  : "This beacon may have ended or its audience changed."}
-              </Txt>
-              {person &&
-                person.id !== userId &&
-                (friendIds(data, userId!).includes(person.id) ? (
-                  <Button
-                    title="Message"
-                    onPress={() =>
-                      router.push({
-                        pathname: "/messages/[id]",
-                        params: { id: person.id },
-                      })
-                    }
-                  />
-                ) : (
-                  <Action
-                    title="Add friend"
-                    run={() =>
-                      act("friend_request", { username: person.username })
-                    }
-                  />
-                ))}
-            </>
-          )}
-          {a && activeTab === "Overview" && (
-            <>
-              <Txt muted>
-                {activityWhen(a)} | {a.category}
-              </Txt>
-              <Txt>
-                {a.description || "A simple plan. A little time together."}
-              </Txt>
-              <Txt muted>
-                {place?.label || "Meeting place to be decided together"}
-              </Txt>
-              <BeaconMomentum activity={a} />
-              <BeaconResponse activity={a} />
-              <Button
-                title="Open beacon details & tools"
-                secondary
-                onPress={() =>
-                  router.push({
-                    pathname: "/activity/[id]",
-                    params: { id: a.id },
-                  })
-                }
-              />
-              {decisionThread && (
-                <Button
-                  title={`View ${decisionThread.kind === "vote" ? "Vote" : "Draw"} decision`}
-                  secondary
-                  onPress={() =>
-                    router.push({
-                      pathname: "/council/[id]",
-                      params: { id: decisionThread.id },
-                    })
-                  }
-                />
-              )}
-              {mine && open && a.mode === "solo" && (
-                <Action
-                  title="Open this status to company"
-                  run={() => act("open_status", { id: a.id })}
-                />
-              )}
-              {mine && open && (
-                <Action
-                  title="End beacon & keep memories"
-                  secondary
-                  run={() =>
-                    act("activity_status", { id: a.id, status: "completed" })
-                  }
-                />
-              )}
-              <Button
-                title="Save as a template"
-                secondary
-                onPress={() =>
-                  router.push({
-                    pathname: "/create",
-                    params: { repeat: a.id, saveTemplate: "yes" },
-                  })
-                }
-              />
-              {a.status !== "scheduled" && (
-                <Button
-                  title="Do this again"
-                  secondary
-                  onPress={() =>
-                    router.push({
-                      pathname: "/create",
-                      params: { repeat: a.id },
-                    })
-                  }
-                />
-              )}
-            </>
-          )}
-          {a &&
-            activeTab === "People" &&
-            crew(data, a)
-              .filter(
-                ({ person: p }) => userId && canViewProfile(data, p, userId),
-              )
-              .map(({ person: p, status }) => (
-                <View key={p.id} style={styles.card}>
-                  <View style={styles.row}>
-                    <ProfileAvatar profile={p} />
-                    <View style={{ flex: 1 }}>
-                      <Txt>{p.name}</Txt>
-                      <Txt muted>{status}</Txt>
-                    </View>
-                  </View>
-                  {mine && status === "Pending approval" && (
-                    <Action
-                      title={`Approve ${p.name}`}
-                      run={() =>
-                        act("approve_rsvp", { id: a.id, user_id: p.id })
-                      }
-                    />
-                  )}
+              <Text style={[styles.body, { flex: 1 }]}>{person.name}</Text>
+            </Pressable>
+          ))}
+        {activeTab !== "overview" && activeTab !== "people" && !allowed && (
+          <Txt muted>
+            Join this Beacon to use its participant features. Approval may be
+            required.
+          </Txt>
+        )}
+        {allowed && activeTab === "comments" && (
+          <View style={{ gap: tokens.space.sm }}>
+            {!comments.length && <Txt muted>No comments yet.</Txt>}
+            {comments.map((row) => {
+              const author = data.profiles.find(
+                (person) =>
+                  person.id === row.author_id &&
+                  canViewProfile(data, person, userId),
+              );
+              return (
+                <View key={row.id} style={styles.card}>
+                  <Txt muted>{author?.name || "Beacon participant"}</Txt>
+                  <Txt>{row.body}</Txt>
                 </View>
-              ))}
-          {a && activeTab === "Overview" && a.enable_comments !== false && (
-            <>
-              <Txt muted>
-                {a.status === "completed"
-                  ? "Memory comments are shared text. Media uploads aren’t available yet."
-                  : "Quick questions and notes for anyone who can see this beacon. Chat is just for people going."}
-              </Txt>
-              {data.comments
-                .filter((c) => c.activity_id === a.id)
-                .sort((a, b) => a.created_at.localeCompare(b.created_at))
-                .map((c) => {
-                  const author = data.profiles.find((p) => p.id === c.author_id);
-                  const authorVisible =
-                    !!userId &&
-                    (c.author_id === userId ||
-                      (!!author && canViewProfile(data, author, userId)));
-                  return (
-                    <View key={c.id} style={styles.card}>
-                      <Text style={styles.label}>
-                        {authorVisible ? author?.name ?? "You" : "Beacon participant"}
-                      </Text>
-                      <Txt>{c.body}</Txt>
-                      <Txt muted>{new Date(c.created_at).toLocaleString()}</Txt>
-                    </View>
-                  );
-                })}
-              {canComment ? (
-                <>
-                  <Field
-                    label={
-                      a.status === "completed"
-                        ? "Add a memory comment"
-                        : "Add a comment"
-                    }
-                    value={comment}
-                    onChangeText={setComment}
-                    maxLength={2000}
-                  />
-                  <Action
-                    title="Post comment"
-                    run={async () => {
-                      if (!comment.trim())
-                        throw new Error("Write a note first.");
-                      await act("comment", { id: a.id, body: comment.trim() });
-                      setComment("");
-                    }}
-                  />
-                </>
-              ) : (
-                <Txt muted>
-                  Memory comments are paused by the host or unavailable for this
-                  beacon.
-                </Txt>
-              )}
-            </>
-          )}
-          {a && activeTab === "Chat" && !eligible && (
-            <>
-              <Text style={styles.h2}>A room for the crew</Text>
-              <Txt muted>
-                Join this beacon to read and send chat messages. If approval is
-                needed, the host will let you in.
-              </Txt>
-              <BeaconResponse activity={a} />
-            </>
-          )}
-          {person &&
-            activeTab === "Overview" &&
-            data.activities
-              .filter(
-                (b) =>
-                  b.id !== beaconId &&
-                  b.status === "scheduled" &&
-                  Date.parse(b.ends_at) > now &&
-                  (b.owner_id === person.id ||
-                    data.rsvps.some(
-                      (r) =>
-                        r.activity_id === b.id &&
-                        r.user_id === person.id &&
-                        r.status === "going",
-                    )),
-              )
-              .map((b) => (
-                <Button
-                  key={b.id}
-                  title={b.title}
+              );
+            })}
+            {canWriteBeaconModule(data, activity, userId, "comments") && (
+              <>
+                <Field
+                  label="Add a comment"
+                  value={comment}
+                  onChangeText={setComment}
+                  multiline
+                  maxLength={2000}
+                />
+                <Action
+                  title="Post comment"
+                  disabled={!comment.trim()}
+                  run={async () => {
+                    await act("comment", {
+                      id: activity.id,
+                      body: comment.trim(),
+                    });
+                    setComment("");
+                  }}
+                />
+              </>
+            )}
+          </View>
+        )}
+        {allowed && activeTab === "reactions" && (
+          <View style={{ gap: tokens.space.sm }}>
+            <Txt muted>
+              {
+                data.reactions.filter((row) => row.activity_id === activity.id)
+                  .length
+              }{" "}
+              reactions
+            </Txt>
+            <View
+              style={{
+                flexDirection: "row",
+                flexWrap: "wrap",
+                gap: tokens.space.sm,
+              }}
+            >
+              {["\u{1F64C}"].map((emoji) => (
+                <Action
+                  key={emoji}
+                  title={emoji}
                   secondary
-                  onPress={() => onBeacon(b.id)}
+                  compact
+                  disabled={
+                    !canWriteBeaconModule(
+                      data,
+                      activity,
+                      userId,
+                      "reactions",
+                    ) ||
+                    data.reactions.some(
+                      (row) =>
+                        row.activity_id === activity.id &&
+                        row.user_id === userId &&
+                        row.emoji === emoji,
+                    )
+                  }
+                  run={async () => {
+                    await act("react", { id: activity.id });
+                    void uiHaptics.success();
+                  }}
                 />
               ))}
-        </ScrollView>
-      )}
+            </View>
+          </View>
+        )}
+        {allowed &&
+          (["checklist", "journal", "focus"] as const)
+            .filter((section) => features.includes(section))
+            .map((section) => (
+              <View
+                key={section}
+                style={{ display: activeTab === section ? "flex" : "none" }}
+              >
+                <BeaconTools activity={activity} section={section} />
+              </View>
+            ))}
+        {allowed && activeTab === "experiences" && (
+          <BeaconMemories activity={activity} />
+        )}
+        {allowed && activeTab === "scoreboard" && (
+          <BeaconScoreboard activity={activity} />
+        )}
+        {allowed && activeTab === "chat" && (
+          <View style={{ height: 420 }}>
+            <ChatThread key={activity.id} activityId={activity.id} />
+          </View>
+        )}
+        {allowed && activeTab === "music" && (
+          <Button
+            title="Open music link"
+            onPress={() => {
+              try {
+                const url = new URL(activity.music_url || "");
+                if (
+                  ["https:", "http:"].includes(url.protocol) &&
+                  !url.username &&
+                  !url.password
+                )
+                  void Linking.openURL(url.toString());
+              } catch {
+                /* Invalid links remain closed. */
+              }
+            }}
+          />
+        )}
+        {activeTab === "settings" && manage && (
+          <BeaconSettings
+            activity={activity}
+            onSave={(settings) =>
+              act("set_beacon_controls", { id: activity.id, ...settings })
+            }
+          />
+        )}
+      </ScrollView>
     </View>
   );
 }

@@ -1,7 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Image, Text, View } from "react-native";
 import { Circle as MapCircle, Marker } from "react-native-maps";
-import Svg, { Circle } from "react-native-svg";
 import Animated, {
   cancelAnimation,
   interpolate,
@@ -18,14 +17,14 @@ import { avatarSeed } from "@/src/features/profile/avatarArt";
 import { canViewProfile } from "@/src/features/profile/privacy";
 import { supabase } from "@/src/shared/supabase";
 import { useBeacon } from "@/src/shared/store";
+import { useTheme } from "@/src/shared/ui";
 import { usePreferences } from "@/src/shared/preferences";
-import type {
-  ClusterPoint,
-  ClusterCategoryCount,
-} from "@/src/features/maps/cluster";
+import type { ClusterPoint } from "@/src/features/maps/cluster";
 import {
-  clusterCategoryMix,
+  clusterPreviewOverflow,
   markerVisualSize,
+  CLUSTER_PREVIEW_ICON_SIZE,
+  CLUSTER_PREVIEW_GAP,
 } from "@/src/features/maps/cluster";
 import { useReducedMotion } from "@/src/shared/design-system";
 import type { Category, LocationSession, Profile } from "@/src/shared/types";
@@ -437,48 +436,41 @@ export const FriendMapPin = React.memo(
     left.onPress === right.onPress,
 );
 
-function clusterStrokeSegments(
-  mix: ClusterCategoryCount[],
-  total: number,
-  size: number,
-  categoryColors: Record<Category, string>,
-) {
-  const radius = size / 2 - 3;
-  const circumference = 2 * Math.PI * radius;
-  let offset = 0;
-  return mix.map((segment) => {
-    const length = Math.max(1, (segment.count / total) * circumference - 2);
-    const strokeDashoffset = -offset;
-    offset += length + 2;
-    return (
-      <Circle
-        key={segment.category}
-        cx={size / 2}
-        cy={size / 2}
-        r={radius}
-        fill="none"
-        stroke={
-          segment.category === "People"
-            ? "#74828A"
-            : categoryColors[segment.category]
-        }
-        strokeWidth={3}
-        strokeDasharray={`${length} ${circumference}`}
-        strokeDashoffset={strokeDashoffset}
-        rotation={-90}
-        origin={`${size / 2}, ${size / 2}`}
-      />
-    );
-  });
+function ClusterPersonAvatar({
+  profile,
+  size,
+  onImageLoad,
+}: {
+  profile?: Profile;
+  size: number;
+  onImageLoad: () => void;
+}) {
+  const loadedKey = useRef<string | null>(null);
+  if (!profile) return <Text style={{ fontSize: 28 }}>{"\u{1F464}"}</Text>;
+  const key = `${profile.id}:${profile.avatar_updated_at ?? ""}:${profile.avatar_seed ?? ""}:${profile.avatar_style ?? ""}`;
+  return (
+    <FriendMapAvatar
+      profile={profile}
+      size={size}
+      onImageLoad={() => {
+        if (loadedKey.current === key) return;
+        loadedKey.current = key;
+        onImageLoad();
+      }}
+    />
+  );
 }
 
 function ClusterMapPinComponent({
   group,
-  categoryColors,
+  profiles,
+  peopleCount,
   appearanceKey,
   accessibilityLabel,
   onPress,
 }: {
+  profiles: Profile[];
+  peopleCount?: number;
   group: {
     id: string;
     latitude: number;
@@ -495,16 +487,22 @@ function ClusterMapPinComponent({
     members: ClusterPoint[];
   }) => void;
 }) {
-  const tracking = useMarkerTracking(`${group.id}:${appearanceKey}`);
-  const beaconCount = group.members.filter(
-    (point) => point.kind === "beacon",
-  ).length;
-  const personCount = group.members.length - beaconCount;
-  const size = Math.min(
-    74,
-    54 + Math.log2(Math.max(2, group.members.length)) * 4,
+  const [avatarRevision, setAvatarRevision] = useState(0);
+  const preview = group.members.slice(0, 14);
+  const avatarKey = preview
+    .map((member) => {
+      const profile = profiles.find((row) => `person:${row.id}` === member.id);
+      return `${member.id}:${profile?.avatar_updated_at ?? ""}:${profile?.avatar_seed ?? ""}:${profile?.avatar_style ?? ""}`;
+    })
+    .join("|");
+  const tracking = useMarkerTracking(
+    `${group.id}:${appearanceKey}:${peopleCount}:${avatarKey}:${avatarRevision}:${CLUSTER_PREVIEW_ICON_SIZE}`,
   );
-  const mix = clusterCategoryMix(group.members);
+  const overflow = clusterPreviewOverflow(group.members.length);
+  const columns = Math.min(7, preview.length);
+  const iconSize = CLUSTER_PREVIEW_ICON_SIZE;
+  const gridWidth = columns * iconSize + (columns - 1) * CLUSTER_PREVIEW_GAP;
+  const { colors } = useTheme();
   return (
     <Marker
       key={group.id}
@@ -519,56 +517,57 @@ function ClusterMapPinComponent({
     >
       <View
         style={{
-          width: size,
-          height: size,
+          padding: 3,
+          borderRadius: 22,
+          backgroundColor: colors.white,
+          borderWidth: 1,
+          borderColor: colors.line,
+          flexDirection: "row",
           alignItems: "center",
-          justifyContent: "center",
+          gap: 4,
         }}
       >
-        <Svg width={size} height={size}>
-          <Circle
-            cx={size / 2}
-            cy={size / 2}
-            r={size / 2 - 3}
-            fill="#FFFFFF"
-            stroke="#FFFFFF"
-            strokeWidth={5}
-          />
-          {clusterStrokeSegments(
-            mix,
-            group.members.length,
-            size,
-            categoryColors,
-          )}
-        </Svg>
         <View
           style={{
-            position: "absolute",
-            alignItems: "center",
-            justifyContent: "center",
+            flexDirection: "row",
+            flexWrap: "wrap",
+            width: gridWidth,
+            gap: CLUSTER_PREVIEW_GAP,
           }}
         >
-          <Text
-            style={{
-              color: "#17252B",
-              fontSize: 17,
-              lineHeight: 20,
-              fontWeight: "800",
-            }}
-          >
-            {group.members.length}
-          </Text>
-          <Text
-            style={{
-              color: "#54636B",
-              fontSize: 8,
-              lineHeight: 10,
-              fontWeight: "700",
-            }}
-          >
-            {beaconCount}B · {personCount}P
-          </Text>
+          {preview.map((member) => (
+            <View
+              key={member.id}
+              style={{
+                width: iconSize,
+                height: iconSize,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              {member.kind === "beacon" ? (
+                <ActivityBadge
+                  category={member.category ?? "Other"}
+                  size={iconSize}
+                  iconSize={22}
+                />
+              ) : (
+                <ClusterPersonAvatar
+                  profile={profiles.find(
+                    (row) => `person:${row.id}` === member.id,
+                  )}
+                  size={iconSize}
+                  onImageLoad={() =>
+                    setAvatarRevision((revision) => revision + 1)
+                  }
+                />
+              )}
+            </View>
+          ))}
         </View>
+        {!!overflow && (
+          <Text style={{ fontSize: 11, color: colors.ink }}>+{overflow}</Text>
+        )}
       </View>
     </Marker>
   );
@@ -577,6 +576,8 @@ function ClusterMapPinComponent({
 export const ClusterMapPin = React.memo(
   ClusterMapPinComponent,
   (left, right) =>
+    left.profiles === right.profiles &&
+    left.peopleCount === right.peopleCount &&
     left.group.id === right.group.id &&
     left.group.latitude === right.group.latitude &&
     left.group.longitude === right.group.longitude &&

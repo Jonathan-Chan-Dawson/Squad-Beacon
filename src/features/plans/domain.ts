@@ -1,4 +1,10 @@
-import type { Activity, Category, PlanStep } from "@/src/shared/types";
+import type {
+  Activity,
+  ActivityPlace,
+  Category,
+  Plan,
+  PlanStep,
+} from "@/src/shared/types";
 
 export interface PlanOccurrence {
   step_index: number;
@@ -131,7 +137,9 @@ export function planLocalDateTimeToISO(
     })
     .sort((a, b) => a - b);
   if (!matches.length)
-    throw new Error("That local time does not exist because of a clock change.");
+    throw new Error(
+      "That local time does not exist because of a clock change.",
+    );
   return new Date(matches[matches.length - 1]).toISOString();
 }
 
@@ -161,17 +169,39 @@ export function validatePlanSteps(value: unknown): PlanStep[] {
     if (!categories.has(category))
       throw new Error("Choose a valid beacon category.");
     if (!Number.isInteger(dayOffset) || dayOffset < 0 || dayOffset > 365)
-      throw new Error("Beacon dates must be within one year of the plan start.");
+      throw new Error(
+        "Beacon dates must be within one year of the plan start.",
+      );
     if (!Number.isInteger(duration) || duration < 1 || duration > 1440)
       throw new Error("Choose a duration from 1 to 1440 minutes.");
     if (!/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(time))
       throw new Error("Choose a valid beacon start time.");
+    if (
+      step.start_mode != null &&
+      !["specific", "after_previous", "manual"].includes(
+        String(step.start_mode),
+      )
+    )
+      throw new Error("Choose a valid start behavior.");
+    if (
+      step.end_mode != null &&
+      !["duration", "specific", "manual"].includes(String(step.end_mode))
+    )
+      throw new Error("Choose a valid end behavior.");
+    if (
+      step.end_mode === "specific" &&
+      (typeof step.end_time !== "string" ||
+        !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(step.end_time))
+    )
+      throw new Error("Choose a valid end time.");
     if ((lat == null) !== (lng == null))
       throw new Error("Choose a complete map location.");
     if (
       lat != null &&
-      (!Number.isFinite(lat) || Math.abs(lat) > 90 ||
-        !Number.isFinite(lng) || Math.abs(lng!) > 180)
+      (!Number.isFinite(lat) ||
+        Math.abs(lat) > 90 ||
+        !Number.isFinite(lng) ||
+        Math.abs(lng!) > 180)
     )
       throw new Error("Choose a valid map location.");
     if (
@@ -191,6 +221,13 @@ export function validatePlanSteps(value: unknown): PlanStep[] {
       start_time: time,
       duration_minutes: duration,
       aspiration_ids: [...new Set(aspirationIds as string[])],
+      ...(step.start_mode
+        ? { start_mode: step.start_mode as PlanStep["start_mode"] }
+        : {}),
+      ...(step.end_mode
+        ? { end_mode: step.end_mode as PlanStep["end_mode"] }
+        : {}),
+      ...(step.end_time ? { end_time: String(step.end_time) } : {}),
     };
   });
 }
@@ -202,18 +239,125 @@ export function buildPlanSchedule(
 ): PlanOccurrence[] {
   dateParts(startDate);
   const valid = validatePlanSteps(steps);
-  return valid.map((step, step_index) => {
+  const occurrences: PlanOccurrence[] = [];
+  for (const [step_index, step] of valid.entries()) {
     const localDate = dateWithOffset(startDate, step.day_offset),
-      starts = Date.parse(
-        planLocalDateTimeToISO(localDate, step.start_time, timezone),
+      starts =
+        step.start_mode === "after_previous" && occurrences.length
+          ? Date.parse(occurrences[step_index - 1].ends_at)
+          : Date.parse(
+              planLocalDateTimeToISO(localDate, step.start_time, timezone),
+            );
+    if (step.start_mode === "after_previous" && !step_index)
+      throw new Error(
+        "The first Beacon needs a specific time or manual start.",
       );
-    return {
-      step_index,
-      step,
-      starts_at: new Date(starts).toISOString(),
-      ends_at: new Date(starts + step.duration_minutes * 60000).toISOString(),
+    let ends = starts + step.duration_minutes * 60000;
+    if (step.end_mode === "specific") {
+      const date = localParts(starts, timezone).date;
+      ends = Date.parse(planLocalDateTimeToISO(date, step.end_time!, timezone));
+      if (ends <= starts)
+        ends = Date.parse(
+          planLocalDateTimeToISO(
+            dateWithOffset(date, 1),
+            step.end_time!,
+            timezone,
+          ),
+        );
+      if (ends - starts > 86400000)
+        throw new Error("A Beacon can last up to 24 hours.");
+    }
+    const local = localParts(starts, timezone);
+    const resolved = {
+      ...step,
+      day_offset: Math.round(
+        (Date.parse(local.date) - Date.parse(startDate)) / 86400000,
+      ),
+      start_time: local.time,
+      duration_minutes: Math.round((ends - starts) / 60000),
     };
-  });
+    occurrences.push({
+      step_index,
+      step: resolved,
+      starts_at: new Date(starts).toISOString(),
+      ends_at: new Date(ends).toISOString(),
+    });
+  }
+  return occurrences;
+}
+
+export function planBeaconEndAt(
+  step: PlanStep,
+  starts: number,
+  timezone: string,
+): string {
+  if (step.end_mode === "manual")
+    return new Date(starts + 366 * 86400000).toISOString();
+  if (step.end_mode !== "specific")
+    return new Date(starts + step.duration_minutes * 60000).toISOString();
+  const date = localParts(starts, timezone).date;
+  let ends = Date.parse(
+    planLocalDateTimeToISO(date, step.end_time ?? "", timezone),
+  );
+  if (ends <= starts)
+    ends = Date.parse(
+      planLocalDateTimeToISO(
+        dateWithOffset(date, 1),
+        step.end_time ?? "",
+        timezone,
+      ),
+    );
+  if (ends - starts > 86400000)
+    throw new Error("A Beacon can last up to 24 hours.");
+  return new Date(ends).toISOString();
+}
+
+/** Reuse the source itinerary for templates, duplication, and Routine setup. */
+export function stepsFromPlan(
+  plan: Plan,
+  activities: Activity[],
+  places: ActivityPlace[],
+): PlanStep[] {
+  return activities
+    .filter((item) => item.plan_id === plan.id)
+    .slice()
+    .sort((a, b) => (a.plan_step_index ?? 0) - (b.plan_step_index ?? 0))
+    .map((item) => {
+      if (item.plan_step) {
+        const place = places.find((place) => place.activity_id === item.id);
+        return {
+          ...item.plan_step,
+          title: item.title,
+          description: item.description ?? "",
+          category: item.category,
+          location_name: place?.label ?? "",
+          lat: place?.latitude ?? null,
+          lng: place?.longitude ?? null,
+          aspiration_ids: item.aspiration_ids ?? [],
+        };
+      }
+      const place = places.find((place) => place.activity_id === item.id);
+      const local = localParts(Date.parse(item.starts_at), plan.timezone);
+      return {
+        title: item.title,
+        description: item.description ?? "",
+        category: item.category,
+        location_name: place?.label ?? "",
+        lat: place?.latitude ?? null,
+        lng: place?.longitude ?? null,
+        day_offset: Math.round(
+          (Date.parse(local.date) - Date.parse(plan.start_date)) / 86400000,
+        ),
+        start_time: local.time,
+        duration_minutes: Math.max(
+          1,
+          Math.round(
+            (Date.parse(item.ends_at) - Date.parse(item.starts_at)) / 60000,
+          ),
+        ),
+        aspiration_ids: item.aspiration_ids ?? [],
+      };
+    });
 }
 
 export function detectPlanStepOverlaps(
@@ -281,10 +425,11 @@ export function suggestPlanConflicts(
       if (proposedLocal.date !== local.date) break;
       if (
         owned.every((activity) => !overlaps(proposed, proposedEnd, activity)) &&
-        occurrences.every((other) =>
-          other.step_index === occurrence.step_index ||
-          proposed >= Date.parse(other.ends_at) ||
-          proposedEnd <= Date.parse(other.starts_at),
+        occurrences.every(
+          (other) =>
+            other.step_index === occurrence.step_index ||
+            proposed >= Date.parse(other.ends_at) ||
+            proposedEnd <= Date.parse(other.starts_at),
         )
       ) {
         suggestion = proposed;

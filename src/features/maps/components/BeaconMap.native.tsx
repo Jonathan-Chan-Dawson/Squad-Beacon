@@ -21,7 +21,6 @@ import {
   rankClusterMembers,
   clusterPreviewOverflow,
   clusterCategoryMix,
-  clusterBounds,
   formatLocationAge,
   MAP_MAX_ZOOM,
   MAX_RENDERED_MAP_FEATURES,
@@ -120,9 +119,11 @@ export default function BeaconMap({
   panelHeight = 0,
   viewportInsets,
   focused,
+  anchorCoordinate,
   onAnchor,
   onCluster,
   clusterPriorities = {},
+  clusterPersonCount,
   onMapTap,
   onViewportChange,
   explorationTarget,
@@ -318,7 +319,8 @@ export default function BeaconMap({
     if (!currentMap) return;
 
     if (controlCommand.kind === "fit") {
-      const visibleCoordinates = JSON.parse(coordinates);
+      const visibleCoordinates =
+        controlCommand.coordinates ?? JSON.parse(coordinates);
       if (visibleCoordinates.length)
         currentMap.fitToCoordinates(visibleCoordinates, {
           edgePadding: fitEdgePadding,
@@ -410,10 +412,12 @@ export default function BeaconMap({
         animated: true,
       });
   }
-  async function updateAnchor() {
+  const anchorLat = anchorCoordinate?.latitude ?? focused?.latitude;
+  const anchorLng = anchorCoordinate?.longitude ?? focused?.longitude;
+  const updateAnchor = useCallback(async () => {
     if (
-      !focused ||
-      !isValidCoordinate(focused) ||
+      anchorLat == null ||
+      anchorLng == null ||
       !hasUsableMapViewport(mapSize)
     ) {
       onAnchor?.(null);
@@ -422,14 +426,20 @@ export default function BeaconMap({
     if (projectionBusy.current) return;
     projectionBusy.current = true;
     try {
-      const point = await map.current?.pointForCoordinate(focused);
+      const point = await map.current?.pointForCoordinate({
+        latitude: anchorLat,
+        longitude: anchorLng,
+      });
       if (point) onAnchor?.(point);
     } catch {
       onAnchor?.(null);
     } finally {
       projectionBusy.current = false;
     }
-  }
+  }, [anchorLat, anchorLng, mapSize, onAnchor]);
+  useEffect(() => {
+    if (ready) void updateAnchor();
+  }, [ready, updateAnchor]);
   const first = (selected && isValidCoordinate(selected) ? selected : null) ??
     pins[0] ?? { latitude: 41.885, longitude: -87.642 };
   const initialTargetIsValid =
@@ -486,47 +496,6 @@ export default function BeaconMap({
   async function pressCluster(group: MapPointGroup) {
     const currentMap = map.current;
     if (!currentMap) return;
-    const zoom = nativeMapZoom(region.longitudeDelta, mapSize.width);
-    const expansionZoom =
-      group.expansionZoom ?? Math.min(MAP_MAX_ZOOM, Math.floor(zoom) + 1);
-    if (zoom < expansionZoom && zoom < MAP_MAX_ZOOM) {
-      const bounds = clusterBounds(group.members);
-      if (bounds) {
-        const latitudeSpan = bounds.north - bounds.south;
-        const coordinateList = group.members.map((member) => ({
-          latitude: member.latitude,
-          longitude: member.longitude,
-        }));
-        if (
-          bounds.east < bounds.west ||
-          (latitudeSpan < 0.0001 && bounds.longitudeSpan < 0.0001)
-        ) {
-          const targetZoom = Math.min(
-            MAP_MAX_ZOOM,
-            Math.max(zoom + 1, expansionZoom),
-          );
-          const minimumDelta = 360 / 2 ** targetZoom;
-          currentMap.animateToRegion(
-            {
-              latitude: (bounds.north + bounds.south) / 2,
-              longitude: bounds.centerLongitude,
-              latitudeDelta: Math.max(minimumDelta, latitudeSpan * 1.35),
-              longitudeDelta: Math.max(
-                minimumDelta,
-                bounds.longitudeSpan * 1.35,
-              ),
-            },
-            420,
-          );
-        } else {
-          currentMap.fitToCoordinates(coordinateList, {
-            edgePadding: fitEdgePadding,
-            animated: true,
-          });
-        }
-        return;
-      }
-    }
     try {
       const anchor = await currentMap.pointForCoordinate({
         latitude: group.latitude,
@@ -702,10 +671,12 @@ export default function BeaconMap({
           const beaconCount = group.members.filter(
             (member) => member.kind === "beacon",
           ).length;
-          const peopleCount = group.members.length - beaconCount;
+          const peopleCount =
+            clusterPersonCount?.(group.members) ??
+            group.members.length - beaconCount;
           const ranked = rankClusterMembers(group.members, clusterPriorities);
           const previewLabels = ranked
-            .slice(0, 3)
+            .slice(0, 14)
             .map((member) =>
               member.kind === "beacon"
                 ? activities.find(
@@ -723,8 +694,10 @@ export default function BeaconMap({
           const accessibilityLabel = `Map cluster: ${beaconCount} beacons, ${peopleCount} people. Preview: ${previewLabels.join(", ")}${overflow ? `, plus ${overflow} more` : ""}. Category mix: ${categoryMix}.`;
           return (
             <ClusterMapPin
+              profiles={profiles}
+              peopleCount={clusterPersonCount?.(group.members)}
               key={group.id}
-              group={group}
+              group={{ ...group, members: ranked }}
               categoryColors={categoryColors}
               appearanceKey={appearanceKey}
               accessibilityLabel={accessibilityLabel}

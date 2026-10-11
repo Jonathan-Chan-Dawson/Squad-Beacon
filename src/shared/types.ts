@@ -178,9 +178,15 @@ export interface Activity extends Shared {
   habit_id: ID | null;
   plan_id: ID | null;
   plan_step_index: number | null;
+  plan_step?: PlanStep | null;
+  plan_started_at?: string | null;
+  template_source_id?: string | null;
   aspiration_ids: ID[];
 }
 export interface PlanStep {
+  start_mode?: "specific" | "after_previous" | "manual";
+  end_mode?: "duration" | "specific" | "manual";
+  end_time?: string;
   title: string;
   description: string;
   category: Category;

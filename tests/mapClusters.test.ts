@@ -282,7 +282,9 @@ test("cluster previews rank real items by relevance and report overflow", () => 
     ["beacon:joined", "person:starred", "beacon:busy", "beacon:other"],
   );
   assert.equal(clusterPreviewOverflow(2), 0);
-  assert.equal(clusterPreviewOverflow(4), 1);
+  assert.equal(clusterPreviewOverflow(4), 0);
+  assert.equal(clusterPreviewOverflow(14), 0);
+  assert.equal(clusterPreviewOverflow(19), 5);
 });
 
 test("map relevance derives joined, starred, available, and nearby ranks centrally", () => {
@@ -322,4 +324,28 @@ test("directions URL rejects virtual or invalid coordinates", () => {
     physicalDirectionsUrl(0, 0),
     "https://www.google.com/maps/dir/?api=1&destination=0%2C0",
   );
+});
+
+import { mapCalloutLayout } from "../src/features/maps/mapCalloutLayout";
+test("map callouts resize beside their anchor without covering the marker or leaving map bounds", () => {
+  const bounds = { width: 390, height: 800, top: 140, bottom: 24 };
+  for (const anchor of [
+    { x: 195, y: 430 },
+    { x: 26, y: 200 },
+    { x: 365, y: 730 },
+  ]) {
+    const layout = mapCalloutLayout(anchor, bounds, 450, 450);
+    assert.ok(layout.left >= 16);
+    assert.ok(layout.left + layout.width <= bounds.width - 16);
+    assert.ok(layout.top >= bounds.top);
+    assert.ok(layout.top + layout.maxHeight <= bounds.height - bounds.bottom);
+    assert.ok(
+      layout.top > anchor.y || layout.top + layout.maxHeight < anchor.y,
+    );
+  }
+  const middle = mapCalloutLayout({ x: 195, y: 430 }, bounds, 450, 450);
+  assert.equal(middle.attached, true);
+  const virtual = mapCalloutLayout(null, bounds, 450, 450);
+  assert.equal(virtual.attached, false);
+  assert.equal(virtual.maxHeight, 450);
 });

@@ -5,7 +5,11 @@ Plans feature
 - routines.ts: PlanMember/PlanRoutine contract, ISO weekday/date helpers, and demo fixture/action helpers.
 - domain.ts: shared Plan schedule, occurrence, and conflict helpers.
 - Migration `202610040003_plan_routines.sql` persists membership and Routine settings/occurrence history. Every generated occurrence reuses `private.apply_plan_action('create_plan', ...)`.
-- A standalone Routine-level start-time shift is not implemented in this pass; each occurrence keeps the local times configured on its source Beacons.
+- `202610100001_create_flow.sql` extends the existing writers with Plan step timing metadata, manual start/end actions, transactional Beacon insertion, template usage history, and manual Routine reuse. Apply this additive migration before using the new actions against a connected account.
+- Scheduled Routine occurrences retain source local times. Run Now creates a fresh Plan starting within two minutes and preserves spacing, audience, places, and start/end choices without consuming the next scheduled repeat.
+- Create opens a Beacon / Plan / Routine chooser. It reuses the unchanged Beacon template catalog and existing personal template storage. Routines never have an app template catalog.
+- Plan steps retain their reusable local schedule in `activities.plan_step`. A pending manual step uses a deferred timestamp to stay out of live discovery; a manual end uses an extended deadline until the owner explicitly ends it. `plan_started_at` distinguishes pending steps. Completed steps advance dependent Beacons, including duration chains, using the actual end.
+- Browser coverage: `tests/browser/createFlow.spec.ts`. Domain/demo coverage: `tests/createFlow.test.ts`. Server permissions, idempotency and persistence coverage extends `tests/plansRoutine.database.test.ts`.
 
 Automatic generation and reminder notices require the trusted server runner. If `pg_cron` is available when the migration runs, it registers the 15-minute job automatically. Otherwise enable `pg_cron` in Supabase, then run this once in the SQL Editor:
 

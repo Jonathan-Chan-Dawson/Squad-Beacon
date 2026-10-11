@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import { Linking, Pressable, Text, View } from "react-native";
 import {
-  ArrowUpRight,
   Clock3,
   MapPin,
   MessageCircle,
@@ -12,7 +11,8 @@ import {
 import { router } from "expo-router";
 import { useBeacon } from "@/src/shared/store";
 import { useNow } from "@/src/shared/useNow";
-import { IconButton, Txt, useTheme } from "@/src/shared/ui";
+import { PrimaryButton } from "@/src/shared/design-system";
+import { Button, IconButton, Txt, useTheme } from "@/src/shared/ui";
 import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
 import { canViewProfile } from "@/src/features/profile/privacy";
 import { canReadPlanningThread } from "@/src/features/planning/domain";
@@ -25,10 +25,18 @@ import { ActivityBadge } from "@/src/features/beacons/ActivityBadge";
 import { BeaconResponse } from "@/src/features/beacons/BeaconResponse";
 import { canReadBeaconMeetingDetails } from "@/src/features/maps/filtering";
 
+import {
+  enabledMapBeaconFeatures,
+  beaconFeatureLabels,
+  type MapBeaconFeature,
+} from "./mapBeaconFeatures";
+
 export function MapTooltip({
   beaconId,
   personId,
   pinned,
+  onFeature,
+  onPerson,
   onDetails,
   onMessage,
   onClose,
@@ -36,6 +44,8 @@ export function MapTooltip({
   beaconId: string | null;
   personId: string | null;
   pinned: boolean;
+  onFeature?: (tab: MapBeaconFeature) => void;
+  onPerson?: (id: string) => void;
   onDetails: () => void;
   onMessage: () => void;
   onClose: () => void;
@@ -45,7 +55,9 @@ export function MapTooltip({
   const [savingStar, setSavingStar] = useState(false);
   const [starError, setStarError] = useState("");
   const now = useNow();
-  const activity = data.activities.find((candidate) => candidate.id === beaconId);
+  const activity = data.activities.find(
+    (candidate) => candidate.id === beaconId,
+  );
   const candidate = data.profiles.find(
     (profile) => profile.id === (personId ?? activity?.owner_id),
   );
@@ -53,9 +65,12 @@ export function MapTooltip({
     candidate && userId && canViewProfile(data, candidate, userId)
       ? candidate
       : undefined;
-  const place = activity && userId && canReadBeaconMeetingDetails(data, activity, userId)
-    ? data.places.find((candidatePlace) => candidatePlace.activity_id === activity.id)
-    : undefined;
+  const place =
+    activity && userId && canReadBeaconMeetingDetails(data, activity, userId)
+      ? data.places.find(
+          (candidatePlace) => candidatePlace.activity_id === activity.id,
+        )
+      : undefined;
   const decisionThread =
     activity && userId && data.viewer_id === userId
       ? data.planning_threads.find(
@@ -73,12 +88,14 @@ export function MapTooltip({
           canViewProfile(data, member, userId),
       )
     : [];
-  const saved = !!personId && data.favorites.some(
-    (favorite) =>
-      favorite.owner_id === userId &&
-      favorite.kind === "friend" &&
-      favorite.target_id === personId,
-  );
+  const saved =
+    !!personId &&
+    data.favorites.some(
+      (favorite) =>
+        favorite.owner_id === userId &&
+        favorite.kind === "friend" &&
+        favorite.target_id === personId,
+    );
   const friends = userId ? friendIds(data, userId) : [];
   const canStarPerson = !!personId && friends.includes(personId);
   const canMessagePerson = !!personId && friends.includes(personId);
@@ -94,7 +111,9 @@ export function MapTooltip({
       });
     } catch (error) {
       setStarError(
-        error instanceof Error ? error.message : "Could not update Starred Friends.",
+        error instanceof Error
+          ? error.message
+          : "Could not update Starred Friends.",
       );
     } finally {
       setSavingStar(false);
@@ -116,7 +135,7 @@ export function MapTooltip({
       testID="map-tooltip-card"
       style={{
         gap: 8,
-        padding: 12,
+        padding: 16,
         borderRadius: 20,
         borderWidth: 1,
         borderColor: colors.line,
@@ -131,7 +150,12 @@ export function MapTooltip({
             accessibilityRole="button"
             accessibilityLabel={`View ${person.name}'s profile`}
             onPress={() =>
-              router.push({ pathname: "/person/[id]", params: { id: person.id } })
+              onPerson
+                ? onPerson(person.id)
+                : router.push({
+                    pathname: "/person/[id]",
+                    params: { id: person.id },
+                  })
             }
           >
             <ProfileAvatar profile={person} size={38} />
@@ -147,14 +171,20 @@ export function MapTooltip({
                 : "Open map item details"
           }
           onPress={() => {
-            if (personId && person)
-              router.push({ pathname: "/person/[id]", params: { id: person.id } });
-            else onDetails();
+            if (personId && person) {
+              if (onPerson) onPerson(person.id);
+              else
+                router.push({
+                  pathname: "/person/[id]",
+                  params: { id: person.id },
+                });
+            } else onDetails();
           }}
           style={{ flex: 1, minWidth: 0 }}
         >
           <Text style={styles.label} numberOfLines={1}>
-            {person?.name ?? (activity?.owner_id === userId ? "Your Beacon" : "BEACON")}
+            {person?.name ??
+              (activity?.owner_id === userId ? "Your Beacon" : "BEACON")}
           </Text>
           <Text numberOfLines={2} style={[styles.h2, { fontSize: 16 }]}>
             {activity?.title ?? person?.name ?? "Beacon unavailable"}
@@ -162,12 +192,20 @@ export function MapTooltip({
         </Pressable>
         {personId && userId !== personId && canStarPerson && (
           <IconButton
-            label={saved ? `Unstar ${person?.name ?? "friend"}` : `Star ${person?.name ?? "friend"}`}
+            label={
+              saved
+                ? `Unstar ${person?.name ?? "friend"}`
+                : `Star ${person?.name ?? "friend"}`
+            }
             selected={saved}
             disabled={savingStar}
             onPress={() => void togglePersonStar()}
           >
-            <Star size={18} color={colors.green} fill={saved ? colors.green : "transparent"} />
+            <Star
+              size={18}
+              color={colors.green}
+              fill={saved ? colors.green : "transparent"}
+            />
           </IconButton>
         )}
         <Pressable
@@ -196,12 +234,43 @@ export function MapTooltip({
             <Text numberOfLines={1} style={[styles.muted, { flex: 1 }]}>
               {place?.online_url
                 ? "Virtual"
-                : place?.label ?? (pinned ? "Meeting place" : "No location shared")}
+                : (place?.label ??
+                  (pinned ? "Meeting place" : "No location shared"))}
             </Text>
             <Clock3 size={14} color={colors.muted} />
-            <Text style={styles.muted}>{activityWhen(activity, new Date(now))}</Text>
+            <Text style={styles.muted}>
+              {activityWhen(activity, new Date(now))}
+            </Text>
           </View>
           <View style={styles.between}>
+            {activity && (
+              <>
+                <PrimaryButton
+                  title="See overview"
+                  onPress={onDetails}
+                  style={{ width: "100%" }}
+                />
+                <View
+                  style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}
+                >
+                  {enabledMapBeaconFeatures(activity)
+                    .filter((tab) => tab !== "overview")
+                    .map((tab) => (
+                      <Button
+                        key={tab}
+                        title={
+                          tab === "reactions"
+                            ? "Add reaction"
+                            : beaconFeatureLabels[tab]
+                        }
+                        secondary
+                        compact
+                        onPress={() => onFeature?.(tab)}
+                      />
+                    ))}
+                </View>
+              </>
+            )}
             <View style={[styles.row, { gap: 6 }]}>
               {participants.slice(0, 3).map(({ person: member }, index) => (
                 <View key={member.id} style={{ marginLeft: index ? -8 : 0 }}>
@@ -213,9 +282,13 @@ export function MapTooltip({
               </Text>
             </View>
             {activity.target_count != null &&
-              activity.target_count > (activity.accepted_seat_count ?? participants.length) && (
+              activity.target_count >
+                (activity.accepted_seat_count ?? participants.length) && (
                 <Text style={styles.label}>
-                  Need {activity.target_count - (activity.accepted_seat_count ?? participants.length)} more
+                  Need{" "}
+                  {activity.target_count -
+                    (activity.accepted_seat_count ?? participants.length)}{" "}
+                  more
                 </Text>
               )}
           </View>
@@ -251,24 +324,14 @@ export function MapTooltip({
           <IconButton
             label={`Message ${person?.name ?? "friend"}`}
             onPress={() =>
-              router.push({ pathname: "/messages/[id]", params: { id: personId! } })
+              router.push({
+                pathname: "/messages/[id]",
+                params: { id: personId! },
+              })
             }
           >
             <MessageCircle size={18} color={colors.green} />
           </IconButton>
-        )}
-        {activity && (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`${activity.owner_id === userId ? "Manage" : "Open"} ${activity.title} Beacon`}
-            onPress={onDetails}
-            style={[styles.row, { marginLeft: "auto", padding: 8, gap: 4 }]}
-          >
-            <Text style={styles.label}>
-              {activity.owner_id === userId ? "Manage" : "Open"}
-            </Text>
-            <ArrowUpRight size={17} color={colors.green} />
-          </Pressable>
         )}
       </View>
     </View>

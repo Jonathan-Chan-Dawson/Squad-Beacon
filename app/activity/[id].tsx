@@ -119,7 +119,7 @@ type ToolId =
   | "chat";
 const toolLabels: Record<ToolId, string> = {
   checklist: "Checklist",
-  journal: "Journal",
+  journal: "Beacon Sketchboard",
   focus: "Focus timer",
   experiences: "Memories",
   scoreboard: "Teams & scores",
@@ -1433,7 +1433,7 @@ export default function ActivityDetail() {
                   </ReadOnlyHistoryCard>
                 ) : null}
                 {selectedTool === "journal" && !enabledFor("journal") ? (
-                  <ReadOnlyHistoryCard title="Journal history">
+                  <ReadOnlyHistoryCard title="Beacon Sketchboard history">
                     {journalHistory.length ? (
                       journalHistory.map((note) => (
                         <View key={note.id} style={{ gap: 4 }}>

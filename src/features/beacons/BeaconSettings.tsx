@@ -64,7 +64,7 @@ const moduleGroups: {
         explanation: "Shared sections and tasks for this Beacon.",
       },
       {
-        label: "Beacon Note",
+        label: "Beacon Sketchboard",
         field: "enable_journal",
         explanation: "Write a private note or intentionally share it.",
       },

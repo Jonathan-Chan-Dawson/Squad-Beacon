@@ -340,6 +340,11 @@ export default function PlanningDetailScreen() {
               />
             )}
           </View>
+          {thread.status === "open" && canRespond && <Button
+            title="+ Suggested Beacon"
+            secondary
+            onPress={() => router.push({ pathname: "/create", params: { threadId: thread.id, editor: "yes" } })}
+          />}
           {pendingReviews.length > 0 && manages && (
             <View style={[styles.card, { backgroundColor: colors.lime }]}>
               <Txt>

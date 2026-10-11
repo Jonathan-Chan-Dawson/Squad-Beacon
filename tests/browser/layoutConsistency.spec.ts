@@ -5,12 +5,21 @@ async function expectInViewport(
   width: number,
   height: number,
 ) {
-  const box = await locator.boundingBox();
-  expect(box).not.toBeNull();
-  expect(box!.x).toBeGreaterThanOrEqual(0);
-  expect(box!.y).toBeGreaterThanOrEqual(0);
-  expect(box!.x + box!.width).toBeLessThanOrEqual(width + 1);
-  expect(box!.y + box!.height).toBeLessThanOrEqual(height + 1);
+  await expect
+    .poll(
+      async () => {
+        const box = await locator.boundingBox();
+        if (!box) return Infinity;
+        return Math.max(
+          -box.x,
+          -box.y,
+          box.x + box.width - width,
+          box.y + box.height - height,
+        );
+      },
+      { message: "the menu must finish opening inside the viewport" },
+    )
+    .toBeLessThanOrEqual(1);
 }
 
 test("Map previews and edge menus stay inside the usable Map area", async ({

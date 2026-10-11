@@ -1,9 +1,7 @@
 import React, { useEffect, useState } from "react";
 import {
-  ActivityIndicator,
   Animated,
   Easing,
-  Platform,
   Pressable,
   ScrollView,
   Text,
@@ -70,10 +68,6 @@ export function MapExplorationHeader({
   activeFilterCount,
   activeChips,
   onRemoveChip,
-  searchAreaState,
-  searchAreaCount,
-  onSearchThisArea,
-  searchAreaVisible,
   onSearchFocus,
   sharingIndicator,
   loading,
@@ -89,10 +83,6 @@ export function MapExplorationHeader({
   activeFilterCount: number;
   activeChips: ActiveMapFilterChip[];
   onRemoveChip: (key: string) => void;
-  searchAreaState: "idle" | "loading" | "count";
-  searchAreaCount: number;
-  searchAreaVisible: boolean;
-  onSearchThisArea: () => void;
   onSearchFocus: () => void;
   sharingIndicator?: React.ReactNode;
   loading?: boolean;
@@ -106,7 +96,6 @@ export function MapExplorationHeader({
   >({});
   const [indicatorX] = useState(() => new Animated.Value(0));
   const [indicatorWidth] = useState(() => new Animated.Value(0));
-  const [areaAnimation] = useState(() => new Animated.Value(0));
   const [shimmerProgress] = useState(() => new Animated.Value(0));
   const [railWidth, setRailWidth] = useState(0);
   const quickFilters: MapQuickFilter[] = [
@@ -149,29 +138,6 @@ export function MapExplorationHeader({
     reducedMotion,
     selectedQuickFilter,
   ]);
-
-  useEffect(() => {
-    if (Platform.OS === "web") return;
-    areaAnimation.stopAnimation();
-    if (!searchAreaVisible) {
-      areaAnimation.setValue(0);
-      return;
-    }
-    if (reducedMotion) {
-      areaAnimation.setValue(1);
-      return;
-    }
-    areaAnimation.setValue(0);
-    const entrance = Animated.spring(areaAnimation, {
-      toValue: 1,
-      damping: 22,
-      stiffness: 240,
-      mass: 0.7,
-      useNativeDriver: true,
-    });
-    entrance.start();
-    return () => entrance.stop();
-  }, [areaAnimation, reducedMotion, searchAreaVisible]);
 
   useEffect(() => {
     if (!loading || reducedMotion || railWidth === 0) {
@@ -417,79 +383,6 @@ export function MapExplorationHeader({
       ) : null}
 
       {sharingIndicator}
-
-      {searchAreaVisible
-        ? (() => {
-            const action = (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Search this area"
-                accessibilityState={{ busy: searchAreaState === "loading" }}
-                onPress={onSearchThisArea}
-                disabled={searchAreaState === "loading"}
-                hitSlop={10}
-                style={{
-                  minHeight: 44,
-                  zIndex: 31,
-                  elevation: 31,
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: 7,
-                  paddingHorizontal: 14,
-                  borderRadius: 19,
-                  backgroundColor: colors.ink,
-                  opacity: searchAreaState === "loading" ? 0.9 : 1,
-                }}
-              >
-                {searchAreaState === "loading" ? (
-                  <ActivityIndicator size="small" color={colors.white} />
-                ) : null}
-                <Text
-                  style={{
-                    color: colors.white,
-                    fontSize: 13,
-                    fontWeight: "700",
-                  }}
-                >
-                  {searchAreaState === "loading"
-                    ? "Searching this area"
-                    : searchAreaState === "count"
-                      ? `${searchAreaCount} Beacons here`
-                      : "Search this area"}
-                </Text>
-              </Pressable>
-            );
-            const wrapperStyle = {
-              position: "relative" as const,
-              zIndex: 30,
-              elevation: 30,
-              minHeight: 44,
-              alignItems: "center" as const,
-            };
-            return Platform.OS === "web" ? (
-              <View style={wrapperStyle}>{action}</View>
-            ) : (
-              <Animated.View
-                style={[
-                  wrapperStyle,
-                  {
-                    opacity: areaAnimation,
-                    transform: [
-                      {
-                        translateY: areaAnimation.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [-7, 0],
-                        }),
-                      },
-                    ],
-                  },
-                ]}
-              >
-                {action}
-              </Animated.View>
-            );
-          })()
-        : null}
     </View>
   );
 }

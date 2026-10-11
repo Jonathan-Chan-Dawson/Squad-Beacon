@@ -75,6 +75,7 @@ test("Plan membership and Routine actions enforce audience boundaries and persis
     "202610030002_beacon_module_collections.sql", "202610030003_beacon_media_teams.sql",
     "202610040001_organization_audience_type.sql", "202610040002_organizations_group_chat.sql",
     "202610040003_plan_routines.sql",
+    "202610100001_create_flow.sql",
   ]) await migration(name);
 
   await root();
@@ -196,4 +197,59 @@ test("Plan membership and Routine actions enforce audience boundaries and persis
 
   await actor("owner");
   await assert.rejects(db.query("select public.run_due_plan_routines(30)"), /permission denied/i);
+
+  const manual = await action("create_plan", {
+    title: "Manual itinerary", description: "", timezone: "UTC", start_date: futureDate(2),
+    steps: [
+      { ...planSteps()[0], start_mode: "manual", end_mode: "manual" },
+      { ...planSteps()[0], title: "Bowling", start_time: "19:00", start_mode: "after_previous", end_mode: "duration" },
+      { ...planSteps()[0], title: "Hangout", start_time: "20:00", start_mode: "after_previous", end_mode: "duration" },
+    ],
+  });
+  const manualRows = (await db.query<{ id: string; plan_started_at: string | null; plan_step: any }>("select id,plan_started_at,plan_step from public.activities where plan_id=$1 order by plan_step_index", [manual.id])).rows;
+  assert.equal(manualRows.length, 3);
+  assert.equal(manualRows[0].plan_step.start_mode, "manual");
+  assert.equal(manualRows[0].plan_started_at, null);
+  assert.equal(manualRows[1].plan_started_at, null);
+  await assert.rejects(action("start_plan_beacon", { id: manualRows[1].id }), /previous Beacon/i);
+  await actor("outsider");
+  await assert.rejects(action("start_plan_beacon", { id: manualRows[0].id }), /unavailable/i);
+  await actor("owner");
+  await action("start_plan_beacon", { id: manualRows[0].id });
+  await action("end_plan_beacon", { id: manualRows[0].id });
+  const advanced = (await db.query<{ starts_at: string; ends_at: string; plan_started_at: string | null }>("select starts_at,ends_at,plan_started_at from public.activities where plan_id=$1 order by plan_step_index", [manual.id])).rows;
+  assert.ok(advanced[1].plan_started_at);
+  assert.equal(String(advanced[1].starts_at), String(advanced[0].ends_at));
+  assert.equal(String(advanced[2].starts_at), String(advanced[1].ends_at), "duration chains follow the actual manual end");
+  const reusable = await action("create_routine", { plan_id: manual.id, weekdays: [5], interval_weeks: 1, run_mode: "manual" });
+  const manualRoutine = (await db.query<{ run_mode: string; status: string; next_occurrence_on: string | null }>("select run_mode,status,next_occurrence_on from public.plan_routines where id=$1", [reusable.id])).rows[0];
+  assert.equal(manualRoutine.run_mode, "manual");
+  assert.equal(manualRoutine.status, "paused");
+  assert.equal(manualRoutine.next_occurrence_on, null);
+  const runNow = await action("run_routine_now", { id: reusable.id });
+  assert.ok(runNow.occurrence_plan_id);
+  const fresh = (await db.query<{ plan_step: any; plan_started_at: string | null }>("select plan_step,plan_started_at from public.activities where plan_id=$1 order by plan_step_index", [runNow.occurrence_plan_id])).rows;
+  assert.equal(fresh[0].plan_step.start_mode, "manual");
+  assert.equal(fresh[0].plan_started_at, null);
+  assert.equal(fresh.length, 3);
+  const sourceSnapshot = (await db.query<{ data: any }>("select public.beacon_snapshot() data")).rows[0].data;
+  assert.equal(sourceSnapshot.activities.find((row: any) => row.plan_id === runNow.occurrence_plan_id)?.plan_step?.start_mode, "manual");
+
+  const insertionPlan = await createPlan("Insert Beacon", futureDate(4));
+  const beaconPayload = { title: "Late coffee", description: "", category: "Social", mode: "squad", starts_at: futureDate(4) + "T20:00:00Z", ends_at: futureDate(4) + "T21:00:00Z", timezone: "UTC", audience: "private", audience_id: null, approval_required: false, plan_id: insertionPlan.id, position: 0, label: "Coffee shop", template_source_id: "app:quick-coffee" };
+  const insertionRequest = "86666666-6666-4666-8666-666666666666";
+  const inserted = await action("create_plan_beacon", beaconPayload, insertionRequest);
+  assert.equal((await action("create_plan_beacon", beaconPayload, insertionRequest)).id, inserted.id);
+  assert.ok(inserted.id);
+  assert.equal((await db.query("select plan_step_index from public.activities where id=$1", [inserted.id])).rows[0].plan_step_index, 0);
+  assert.equal((await db.query("select count(*)::int n from public.activities where plan_id=$1", [insertionPlan.id])).rows[0].n, 2);
+  assert.equal((await db.query("select template_source_id from public.activities where id=$1", [inserted.id])).rows[0].template_source_id, "app:quick-coffee");
+  await assert.rejects(action("create_plan_beacon", { ...beaconPayload, position: 2, audience: "friends" }), /Plan audience/i);
+  await actor("outsider");
+  await assert.rejects(action("create_plan_beacon", beaconPayload), /unavailable/i);
+
+  await actor("owner");
+  const decision = await action("create_planning_thread", { kind: "vote", title: "Quick suggestions", body: "", audience: "friends", audience_id: null, coowner_ids: [], deadline_at: futureDate(2) + "T12:00:00Z" });
+  const suggested = await action("add_council_proposal", { thread_id: decision.id, approve_if_manager: true, payload: { ...beaconPayload, audience: "friends", target_count: null, label: "Coffee shop", latitude: null, longitude: null, online_url: null, aspiration_ids: [] } });
+  assert.equal((await db.query("select approved from public.planning_proposals where id=$1", [suggested.id])).rows[0].approved, true, "host suggestions are immediately available for the decision");
 });

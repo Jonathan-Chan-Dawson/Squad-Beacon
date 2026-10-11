@@ -24,10 +24,11 @@ import { cartoAttribution, cartoTileUrl } from "@/src/theme/map";
 import {
   clusterMapPoints,
   markerVisualSize,
+  CLUSTER_PREVIEW_ICON_SIZE,
+  CLUSTER_PREVIEW_GAP,
   rankClusterMembers,
   clusterPreviewOverflow,
   clusterCategoryMix,
-  clusterBounds,
   formatLocationAge,
   MAP_MAX_ZOOM,
 } from "@/src/features/maps/cluster";
@@ -130,7 +131,7 @@ export default function BeaconMap(props: MapProps) {
       L.control.scale({ position: "bottomleft" }).addTo(m);
       layer.current = L.layerGroup().addTo(m);
       const updateAnchor = () => {
-        const p = latest.current.focused;
+        const p = latest.current.anchorCoordinate ?? latest.current.focused;
         latest.current.onAnchor?.(
           p && hasUsableMapViewport(m)
             ? m.latLngToContainerPoint([p.latitude, p.longitude])
@@ -296,6 +297,7 @@ export default function BeaconMap(props: MapProps) {
     onPerson,
     onCluster,
     clusterPriorities = {},
+    clusterPersonCount,
     explorationTarget,
     onOptions,
     onRecenter,
@@ -506,10 +508,12 @@ export default function BeaconMap(props: MapProps) {
         const beaconCount = cluster.members.filter(
           (member) => member.kind === "beacon",
         ).length;
-        const personCount = cluster.members.length - beaconCount;
+        const personCount =
+          clusterPersonCount?.(cluster.members) ??
+          cluster.members.length - beaconCount;
         const ranked = rankClusterMembers(cluster.members, clusterPriorities);
         const previewLabels = ranked
-          .slice(0, 3)
+          .slice(0, 14)
           .map((member) =>
             member.kind === "beacon"
               ? activities.find(
@@ -525,75 +529,54 @@ export default function BeaconMap(props: MapProps) {
           .join(", ");
         const node = document.createElement("button");
         node.type = "button";
-        const badgeSize = Math.min(
-          74,
-          54 + Math.log2(cluster.members.length) * 4,
-        );
-        const radius = badgeSize / 2 - 3;
-        const circumference = 2 * Math.PI * radius;
-        node.style.cssText = `position:relative;width:${badgeSize}px;height:${badgeSize}px;padding:0;border:0;border-radius:50%;background:${colors.white};color:${colors.ink};display:flex;flex-direction:column;align-items:center;justify-content:center;box-shadow:0 3px 10px #172c2940;cursor:pointer;font-family:system-ui;`;
-        const svg = document.createElementNS(
-          "http://www.w3.org/2000/svg",
-          "svg",
-        );
-        svg.setAttribute("width", String(badgeSize));
-        svg.setAttribute("height", String(badgeSize));
-        svg.style.cssText =
-          "position:absolute;inset:0;overflow:visible;pointer-events:none;";
-        const base = document.createElementNS(
-          "http://www.w3.org/2000/svg",
-          "circle",
-        );
-        base.setAttribute("cx", String(badgeSize / 2));
-        base.setAttribute("cy", String(badgeSize / 2));
-        base.setAttribute("r", String(radius));
-        base.setAttribute("fill", "none");
-        base.setAttribute("stroke", colors.line);
-        base.setAttribute("stroke-width", "3");
-        svg.append(base);
-        let offset = 0;
-        mix.forEach((entry) => {
-          const segment = document.createElementNS(
-            "http://www.w3.org/2000/svg",
-            "circle",
-          );
-          const length = Math.max(
-            1,
-            (entry.count / cluster.members.length) * circumference - 2,
-          );
-          segment.setAttribute("cx", String(badgeSize / 2));
-          segment.setAttribute("cy", String(badgeSize / 2));
-          segment.setAttribute("r", String(radius));
-          segment.setAttribute("fill", "none");
-          segment.setAttribute(
-            "stroke",
-            entry.category === "People"
-              ? "#74828A"
-              : categories[entry.category].color,
-          );
-          segment.setAttribute("stroke-width", "3");
-          segment.setAttribute(
-            "stroke-dasharray",
-            `${length} ${circumference}`,
-          );
-          segment.setAttribute("stroke-dashoffset", String(-offset));
-          segment.setAttribute(
-            "transform",
-            `rotate(-90 ${badgeSize / 2} ${badgeSize / 2})`,
-          );
-          svg.append(segment);
-          offset += length + 2;
+        const preview = ranked.slice(0, 14);
+        const columns = Math.min(7, preview.length);
+        const iconSize = CLUSTER_PREVIEW_ICON_SIZE;
+        node.style.cssText = `width:max-content;padding:3px;border:1px solid ${colors.line};border-radius:22px;background:${colors.white};color:${colors.ink};display:flex;align-items:center;gap:4px;cursor:pointer;font-family:system-ui;`;
+        const icons = document.createElement("span");
+        icons.style.cssText = `display:grid;grid-template-columns:repeat(${columns},${iconSize}px);grid-auto-rows:${iconSize}px;gap:${CLUSTER_PREVIEW_GAP}px;`;
+        const symbols = {
+          Fitness: "\u{1F3C0}",
+          Study: "\u{1F4DA}",
+          Gaming: "\u{1F3AE}",
+          Creative: "\u{1F3A8}",
+          Social: "\u{1F44B}",
+          Other: "\u{2728}",
+        };
+        preview.forEach((member) => {
+          const icon = document.createElement("span");
+          icon.style.cssText = `width:${iconSize}px;height:${iconSize}px;display:flex;align-items:center;justify-content:center;font:24px/${iconSize}px system-ui;text-align:center;`;
+          const profile =
+            member.kind === "person"
+              ? profiles.find((row) => `person:${row.id}` === member.id)
+              : undefined;
+          if (profile && showAvatars) {
+            const img = document.createElement("img");
+            img.src =
+              "data:image/svg+xml;charset=utf-8," +
+              encodeURIComponent(
+                miniAvatarSvg(profile.avatar_seed ?? avatarSeed(profile.id)),
+              );
+            img.width = iconSize;
+            img.height = iconSize;
+            img.alt = "";
+            img.style.cssText = "display:block;border-radius:50%;";
+            icon.append(img);
+          } else {
+            icon.textContent =
+              member.kind === "person"
+                ? "\u{1F464}"
+                : symbols[member.category ?? "Other"];
+          }
+          icons.append(icon);
         });
-        node.append(svg);
-        const total = document.createElement("span");
-        total.textContent = String(cluster.members.length);
-        total.style.cssText = "position:relative;font:800 17px/20px system-ui;";
-        node.append(total);
-        const counts = document.createElement("span");
-        counts.textContent = `${beaconCount}B · ${personCount}P`;
-        counts.style.cssText =
-          "position:relative;color:#54636b;font:700 8px/10px system-ui;white-space:nowrap;";
-        node.append(counts);
+        node.append(icons);
+        if (cluster.members.length > 14) {
+          const more = document.createElement("span");
+          more.textContent = `+${cluster.members.length - 14}`;
+          more.style.cssText = "font:10px/12px system-ui;";
+          node.append(more);
+        }
         const overflow = clusterPreviewOverflow(cluster.members.length);
         node.setAttribute(
           "aria-label",
@@ -602,82 +585,24 @@ export default function BeaconMap(props: MapProps) {
         node.title = `${cluster.members.length} items · ${beaconCount} Beacons · ${personCount} people`;
         L.DomEvent.disableClickPropagation(node);
         node.onclick = () => {
-          const zoom = m.getZoom();
-          const expansionZoom =
-            cluster.expansionZoom ??
-            Math.min(MAP_MAX_ZOOM + 1, Math.floor(zoom) + 1);
-          if (zoom < expansionZoom && zoom < MAP_MAX_ZOOM) {
-            const bounds = clusterBounds(cluster.members);
-            if (bounds) {
-              programmaticMove.current = true;
-              const targetZoom = Math.min(
-                MAP_MAX_ZOOM,
-                Math.max(zoom + 1, expansionZoom),
-              );
-              if (
-                bounds.longitudeSpan < 0.0001 &&
-                bounds.north - bounds.south < 0.0001
-              ) {
-                if (reducedMotion)
-                  m.setView([cluster.latitude, cluster.longitude], targetZoom, {
-                    animate: false,
-                  });
-                else
-                  m.flyTo([cluster.latitude, cluster.longitude], targetZoom, {
-                    duration: 0.45,
-                  });
-              } else if (bounds.east < bounds.west) {
-                m.fitBounds(
-                  [
-                    [bounds.south, bounds.west],
-                    [bounds.north, bounds.east + 360],
-                  ],
-                  {
-                    paddingTopLeft: [mapInsets.left + 24, mapInsets.top + 24],
-                    paddingBottomRight: [
-                      mapInsets.right + 24,
-                      mapInsets.bottom + 24,
-                    ],
-                    maxZoom: targetZoom,
-                    animate: reducedMotion ? false : undefined,
-                  },
-                );
-              } else {
-                m.fitBounds(
-                  L.latLngBounds(
-                    cluster.members.map(
-                      (member) =>
-                        [
-                          member.latitude,
-                          member.longitude,
-                        ] as Leaflet.LatLngTuple,
-                    ),
-                  ),
-                  {
-                    paddingTopLeft: [mapInsets.left + 24, mapInsets.top + 24],
-                    paddingBottomRight: [
-                      mapInsets.right + 24,
-                      mapInsets.bottom + 24,
-                    ],
-                    maxZoom: targetZoom,
-                    animate: reducedMotion ? false : undefined,
-                  },
-                );
-              }
-              return;
-            }
-          }
           onCluster?.(
             cluster,
             m.latLngToContainerPoint([cluster.latitude, cluster.longitude]),
           );
         };
+        // Measure the content so the Leaflet hit area and anchor fit the icons.
+        node.style.visibility = "hidden";
+        m.getContainer().append(node);
+        const { width: badgeWidth, height: badgeHeight } =
+          node.getBoundingClientRect();
+        node.remove();
+        node.style.visibility = "";
         L.marker([cluster.latitude, cluster.longitude], {
           icon: L.divIcon({
             html: node,
             className: "beacon-marker",
-            iconSize: [badgeSize, badgeSize],
-            iconAnchor: [badgeSize / 2, badgeSize / 2],
+            iconSize: [badgeWidth, badgeHeight],
+            iconAnchor: [badgeWidth / 2, badgeHeight / 2],
           }),
           keyboard: true,
         }).addTo(group);
@@ -823,11 +748,27 @@ export default function BeaconMap(props: MapProps) {
     onPerson,
     onCluster,
     clusterPriorities,
+    clusterPersonCount,
     mapInsets.bottom,
     mapInsets.left,
     mapInsets.right,
     mapInsets.top,
   ]);
+  const anchorLat = props.anchorCoordinate?.latitude ?? focused?.latitude;
+  const anchorLng = props.anchorCoordinate?.longitude ?? focused?.longitude;
+  const onAnchor = props.onAnchor;
+  useEffect(() => {
+    const currentMap = map.current;
+    onAnchor?.(
+      ready &&
+        currentMap &&
+        anchorLat != null &&
+        anchorLng != null &&
+        hasUsableMapViewport(currentMap)
+        ? currentMap.latLngToContainerPoint([anchorLat, anchorLng])
+        : null,
+    );
+  }, [ready, anchorLat, anchorLng, onAnchor, layoutVersion]);
   const lat = focused?.latitude,
     lng = focused?.longitude;
   useEffect(() => {
@@ -961,8 +902,31 @@ export default function BeaconMap(props: MapProps) {
     programmaticMove.current = true;
     if (command.kind === "zoom-in") currentMap.zoomIn();
     else if (command.kind === "zoom-out") currentMap.zoomOut();
+    else if (command.coordinates?.length)
+      currentMap.fitBounds(
+        command.coordinates.map(
+          (point) => [point.latitude, point.longitude] as Leaflet.LatLngTuple,
+        ),
+        {
+          paddingTopLeft: [mapInsets.left + 24, mapInsets.top + 24],
+          paddingBottomRight: [mapInsets.right + 24, mapInsets.bottom + 24],
+          maxZoom: 18,
+          animate: !reducedMotion,
+        },
+      );
     else fit();
-  }, [controlCommand, fit, onPick, ready, layoutVersion]);
+  }, [
+    controlCommand,
+    fit,
+    onPick,
+    ready,
+    layoutVersion,
+    mapInsets.left,
+    mapInsets.top,
+    mapInsets.right,
+    mapInsets.bottom,
+    reducedMotion,
+  ]);
   return (
     <View
       style={{
