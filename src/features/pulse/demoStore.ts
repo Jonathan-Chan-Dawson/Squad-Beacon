@@ -38,7 +38,7 @@ export class PulseDemoStore {
     this.initialized = true;
     const answers = [
       { crowd: 2, wait: 2 },
-      { availability: "courts_occupied", condition: "field_wet" },
+      { crowd: 2, availability: "courts_occupied" },
       { parking: 1 },
       { condition: "trail_muddy" },
       { crowd: 3, availability: "equipment_available" },
@@ -46,7 +46,7 @@ export class PulseDemoStore {
       { crowd: 1, wait: 1 },
       { crowd: 2 },
       { crowd: 2, availability: "seats_available" },
-      { availability: "courts_open" },
+      { crowd: 1, condition: "field_wet" },
     ] as PulseDraft["answers"][];
     DEMO_PULSE_PLACES.forEach((place, i) => {
       Object.entries(answers[i]).forEach(([kind, value]) => {

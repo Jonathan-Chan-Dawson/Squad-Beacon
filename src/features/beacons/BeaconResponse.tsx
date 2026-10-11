@@ -9,9 +9,11 @@ import { uiHaptics } from "@/src/shared/design-system";
 export function BeaconResponse({
   activity: a,
   compact = false,
+  joinLabel = "I'm In",
 }: {
   activity: Activity;
   compact?: boolean;
+  joinLabel?: string;
 }) {
   const { styles } = useTheme();
 
@@ -40,8 +42,15 @@ export function BeaconResponse({
     const capacity = beaconCapacity(data, a);
     const closed = capacity.closed && !pending && !going;
     return (
-      <View style={{ flexDirection: "row", gap: 6 }}>
-        <View style={{ flex: 1 }}>
+      <View
+        style={{
+          flexDirection: "row",
+          gap: 6,
+          justifyContent: "flex-start",
+          flexWrap: "wrap",
+        }}
+      >
+        <View>
           <Action
             title={
               pending
@@ -52,17 +61,18 @@ export function BeaconResponse({
                     ? "Full"
                     : closed
                       ? "Closed"
-                  : approval
-                    ? "Request"
-                    : "I'm In"
+                      : approval
+                        ? "Request"
+                        : joinLabel
             }
             disabled={pending || closed}
+            compact
             secondary={pending || going || closed}
             run={() => respond(going ? "withdraw" : "going")}
           />
         </View>
         {pending ? (
-          <View style={{ width: 112 }}>
+          <View>
             <Action
               title="Cancel request"
               secondary
@@ -71,7 +81,7 @@ export function BeaconResponse({
             />
           </View>
         ) : !going && !closed ? (
-          <View style={{ width: 86 }}>
+          <View>
             <Action
               title="Maybe"
               disabled={rsvp?.status === "interested"}
@@ -107,7 +117,7 @@ export function BeaconResponse({
                   ? "I'm In"
                   : approval
                     ? "Request"
-                    : "I'm In"
+                    : joinLabel
             }
             disabled={pending || rsvp?.status === "going"}
             secondary={rsvp?.status === "going"}
@@ -123,11 +133,7 @@ export function BeaconResponse({
         </View>
         {rsvp && (
           <View style={{ flex: 1 }}>
-            <Action
-              title="I'm Out"
-              secondary
-              run={() => respond("withdraw")}
-            />
+            <Action title="I'm Out" secondary run={() => respond("withdraw")} />
           </View>
         )}
       </View>

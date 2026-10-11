@@ -105,7 +105,8 @@ export function locationIsFresh(
   return (
     Date.parse(location.expires_at) > +now &&
     !!location.updated_at &&
-    +now - Date.parse(location.updated_at) < 300000
+    Date.parse(location.updated_at) <= +now + 30_000 &&
+    +now - Date.parse(location.updated_at) < 24 * 60 * 60 * 1000
   );
 }
 export type FriendAvailabilityState =

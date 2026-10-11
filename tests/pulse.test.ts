@@ -115,18 +115,22 @@ test("layer policy enforces tiers/caps, freshness, viewport and dateline", () =>
   }));
   const bounds = { north: 42, south: 41, east: -87, west: -88 };
   assert.equal(pulseLayerPolicy(11, bounds, summaries).badges.length, 0);
-  assert.equal(pulseLayerPolicy(13, bounds, summaries).halos.length, 12);
-  assert.equal(pulseLayerPolicy(15, bounds, summaries).badges.length, 20);
-  assert.equal(pulseLayerPolicy(15, bounds, summaries).collapsedCount, 10);
+  assert.equal(pulseLayerPolicy(13, bounds, summaries).halos.length, 0);
+  for (const zoom of [13, 15, 17, 17.99, NaN]) {
+    assert.equal(pulseLayerPolicy(zoom, bounds, summaries).badges.length, 0);
+    assert.equal(pulseLayerPolicy(zoom, bounds, summaries).halos.length, 0);
+  }
+  assert.equal(pulseLayerPolicy(18, bounds, summaries).badges.length, 20);
+  assert.equal(pulseLayerPolicy(18, bounds, summaries).collapsedCount, 10);
   assert.equal(
-    pulseLayerPolicy(15, bounds, [
+    pulseLayerPolicy(18, bounds, [
       { ...base, crowd: 0, conditions: [] },
       { ...base, freshness: 0.349 },
     ]).badges.length,
     0,
   );
   assert.equal(
-    pulseLayerPolicy(15, { north: 42, south: 41, west: 170, east: -170 }, [
+    pulseLayerPolicy(18, { north: 42, south: 41, west: 170, east: -170 }, [
       { ...base, lng: 179 },
     ]).badges.length,
     1,

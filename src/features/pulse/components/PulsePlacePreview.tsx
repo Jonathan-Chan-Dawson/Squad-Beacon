@@ -1,6 +1,6 @@
 import React, { useLayoutEffect, useRef, useState } from "react";
 import { AccessibilityInfo, Pressable, ScrollView, Text, View } from "react-native";
-import { Check, MoreHorizontal, Radio, X } from "lucide-react-native";
+import { Check, MoreHorizontal, X } from "lucide-react-native";
 import Svg, { Circle } from "react-native-svg";
 import Animated, { FadeInDown, FadeOutUp, useAnimatedProps, useSharedValue, withTiming } from "react-native-reanimated";
 import { Toast, uiHaptics, useReducedMotion } from "@/src/shared/design-system";
@@ -9,6 +9,7 @@ import { useNow } from "@/src/shared/useNow";
 import type { PulseAnswers, PulsePlace, PulseSummary } from "../types";
 import { pulseCategoryLabel, pulseConditionText, pulseCopy, pulseLevelText, pulseMetaText } from "../copy/pulse";
 import { PulseLevelGlyph } from "./PulseVisuals";
+import { PlaceKnowledge } from "./PlaceKnowledge";
 
 const AnimatedCircle = Animated.createAnimatedComponent(Circle);
 const circumference = 2 * Math.PI * 10;
@@ -22,6 +23,8 @@ export type PulsePlacePreviewProps = {
   confirmedUntil?: number;
   lastAnswers?: PulseAnswers;
   onCreateBeacon: () => void;
+  onPing?: () => void;
+  onNearby?: () => void;
   happeningHere?: React.ReactNode;
   onReportNote: (placeKey: string) => Promise<unknown>;
 };
@@ -30,8 +33,8 @@ export function PulsePlacePreview(props: PulsePlacePreviewProps) {
   return <PulsePreviewContent key={JSON.stringify([props.scopeKey, props.place.placeKey])} {...props} />;
 }
 
-function PulsePreviewContent({ place, summary, onClose, onAdd, onConfirm, confirmedUntil = 0, lastAnswers,
-  onCreateBeacon, happeningHere, onReportNote }: PulsePlacePreviewProps) {
+function PulsePreviewContent({ scopeKey, place, summary, onClose, onAdd, onConfirm, confirmedUntil = 0, lastAnswers,
+  onCreateBeacon, onPing, onNearby, happeningHere, onReportNote }: PulsePlacePreviewProps) {
   const { styles, semanticColors: colors, tokens } = useTheme();
   const reducedMotion = useReducedMotion();
   const tick = useNow();
@@ -71,10 +74,7 @@ function PulsePreviewContent({ place, summary, onClose, onAdd, onConfirm, confir
       <View style={{ flex: 1, gap: 2 }}><Text numberOfLines={2} style={styles.h2}>{place.name || pulseCopy.areaUpdate}</Text><Txt muted>{pulseCategoryLabel(place.category)}</Txt></View>
       <IconButton label={pulseCopy.close} onPress={onClose}><X size={20} color={colors.textPrimary} /></IconButton>
     </View>
-    {!current ? <>
-      <View style={[styles.row, { gap: 8, paddingVertical: 8 }]}><Radio size={22} color={colors.textSecondary} /><Text style={styles.body}>{pulseCopy.noData}</Text></View>
-      <Button title={pulseCopy.add} onPress={() => onAdd()} />
-    </> : <>
+    {current && <>
       {current.crowd !== undefined && <View style={[styles.row, { gap: 12 }]}><PulseLevelGlyph level={current.crowd} />
         <Text style={[styles.body, { flex: 1 }]}>{pulseLevelText("crowd", current.crowd, (current.confidence?.crowd ?? 0) < 2)}</Text></View>}
       <View style={[styles.row, { flexWrap: "wrap", gap: 8 }]}>
@@ -101,7 +101,10 @@ function PulsePreviewContent({ place, summary, onClose, onAdd, onConfirm, confir
           .catch(() => { if (reportAttempt.current === report) setError(pulseCopy.reportFailure); })
           .finally(() => { if (reportAttempt.current === report) setReporting(false); });
       }} />}
+    </>}
+    <PlaceKnowledge place={place} scope={scopeKey} onPing={onPing} onNearby={onNearby} />
       <View style={[styles.row, { alignItems: "stretch", gap: 8 }]}>
+        {current &&
         <Pressable accessibilityRole="button" accessibilityLabel={confirming ? pulseCopy.confirming : cooldown ? pulseCopy.confirmed : pulseCopy.stillTrue}
           accessibilityState={{ disabled: confirming || cooldown, busy: confirming }} disabled={confirming || cooldown} onPress={() => { void confirm(); }}
           style={{ flex: 1, minHeight: 48, padding: 8, borderRadius: tokens.radius.button, backgroundColor: colors.accent,
@@ -110,13 +113,12 @@ function PulsePreviewContent({ place, summary, onClose, onAdd, onConfirm, confir
             <AnimatedCircle cx={12} cy={12} r={10} stroke={colors.onAccent} strokeWidth={2} fill="none" strokeDasharray={circumference} animatedProps={ringProps} rotation={-90} origin="12,12" /></Svg>}
           {cooldown && !confirming && <Check size={18} color={colors.onAccent} />}
           <Text style={[styles.body, { color: colors.onAccent, textAlign: "center" }]}>{confirming ? pulseCopy.confirming : cooldown ? pulseCopy.confirmed : pulseCopy.stillTrue}</Text>
-        </Pressable>
+        </Pressable>}
         <View style={{ flex: 1 }}><Button title={pulseCopy.update} secondary onPress={() => onAdd(lastAnswers)} /></View>
         <View style={{ flex: 1 }}><Button title={pulseCopy.createBeacon} secondary onPress={onCreateBeacon} /></View>
       </View>
       {happeningHere && <View style={{ gap: 8 }}><Text style={styles.h2}>{pulseCopy.happeningHere}</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>{happeningHere}</ScrollView></View>}
-    </>}
     <Toast visible={!!error} message={error} tone="danger" onDismiss={() => setError("")} />
   </View>;
 }

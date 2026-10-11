@@ -4,14 +4,28 @@ import { useLocalSearchParams } from "expo-router";
 import { useBeacon } from "@/src/shared/store";
 import { friendIds } from "@/src/shared/domain";
 import { startDeviceLocation, stopDeviceLocation } from "@/src/platform/device";
-import { Action, Button, Chips, Empty, Screen, Txt, useTheme } from "@/src/shared/ui";
-import { locationShareExpiry, MAX_LOCATION_SHARE_MS, type LocationShareDuration } from "@/src/features/maps/sessionHelpers";
+import {
+  Action,
+  Button,
+  Chips,
+  Empty,
+  Screen,
+  Txt,
+  useTheme,
+} from "@/src/shared/ui";
+import {
+  locationShareExpiry,
+  MAX_LOCATION_SHARE_MS,
+  type LocationShareDuration,
+} from "@/src/features/maps/sessionHelpers";
 export default function LocationScreen() {
   const { styles, colors } = useTheme();
 
   const { data, userId, act, demo } = useBeacon(),
     params = useLocalSearchParams<{ extend?: string }>(),
-    [selected, setSelected] = useState<string[]>(() => params.extend === "yes" ? [...(data.location_recipients ?? [])] : []),
+    [selected, setSelected] = useState<string[]>(() =>
+      params.extend === "yes" ? [...(data.location_recipients ?? [])] : [],
+    ),
     [duration, setDuration] = useState<LocationShareDuration>("15 minutes"),
     [activity, setActivity] = useState(""),
     [now, setNow] = useState(() => Date.now());
@@ -24,11 +38,14 @@ export default function LocationScreen() {
       (l) => l.owner_id === userId && Date.parse(l.expires_at) > now,
     ),
     extensionMode = params.extend === "yes" && !!session,
-    extensionAtLimit = extensionMode && Date.parse(session!.expires_at) >= now + MAX_LOCATION_SHARE_MS,
+    extensionAtLimit =
+      extensionMode &&
+      Date.parse(session!.expires_at) >= now + MAX_LOCATION_SHARE_MS,
     eligible = data.activities.filter(
       (a) =>
         a.status === "scheduled" &&
-        Date.parse(a.ends_at) > (extensionMode ? Date.parse(session!.expires_at) : now) &&
+        Date.parse(a.ends_at) >
+          (extensionMode ? Date.parse(session!.expires_at) : now) &&
         (a.owner_id === userId ||
           data.rsvps.some(
             (r) =>
@@ -85,12 +102,14 @@ export default function LocationScreen() {
           </>
         )}
       </View>
-        <Text style={styles.h2}>{extensionMode ? "Confirm who can still see you" : "Choose your people"}</Text>
+      <Text style={styles.h2}>
+        {extensionMode ? "Confirm who can still see you" : "Choose your people"}
+      </Text>
       {extensionMode ? (
         <Txt muted>
           {extensionAtLimit
-            ? "This session has reached the four-hour limit from now and cannot be extended yet."
-            : "Your current recipients are selected. You can update them. The chosen duration is added to the current expiry, up to four hours from now."}
+            ? "This session has reached the 24-hour limit from now and cannot be extended yet."
+            : "Your current recipients are selected. You can update them. The chosen duration is added to the current expiry, up to 24 hours from now."}
         </Txt>
       ) : null}
       {data.profiles
@@ -117,14 +136,16 @@ export default function LocationScreen() {
       )}
       <Text style={styles.h2}>For a little while</Text>
       <Chips
-        options={["15 minutes", "1 hour", "Until activity ends"]}
+        options={["15 minutes", "1 hour", "24 hours", "Until activity ends"]}
         value={duration}
         onChange={setDuration}
       />
       {duration === "Until activity ends" && (
         <>
           <Txt muted>
-            {extensionMode ? "Extends to the earlier of the activity end and four hours from now." : "Sharing lasts until the earlier of the activity end and four hours from now."}
+            {extensionMode
+              ? "Extends to the earlier of the activity end and 24 hours from now."
+              : "Sharing lasts until the earlier of the activity end and 24 hours from now."}
           </Txt>
           {eligible.map((a) => (
             <Button
@@ -137,7 +158,15 @@ export default function LocationScreen() {
         </>
       )}
       <Action
-        title={extensionAtLimit ? "Sharing limit reached" : extensionMode ? "Extend sharing" : session ? "Replace sharing session" : "Start temporary sharing"}
+        title={
+          extensionAtLimit
+            ? "Sharing limit reached"
+            : extensionMode
+              ? "Extend sharing"
+              : session
+                ? "Replace sharing session"
+                : "Start temporary sharing"
+        }
         disabled={extensionAtLimit}
         run={async () => {
           if (demo)
@@ -145,9 +174,10 @@ export default function LocationScreen() {
               "The demo never shares your device location. Use a real account and mobile development build.",
             );
           if (!selected.length) throw new Error("Select at least one friend.");
-          const selectedActivity = duration === "Until activity ends"
-            ? eligible.find((candidate) => candidate.id === activity)
-            : undefined;
+          const selectedActivity =
+            duration === "Until activity ends"
+              ? eligible.find((candidate) => candidate.id === activity)
+              : undefined;
           if (duration === "Until activity ends" && !selectedActivity)
             throw new Error("Choose an activity.");
           const end = locationShareExpiry(
@@ -157,11 +187,13 @@ export default function LocationScreen() {
             selectedActivity?.ends_at,
           );
           if (!end) {
-            throw new Error(duration === "Until activity ends"
-              ? extensionMode
-                ? "Choose an activity that ends after your current expiry."
-                : "Choose an activity that ends within four hours from now."
-              : "The session has reached the four-hour limit from now.");
+            throw new Error(
+              duration === "Until activity ends"
+                ? extensionMode
+                  ? "Choose an activity that ends after your current expiry."
+                  : "Choose an activity that ends within 24 hours from now."
+                : "The session has reached the 24-hour limit from now.",
+            );
           }
           const result = await act("start_location", {
             recipients: selected,

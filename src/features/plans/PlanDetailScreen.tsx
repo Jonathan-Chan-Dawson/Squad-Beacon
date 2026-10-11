@@ -100,6 +100,13 @@ export default function PlanDetailScreen() {
       eyebrow={squad ? `BEACON PLAN · ${squad.name}` : "PERSONAL BEACON PLAN"}
       create={false}
     >
+      <Button
+        title="Show Full Plan"
+        secondary
+        onPress={() =>
+          router.push({ pathname: "/", params: { mapPlan: plan.id } })
+        }
+      />
       {!!plan.description && <Txt>{plan.description}</Txt>}
       <View style={styles.card}>
         <Text style={styles.h2}>Plan schedule</Text>

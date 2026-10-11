@@ -1,3 +1,4 @@
+import type { PublicBeaconSummary } from "@/src/features/discovery/types";
 import React from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { MapPin, Search, Clock3 } from "lucide-react-native";
@@ -9,6 +10,8 @@ import { pulseReadout } from "@/src/features/pulse/wording";
 import { savedPulsePlace } from "./pulseMapPolicy";
 import { WorldwidePlaceSearch } from "./WorldwidePlaceSearch";
 import type { WorldwidePlace } from "./placeSearch";
+import { beaconPreviewWhen } from "./discoveryRanking";
+import { useNow } from "@/src/shared/useNow";
 import { Button, useTheme } from "@/src/shared/ui";
 
 type PlaceResult = ActivityPlace & { label: string };
@@ -39,6 +42,10 @@ function SearchSection({
 }
 
 export function MapSearchOverlay({
+  publicBeacons = [],
+  onSelectPublicBeacon,
+  personReason,
+  discoveryMessage,
   visible,
   query,
   beacons,
@@ -58,6 +65,10 @@ export function MapSearchOverlay({
   onStartPickingLocation,
   maxHeight = 430,
 }: {
+  publicBeacons?: PublicBeaconSummary[];
+  onSelectPublicBeacon?: (row: PublicBeaconSummary) => void;
+  personReason?: (profile: Profile) => string;
+  discoveryMessage?: string;
   visible: boolean;
   query: string;
   beacons: Activity[];
@@ -73,6 +84,7 @@ export function MapSearchOverlay({
   communities?: {
     id: string;
     name: string;
+    description?: string;
     kind: "Squads" | "Spaces" | "Organizations";
   }[];
   onSelectPulsePlace?: (place: PulsePlace) => void;
@@ -85,6 +97,7 @@ export function MapSearchOverlay({
   maxHeight?: number;
 }) {
   const { colors, styles, tokens } = useTheme();
+  const now = useNow();
   const term = query.trim();
   if (!visible) return null;
 
@@ -110,7 +123,7 @@ export function MapSearchOverlay({
         contentContainerStyle={{ gap: 12 }}
       >
         {!!beacons.length && (
-          <SearchSection title="Beacons">
+          <SearchSection title={term ? "Beacons" : "For you"}>
             {beacons.slice(0, 5).map((activity) => (
               <Pressable
                 key={activity.id}
@@ -135,7 +148,7 @@ export function MapSearchOverlay({
                     {activity.title}
                   </Text>
                   <Text numberOfLines={1} style={styles.muted}>
-                    Beacon
+                    {beaconPreviewWhen(activity, now)}
                   </Text>
                 </View>
               </Pressable>
@@ -143,6 +156,38 @@ export function MapSearchOverlay({
           </SearchSection>
         )}
 
+        {!!publicBeacons.length && (
+          <SearchSection title="Public Beacons">
+            {publicBeacons.map((row) => (
+              <Pressable
+                key={row.activity_id}
+                accessibilityRole="button"
+                accessibilityLabel={`Preview ${row.title} public Beacon`}
+                onPress={() => onSelectPublicBeacon?.(row)}
+                style={{
+                  minHeight: 52,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 10,
+                  paddingHorizontal: 8,
+                }}
+              >
+                <ActivityBadge category={row.category} size={32} />
+                <View style={{ flex: 1 }}>
+                  <Text
+                    numberOfLines={1}
+                    style={[styles.body, { fontWeight: "700" }]}
+                  >
+                    {row.title}
+                  </Text>
+                  <Text numberOfLines={1} style={styles.muted}>
+                    {row.area_label} ? {row.accepted_seat_count} going
+                  </Text>
+                </View>
+              </Pressable>
+            ))}
+          </SearchSection>
+        )}
         {!!people.length && (
           <SearchSection title="People">
             {people.slice(0, 5).map((profile) => (
@@ -169,7 +214,10 @@ export function MapSearchOverlay({
                     {profile.name}
                   </Text>
                   <Text numberOfLines={1} style={styles.muted}>
-                    {profile.username ? `@${profile.username}` : "Person"}
+                    {personReason?.(profile) ||
+                      (profile.username
+                        ? `@${profile.username}`
+                        : "Public profile")}
                   </Text>
                 </View>
               </Pressable>
@@ -301,6 +349,11 @@ export function MapSearchOverlay({
                   <Text style={[styles.body, { fontWeight: "700" }]}>
                     {row.name}
                   </Text>
+                  {!!row.description && (
+                    <Text numberOfLines={1} style={styles.muted}>
+                      {row.description}
+                    </Text>
+                  )}
                 </Pressable>
               ))}
             </SearchSection>
@@ -309,6 +362,11 @@ export function MapSearchOverlay({
         {term.length >= 3 ? (
           <WorldwidePlaceSearch query={query} onChoose={onChooseWorldPlace} />
         ) : null}
+        {!!discoveryMessage && (
+          <Text accessibilityLiveRegion="polite" style={styles.muted}>
+            {discoveryMessage}
+          </Text>
+        )}
         {!term && recentQueries.length ? (
           <SearchSection title="Recent searches">
             {recentQueries.map((recent) => (
@@ -338,6 +396,7 @@ export function MapSearchOverlay({
 
         {term &&
         !beacons.length &&
+        !publicBeacons.length &&
         !people.length &&
         !places.length &&
         !pulsePlaces.length &&

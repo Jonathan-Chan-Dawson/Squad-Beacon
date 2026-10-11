@@ -21,7 +21,7 @@ add
 
 create function private.plan_beacon_end(step jsonb, starts timestamptz, zone text) returns timestamptz language plpgsql stable
 set
-  search_path = '' as $ $ declare ends timestamptz;
+  search_path = '' as $$ declare ends timestamptz;
 
 local_day date :=(starts at time zone zone) :: date;
 
@@ -53,11 +53,11 @@ end if;
 
 return starts +(step ->> 'duration_minutes') :: int * interval '1 minute';
 
-end $ $;
+end $$;
 
 create function private.resolve_plan_steps(steps jsonb, start_date date, zone text) returns jsonb language plpgsql stable
 set
-  search_path = '' as $ $ declare step jsonb;
+  search_path = '' as $$ declare step jsonb;
 
 result jsonb := '[]';
 
@@ -127,11 +127,11 @@ end loop;
 
 return result;
 
-end $ $;
+end $$;
 
 create function private.prepare_plan_beacon() returns trigger language plpgsql security definer
 set
-  search_path = '' as $ $ declare previous public.activities;
+  search_path = '' as $$ declare previous public.activities;
 
 begin if new.plan_id is null
 or new.plan_step is null then return new;
@@ -183,14 +183,14 @@ end if;
 
 return new;
 
-end $ $;
+end $$;
 
 create trigger prepare_plan_beacon before
 insert
   on public.activities for each row execute function private.prepare_plan_beacon();
 
 -- Retain the established writer's authorization, conflict checking and places.
-do $ $ declare definition text;
+do $$ declare definition text;
 
 original text;
 
@@ -227,13 +227,13 @@ end if;
 
 execute definition;
 
-end $ $;
+end $$;
 
 -- Source metadata survives manual execution, template saves and each repeat.
 create
 or replace function private.plan_routine_steps(pid uuid) returns jsonb language sql stable security definer
 set
-  search_path = '' as $ $
+  search_path = '' as $$
 select
   coalesce(
     jsonb_agg(
@@ -297,11 +297,11 @@ from
   join public.activities a on a.plan_id = p.id
   left join public.places pl on pl.activity_id = a.id
 where
-  p.id = pid $ $;
+  p.id = pid $$;
 
 create function private.advance_plan_beacon() returns trigger language plpgsql security definer
 set
-  search_path = '' as $ $ declare following public.activities;
+  search_path = '' as $$ declare following public.activities;
 
 actual_start timestamptz;
 
@@ -352,7 +352,7 @@ end if;
 
 return new;
 
-end $ $;
+end $$;
 
 create trigger advance_plan_beacon
 after
@@ -369,7 +369,7 @@ from
   anon,
   authenticated;
 
-do $ $ declare definition text;
+do $$ declare definition text;
 
 begin
 select
@@ -385,7 +385,7 @@ definition := replace(
 
 execute definition;
 
-end $ $;
+end $$;
 
 create function public.beacon_action(
   action text,
@@ -393,7 +393,7 @@ create function public.beacon_action(
   request_id uuid default gen_random_uuid()
 ) returns jsonb language plpgsql security definer
 set
-  search_path = '' as $ $ < < create_flow > > declare uid uuid := auth.uid();
+  search_path = '' as $$ <<create_flow>> declare uid uuid := auth.uid();
 
 prior jsonb;
 
@@ -861,7 +861,7 @@ values
 
 return result;
 
-end $ $;
+end $$;
 
 revoke all on function public.beacon_action(text, jsonb, uuid)
 from

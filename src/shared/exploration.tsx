@@ -21,7 +21,7 @@ export type ExplorationArea =
       label: string;
       coordinate: Coordinate;
       zoom: number;
-      source: "saved" | "demo" | "google";
+      source: "saved" | "demo" | "google" | "osm";
       attributions?: { name: string; uri?: string }[];
     }
   | {

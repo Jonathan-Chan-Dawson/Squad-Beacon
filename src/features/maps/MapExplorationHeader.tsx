@@ -59,6 +59,8 @@ function QuickChip({
 }
 
 export function MapExplorationHeader({
+  areaLabel,
+  onBackNearMe,
   query,
   onQueryChange,
   onQuerySubmit,
@@ -68,12 +70,15 @@ export function MapExplorationHeader({
   activeFilterCount,
   activeChips,
   onRemoveChip,
+  onClearContexts,
   onSearchFocus,
   sharingIndicator,
   loading,
   calm = false,
   onHeightChange,
 }: {
+  areaLabel?: string;
+  onBackNearMe?: () => void;
   query: string;
   onQueryChange: (value: string) => void;
   onQuerySubmit: (value: string) => void;
@@ -83,6 +88,7 @@ export function MapExplorationHeader({
   activeFilterCount: number;
   activeChips: ActiveMapFilterChip[];
   onRemoveChip: (key: string) => void;
+  onClearContexts?: () => void;
   onSearchFocus: () => void;
   sharingIndicator?: React.ReactNode;
   loading?: boolean;
@@ -179,7 +185,7 @@ export function MapExplorationHeader({
           <Search size={18} color={colors.green} />
           <TextInput
             accessibilityLabel="Search places, Beacons, people and communities"
-            placeholder="Search Beacons, people, places"
+            placeholder="Search Beacons, people, places..."
             placeholderTextColor={colors.muted}
             value={query}
             onChangeText={onQueryChange}
@@ -379,9 +385,56 @@ export function MapExplorationHeader({
               <X size={13} color={colors.muted} />
             </Pressable>
           ))}
+          {onClearContexts ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Clear all context filters"
+              onPress={onClearContexts}
+              style={{
+                minHeight: 44,
+                justifyContent: "center",
+                paddingHorizontal: 10,
+              }}
+            >
+              <Text style={{ color: colors.muted, fontSize: 12 }}>
+                Clear contexts
+              </Text>
+            </Pressable>
+          ) : null}
         </ScrollView>
       ) : null}
 
+      {areaLabel && (
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 8,
+            paddingHorizontal: 12,
+            borderRadius: 16,
+            backgroundColor: colors.white + "ED",
+          }}
+        >
+          <Text
+            numberOfLines={1}
+            style={{ flex: 1, color: colors.ink, fontSize: 12 }}
+          >
+            Exploring {areaLabel}
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Back Near Me"
+            onPress={onBackNearMe}
+            style={{ minHeight: 44, justifyContent: "center" }}
+          >
+            <Text
+              style={{ color: colors.green, fontWeight: "700", fontSize: 12 }}
+            >
+              Back Near Me
+            </Text>
+          </Pressable>
+        </View>
+      )}
       {sharingIndicator}
     </View>
   );

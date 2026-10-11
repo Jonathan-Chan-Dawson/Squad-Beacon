@@ -1,3 +1,5 @@
+import { demoPublicBeacons } from "@/src/features/discovery/publicDirectory";
+import { validatePublicDiscoveryOptIn } from "@/src/features/discovery/domain";
 import { canChat } from "@/src/shared/browsing";
 import {
   canAddBeaconNote,
@@ -71,6 +73,7 @@ import type {
 import { canInviteWithPolicy, SOCIAL_ROLE_RANK } from "@/src/features/social/domain";
 import type { ActivitySocialLink, InvitePolicy, SocialMemberRole, SocialRole } from "@/src/features/social/types";
 import { makeDemo as makeNeighborhoodDemo } from "@/tests/fixtures/neighborhood";
+import { addDemoMapFixtures } from "./demoMapFixtures";
 export const DEMO_ID = "demo-you";
 export function makeDemo(): Data {
   const data = makeNeighborhoodDemo(),
@@ -690,6 +693,19 @@ export function makeDemo(): Data {
     { space_id: "space-park-care", user_id: "jordan", role: "owner", status: "active", invited_by: null, created_at: growthCreatedAt },
   );
   data.space_squads.push({ space_id: "space-lakefront-runs", squad_id: "open-run-club", added_by: "maya", created_at: growthCreatedAt });
+  data.squads.push({ id: "weekend-hoops", owner_id: "neighbor-6", name: "Weekend Hoops", description: "Pickup basketball and friendly games around Chicago.", discoverability: "public", join_mode: "open", invite_policy: "admins", archived_at: null });
+  data.squads.push({ id: "auburn-hoops", owner_id: DEMO_ID, name: "Auburn Hoops", description: "Basketball with people from the neighborhood.", discoverability: "private", join_mode: "invite", invite_policy: "admins", archived_at: null });
+  data.squad_members.push({ squad_id: "auburn-hoops", user_id: DEMO_ID, role: "owner" }, { squad_id: "auburn-hoops", user_id: "neighbor-22", role: "member" });
+  data.squad_members.push({ squad_id: "weekend-hoops", user_id: "neighbor-6", role: "owner" });
+  data.activity_social_links.push({ activity_id: "neighborhood-6", entity_type: "squad", entity_id: "weekend-hoops", created_by: "neighbor-6", created_at: createdAt });
+  const discoveryPerson = data.profiles.find(row => row.id === "neighbor-22");
+  if (discoveryPerson) { discoveryPerson.profile_visibility = "public"; discoveryPerson.interests = ["basketball", "Fitness"]; discoveryPerson.bio = "Always up for pickup basketball."; }
+  data.public_beacons = ["neighborhood-0", "neighborhood-6", "neighborhood-12"].flatMap(id => {
+    const activity = data.activities.find(row => row.id === id);
+    if (!activity) return [];
+    return [{ activity_id: id, title: activity.title, category: activity.category, interest_tags: [activity.category, "basketball"], starts_at: activity.starts_at, ends_at: activity.ends_at, area_label: "Chicago", coarse_lat: id === "neighborhood-12" ? 41.89 : 41.88, coarse_lng: id === "neighborhood-0" ? -87.63 : id === "neighborhood-6" ? -87.65 : -87.64, requires_approval: activity.approval_required, capacity_limit: null, capacity_policy: "soft" as const, accepted_seat_count: 1, closed: false }];
+  });
+  addDemoMapFixtures(data, DEMO_ID, now);
   return data;
 }
 
@@ -1661,6 +1677,29 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
   const d = structuredClone(previous),
     id = String(p.id ?? ""),
     uid = DEMO_ID;
+  if (action === "publish_beacon_discovery" || action === "unpublish_beacon_discovery" || action === "join_public_beacon") {
+    const activity = d.activities.find(row => row.id === String(p.activity_id));
+    if (!activity || d.viewer_id !== uid) throw new Error("Beacon unavailable.");
+    if (action !== "join_public_beacon") {
+      if (activity.owner_id !== uid) throw new Error("Only the host can publish discovery.");
+      d.public_beacons = d.public_beacons.filter(row => row.activity_id !== activity.id);
+      if (action === "publish_beacon_discovery") {
+        if (activity.mode !== "squad" || activity.audience === "organization" || activity.status !== "scheduled" || Date.parse(activity.ends_at) <= Date.now()) throw new Error("Only upcoming group Beacons can be published.");
+        const input = { activity_id: activity.id, area_label: String(p.area_label ?? ""), ...(p.coarse_lat != null || p.coarse_lng != null ? { coarse_lat: Number(p.coarse_lat), coarse_lng: Number(p.coarse_lng) } : {}) };
+        validatePublicDiscoveryOptIn(input);
+        d.public_beacons.push({ ...input, title: activity.title, category: activity.category, interest_tags: [activity.category], starts_at: activity.starts_at, ends_at: activity.ends_at, coarse_lat: input.coarse_lat === undefined ? null : Math.round(input.coarse_lat * 100) / 100, coarse_lng: input.coarse_lng === undefined ? null : Math.round(input.coarse_lng * 100) / 100, requires_approval: activity.approval_required, capacity_limit: activity.capacity_limit ?? null, capacity_policy: activity.capacity_policy ?? "soft", accepted_seat_count: beaconCapacity(d, activity).count, closed: beaconCapacity(d, activity).closed });
+      }
+    } else {
+      if (!demoPublicBeacons(d, uid, "").some(row => row.activity_id === activity.id)) throw new Error("Public Beacon unavailable.");
+      const existing = d.rsvps.find(row => row.activity_id === activity.id && row.user_id === uid);
+      if (existing?.status === "requested" || (existing?.status === "going" && existing.approved) || activity.owner_id === uid) return d;
+      if (beaconCapacity(d, activity).closed) throw new Error("This Beacon is full or closed.");
+      const pending = activity.approval_required && !existing?.approved;
+      d.rsvps = d.rsvps.filter(row => row.activity_id !== activity.id || row.user_id !== uid);
+      d.rsvps.push({ activity_id: activity.id, user_id: uid, status: pending ? "requested" : "going", approved: !pending });
+    }
+    return d;
+  }
   const newId = () => "demo-" + Math.random().toString(36).slice(2);
   const currentProfile = d.profiles.find((profile) => profile.id === uid)!;
   if (applyDemoBeaconMediaTeamAction(d, action, p, uid)) return d;

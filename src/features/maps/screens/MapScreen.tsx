@@ -24,7 +24,14 @@ import {
 } from "expo-router";
 import * as Location from "expo-location";
 import * as Network from "expo-network";
-import { Compass, LocateFixed, SlidersHorizontal } from "lucide-react-native";
+import {
+  Compass,
+  LocateFixed,
+  SlidersHorizontal,
+  MapPin,
+  Plus,
+  UserRoundPlus,
+} from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import BeaconMap, {
   type MapControlCommand,
@@ -38,6 +45,14 @@ import { Button, IconButton, Sheet, Txt, useTheme } from "@/src/shared/ui";
 import { usePreferences } from "@/src/shared/preferences";
 import { friendIds, locationIsFresh } from "@/src/shared/domain";
 import { canViewProfile } from "@/src/features/profile/privacy";
+import { publicMapBeacons } from "../publicMapDiscovery";
+import { usePublicBeacons } from "@/src/features/discovery/usePublicBeacons";
+import { PublicBeaconPreview } from "@/src/features/discovery/PublicBeaconPreview";
+import { rankPublicBeaconSummaries } from "@/src/features/discovery/domain";
+import { discoverBeacons, personDiscoveryReason } from "../discoveryRanking";
+import type { SocialDirectorySummary } from "@/src/features/social/types";
+import { performDirectoryAction } from "@/src/features/social/directoryActions";
+import { SocialDirectorySummaryPreview } from "@/src/features/people/components/SocialDirectorySummaryCard";
 import { deriveMapPointPriorities } from "@/src/features/maps/relevance";
 import {
   explorationAreaTarget,
@@ -72,16 +87,13 @@ import {
   beaconHasSquadParticipant,
   clusterPeople,
   showBeaconOnMap,
+  withinMapBeaconWindow,
 } from "@/src/features/maps/mapDiscovery";
 import type { MapBeaconFeature } from "@/src/features/maps/mapBeaconFeatures";
 import { SquadProfilePreview } from "@/src/features/people/previews/SquadProfilePreview";
 import { canOpenSquadProfile } from "@/src/features/people/squadProfile";
 import { SpaceProfilePreview } from "@/src/features/spaces/SpaceProfilePreview";
-import { canReadSpace } from "@/src/features/spaces/domain";
-import {
-  activeOrganizationRole,
-  canReadOrganization,
-} from "@/src/features/organizations/domain";
+import { activeOrganizationRole } from "@/src/features/organizations/domain";
 import {
   DemoChip,
   uiHaptics,
@@ -102,11 +114,11 @@ import {
 } from "@/src/features/maps/mapUIselectors";
 import { MapTooltip } from "@/src/features/maps/MapTooltip";
 import { physicalDirectionsUrl } from "@/src/features/maps/directions";
+import { pulseCopy } from "@/src/features/pulse/copy/pulse";
 import { usePulse } from "@/src/features/pulse/usePulse";
 import type { PulsePlace, PulseAnswers } from "@/src/features/pulse/types";
 import { PulsePlacePreview } from "@/src/features/pulse/components/PulsePlacePreview";
 import { AddLiveUpdateSheet } from "@/src/features/pulse/components/AddLiveUpdateSheet";
-import { pulseCopy } from "@/src/features/pulse/copy/pulse";
 import {
   areaPulsePlace,
   savedPulsePlace,
@@ -120,6 +132,13 @@ import {
   writeMapDevicePreferences,
   defaultMapDevicePreferences,
 } from "@/src/features/maps/mapDevicePreferences";
+
+import {
+  canReadMapPlan,
+  mapContextKey,
+  resolveMapContext,
+  type MapContextFilter,
+} from "../contextFilters";
 
 const defaultFilters = {
   audience: "Everyone" as const,
@@ -211,19 +230,55 @@ export default function MapScreen() {
   const [spacePreviewId, setSpacePreviewId] = useState<string | null>(null);
 
   const exploration = useExploration();
-  const { data, userId, demo, loading } = useBeacon();
+  const [discoveryHintDismissed, setDiscoveryHintDismissed] = useState(false);
+  const nearMeArea = useRef<ExplorationArea | null>(null);
+  useEffect(() => {
+    if (exploration.area?.kind === "near-me" && exploration.area.coordinate)
+      nearMeArea.current = exploration.area;
+  }, [exploration.area]);
+  const { data, userId, demo, loading, act, searchDirectory } = useBeacon();
 
   const params = useLocalSearchParams<{
     beacon?: string;
     person?: string;
     created?: string;
     search?: string;
+    mapPlan?: string;
+    mapThread?: string;
   }>();
   const insets = useSafeAreaInsets();
   const { height, width } = useWindowDimensions();
   const [mapSize, setMapSize] = useState({ width, height });
   const now = useNow();
   const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
+  const [contextState, setContextState] = useState<{
+    viewerId: string | null;
+    filters: MapContextFilter[];
+  }>({ viewerId: userId, filters: [] });
+  const contextViews = useMemo(
+    () =>
+      contextState.viewerId === userId
+        ? contextState.filters.flatMap((filter) => {
+            const view = resolveMapContext(data, userId, filter);
+            return view ? [view] : [];
+          })
+        : [],
+    [contextState, data, userId],
+  );
+  const contextPoints = useMemo(
+    () => [
+      ...new Map(
+        contextViews
+          .flatMap((view) => view.points)
+          .map((point) => [point.id, point]),
+      ).values(),
+    ],
+    [contextViews],
+  );
+  const contextPaths = useMemo(
+    () => contextViews.flatMap((view) => view.paths),
+    [contextViews],
+  );
   const [detailTab, setDetailTab] = useState<MapBeaconFeature | null>(null);
   const [squadPreviewId, setSquadPreviewId] = useState<string | null>(null);
   const [organizationPreviewId, setOrganizationPreviewId] = useState<
@@ -517,11 +572,13 @@ export default function MapScreen() {
   const snapshotReady = !!userId && data.viewer_id === userId;
   const friends = friendIds(data, userId ?? "");
   const selectedPersonLocation =
-    person && userId
+    person && userId && (person === userId || friends.includes(person))
       ? selectFreshVisiblePersonLocation(data, person, userId, now)
       : undefined;
   const routeSelectedPersonLocation =
-    params.person && userId
+    params.person &&
+    userId &&
+    (params.person === userId || friends.includes(params.person))
       ? selectFreshVisiblePersonLocation(data, params.person, userId, now)
       : undefined;
 
@@ -546,10 +603,7 @@ export default function MapScreen() {
         : [exploration.filters.category];
     return data.activities
       .filter((activity) => canReadBeaconActivity(data, activity, userId))
-      .filter(
-        (activity) =>
-          activity.status === "scheduled" && Date.parse(activity.ends_at) > now,
-      )
+      .filter((activity) => withinMapBeaconWindow(activity, now))
       .filter((activity) =>
         matchesBeaconFilters(
           data,
@@ -607,12 +661,12 @@ export default function MapScreen() {
     [data, userId],
   );
 
-  const activities = useMemo(
+  const normalActivities = useMemo(
     () =>
-      safeActivities.filter((activity) => {
-        if (
-          !userId ||
-          !showBeaconOnMap(
+      safeActivities.filter(
+        (activity) =>
+          !!userId &&
+          showBeaconOnMap(
             data,
             activity,
             userId,
@@ -621,20 +675,28 @@ export default function MapScreen() {
               squadId: squadPreviewId ?? exploration.filters.audience,
             },
             now,
-          )
-        )
-          return false;
-        return true;
-      }),
+          ),
+      ),
     [
-      data,
+      safeActivities,
       userId,
+      data,
       person,
       squadPreviewId,
-      now,
       exploration.filters.audience,
-      safeActivities,
+      now,
     ],
+  );
+  const activities = useMemo(
+    () => [
+      ...new Map(
+        [
+          ...normalActivities,
+          ...contextViews.flatMap((view) => view.activities),
+        ].map((activity) => [activity.id, activity]),
+      ).values(),
+    ],
+    [normalActivities, contextViews],
   );
 
   const visibleActivities = useMemo(() => {
@@ -665,21 +727,7 @@ export default function MapScreen() {
   const visiblePlans = useMemo(
     () =>
       userId && data.viewer_id === userId
-        ? data.plans.filter((plan) => {
-            if (plan.owner_id === userId && !plan.squad_id) return true;
-            if (
-              !plan.squad_id ||
-              !canOpenSquadProfile(data, plan.squad_id, userId)
-            )
-              return false;
-            return !data.blocks.some(
-              (block) =>
-                (block.blocker_id === plan.owner_id &&
-                  block.blocked_id === userId) ||
-                (block.blocker_id === userId &&
-                  block.blocked_id === plan.owner_id),
-            );
-          })
+        ? data.plans.filter((plan) => canReadMapPlan(data, plan, userId))
         : [],
     [data, userId],
   );
@@ -785,6 +833,8 @@ export default function MapScreen() {
         if (
           !snapshotReady ||
           !userId ||
+          (location.owner_id !== userId &&
+            !friends.includes(location.owner_id)) ||
           !showAvatars ||
           !mapPreferences.showFriends ||
           !locationIsFresh(location, new Date(now))
@@ -843,17 +893,154 @@ export default function MapScreen() {
   );
 
   const query = exploration.query.trim();
-  const searchActivityResults = query ? safeActivities.slice(0, 5) : [];
+  const publicDiscovery = usePublicBeacons(
+    query,
+    exploration.area?.coordinate ?? viewport?.center,
+  );
+  const [publicSelection, setPublicSelection] = useState<string | null>(null);
+  const rankedPublic = rankPublicBeaconSummaries(
+    publicDiscovery.rows,
+    data.profiles.find((row) => row.id === userId)?.interests ?? [],
+    exploration.area?.label ?? null,
+    now,
+  );
+  const selectedPublic = publicDiscovery.rows.find(
+    (row) => row.activity_id === publicSelection,
+  );
+  const publicMapRows = publicMapBeacons(
+    rankedPublic,
+    exploration.filters,
+    selectedCategories,
+    activities.map((row) => row.id),
+    !!contextViews.length,
+    viewport,
+    now,
+  );
+  const hasVisibleBeacons = visibleActivities.some((activity) =>
+    safePlaces.some(
+      (place) => place.activity_id === activity.id && validPhysicalPlace(place),
+    ),
+  );
+  const hasVisiblePeople = mapLocations.some(
+    (row) =>
+      !viewport ||
+      matchesExplorationArea(
+        {
+          kind: "viewport",
+          label: "Visible area",
+          coordinate: viewport.center,
+          zoom: viewport.zoom,
+          bounds: viewport.bounds,
+        },
+        row.latitude != null && row.longitude != null
+          ? { latitude: row.latitude, longitude: row.longitude }
+          : null,
+      ),
+  );
+  const publicPoints = publicMapRows.map((row) => ({
+    id: `public:${row.activity_id}`,
+    publicBeaconId: row.activity_id,
+    category: row.category,
+    title: row.title,
+    latitude: row.coarse_lat!,
+    longitude: row.coarse_lng!,
+    suggestion: false,
+  }));
+  function choosePublicBeacon(id: string) {
+    setSelected(null);
+    setPerson(null);
+    setClusterActivityIds(null);
+    setClusterPersonIds(null);
+    setPulsePlace(null);
+    setPublicSelection(id);
+    setPlaceSearchOpen(false);
+    const row = publicDiscovery.rows.find((item) => item.activity_id === id);
+    if (row?.coarse_lat != null && row.coarse_lng != null)
+      exploration.setArea({
+        kind: "place",
+        label: row.area_label,
+        coordinate: { latitude: row.coarse_lat, longitude: row.coarse_lng },
+        zoom: 13,
+        source: "saved",
+      });
+  }
+
+  const searchActivityResults = userId
+    ? discoverBeacons(
+        data,
+        userId,
+        query,
+        now,
+        exploration.area?.coordinate ?? viewport?.center,
+      ).slice(0, 5)
+    : [];
   const searchPeopleResults: Profile[] =
-    query && snapshotReady && userId
+    snapshotReady && userId
       ? data.profiles
           .filter(
             (profile) =>
+              profile.id !== userId &&
               canViewProfile(data, profile, userId) &&
-              matchesSearch(query, profile.name, profile.username),
+              matchesSearch(
+                query,
+                profile.name,
+                profile.username,
+                profile.bio,
+                ...(profile.interests ?? []),
+              ),
           )
-          .slice(0, 5)
+          .sort(
+            (a, b) =>
+              Number(friends.includes(b.id)) - Number(friends.includes(a.id)) ||
+              a.name.localeCompare(b.name),
+          )
+          .slice(0, query ? 5 : 3)
       : [];
+  const [directoryResult, setDirectoryResult] = useState<{
+    snapshot: typeof data;
+    rows: SocialDirectorySummary[];
+    query: string;
+    error?: string;
+  } | null>(null);
+  const [directorySelection, setDirectorySelection] = useState<string | null>(
+    null,
+  );
+  useEffect(() => {
+    if (!snapshotReady) return;
+    let current = true;
+    const timer = setTimeout(() => {
+      void searchDirectory({ query, pageSize: 20 })
+        .then((rows) => {
+          if (current) setDirectoryResult({ snapshot: data, rows, query });
+        })
+        .catch(() => {
+          if (current)
+            setDirectoryResult({
+              snapshot: data,
+              rows: [],
+              query,
+              error: "Communities could not load. Try again.",
+            });
+        });
+    }, 250);
+    return () => {
+      current = false;
+      clearTimeout(timer);
+    };
+  }, [data, query, searchDirectory, snapshotReady]);
+  const directoryRows =
+    directoryResult?.snapshot === data && directoryResult.query === query
+      ? directoryResult.rows
+      : [];
+  const selectedDirectory =
+    directoryRows.find(
+      (row) => `${row.entity_type}:${row.entity_id}` === directorySelection,
+    ) ?? null;
+  const communityKind = {
+    squad: "Squads",
+    space: "Spaces",
+    organization: "Organizations",
+  } as const;
   const searchPlaceResults = safePlaces
     .filter(
       (place) =>
@@ -873,6 +1060,33 @@ export default function MapScreen() {
         now,
       )
     : {};
+  for (const row of publicMapRows)
+    clusterPriorities[`beacon:${row.activity_id}`] = {
+      tier:
+        Date.parse(row.starts_at) <= now && Date.parse(row.ends_at) > now
+          ? 2
+          : 6,
+    };
+  for (const point of contextPoints)
+    if (point.activityId)
+      clusterPriorities[`beacon:${point.activityId}`] = {
+        ...clusterPriorities[`beacon:${point.activityId}`],
+        tier: Math.min(
+          clusterPriorities[`beacon:${point.activityId}`]?.tier ?? 7,
+          (viewport?.zoom ?? 13) >= 16 ? -1 : 1,
+        ),
+        affinity: 10,
+      };
+  if (selected)
+    clusterPriorities[`beacon:${selected}`] = {
+      ...clusterPriorities[`beacon:${selected}`],
+      tier: -3,
+    };
+  if (person)
+    clusterPriorities[`person:${person}`] = {
+      ...clusterPriorities[`person:${person}`],
+      tier: -3,
+    };
   const focusedBeacon =
     selected && userId
       ? data.activities.find(
@@ -881,6 +1095,26 @@ export default function MapScreen() {
             canReadBeaconActivity(data, activity, userId),
         )
       : undefined;
+  const hostLink = focusedBeacon
+    ? data.activity_social_links.find(
+        (row) => row.activity_id === focusedBeacon.id,
+      )
+    : undefined;
+  const hostingCommunity = directoryRows.find((row) =>
+    hostLink
+      ? row.entity_type === hostLink.entity_type &&
+        row.entity_id === hostLink.entity_id
+      : focusedBeacon?.audience_id === row.entity_id &&
+        focusedBeacon.audience === row.entity_type,
+  );
+  function openCommunity(row: SocialDirectorySummary) {
+    setPlaceSearchOpen(false);
+    if (row.action !== "joined")
+      setDirectorySelection(`${row.entity_type}:${row.entity_id}`);
+    else if (row.entity_type === "squad") setSquadPreviewId(row.entity_id);
+    else if (row.entity_type === "space") setSpacePreviewId(row.entity_id);
+    else setOrganizationPreviewId(row.entity_id);
+  }
   const focusedPlace = focusedBeacon
     ? safePlaces.find(
         (place) =>
@@ -964,8 +1198,17 @@ export default function MapScreen() {
             (plan) => plan.id === exploration.filters.planId,
           )?.label ?? "Plan",
       });
+    chips.push(
+      ...contextViews.map((view) => ({ key: view.key, label: view.label })),
+    );
     return chips;
-  }, [activeCategories, exploration.filters, mapAudiences, planFilterOptions]);
+  }, [
+    activeCategories,
+    exploration.filters,
+    mapAudiences,
+    planFilterOptions,
+    contextViews,
+  ]);
 
   const selectedQuickFilter: MapQuickFilter | null =
     exploration.filters.time === "Now"
@@ -1144,9 +1387,8 @@ export default function MapScreen() {
     setCompassSheetOpen(false);
   }
 
-  function exploreGooglePlace(place: WorldwidePlace) {
-    if (Platform.OS !== "android" || !isValidCoordinate(place.coordinate))
-      return;
+  function exploreWorldPlace(place: WorldwidePlace) {
+    if (!isValidCoordinate(place.coordinate)) return;
     clearRouteSelection();
     setClusterActivityIds(null);
     setClusterPersonIds(null);
@@ -1155,25 +1397,38 @@ export default function MapScreen() {
     setPickMode(false);
     setPickedMapPoint(null);
     exploration.setQuery("");
+    const isCity = [
+      "locality",
+      "administrative_area_level_1",
+      "administrative_area_level_2",
+      "country",
+    ].includes(place.primaryType ?? "");
+    setPublicSelection(null);
     exploration.setArea({
       kind: "place",
       label: place.label,
       coordinate: place.coordinate,
-      zoom: 16,
-      source: "google",
+      zoom: isCity ? 12 : 16,
+      source: place.id.startsWith("demo-city:")
+        ? "demo"
+        : Platform.OS === "android"
+          ? "google"
+          : "osm",
       attributions: place.attributions,
     });
-    choosePulsePlace({
-      placeKey: place.id,
-      name: place.label,
-      lat: place.coordinate.latitude,
-      lng: place.coordinate.longitude,
-      category: classifyPlaceCategory(
-        place.primaryType ? [place.primaryType] : [],
-      ),
-    });
+    if (!isCity)
+      choosePulsePlace({
+        placeKey: place.id,
+        name: place.label,
+        lat: place.coordinate.latitude,
+        lng: place.coordinate.longitude,
+        category: classifyPlaceCategory(
+          place.primaryType ? [place.primaryType] : [],
+        ),
+      });
     setPlaceSearchOpen(false);
     setSearchPlaceOpen(false);
+    if (isCity) setPulsePlace(null);
     setCompassSheetOpen(false);
   }
 
@@ -1192,7 +1447,66 @@ export default function MapScreen() {
     setSelectedCategories([]);
   }
 
+  const focusContext = useCallback(
+    (filter: MapContextFilter) => {
+      const view = resolveMapContext(data, userId, filter);
+      if (!view) return;
+      setContextState((current) => ({
+        viewerId: userId,
+        filters: [
+          ...(current.viewerId === userId
+            ? current.filters.filter((item) => mapContextKey(item) !== view.key)
+            : []),
+          filter,
+        ],
+      }));
+      if (view.points.length)
+        setControlCommand((previous) => ({
+          kind: "fit",
+          coordinates: view.points,
+          revision: (previous?.revision ?? 0) + 1,
+        }));
+    },
+    [data, userId],
+  );
+
+  useEffect(() => {
+    if (!params.mapPlan && !params.mapThread) return;
+    if (!snapshotReady) return;
+    const frame = requestAnimationFrame(() => {
+      if (params.mapPlan) focusContext({ kind: "plan", id: params.mapPlan });
+      if (params.mapThread)
+        focusContext({ kind: "thread", id: params.mapThread });
+      router.setParams({ mapPlan: undefined, mapThread: undefined });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [params.mapPlan, params.mapThread, snapshotReady, focusContext]);
+
+  function clearContexts(key?: string) {
+    const remaining = contextViews.filter((view) => key && view.key !== key);
+    if (
+      selected &&
+      !normalActivities.some((activity) => activity.id === selected) &&
+      !remaining.some((view) =>
+        view.activities.some((activity) => activity.id === selected),
+      )
+    ) {
+      setSelected(null);
+      setDetailTab(null);
+    }
+    setContextState((current) => ({
+      ...current,
+      filters: key
+        ? current.filters.filter((filter) => mapContextKey(filter) !== key)
+        : [],
+    }));
+  }
+
   function removeActiveChip(key: string) {
+    if (key.startsWith("context:")) {
+      clearContexts(key);
+      return;
+    }
     if (key.startsWith("category:")) {
       const category = key.slice("category:".length) as Category;
       const next = activeCategories.filter((value) => value !== category);
@@ -1255,11 +1569,10 @@ export default function MapScreen() {
     try {
       if (demo) {
         exploration.setArea({
-          kind: "place",
-          label: "Demo area",
+          kind: "near-me",
+          label: "Near me",
           coordinate: { latitude: 41.884, longitude: -87.632 },
           zoom: 13,
-          source: "demo",
         });
         setCompassSheetOpen(false);
         return;
@@ -1417,6 +1730,20 @@ export default function MapScreen() {
       {preferencesReady ? (
         <BeaconMap
           fullScreen
+          contextPoints={[...contextPoints, ...publicPoints]}
+          contextPaths={contextPaths}
+          onContextPoint={(point) => {
+            if (point.publicBeaconId) {
+              choosePublicBeacon(point.publicBeaconId);
+              return;
+            }
+            if (point.activityId) chooseBeacon(point.activityId);
+            else if (point.threadId)
+              router.push({
+                pathname: "/council/[id]",
+                params: { id: point.threadId },
+              });
+          }}
           calm={calm}
           pulseSummaries={mapPreferences.liveUpdates ? pulse.summaries : []}
           pulsePlaces={knownPulsePlaces}
@@ -1456,6 +1783,11 @@ export default function MapScreen() {
           locations={mapLocations}
           profiles={data.profiles}
           clusterPriorities={clusterPriorities}
+          areaName={
+            exploration.area?.kind === "place"
+              ? exploration.area.label
+              : undefined
+          }
           selectedActivityId={selected}
           onPick={
             pickMode
@@ -1496,7 +1828,8 @@ export default function MapScreen() {
               .filter(
                 (id) =>
                   activities.some((activity) => activity.id === id) ||
-                  focusedBeacon?.id === id,
+                  focusedBeacon?.id === id ||
+                  publicMapRows.some((row) => row.activity_id === id),
               );
             const peopleIds = nextCluster.members
               .filter((member) => member.kind === "person")
@@ -1520,6 +1853,7 @@ export default function MapScreen() {
             }
           }}
           onMapTap={() => {
+            setPublicSelection(null);
             setPulsePlace(null);
             setContextPoint(null);
             setPlaceSearchOpen(false);
@@ -1543,6 +1877,17 @@ export default function MapScreen() {
         />
       ) : null}
 
+      <SocialDirectorySummaryPreview
+        summary={selectedDirectory}
+        visible={!!selectedDirectory}
+        onClose={() => setDirectorySelection(null)}
+        onAction={async () => {
+          if (!selectedDirectory || !userId) return false;
+          await performDirectoryAction(selectedDirectory, data, userId, act);
+          setDirectorySelection(null);
+        }}
+      />
+
       <View
         style={{
           position: "absolute",
@@ -1560,6 +1905,24 @@ export default function MapScreen() {
         }}
       >
         <MapExplorationHeader
+          areaLabel={
+            exploration.area?.kind === "place"
+              ? exploration.area.label
+              : undefined
+          }
+          onBackNearMe={() => {
+            setPublicSelection(null);
+            setPulsePlace(null);
+            setSelected(null);
+            setPerson(null);
+            if (nearMeArea.current) {
+              exploration.setArea(nearMeArea.current);
+              setTargetRevision((value) => value + 1);
+            } else {
+              setCompassSheetOpen(true);
+              void handleUseMyLocation();
+            }
+          }}
           query={exploration.query}
           onQueryChange={exploration.setQuery}
           onQuerySubmit={searchSubmit}
@@ -1570,6 +1933,9 @@ export default function MapScreen() {
           activeFilterCount={activeFilterCount}
           activeChips={activeChips}
           onRemoveChip={removeActiveChip}
+          onClearContexts={
+            contextViews.length >= 3 ? () => clearContexts() : undefined
+          }
           onSearchFocus={() => setPlaceSearchOpen(true)}
           loading={loading}
           sharingIndicator={shareIndicator}
@@ -1609,6 +1975,15 @@ export default function MapScreen() {
             )}
             query={exploration.query}
             beacons={searchActivityResults}
+            publicBeacons={rankedPublic
+              .filter(
+                (row) =>
+                  !searchActivityResults.some(
+                    (activity) => activity.id === row.activity_id,
+                  ),
+              )
+              .slice(0, 5)}
+            onSelectPublicBeacon={(row) => choosePublicBeacon(row.activity_id)}
             people={searchPeopleResults}
             places={searchPlaceResults}
             recentQueries={recentQueries}
@@ -1644,54 +2019,32 @@ export default function MapScreen() {
               });
               choosePulsePlace(place);
             }}
-            communities={
-              snapshotReady && userId && query
-                ? [
-                    ...data.squads
-                      .filter(
-                        (row) =>
-                          canOpenSquadProfile(data, row.id, userId) &&
-                          matchesSearch(query, row.name),
-                      )
-                      .map((row) => ({
-                        id: row.id,
-                        name: row.name,
-                        kind: "Squads" as const,
-                      })),
-                    ...data.spaces
-                      .filter(
-                        (row) =>
-                          canReadSpace(data, row.id, userId) &&
-                          matchesSearch(query, row.name),
-                      )
-                      .map((row) => ({
-                        id: row.id,
-                        name: row.name,
-                        kind: "Spaces" as const,
-                      })),
-                    ...data.organizations
-                      .filter(
-                        (row) =>
-                          canReadOrganization(data, row.id, userId) &&
-                          matchesSearch(query, row.name),
-                      )
-                      .map((row) => ({
-                        id: row.id,
-                        name: row.name,
-                        kind: "Organizations" as const,
-                      })),
-                  ].slice(0, 12)
-                : []
+            communities={directoryRows.map((row) => ({
+              id: row.entity_id,
+              name: row.name,
+              kind: communityKind[row.entity_type],
+              description: row.description,
+            }))}
+            discoveryMessage={
+              publicDiscovery.error ??
+              (directoryResult?.snapshot === data
+                ? directoryResult.error
+                : undefined)
+            }
+            personReason={(profile) =>
+              userId ? personDiscoveryReason(data, profile, userId) : ""
             }
             onSelectCommunity={(id, kind) => {
               setPlaceSearchOpen(false);
-              if (kind === "Squads") setSquadPreviewId(id);
-              else if (kind === "Spaces") setSpacePreviewId(id);
-              else setOrganizationPreviewId(id);
+              const row = directoryRows.find(
+                (item) =>
+                  item.entity_id === id &&
+                  communityKind[item.entity_type] === kind,
+              );
+              if (!row) return;
+              openCommunity(row);
             }}
-            onChooseWorldPlace={
-              Platform.OS === "android" ? exploreGooglePlace : undefined
-            }
+            onChooseWorldPlace={exploreWorldPlace}
             onStartPickingLocation={startPickingLocation}
           />
         </View>
@@ -1718,42 +2071,118 @@ export default function MapScreen() {
         </View>
       ) : null}
 
-      {preferencesReady &&
-      hintIndex < 3 &&
-      !pulsePlace &&
-      !activeSearchVisible &&
-      !optionsOpen &&
-      !calm ? (
-        <View
-          testID="map-first-run-hint"
-          style={{
-            position: "absolute",
-            top: headerTop + headerHeight + (demo ? 52 : 12),
-            left: 12,
-            right: 70,
-            padding: 12,
-            borderRadius: 16,
-            backgroundColor: colors.white,
-            borderWidth: 1,
-            borderColor: colors.line,
-            zIndex: 8,
-          }}
-        >
-          <Text style={styles.body}>
-            {
-              [pulseCopy.hintPin, pulseCopy.hintLongPress, pulseCopy.hintList][
-                hintIndex
-              ]
-            }
-          </Text>
-          <Button
-            title={pulseCopy.hintDismiss}
-            compact
-            secondary
-            onPress={() => setHintIndex((index) => index + 1)}
-          />
-        </View>
-      ) : null}
+      {snapshotReady &&
+        (viewport?.zoom ?? 13) < 16 &&
+        !loading &&
+        !activeSearchVisible &&
+        !selected &&
+        !person &&
+        !selectedPublic &&
+        !pulsePlace &&
+        !panel &&
+        !pickMode &&
+        !optionsOpen &&
+        !calm &&
+        ((!hasVisibleBeacons &&
+          !publicMapRows.length &&
+          !hasVisiblePeople &&
+          publicDiscovery.ready) ||
+          (preferencesReady && hintIndex < 3 && !discoveryHintDismissed)) && (
+          <View
+            testID="map-discovery-help"
+            style={{
+              position: "absolute",
+              top: headerTop + headerHeight + (demo ? 52 : 12),
+              left: 12,
+              right: 12,
+              padding: 12,
+              gap: 8,
+              borderRadius: 16,
+              backgroundColor: colors.white,
+              borderWidth: 1,
+              borderColor: colors.line,
+              zIndex: 8,
+            }}
+          >
+            {!hasVisibleBeacons &&
+            !publicMapRows.length &&
+            !hasVisiblePeople ? (
+              <>
+                <Text style={styles.h2}>
+                  {exploration.filters.audience === "Friends" && !friends.length
+                    ? "No friends yet"
+                    : "No Beacons here yet"}
+                </Text>
+                {(publicDiscovery.error || directoryResult?.error) && (
+                  <Text style={styles.muted}>
+                    {publicDiscovery.error ?? directoryResult?.error}
+                  </Text>
+                )}
+                <View
+                  style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}
+                >
+                  {exploration.filters.audience === "Friends" &&
+                  !friends.length ? (
+                    <IconButton
+                      label="Add Friends"
+                      onPress={() => router.push("/find-friends")}
+                    >
+                      <UserRoundPlus size={18} color={colors.green} />
+                    </IconButton>
+                  ) : (
+                    <IconButton
+                      label="Change Area"
+                      onPress={() => setPlaceSearchOpen(true)}
+                    >
+                      <MapPin size={18} color={colors.green} />
+                    </IconButton>
+                  )}
+                  <Button
+                    title={
+                      exploration.filters.audience === "Friends"
+                        ? "Explore Beacons"
+                        : "Explore Nearby"
+                    }
+                    compact
+                    onPress={() => {
+                      resetFilters();
+                      exploration.setQuery("");
+                      setPlaceSearchOpen(true);
+                    }}
+                  />
+                  <IconButton
+                    label="Create Beacon"
+                    onPress={() => router.push("/create")}
+                  >
+                    <Plus size={18} color={colors.green} />
+                  </IconButton>
+                </View>
+              </>
+            ) : preferencesReady && hintIndex < 3 && !discoveryHintDismissed ? (
+              <>
+                <Text style={styles.body}>
+                  Explore what&apos;s happening nearby
+                </Text>
+                <Text style={styles.muted}>
+                  Search for an activity, a person or another city. Tap a Beacon
+                  to preview and join.
+                </Text>
+                <Button
+                  title="Got it"
+                  compact
+                  secondary
+                  onPress={() => {
+                    setDiscoveryHintDismissed(true);
+                    setHintIndex(3);
+                    void writeMapDevicePreferences({ hintsSeen: 3 }).catch(
+                      () => {},
+                    );
+                  }}
+                />
+              </>
+            ) : null}
+          </View>
+        )}
       {createdNotice ? (
         <View
           accessibilityLiveRegion="polite"
@@ -1853,9 +2282,31 @@ export default function MapScreen() {
         </View>
       ) : null}
 
+      {selectedPublic && !person && !selected && (
+        <MapCallout
+          testID="map-public-callout"
+          anchor={null}
+          bounds={{
+            ...mapSize,
+            top: headerTop + headerHeight + 12,
+            bottom: 24,
+          }}
+        >
+          <PublicBeaconPreview
+            key={selectedPublic.activity_id}
+            summary={selectedPublic}
+            onClose={() => setPublicSelection(null)}
+            onJoined={(id) => {
+              setPublicSelection(null);
+              router.setParams({ beacon: id });
+            }}
+          />
+        </MapCallout>
+      )}
       {person || (selected && !detailTab) ? (
         <MapCallout
           testID="map-tooltip"
+          maxWidth={320}
           anchor={mapAnchor}
           bounds={{
             ...mapSize,
@@ -1878,13 +2329,19 @@ export default function MapScreen() {
               />
             ) : (
               <MapTooltip
+                community={
+                  hostingCommunity
+                    ? {
+                        name: hostingCommunity.name,
+                        onPress: () => openCommunity(hostingCommunity),
+                      }
+                    : undefined
+                }
+                onShowContext={focusContext}
                 beaconId={selected}
                 personId={null}
                 pinned={!!focusedPlace}
                 onDetails={() => selected && openActivityDetails(selected)}
-                onFeature={(tab) =>
-                  selected && openActivityDetails(selected, tab)
-                }
                 onPerson={choosePerson}
                 onMessage={() =>
                   selected && openActivityDetails(selected, "chat")
@@ -1902,7 +2359,8 @@ export default function MapScreen() {
       {clusterActivityIds && clusterPersonIds ? (
         <MapCallout
           anchor={mapAnchor}
-          height={400}
+          height={320}
+          maxWidth={320}
           bounds={{
             ...mapSize,
             top: headerTop + headerHeight + 12,
@@ -1913,6 +2371,10 @@ export default function MapScreen() {
             key={`${clusterActivityIds.join()}:${clusterPersonIds.join()}`}
             beaconIds={clusterActivityIds}
             personIds={clusterPersonIds}
+            publicBeacons={publicMapRows.filter((row) =>
+              clusterActivityIds.includes(row.activity_id),
+            )}
+            onPublicBeacon={choosePublicBeacon}
             onBeacon={chooseBeacon}
             onPerson={choosePerson}
             onClose={() => {
@@ -1941,6 +2403,7 @@ export default function MapScreen() {
         >
           <MapPanel
             key={`${selected}:${detailTab}`}
+            onShowContext={focusContext}
             beaconId={selected}
             initialTab={detailTab}
             onPerson={choosePerson}
@@ -1986,6 +2449,22 @@ export default function MapScreen() {
               confirmedUntil={pulse.confirmedUntil(pulsePlace.placeKey)}
               lastAnswers={pulse.lastAnswers(pulsePlace.placeKey)}
               onCreateBeacon={createAtPulsePlace}
+              onPing={() =>
+                router.push({
+                  pathname: "/councils",
+                  params: {
+                    newPing: "yes",
+                    placeLabel: pulsePlace.name,
+                    pingSeed: String(Date.now()),
+                  },
+                })
+              }
+              onNearby={() => {
+                setPulsePlace(null);
+                resetFilters();
+                exploration.setQuery("");
+                setPlaceSearchOpen(true);
+              }}
               onReportNote={pulse.reportNote}
               happeningHere={
                 happeningHereRows.length ? happeningHereRows : undefined
@@ -2152,9 +2631,7 @@ export default function MapScreen() {
         recentQueries={recentQueries}
         onChoosePlace={exploreSavedPlace}
         onSelectRecent={chooseRecent}
-        onChooseWorldPlace={
-          Platform.OS === "android" ? exploreGooglePlace : undefined
-        }
+        onChooseWorldPlace={exploreWorldPlace}
       />
 
       {squadPreviewId ? (

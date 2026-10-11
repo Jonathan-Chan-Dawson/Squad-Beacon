@@ -72,8 +72,8 @@ function overlapsDate(
   return localStamp(start) < dayEnd && localStamp(end) > dayStart;
 }
 
-function matchesWhen(
-  activity: Activity,
+export function matchesWhen(
+  activity: Pick<Activity, "starts_at" | "ends_at" | "timezone">,
   when: ExplorationFilters["when"],
   now: number,
 ) {
@@ -293,6 +293,7 @@ export function matchesBeaconFilters(
         options.query,
         activity.title,
         activity.category,
+        activity.description,
         owner && canViewProfile(data, owner, userId) ? owner.name : undefined,
         place?.label,
       )

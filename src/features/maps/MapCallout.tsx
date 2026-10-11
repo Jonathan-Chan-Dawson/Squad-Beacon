@@ -10,12 +10,14 @@ export function MapCallout({
   children,
   height,
   testID,
+  maxWidth,
 }: {
   anchor: { x: number; y: number } | null;
   bounds: { width: number; height: number; top: number; bottom: number };
   children: React.ReactNode;
   height?: number;
   testID?: string;
+  maxWidth?: number;
 }) {
   const { colors, tokens } = useTheme();
   const [measuredHeight, setMeasuredHeight] = useState(height ?? 280);
@@ -26,6 +28,7 @@ export function MapCallout({
       measuredHeight,
       height,
       tokens.layout.screenGutter,
+      maxWidth,
     );
   return (
     <View

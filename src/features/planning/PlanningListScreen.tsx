@@ -49,11 +49,12 @@ const shortDate = (value: string) =>
 
 export default function PlanningListScreen() {
   const { data, userId, act } = useBeacon();
-  const { organizationId, squadId: squadIdParam, newPing, pingSeed } = useLocalSearchParams<{
+  const { organizationId, squadId: squadIdParam, newPing, pingSeed, placeLabel } = useLocalSearchParams<{
     organizationId?: string;
     squadId?: string;
     newPing?: string;
     pingSeed?: string;
+    placeLabel?: string;
   }>();
   const requestedSquadId = Array.isArray(squadIdParam)
     ? squadIdParam[0]
@@ -61,7 +62,9 @@ export default function PlanningListScreen() {
   const createSquadPing = Array.isArray(newPing) ? newPing[0] : newPing;
   const pingSeedToken = Array.isArray(pingSeed) ? pingSeed[0] : pingSeed;
   const hasSquadPingRequest = createSquadPing === "yes" && !!requestedSquadId;
-  const seedKey = `${userId ?? "signed-out"}:${requestedSquadId ?? ""}:${pingSeedToken ?? "direct"}`;
+  const placeName = (Array.isArray(placeLabel) ? placeLabel[0] : placeLabel)?.trim().slice(0, 120) ?? "";
+  const hasPlacePingRequest = createSquadPing === "yes" && !requestedSquadId && !!placeName;
+  const seedKey = `${userId ?? "signed-out"}:${requestedSquadId ?? placeName}:${pingSeedToken ?? "direct"}`;
   const seededSquad =
     requestedSquadId &&
     userId &&
@@ -102,20 +105,21 @@ export default function PlanningListScreen() {
   );
   const createOpen = hasSquadPingRequest
     ? activeSeed
-    : manualCreateOpen;
-  const draftKey = activeSeed ? `squad:${seedKey}` : "normal";
-  const title = titleDraft.key === draftKey ? titleDraft.value : "";
+    : (hasPlacePingRequest && dismissedSeedKey !== seedKey) || manualCreateOpen;
+  const placeSeed = hasPlacePingRequest && dismissedSeedKey !== seedKey;
+  const draftKey = activeSeed ? `squad:${seedKey}` : placeSeed ? `place:${seedKey}` : "normal";
+  const title = titleDraft.key === draftKey ? titleDraft.value : placeSeed ? `Meet at ${placeName}`.slice(0, 120) : "";
   const body = bodyDraft.key === draftKey ? bodyDraft.value : "";
   const coownerIds = coownerDraft.key === draftKey ? coownerDraft.value : [];
-  const effectiveKindChoice = activeSeed ? "Ping" : kindChoice;
+  const effectiveKindChoice = activeSeed || placeSeed ? "Ping" : kindChoice;
   const effectiveAudience: Audience = activeSeed ? "squad" : audience;
   const effectiveAudienceId = activeSeed ? seededSquad!.id : audienceId;
 
   function closeCreate() {
     setManualCreateOpen(false);
-    if (hasSquadPingRequest) {
+    if (hasSquadPingRequest || hasPlacePingRequest) {
       setDismissedSeedKey(seedKey);
-      router.setParams({ newPing: undefined, pingSeed: undefined });
+      router.setParams({ newPing: undefined, pingSeed: undefined, placeLabel: undefined });
     }
   }
 
@@ -173,6 +177,7 @@ export default function PlanningListScreen() {
     draft.category = recipe.category;
     draft.audience = effectiveAudience;
     draft.audience_id = effectiveAudienceId;
+    if (placeSeed) draft.label = placeName;
     return draft;
   }
 
@@ -299,6 +304,8 @@ export default function PlanningListScreen() {
           <View style={styles.card}>
             <Text style={styles.h2}>Squad Ping</Text>
           </View>
+        ) : placeSeed ? (
+          <Txt muted>Choose who to invite. Nearby interest stays anonymous.</Txt>
         ) : (
           <Chips options={kinds} value={kindChoice} onChange={setKindChoice} />
         )}

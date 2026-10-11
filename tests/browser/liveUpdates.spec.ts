@@ -58,9 +58,9 @@ test("place categories show their own choices and selecting again clears the dra
 
   const court = await openPlace(page, "Willow Courts");
   await court.getByRole("button", { name: "Update", exact: true }).click();
-  for (const group of ["Availability", "Conditions"]) await expect(sheet.getByText(group, { exact: true })).toBeVisible();
-  for (const group of ["Crowd", "Wait", "Parking"]) await expect(sheet.getByText(group, { exact: true })).toHaveCount(0);
-  for (const option of ["Courts open", "Courts occupied", "People waiting", "Wet field"]) await expect(sheet.getByRole("button", { name: option, exact: true })).toBeVisible();
+  for (const group of ["Crowd", "Availability"]) await expect(sheet.getByText(group, { exact: true })).toBeVisible();
+  for (const group of ["Conditions", "Wait", "Parking"]) await expect(sheet.getByText(group, { exact: true })).toHaveCount(0);
+  for (const option of ["Courts open", "Courts occupied", "People waiting"]) await expect(sheet.getByRole("button", { name: option, exact: true })).toBeVisible();
   await expect(post).toBeDisabled();
   await sheet.getByRole("button", { name: "Courts open", exact: true }).click();
   await expect(post).toBeEnabled();
@@ -68,12 +68,13 @@ test("place categories show their own choices and selecting again clears the dra
   await expect(post).toBeDisabled();
 });
 
-test("a place without recent updates offers one add action and a crowd-only draft", async ({ page }) => {
+test("a place without recent updates keeps update and Beacon actions without empty sections", async ({ page }) => {
   await enterDemo(page);
   const preview = await openPlace(page, "Montrose Harbor");
-  await expect(preview.getByText("No recent updates", { exact: true })).toBeVisible();
-  for (const action of ["Still true", "Update", "Create Beacon here"]) await expect(preview.getByRole("button", { name: action, exact: true })).toHaveCount(0);
-  await preview.getByRole("button", { name: "Add Live Update", exact: true }).click();
+  await expect(preview.getByText("No recent updates", { exact: true })).toHaveCount(0);
+  for (const action of ["Still true"]) await expect(preview.getByRole("button", { name: action, exact: true })).toHaveCount(0);
+  await expect(preview.getByRole("button", { name: "Create Beacon here", exact: true })).toBeVisible();
+  await preview.getByRole("button", { name: "Update", exact: true }).click();
   const sheet = page.getByTestId("add-live-update-sheet");
   await expect(sheet.getByText("Crowd", { exact: true })).toBeVisible();
   for (const group of ["Wait", "Parking", "Availability", "Conditions"]) await expect(sheet.getByText(group, { exact: true })).toHaveCount(0);
@@ -97,7 +98,13 @@ test("posting updates the summary and badge, preserves own choices, and confirma
   await expect(preview.getByText(/Updated just now/)).toBeVisible();
   await expect(preview.getByText(note, { exact: true })).toBeVisible();
   const map = page.getByLabel("Beacon map", { exact: true }).locator("..");
+  // Live markers are intentionally absent at normal zoom; the place preview remains useful.
+  await expect(map.getByRole("button", { name: /Riverbend Cafe:.*6 recent updates/ })).toHaveCount(0);
+  await preview.getByRole("button", { name: "Close place preview", exact: true }).click();
+  await map.hover();
+  await page.mouse.wheel(0, -300);
   await expect(map.getByRole("button", { name: /Riverbend Cafe:.*6 recent updates/ })).toBeVisible();
+  await map.getByRole("button", { name: /Riverbend Cafe:.*6 recent updates/ }).click();
 
   await preview.getByRole("button", { name: "Update", exact: true }).click();
   for (const choice of ["Busy", "No wait"]) await expect(sheet.getByRole("button", { name: choice, exact: true })).toHaveAttribute("aria-pressed", "true");

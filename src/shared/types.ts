@@ -472,6 +472,7 @@ export interface ProfileVisibilityGrant {
   target_id: ID;
 }
 export interface Data {
+  public_beacons: import("@/src/features/discovery/types").PublicBeaconSummary[];
   plan_members: PlanMember[];
   plan_routines: PlanRoutine[];
   organizations: Organization[];
@@ -587,6 +588,7 @@ export const emptyData = (): Data => ({
   beacon_attendance: [],
   beacon_invitation_grants: [],
   profile_visibility_grants: [],
+  public_beacons: [],
   is_demo: false,
   viewer_id: null,
   activity_exclusions: [],

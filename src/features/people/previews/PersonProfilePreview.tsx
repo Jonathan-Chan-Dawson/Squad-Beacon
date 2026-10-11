@@ -106,19 +106,39 @@ export function PersonProfilePreview({
               entityType={selectedCommunity.type}
               entityId={selectedCommunity.id}
               onBack={() => setSelectedCommunity(null)}
-          backLabel={selectedCommunity ? "Back to preview" : "Back to profile"}
+              backLabel={
+                selectedCommunity ? "Back to preview" : "Back to profile"
+              }
               onOpenBeacon={openBeaconPreview}
               onOpenFullProfile={(type, id, tab) => {
                 closePreview();
                 setTimeout(() => {
                   if (type === "organization")
-                    router.push({ pathname: "/organization/[id]", params: { id, ...(tab === "activity" ? { tab: "activity" } : {}) } });
+                    router.push({
+                      pathname: "/organization/[id]",
+                      params: {
+                        id,
+                        ...(tab === "activity" ? { tab: "activity" } : {}),
+                      },
+                    });
                   else if (type === "space")
-                    router.push({ pathname: "/space/[id]", params: { id, ...(tab ? { tab } : {}) } });
+                    router.push({
+                      pathname: "/space/[id]",
+                      params: { id, ...(tab ? { tab } : {}) },
+                    });
                   else if (tab === "chat")
-                    router.push({ pathname: "/squad-chat/[id]", params: { id } });
+                    router.push({
+                      pathname: "/squad-chat/[id]",
+                      params: { id },
+                    });
                   else
-                    router.push({ pathname: "/squad/[id]", params: { id, ...(tab === "activity" ? { tab: "Activity" } : {}) } });
+                    router.push({
+                      pathname: "/squad/[id]",
+                      params: {
+                        id,
+                        ...(tab === "activity" ? { tab: "Activity" } : {}),
+                      },
+                    });
                 }, 320);
               }}
             />
@@ -142,7 +162,11 @@ export function PersonProfilePreview({
                 { flexDirection: "row", alignItems: "center", gap: 13 },
               ]}
             >
-              <ProfileAvatar profile={profile} size={68} />
+              <ProfileAvatar
+                profile={profile}
+                size={68}
+                status={selection.availability}
+              />
               <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
                 <Text style={styles.h2}>{name}</Text>
                 {profile ? (
@@ -154,18 +178,20 @@ export function PersonProfilePreview({
                   </Text>
                 ) : null}
               </View>
-              {selection.canMessage ? <IconButton
-                label={selection.starred ? "Unstar" : "Star"}
-                selected={selection.starred}
-                disabled={savingStar}
-                onPress={() => void toggleStar()}
-              >
-                <Star
-                  size={19}
-                  color={colors.green}
-                  fill={selection.starred ? colors.green : "transparent"}
-                />
-              </IconButton> : null}
+              {selection.canMessage ? (
+                <IconButton
+                  label={selection.starred ? "Unstar" : "Star"}
+                  selected={selection.starred}
+                  disabled={savingStar}
+                  onPress={() => void toggleStar()}
+                >
+                  <Star
+                    size={19}
+                    color={colors.green}
+                    fill={selection.starred ? colors.green : "transparent"}
+                  />
+                </IconButton>
+              ) : null}
             </View>
 
             {profile?.bio ? (
@@ -192,10 +218,15 @@ export function PersonProfilePreview({
                     title={`${context.kind}: ${context.name}`}
                     compact
                     secondary
-                    onPress={() => setSelectedCommunity({
-                      type: context.kind === "Organization" ? "organization" : "squad",
-                      id: context.id,
-                    })}
+                    onPress={() =>
+                      setSelectedCommunity({
+                        type:
+                          context.kind === "Organization"
+                            ? "organization"
+                            : "squad",
+                        id: context.id,
+                      })
+                    }
                   />
                 ))}
               </View>

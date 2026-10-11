@@ -274,7 +274,7 @@ import {
 } from "../src/features/maps/mapDiscovery";
 import { makeDemo } from "../src/shared/demo";
 
-test("Map hides solo, closed and strict-full Beacons until a relevant person is selected", () => {
+test("Map hides solo and uninvolved closed Beacons while retaining hosted group Beacons", () => {
   const data = makeDemo();
   const viewer = data.viewer_id!;
   const open = beacon("open", {
@@ -292,16 +292,20 @@ test("Map hides solo, closed and strict-full Beacons until a relevant person is 
   ]) {
     const activity = { ...open, ...patch };
     data.activities = [activity];
-    assert.equal(showBeaconOnMap(data, activity, viewer, {}, now), false);
+    assert.equal(showBeaconOnMap(data, activity, viewer, {}, now), activity.mode !== "solo");
     assert.equal(
       showBeaconOnMap(data, activity, viewer, { personId: viewer }, now),
       true,
     );
     assert.equal(
       showBeaconOnMap(data, activity, viewer, { personId: "unrelated" }, now),
-      false,
+      activity.mode !== "solo",
     );
   }
+  const unjoined = { ...open, owner_id: "jordan", audience: "friends" as const, manual_closed: true };
+  data.activities = [unjoined];
+  assert.equal(showBeaconOnMap(data, unjoined, viewer, {}, now), false);
+  assert.equal(showBeaconOnMap(data, unjoined, viewer, { personId: "jordan" }, now), true);
   data.activities = [open];
   assert.equal(showBeaconOnMap(data, open, viewer, {}, now), true);
   const soft = {

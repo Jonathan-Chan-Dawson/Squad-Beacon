@@ -1,5 +1,7 @@
+import { AvatarStatusBadge } from "./AvatarStatusBadge";
+import type { FriendAvailabilityState } from "@/src/shared/domain";
 import React, { useEffect, useState } from "react";
-import { Image } from "react-native";
+import { Image, View } from "react-native";
 import type { Profile } from "@/src/shared/types";
 import { MiniAvatar } from "@/src/features/people/MiniAvatar";
 import { avatarSeed } from "@/src/features/profile/avatarArt";
@@ -10,9 +12,11 @@ import { canViewProfile } from "@/src/features/profile/privacy";
 export function ProfileAvatar({
   profile,
   size = 42,
+  status,
 }: {
   profile: Profile | undefined;
   size?: number;
+  status?: FriendAvailabilityState;
 }) {
   const { showAvatars } = usePreferences();
   const { data, userId } = useBeacon();
@@ -53,22 +57,33 @@ export function ProfileAvatar({
     };
   }, [profile?.id, profile?.avatar_updated_at, key, showAvatars, canReadPhoto]);
   if (!showAvatars) return null;
-  return canReadPhoto && profile?.avatar_style !== "illustrated" && image?.key === key ? (
-    <Image
-      testID="user-avatar"
-      accessibilityLabel={profile?.name ?? "Profile photo"}
-      source={{ uri: image.uri }}
-      style={{ width: size, height: size, borderRadius: size / 2 }}
-    />
+  const avatar =
+    canReadPhoto &&
+    profile?.avatar_style !== "illustrated" &&
+    image?.key === key ? (
+      <Image
+        testID="user-avatar"
+        accessibilityLabel={profile?.name ?? "Profile photo"}
+        source={{ uri: image.uri }}
+        style={{ width: size, height: size, borderRadius: size / 2 }}
+      />
+    ) : (
+      <MiniAvatar
+        seed={
+          canReadPhoto
+            ? (profile?.avatar_seed ?? avatarSeed(profile?.id ?? "friend"))
+            : avatarSeed(profile?.id ?? "friend")
+        }
+        name={profile?.name ?? "Friend"}
+        size={size}
+      />
+    );
+  return status && status !== "unknown" ? (
+    <View style={{ width: size, height: size }}>
+      {avatar}
+      <AvatarStatusBadge state={status} size={size >= 64 ? 16 : 12} />
+    </View>
   ) : (
-    <MiniAvatar
-      seed={
-        canReadPhoto
-          ? (profile?.avatar_seed ?? avatarSeed(profile?.id ?? "friend"))
-          : avatarSeed(profile?.id ?? "friend")
-      }
-      name={profile?.name ?? "Friend"}
-      size={size}
-    />
+    avatar
   );
 }

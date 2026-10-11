@@ -96,11 +96,27 @@ export async function rpc(
   const requestId =
     previous?.fingerprint === fingerprint ? previous.id : randomUUID();
   if (retryable) pendingRequests.set(key, { fingerprint, id: requestId });
-  const { data, error, status } = await supabase.rpc("beacon_action", {
-    action,
-    payload,
-    request_id: requestId,
-  });
+  const discoveryParams =
+    action === "join_public_beacon"
+      ? { p_activity_id: payload.activity_id }
+      : action === "publish_beacon_discovery" ||
+          action === "unpublish_beacon_discovery"
+        ? {
+            p_activity_id: payload.activity_id,
+            p_enabled: action === "publish_beacon_discovery",
+            p_area_label: payload.area_label ?? "",
+            p_lat: payload.coarse_lat ?? null,
+            p_lng: payload.coarse_lng ?? null,
+          }
+        : null;
+  const { data, error, status } = await supabase.rpc(
+    discoveryParams
+      ? action === "join_public_beacon"
+        ? "join_public_beacon"
+        : "set_beacon_discovery"
+      : "beacon_action",
+    discoveryParams ?? { action, payload, request_id: requestId },
+  );
   if (status !== 0) pendingRequests.delete(key);
   if (error) throw new Error(error.message);
   return data as Record<string, unknown>;

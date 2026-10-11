@@ -1,3 +1,9 @@
+import {
+  clusterAreaSummary,
+  mapClusterGroups,
+  mapClusterTier,
+  CLUSTER_PREVIEW_LIMIT,
+} from "../mapClusterPolicy";
 import React, {
   useCallback,
   useEffect,
@@ -5,9 +11,20 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { Platform, View, Pressable, useWindowDimensions } from "react-native";
+import {
+  Platform,
+  View,
+  Text,
+  Pressable,
+  useWindowDimensions,
+} from "react-native";
 import { LocateFixed, SlidersHorizontal } from "lucide-react-native";
-import MapView, { Marker, PROVIDER_GOOGLE } from "react-native-maps";
+import MapView, {
+  Circle,
+  Marker,
+  Polyline,
+  PROVIDER_GOOGLE,
+} from "react-native-maps";
 import { friendAvailabilityState, locationIsFresh } from "@/src/shared/domain";
 import { isValidCoordinate } from "@/src/shared/exploration";
 import { useTheme } from "@/src/shared/ui";
@@ -17,10 +34,8 @@ import { googleMapStyles } from "@/src/theme/map";
 import { useNow } from "@/src/shared/useNow";
 import type { MapProps } from "@/src/features/maps/components/BeaconMap";
 import {
-  clusterMapPoints,
   rankClusterMembers,
   clusterPreviewOverflow,
-  clusterCategoryMix,
   formatLocationAge,
   MAP_MAX_ZOOM,
   MAX_RENDERED_MAP_FEATURES,
@@ -104,6 +119,9 @@ function mapTimeChip(activity: MapProps["activities"][number], now: number) {
   });
 }
 export default function BeaconMap({
+  contextPoints = [],
+  contextPaths = [],
+  onContextPoint,
   activities,
   availabilityActivities,
   places,
@@ -124,6 +142,7 @@ export default function BeaconMap({
   onCluster,
   clusterPriorities = {},
   clusterPersonCount,
+  areaName,
   onMapTap,
   onViewportChange,
   explorationTarget,
@@ -297,6 +316,7 @@ export default function BeaconMap({
       !hasUsableMapViewport(mapSize) ||
       onPick ||
       explorationTarget ||
+      controlCommand?.coordinates?.length ||
       didInitialFit.current
     )
       return;
@@ -310,7 +330,7 @@ export default function BeaconMap({
       });
       didInitialFit.current = true;
     }
-  }, [coordinates, ready, mapSize, onPick, explorationTarget]);
+  }, [coordinates, ready, mapSize, onPick, explorationTarget, controlCommand]);
   useEffect(() => {
     if (!ready || !hasUsableMapViewport(mapSize) || onPick || !controlCommand)
       return;
@@ -319,12 +339,18 @@ export default function BeaconMap({
     if (!currentMap) return;
 
     if (controlCommand.kind === "fit") {
+      didInitialFit.current = true;
       const visibleCoordinates =
         controlCommand.coordinates ?? JSON.parse(coordinates);
       if (visibleCoordinates.length)
         currentMap.fitToCoordinates(visibleCoordinates, {
-          edgePadding: fitEdgePadding,
-          animated: true,
+          edgePadding: {
+            top: mapPadding.top + 24,
+            right: mapPadding.right + 24,
+            bottom: mapPadding.bottom + 24,
+            left: mapPadding.left + 24,
+          },
+          animated: !controlCommand.coordinates?.length,
         });
       appliedControlRevision.current = controlCommand.revision;
       return;
@@ -348,7 +374,18 @@ export default function BeaconMap({
       250,
     );
     appliedControlRevision.current = controlCommand.revision;
-  }, [controlCommand, coordinates, onPick, ready, region, mapSize]);
+  }, [
+    controlCommand,
+    coordinates,
+    onPick,
+    ready,
+    region,
+    mapSize,
+    mapPadding.top,
+    mapPadding.right,
+    mapPadding.bottom,
+    mapPadding.left,
+  ]);
   const focusedLat = focused?.latitude,
     focusedLng = focused?.longitude;
   useEffect(() => {
@@ -447,6 +484,15 @@ export default function BeaconMap({
     isValidCoordinate(explorationTarget.center) &&
     isValidMapZoom(explorationTarget.zoom);
   const mapPoints = [
+    ...contextPoints
+      .filter((point) => point.publicBeaconId)
+      .map((point) => ({
+        id: `beacon:${point.publicBeaconId}`,
+        kind: "beacon" as const,
+        latitude: point.latitude,
+        longitude: point.longitude,
+        category: point.category,
+      })),
     ...pins.map((place) => ({
       id: `beacon:${place.activity_id}`,
       kind: "beacon" as const,
@@ -462,17 +508,34 @@ export default function BeaconMap({
       longitude: location.longitude!,
     })),
   ];
-  const groups = clusterMapPoints(mapPoints, {
-    centerLatitude: region.latitude,
-    centerLongitude: region.longitude,
-    zoom: nativeMapZoom(region.longitudeDelta, mapSize.width),
-    width: mapSize.width,
-    height: mapSize.height,
-  });
-  const clusterGroups = groups.filter((group) => group.members.length > 1);
+  const groups = mapClusterGroups(
+    mapPoints,
+    {
+      centerLatitude: region.latitude,
+      centerLongitude: region.longitude,
+      zoom: nativeMapZoom(region.longitudeDelta, mapSize.width),
+      width: mapSize.width,
+      height: mapSize.height,
+    },
+    clusterPriorities,
+  );
+  const clusterTier = mapClusterTier(
+    nativeMapZoom(region.longitudeDelta, mapSize.width),
+  );
+  const clusterGroups = groups.filter(
+    (group) =>
+      group.members.length > 1 ||
+      (clusterTier === "area" &&
+        (clusterPriorities[group.members[0].id]?.tier ?? 7) >= 0),
+  );
   const renderedSingletonIds = new Set(
     groups
-      .filter((group) => group.members.length === 1)
+      .filter(
+        (group) =>
+          group.members.length === 1 &&
+          (clusterTier !== "area" ||
+            (clusterPriorities[group.members[0].id]?.tier ?? 7) < 0),
+      )
       .map((group) => group.members[0].id),
   );
   const availableHaloSlots = Math.max(
@@ -496,6 +559,22 @@ export default function BeaconMap({
   async function pressCluster(group: MapPointGroup) {
     const currentMap = map.current;
     if (!currentMap) return;
+    const zoom = nativeMapZoom(region.longitudeDelta, mapSize.width);
+    const areaSummary = mapClusterTier(zoom) === "area";
+    const targetZoom = areaSummary
+      ? Math.min(16, Math.max(13, zoom + 2))
+      : Math.min(MAP_MAX_ZOOM, zoom + (zoom < 16 ? 0.5 : 0));
+    const scale = 2 ** (zoom - targetZoom);
+    currentMap.animateToRegion(
+      {
+        latitude: group.latitude,
+        longitude: group.longitude,
+        latitudeDelta: region.latitudeDelta * scale,
+        longitudeDelta: region.longitudeDelta * scale,
+      },
+      300,
+    );
+    if (areaSummary) return;
     try {
       const anchor = await currentMap.pointForCoordinate({
         latitude: group.latitude,
@@ -649,6 +728,83 @@ export default function BeaconMap({
         }}
         showsUserLocation={false}
       >
+        {contextPaths.map((coordinates, index) => (
+          <Polyline
+            key={`context-path:${index}`}
+            coordinates={[...coordinates]}
+            strokeColor={colors.green + "99"}
+            strokeWidth={3}
+            lineDashPattern={[6, 5]}
+            zIndex={0}
+          />
+        ))}
+        {contextPoints
+          .filter(
+            (point) =>
+              (!point.publicBeaconId ||
+                renderedSingletonIds.has(`beacon:${point.publicBeaconId}`)) &&
+              (!point.activityId ||
+                renderedSingletonIds.has(`beacon:${point.activityId}`)),
+          )
+          .map((point) =>
+            point.activityId ? (
+              <Circle
+                key={`context:${point.id}`}
+                center={point}
+                radius={16}
+                strokeColor={colors.green}
+                strokeWidth={2}
+                fillColor={colors.green + "18"}
+                zIndex={1}
+              />
+            ) : (
+              <Marker
+                key={point.id}
+                coordinate={point}
+                anchor={{ x: 0.5, y: 0.5 }}
+                zIndex={2}
+                accessibilityLabel={`${point.publicBeaconId ? "Public Beacon" : "Suggestion"}: ${point.title}`}
+                onPress={(event) => {
+                  event.stopPropagation();
+                  if (!onPick) onContextPoint?.(point);
+                }}
+              >
+                <View
+                  style={{
+                    minWidth: 44,
+                    minHeight: 44,
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <View
+                    style={{
+                      paddingHorizontal: 8,
+                      paddingVertical: 5,
+                      borderRadius: 12,
+                      borderWidth: 1,
+                      borderStyle: "dashed",
+                      borderColor: colors.green,
+                      backgroundColor: colors.white,
+                    }}
+                  >
+                    <Text
+                      numberOfLines={1}
+                      style={{
+                        maxWidth: 150,
+                        color: colors.green,
+                        fontSize: 11,
+                      }}
+                    >
+                      {point.publicBeaconId
+                        ? `Public \u00b7 ${point.title}`
+                        : "? Suggestion"}
+                    </Text>
+                  </View>
+                </View>
+              </Marker>
+            ),
+          )}
         {pins
           .filter((place) => nowHaloIds.has(`beacon:${place.activity_id}`))
           .map((place) => {
@@ -676,24 +832,32 @@ export default function BeaconMap({
             group.members.length - beaconCount;
           const ranked = rankClusterMembers(group.members, clusterPriorities);
           const previewLabels = ranked
-            .slice(0, 14)
+            .slice(0, CLUSTER_PREVIEW_LIMIT)
             .map((member) =>
               member.kind === "beacon"
-                ? activities.find(
+                ? (activities.find(
                     (activity) => `beacon:${activity.id}` === member.id,
-                  )?.title
+                  )?.title ??
+                  contextPoints.find(
+                    (point) => `beacon:${point.publicBeaconId}` === member.id,
+                  )?.title)
                 : profiles.find(
                     (profile) => `person:${profile.id}` === member.id,
                   )?.name,
             )
             .filter((label): label is string => !!label);
-          const categoryMix = clusterCategoryMix(group.members)
-            .map((entry) => `${entry.category} ${entry.count}`)
-            .join(", ");
           const overflow = clusterPreviewOverflow(group.members.length);
-          const accessibilityLabel = `Map cluster: ${beaconCount} beacons, ${peopleCount} people. Preview: ${previewLabels.join(", ")}${overflow ? `, plus ${overflow} more` : ""}. Category mix: ${categoryMix}.`;
+          const summary =
+            clusterTier === "area"
+              ? clusterAreaSummary(group, activities, places, now, areaName)
+              : undefined;
+          const accessibilityLabel = summary
+            ? `Explore ${summary.name}: ${summary.reason}`
+            : `Map cluster: ${beaconCount} beacons, ${peopleCount} people. Preview: ${previewLabels.join(", ")}${overflow ? `, plus ${overflow} more` : ""}.`;
           return (
             <ClusterMapPin
+              areaSummary={summary}
+              availabilityActivities={availabilityActivities}
               profiles={profiles}
               peopleCount={clusterPersonCount?.(group.members)}
               key={group.id}
@@ -715,8 +879,14 @@ export default function BeaconMap({
             );
             if (!activity) return null;
             const selectedPin = selectedActivityId === activity.id;
-            const streetTime =
-              nativeMapZoom(region.longitudeDelta, mapSize.width) >= 15
+            const context = contextPoints.find(
+              (point) => point.activityId === activity.id,
+            );
+            const streetTime = context
+              ? context.suggestion
+                ? "Suggestion"
+                : "In focus"
+              : nativeMapZoom(region.longitudeDelta, mapSize.width) >= 15
                 ? mapTimeChip(activity, now)
                 : undefined;
             return (
@@ -731,7 +901,10 @@ export default function BeaconMap({
                 category={activity.category}
                 categoryColor={categoryColors[activity.category]}
                 selected={selectedPin}
-                dimmed={!!selectedActivityId && !selectedPin}
+                dimmed={
+                  (!!selectedActivityId && !selectedPin) ||
+                  (contextPoints.some((point) => point.activityId) && !context)
+                }
                 streetTime={streetTime}
                 dot={nativeMapZoom(region.longitudeDelta, mapSize.width) < 12}
                 appearanceKey={appearanceKey}

@@ -1,8 +1,15 @@
+import {
+  mapClusterGroups,
+  mapClusterTier,
+  clusterAreaSummary,
+  CLUSTER_PREVIEW_LIMIT,
+} from "../src/features/maps/mapClusterPolicy";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   clusterPreviewOverflow,
+  formatLocationAge,
   clusterMapPoints,
   clusterCategoryMix,
   clusterBounds,
@@ -90,6 +97,7 @@ test("screen-space groups split as zoom increases", () => {
     },
   ];
   assert.equal(clusterMapPoints(points, viewport)[0].members.length, 2);
+  assert.equal(clusterMapPoints(points, { ...viewport, zoom: 16 }).length, 2);
   assert.equal(clusterMapPoints(points, { ...viewport, zoom: 17 }).length, 2);
 });
 
@@ -282,9 +290,9 @@ test("cluster previews rank real items by relevance and report overflow", () => 
     ["beacon:joined", "person:starred", "beacon:busy", "beacon:other"],
   );
   assert.equal(clusterPreviewOverflow(2), 0);
-  assert.equal(clusterPreviewOverflow(4), 0);
-  assert.equal(clusterPreviewOverflow(14), 0);
-  assert.equal(clusterPreviewOverflow(19), 5);
+  assert.equal(clusterPreviewOverflow(4), 1);
+  assert.equal(clusterPreviewOverflow(14), 11);
+  assert.equal(clusterPreviewOverflow(19), 16);
 });
 
 test("map relevance derives joined, starred, available, and nearby ranks centrally", () => {
@@ -348,4 +356,62 @@ test("map callouts resize beside their anchor without covering the marker or lea
   const virtual = mapCalloutLayout(null, bounds, 450, 450);
   assert.equal(virtual.attached, false);
   assert.equal(virtual.maxHeight, 450);
+});
+
+test("last-known location labels stay compact over the 24-hour window", () => {
+  const now = Date.parse("2026-10-11T18:00:00Z");
+  assert.equal(
+    formatLocationAge(new Date(now - 12 * 3600000).toISOString(), now),
+    "12h ago",
+  );
+  assert.equal(
+    formatLocationAge(new Date(now - 59 * 60000).toISOString(), now),
+    "59m ago",
+  );
+  assert.equal(formatLocationAge("invalid", now), null);
+});
+
+test("city-scale summaries simplify density and retain every member", () => {
+  const points = Array.from({ length: 96 }, (_, i) => ({
+    id: `person:${i}`,
+    kind: "person" as const,
+    latitude: 41.88 + (i % 12) * 0.002,
+    longitude: -87.64 + Math.floor(i / 12) * 0.002,
+  }));
+  const far = mapClusterGroups(points, { ...viewport, zoom: 11 });
+  assert.ok(far.length <= 24);
+  assert.equal(
+    new Set(far.flatMap((group) => group.members.map((point) => point.id)))
+      .size,
+    points.length,
+  );
+  assert.equal(mapClusterTier(11), "area");
+  assert.equal(mapClusterTier(13), "cluster");
+  assert.equal(mapClusterTier(16), "individual");
+  assert.equal(CLUSTER_PREVIEW_LIMIT, 3);
+  assert.deepEqual(clusterAreaSummary(far[0], [], [], Date.now(), "Lakeview"), {
+    name: "Lakeview",
+    reason: `${far[0].members.length} Friends`,
+  });
+});
+
+test("selected and own avatars stay individual while nearby items stay grouped", () => {
+  const points = Array.from({ length: 8 }, (_, i) => ({
+    id: `person:${i}`,
+    kind: "person" as const,
+    latitude: viewport.centerLatitude,
+    longitude: viewport.centerLongitude,
+  }));
+  const groups = mapClusterGroups(
+    points,
+    { ...viewport, zoom: 17 },
+    { "person:0": { tier: -3 }, "person:1": { tier: -2 } },
+  );
+  assert.equal(groups.filter((group) => group.members.length === 1).length, 2);
+  assert.equal(
+    new Set(groups.flatMap((group) => group.members.map((point) => point.id)))
+      .size,
+    8,
+  );
+  assert.ok(groups.find((group) => group.members.length === 6));
 });

@@ -28,6 +28,12 @@ export function beaconHasSquadParticipant(
   );
 }
 
+export const PAST_BEACON_MAP_HOURS = 24;
+export function withinMapBeaconWindow(activity: Activity, now = Date.now()) {
+  return activity.status === "scheduled" &&
+    Date.parse(activity.ends_at) > now - PAST_BEACON_MAP_HOURS * 3600000;
+}
+
 export function showBeaconOnMap(
   data: Data,
   activity: Activity,
@@ -45,8 +51,10 @@ export function showBeaconOnMap(
   )
     return false;
   if (selection.beaconId === activity.id) return true;
-  if (activity.status !== "scheduled" || Date.parse(activity.ends_at) <= now)
+  if (!withinMapBeaconWindow(activity, now))
     return false;
+  // Recent history remains browsable, including full events, without reopening joining.
+  if (Date.parse(activity.ends_at) <= now) return activity.mode !== "solo";
   const involved = new Set([
     activity.owner_id,
     ...data.rsvps
@@ -71,6 +79,19 @@ export function showBeaconOnMap(
         involved.has(row.user_id) &&
         canViewProfile(data, row.user_id, viewerId),
     )
+  )
+    return true;
+  if (
+    activity.mode !== "solo" &&
+    (activity.owner_id === viewerId ||
+      data.rsvps.some(
+        (row) =>
+          row.activity_id === activity.id &&
+          row.user_id === viewerId &&
+          (isApprovedGoing(activity, row) ||
+            row.status === "invited" ||
+            row.status === "requested"),
+      ))
   )
     return true;
   const capacity = beaconCapacity(data, activity);

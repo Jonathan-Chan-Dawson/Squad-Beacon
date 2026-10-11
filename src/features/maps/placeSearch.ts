@@ -8,6 +8,25 @@ export type WorldwidePlace = {
   primaryType?: string;
 };
 
+/** Offline examples belong only to the demo, never real-account search results. */
+export function demoWorldwidePlaces(query: string): WorldwidePlace[] {
+  const term = query.trim().toLowerCase();
+  return [
+    { label: "Naperville", latitude: 41.7508, longitude: -88.1535 },
+    { label: "Chicago", latitude: 41.8781, longitude: -87.6298 },
+    { label: "Auburn", latitude: 32.6099, longitude: -85.4808 },
+  ]
+    .filter((row) => row.label.toLowerCase().includes(term))
+    .map((row) => ({
+      id: `demo-city:${row.label}`,
+      label: row.label,
+      address: "Demo city",
+      coordinate: { latitude: row.latitude, longitude: row.longitude },
+      primaryType: "locality",
+      attributions: [],
+    }));
+}
+
 const record = (value: unknown): Record<string, unknown> =>
   value !== null && typeof value === "object"
     ? (value as Record<string, unknown>)

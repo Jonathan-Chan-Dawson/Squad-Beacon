@@ -1,3 +1,4 @@
+import { performDirectoryAction } from "@/src/features/social/directoryActions";
 import React, { useEffect, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { Building2, Layers3, UsersRound } from "lucide-react-native";
@@ -146,34 +147,7 @@ export function SocialDirectoryResults({
 
   async function performAction(row: SocialDirectorySummary) {
     if (!userId || data.viewer_id !== userId) return;
-    const id = row.entity_id;
-    if (row.action === "join") {
-      if (row.entity_type === "organization") await act("join_organization", { organization_id: id });
-      else if (row.entity_type === "space") await act("join_space", { space_id: id });
-      else await act("join_squad", { squad_id: id });
-    } else if (row.action === "request") {
-      if (row.entity_type === "organization") await act("request_organization_join", { organization_id: id });
-      else if (row.entity_type === "space") await act("request_space_join", { space_id: id });
-      else await act("request_squad_join", { squad_id: id });
-    } else if (row.action === "requested") {
-      if (row.entity_type === "organization") await act("cancel_organization_join_request", { organization_id: id });
-      else if (row.entity_type === "space") await act("cancel_space_join_request", { space_id: id });
-      else await act("cancel_squad_join_request", { squad_id: id });
-    } else if (row.action === "invited") {
-      if (row.entity_type === "organization") {
-        await act("respond_organization_invite", { organization_id: id, accept: true });
-      } else if (row.entity_type === "space") {
-        await act("respond_space_invite", { space_id: id, accept: true });
-      } else {
-        const invitation = data.squad_invites.find(
-          (invite) => invite.squad_id === id && invite.recipient_id === userId,
-        );
-        if (!invitation) return;
-        await act("accept_squad", { id: invitation.id });
-      }
-    } else {
-      return;
-    }
+    await performDirectoryAction(row, data, userId, act);
     setRevision((value) => value + 1);
   }
 
@@ -186,9 +160,9 @@ export function SocialDirectoryResults({
       {normalizedQuery.length === 1 ? (
         <Txt muted>Enter at least two characters to search communities.</Txt>
       ) : !current ? (
-        <Txt muted>{explore ? "Loading discoverable communitiesâ€¦" : "Searching communitiesâ€¦"}</Txt>
+        <Txt muted>{explore ? "Loading discoverable communities…" : "Searching communities…"}</Txt>
       ) : current.error ? (
-        <Empty title="Couldnâ€™t load communities" body="Try the search again in a moment." />
+        <Empty title="Couldn’t load communities" body="Try the search again in a moment." />
       ) : !groups.length ? (
         <Empty
           title={explore ? "Nothing to discover yet" : "No matching communities"}
@@ -224,7 +198,7 @@ export function SocialDirectoryResults({
                   `${row.member_count.toLocaleString()} ${row.member_count === 1 ? "member" : "members"}`,
                   children,
                   parent,
-                ].filter(Boolean).join(" Â· ");
+                ].filter(Boolean).join(" · ");
                 return (
                   <View key={`${row.entity_type}:${row.entity_id}`} style={[styles.card, { padding: 10, gap: 6 }]}>
                     <View style={{ flexDirection: "row", alignItems: "center", gap: 9 }}>
@@ -265,8 +239,8 @@ export function SocialDirectoryResults({
       )}
       {current?.hasMore && (
         <View style={{ gap: 6 }}>
-          {loadMoreErrorFor === key ? <Txt muted>Couldnâ€™t load more results. You can try again.</Txt> : null}
-          <Button compact secondary title={loadingMore ? "Loadingâ€¦" : loadMoreErrorFor === key ? "Try again" : "Load more"} disabled={loadingMore} onPress={loadMore} />
+          {loadMoreErrorFor === key ? <Txt muted>Couldn’t load more results. You can try again.</Txt> : null}
+          <Button compact secondary title={loadingMore ? "Loading…" : loadMoreErrorFor === key ? "Try again" : "Load more"} disabled={loadingMore} onPress={loadMore} />
         </View>
       )}
       <ProfilePreviewFrame
@@ -287,7 +261,7 @@ export function SocialDirectoryResults({
             <Text style={styles.body}>
               {selected.member_count.toLocaleString()} {selected.member_count === 1 ? "member" : "members"}
               {selected.child_count > 0
-                ? ` Â· ${selected.child_count} ${selected.entity_type === "space" ? "Squads" : "communities"}`
+                ? ` · ${selected.child_count} ${selected.entity_type === "space" ? "Squads" : "communities"}`
                 : ""}
             </Text>
             {!!selected.parent_name && <Text style={styles.muted}>In {selected.parent_name}</Text>}

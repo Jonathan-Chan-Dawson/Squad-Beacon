@@ -1,3 +1,4 @@
+import { BeaconDiscoverySettings } from "@/src/features/discovery/BeaconDiscoverySettings";
 import React, { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { ChevronDown, ChevronUp } from "lucide-react-native";
@@ -276,6 +277,7 @@ export function BeaconSettings({
               />
             </>
           )}
+          {activity && <BeaconDiscoverySettings activity={activity} />}
           <Text style={styles.h2}>Optional Beacon modules</Text>
           <Txt muted>
             Overview, People, joining, reactions, and directions stay built in.

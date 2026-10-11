@@ -150,7 +150,7 @@ test("View Map requires fresh, finite, geographically valid shared coordinates",
     {
       latitude: 41.8,
       longitude: -87.6,
-      updated_at: new Date(now - 6 * 60_000).toISOString(),
+      updated_at: new Date(now - 24 * 60 * 60_000).toISOString(),
     },
     {
       latitude: 41.8,
@@ -356,7 +356,11 @@ test("a readable public profile remains previewable after friendship ends withou
     viewer_can_view_full_profile: true,
   };
   data.friendships = [];
-  data.favorites.push({ owner_id: "viewer", kind: "friend", target_id: "jordan" });
+  data.favorites.push({
+    owner_id: "viewer",
+    kind: "friend",
+    target_id: "jordan",
+  });
 
   const selected = selectPersonPreview(data, "jordan", "viewer", now);
   assert.equal(selected.canMessage, false);

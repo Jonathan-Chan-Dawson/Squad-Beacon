@@ -74,13 +74,13 @@ test("day boundaries use the habit timezone across DST", () => {
     "2026-11-01",
   );
 });
-test("expired and five-minute-old locations are not live", () => {
+test("map locations last up to 24 hours within the sharing expiry", () => {
   const now = new Date("2026-09-07T12:00:00Z");
   assert.equal(
     locationIsFresh(
       {
         expires_at: "2026-09-07T13:00:00Z",
-        updated_at: "2026-09-07T11:55:00Z",
+        updated_at: "2026-09-06T12:00:00Z",
       },
       now,
     ),
@@ -106,6 +106,26 @@ test("expired and five-minute-old locations are not live", () => {
     ),
     true,
   );
+  assert.equal(
+    locationIsFresh(
+      {
+        expires_at: "2026-09-07T13:00:00Z",
+        updated_at: "2026-09-07T00:00:00Z",
+      },
+      now,
+    ),
+    true,
+  );
+  assert.equal(
+    locationIsFresh(
+      {
+        expires_at: "2026-09-07T13:00:00Z",
+        updated_at: "2026-09-07T12:01:00Z",
+      },
+      now,
+    ),
+    false,
+  );
 });
 test("friend availability uses only explicit live solo status and a 30-minute threshold", () => {
   const now = Date.parse("2026-10-03T18:00:00Z");
@@ -120,7 +140,10 @@ test("friend availability uses only explicit live solo status and a 30-minute th
 
   assert.equal(friendAvailabilityState(liveSolo(true, 31), now), "available");
   assert.equal(friendAvailabilityState(liveSolo(true, 30), now), "ending-soon");
-  assert.equal(friendAvailabilityState(liveSolo(false, 20), now), "unavailable");
+  assert.equal(
+    friendAvailabilityState(liveSolo(false, 20), now),
+    "unavailable",
+  );
   assert.equal(
     friendAvailabilityState({ ...liveSolo(true, 20), mode: "squad" }, now),
     "unknown",
@@ -152,7 +175,10 @@ test("beacon time labels stay relative nearby and readable across days", () => {
     "Ends in 55 min",
   );
   assert.match(activityWhen(event(new Date(2026, 9, 1, 19)), now), /^Today/);
-  assert.match(activityWhen(event(new Date(2026, 9, 2, 16, 30)), now), /^Tomorrow/);
+  assert.match(
+    activityWhen(event(new Date(2026, 9, 2, 16, 30)), now),
+    /^Tomorrow/,
+  );
 });
 test("featured activity cannot expose a pin absent from the authorized collection", () => {
   const d = makeDemo(),
@@ -229,8 +255,11 @@ test("repeat suggestions use only your completed activities and rank repeats fir
 
 test("testing neighborhood has friends, social growth fixtures, and expiring locations", () => {
   const d = makeDemo();
-  assert.equal(d.profiles.length, 70);
-  assert.equal(d.friendships.filter((f) => f.status === "accepted").length, 23);
+  assert.equal(d.profiles.length, 166);
+  assert.equal(
+    d.friendships.filter((f) => f.status === "accepted").length,
+    119,
+  );
   assert.equal(
     d.profiles.filter(
       (p) =>

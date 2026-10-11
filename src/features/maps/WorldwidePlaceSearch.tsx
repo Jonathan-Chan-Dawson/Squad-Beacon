@@ -1,20 +1,22 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Linking, Text, View } from "react-native";
+import { Linking, Platform, Text, View } from "react-native";
 import { MapPin } from "lucide-react-native";
 import { Button, useTheme } from "@/src/shared/ui";
 import { MotionPressable } from "@/src/shared/MotionPressable";
 import { usePreferences } from "@/src/shared/preferences";
 import { searchWorldwidePlaces } from "./searchWorldwidePlaces";
-import type { WorldwidePlace } from "./placeSearch";
+import { demoWorldwidePlaces, type WorldwidePlace } from "./placeSearch";
+import { useBeacon } from "@/src/shared/store";
 
 export function WorldwidePlaceSearch({
   query,
   onChoose,
 }: {
   query: string;
-  // Only supply this callback where the map uses Google Maps.
   onChoose?: (place: WorldwidePlace) => void;
 }) {
+  const { demo } = useBeacon();
+  const provider = Platform.OS === "android" ? "google" : "osm";
   const { colors, styles } = useTheme();
   const { resolvedAppearance } = usePreferences();
   const [places, setPlaces] = useState<WorldwidePlace[]>([]);
@@ -47,7 +49,11 @@ export function WorldwidePlaceSearch({
           setBusy(true);
           setError("");
           setSearched(false);
-          void searchWorldwidePlaces(query)
+          void (
+            demo
+              ? Promise.resolve(demoWorldwidePlaces(query))
+              : searchWorldwidePlaces(query, provider)
+          )
             .then((result) => {
               if (requestRevision !== revision.current.value) return;
               setPlaces(result);
@@ -67,7 +73,7 @@ export function WorldwidePlaceSearch({
         }}
       />
       <Text style={styles.label}>
-        Only your typed place search is sent to Google. No live location.
+        {demo ? "Demo city examples. No search leaves your device." : `Only your typed place search is sent to ${provider === "google" ? "Google" : "OpenStreetMap search"}. No live location.`}
       </Text>
       {current && error ? (
         <Text accessibilityRole="alert" style={styles.error}>
@@ -88,7 +94,11 @@ export function WorldwidePlaceSearch({
               color: resolvedAppearance === "dark" ? "#FFFFFF" : "#1F1F1F",
             }}
           >
-            Google Maps
+            {demo
+              ? "Demo places"
+              : provider === "google"
+                ? "Google Maps"
+                : "OpenStreetMap"}
           </Text>
           {places.map((place) => (
             <View key={place.id} style={{ gap: 4 }}>

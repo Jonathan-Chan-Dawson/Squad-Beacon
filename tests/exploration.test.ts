@@ -152,16 +152,28 @@ test("multi-category choices count as removable filters and match any selected c
     join: "Open",
   } as const;
   assert.equal(mapAdvancedFilterCount(filters, ["Fitness", "Study"]), 4);
-  assert.equal(matchesSelectedCategories("Fitness", ["Fitness", "Study"]), true);
-  assert.equal(matchesSelectedCategories("Gaming", ["Fitness", "Study"]), false);
+  assert.equal(
+    matchesSelectedCategories("Fitness", ["Fitness", "Study"]),
+    true,
+  );
+  assert.equal(
+    matchesSelectedCategories("Gaming", ["Fitness", "Study"]),
+    false,
+  );
   assert.equal(matchesSelectedCategories("Gaming", []), true);
 });
 
 test("a readable selected Beacon remains in synchronized map results exactly once", () => {
   const first = { id: "first" };
   const selected = { id: "outside-query" };
-  assert.deepEqual(includeSelectedActivity([first], selected), [first, selected]);
-  assert.deepEqual(includeSelectedActivity([first, selected], selected), [first, selected]);
+  assert.deepEqual(includeSelectedActivity([first], selected), [
+    first,
+    selected,
+  ]);
+  assert.deepEqual(includeSelectedActivity([first, selected], selected), [
+    first,
+    selected,
+  ]);
   assert.deepEqual(includeSelectedActivity([first], null), [first]);
 });
 
@@ -181,7 +193,14 @@ test("Sonar remains active until expiry while stale or missing points are not sh
   const stale = { ...fresh, updated_at: "2026-10-07T17:54:59.000Z" };
   assert.equal(activeSonarSession([stale], "viewer", now), stale);
   assert.equal(sonarLocationIsFresh(stale, now), false);
-  assert.equal(activeSonarSession([{ ...fresh, expires_at: "2026-10-07T17:59:59.000Z" }], "viewer", now), undefined);
+  assert.equal(
+    activeSonarSession(
+      [{ ...fresh, expires_at: "2026-10-07T17:59:59.000Z" }],
+      "viewer",
+      now,
+    ),
+    undefined,
+  );
   const noPoint = { ...fresh, latitude: null };
   assert.equal(activeSonarSession([noPoint], "viewer", now), noPoint);
   assert.equal(sonarLocationIsFresh(noPoint, now), false);
@@ -189,6 +208,7 @@ test("Sonar remains active until expiry while stale or missing points are not sh
 
 test("Sonar extension adds the selected duration to the current expiry", () => {
   const now = Date.parse("2026-10-07T18:00:00.000Z");
+  assert.equal(locationShareExpiry("24 hours", now), now + 24 * 60 * 60 * 1000);
   const activeExpiry = "2026-10-07T18:42:00.000Z";
   assert.equal(
     locationShareExpiry("15 minutes", now, activeExpiry),
@@ -199,34 +219,60 @@ test("Sonar extension adds the selected duration to the current expiry", () => {
     Date.parse("2026-10-07T19:42:00.000Z"),
   );
   assert.equal(
-    locationShareExpiry("Until activity ends", now, activeExpiry, "2026-10-07T22:00:00.000Z"),
+    locationShareExpiry(
+      "Until activity ends",
+      now,
+      activeExpiry,
+      "2026-10-07T22:00:00.000Z",
+    ),
     Date.parse("2026-10-07T22:00:00.000Z"),
   );
-  assert.equal(locationShareExpiry("Until activity ends", now, activeExpiry), undefined);
   assert.equal(
-    locationShareExpiry("Until activity ends", now, activeExpiry, "2026-10-07T18:30:00.000Z"),
+    locationShareExpiry("Until activity ends", now, activeExpiry),
     undefined,
   );
   assert.equal(
-    locationShareExpiry("1 hour", now, "2026-10-07T21:30:00.000Z"),
-    Date.parse("2026-10-07T22:00:00.000Z"),
+    locationShareExpiry(
+      "Until activity ends",
+      now,
+      activeExpiry,
+      "2026-10-07T18:30:00.000Z",
+    ),
+    undefined,
   );
   assert.equal(
-    locationShareExpiry("15 minutes", now, "2026-10-07T21:59:00.000Z"),
-    Date.parse("2026-10-07T22:00:00.000Z"),
+    locationShareExpiry("1 hour", now, "2026-10-08T17:30:00.000Z"),
+    Date.parse("2026-10-08T18:00:00.000Z"),
   );
-  assert.equal(locationShareExpiry("1 hour", now, "2026-10-07T22:00:00.000Z"), undefined);
-  assert.equal(locationShareExpiry("15 minutes", now, "2026-10-07T22:01:00.000Z"), undefined);
   assert.equal(
-    locationShareExpiry("Until activity ends", now, "2026-10-07T21:30:00.000Z", "2026-10-07T22:30:00.000Z"),
-    Date.parse("2026-10-07T22:00:00.000Z"),
+    locationShareExpiry("15 minutes", now, "2026-10-08T17:59:00.000Z"),
+    Date.parse("2026-10-08T18:00:00.000Z"),
+  );
+  assert.equal(
+    locationShareExpiry("1 hour", now, "2026-10-08T18:00:00.000Z"),
+    undefined,
+  );
+  assert.equal(
+    locationShareExpiry("15 minutes", now, "2026-10-08T18:01:00.000Z"),
+    undefined,
+  );
+  assert.equal(
+    locationShareExpiry(
+      "Until activity ends",
+      now,
+      "2026-10-08T17:30:00.000Z",
+      "2026-10-08T18:30:00.000Z",
+    ),
+    Date.parse("2026-10-08T18:00:00.000Z"),
   );
 });
 
 test("submitted map search history stays private to its viewer for the app session", () => {
   rememberMapSearchQuery(" Coffee  near me ", "map-history-viewer-a");
   rememberMapSearchQuery("Coffee near me", "map-history-viewer-a");
-  assert.deepEqual(getRecentMapSearchQueries("map-history-viewer-a"), ["Coffee near me"]);
+  assert.deepEqual(getRecentMapSearchQueries("map-history-viewer-a"), [
+    "Coffee near me",
+  ]);
   assert.deepEqual(getRecentMapSearchQueries("map-history-viewer-b"), []);
   assert.deepEqual(getRecentMapSearchQueries(null), []);
 });

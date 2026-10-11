@@ -1,7 +1,13 @@
 import React, { useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import { CalendarClock, Check, CircleHelp, Dices, Vote } from "lucide-react-native";
+import {
+  CalendarClock,
+  Check,
+  CircleHelp,
+  Dices,
+  Vote,
+} from "lucide-react-native";
 import { useBeacon } from "@/src/shared/store";
 import { useNow } from "@/src/shared/useNow";
 import {
@@ -50,8 +56,10 @@ export default function PlanningDetailScreen() {
   const [pingAutoRsvp, setPingAutoRsvp] = useState<boolean | null>(null);
   const [replaceConfirm, setReplaceConfirm] = useState(false);
 
-  const accessible = !!thread && canReadPlanningThread(data, thread, userId ?? "");
-  const manages = !!thread && accessible && canManagePlanningThread(thread, userId ?? "");
+  const accessible =
+    !!thread && canReadPlanningThread(data, thread, userId ?? "");
+  const manages =
+    !!thread && accessible && canManagePlanningThread(thread, userId ?? "");
   const proposals = useMemo(
     () =>
       thread
@@ -69,7 +77,9 @@ export default function PlanningDetailScreen() {
   const votes = planning.planning_votes.filter((vote) => vote.thread_id === id);
   const approvedIds = new Set(
     proposals
-      .filter((proposal) => proposal.approved && proposal.disqualified_at == null)
+      .filter(
+        (proposal) => proposal.approved && proposal.disqualified_at == null,
+      )
       .map((proposal) => proposal.id),
   );
   const voteCounts = councilVoteCounts(votes, id ?? "", approvedIds);
@@ -125,16 +135,21 @@ export default function PlanningDetailScreen() {
       proposal.approved &&
       proposal.disqualified_at == null &&
       Date.parse(proposal.payload.starts_at) > now;
-    const author = data.profiles.find((person) => person.id === proposal.author_id);
+    const author = data.profiles.find(
+      (person) => person.id === proposal.author_id,
+    );
     return (
       <View key={proposal.id} style={styles.card}>
         <View style={styles.between}>
           <View style={{ flex: 1, gap: 3 }}>
             <Text style={styles.h2}>{proposal.payload.title}</Text>
             <Text style={styles.muted}>
-              {proposal.payload.category} · {dateLabel(proposal.payload.starts_at)}
+              {proposal.payload.category} ·{" "}
+              {dateLabel(proposal.payload.starts_at)}
             </Text>
-            <Text style={styles.muted}>Suggested by {author?.name ?? "A member"}</Text>
+            <Text style={styles.muted}>
+              Suggested by {author?.name ?? "A member"}
+            </Text>
           </View>
           {proposal.approved && proposal.disqualified_at == null ? (
             <Check color={colors.green} size={18} />
@@ -146,7 +161,8 @@ export default function PlanningDetailScreen() {
         {proposal.payload.label || proposal.payload.latitude != null ? (
           <Txt muted>
             {proposal.payload.label || "Pinned meeting place"}
-            {proposal.payload.latitude != null && proposal.payload.longitude != null
+            {proposal.payload.latitude != null &&
+            proposal.payload.longitude != null
               ? ` · ${proposal.payload.latitude.toFixed(3)}, ${proposal.payload.longitude.toFixed(3)}`
               : ""}
           </Txt>
@@ -173,7 +189,9 @@ export default function PlanningDetailScreen() {
         )}
         {canVote && (
           <Action
-            title={selected ? "Your vote · change vote" : "Vote for this option"}
+            title={
+              selected ? "Your vote · change vote" : "Vote for this option"
+            }
             secondary={selected}
             run={() =>
               act("vote_council_proposal", {
@@ -202,6 +220,17 @@ export default function PlanningDetailScreen() {
 
   return (
     <Screen title={thread.title} eyebrow={thread.kind.toUpperCase()}>
+      <Button
+        title={
+          thread.kind === "ping"
+            ? "Show Ping-related Beacons"
+            : "Show Suggested Beacons"
+        }
+        secondary
+        onPress={() =>
+          router.push({ pathname: "/", params: { mapThread: thread.id } })
+        }
+      />
       <View style={styles.card}>
         <View style={styles.row}>
           <Icon color={colors.green} size={19} />
@@ -225,64 +254,74 @@ export default function PlanningDetailScreen() {
           <Txt muted>
             {thread.payload.category} · {dateLabel(thread.payload.starts_at)}
           </Txt>
-          {thread.status === "open" && userId !== thread.owner_id && canRespond && (
-            <>
-              <Pressable
-                accessibilityRole="checkbox"
-                accessibilityState={{ checked: autoRsvpChoice }}
-                accessibilityLabel="Auto-RSVP if this ping becomes a beacon"
-                onPress={() =>
-                  setPingAutoRsvp((current) => !(current ?? !!myResponse?.auto_rsvp))
-                }
-                style={({ pressed }) => ({
-                  minHeight: 48,
-                  borderRadius: 14,
-                  paddingHorizontal: 12,
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: 10,
-                  borderWidth: 1,
-                  borderColor: colors.line,
-                  backgroundColor: colors.bg,
-                  opacity: pressed ? 0.75 : 1,
-                })}
-              >
-                <View
-                  style={{
-                    width: 21,
-                    height: 21,
-                    borderRadius: 6,
-                    borderWidth: 1,
-                    borderColor: autoRsvpChoice ? colors.green : colors.muted,
-                    backgroundColor: autoRsvpChoice ? colors.green : "transparent",
+          {thread.status === "open" &&
+            userId !== thread.owner_id &&
+            canRespond && (
+              <>
+                <Pressable
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: autoRsvpChoice }}
+                  accessibilityLabel="Auto-RSVP if this ping becomes a beacon"
+                  onPress={() =>
+                    setPingAutoRsvp(
+                      (current) => !(current ?? !!myResponse?.auto_rsvp),
+                    )
+                  }
+                  style={({ pressed }) => ({
+                    minHeight: 48,
+                    borderRadius: 14,
+                    paddingHorizontal: 12,
+                    flexDirection: "row",
                     alignItems: "center",
-                    justifyContent: "center",
-                  }}
+                    gap: 10,
+                    borderWidth: 1,
+                    borderColor: colors.line,
+                    backgroundColor: colors.bg,
+                    opacity: pressed ? 0.75 : 1,
+                  })}
                 >
-                  {autoRsvpChoice ? <Check color={colors.white} size={15} /> : null}
-                </View>
-                <Text style={styles.body}>Auto-RSVP if this becomes a beacon</Text>
-              </Pressable>
-              {(["interested", "maybe", "pass"] as const).map((response) => (
-                <Action
-                  key={response}
-                  title={
-                    myResponse?.response === response
-                      ? `${response[0].toUpperCase()}${response.slice(1)} · update`
-                      : `${response[0].toUpperCase()}${response.slice(1)}`
-                  }
-                  secondary={myResponse?.response !== response}
-                  run={() =>
-                    act("respond_planning_ping", {
-                      thread_id: thread.id,
-                      response,
-                      auto_rsvp: response === "interested" && autoRsvpChoice,
-                    })
-                  }
-                />
-              ))}
-            </>
-          )}
+                  <View
+                    style={{
+                      width: 21,
+                      height: 21,
+                      borderRadius: 6,
+                      borderWidth: 1,
+                      borderColor: autoRsvpChoice ? colors.green : colors.muted,
+                      backgroundColor: autoRsvpChoice
+                        ? colors.green
+                        : "transparent",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    {autoRsvpChoice ? (
+                      <Check color={colors.white} size={15} />
+                    ) : null}
+                  </View>
+                  <Text style={styles.body}>
+                    Auto-RSVP if this becomes a beacon
+                  </Text>
+                </Pressable>
+                {(["interested", "maybe", "pass"] as const).map((response) => (
+                  <Action
+                    key={response}
+                    title={
+                      myResponse?.response === response
+                        ? `${response[0].toUpperCase()}${response.slice(1)} · update`
+                        : `${response[0].toUpperCase()}${response.slice(1)}`
+                    }
+                    secondary={myResponse?.response !== response}
+                    run={() =>
+                      act("respond_planning_ping", {
+                        thread_id: thread.id,
+                        response,
+                        auto_rsvp: response === "interested" && autoRsvpChoice,
+                      })
+                    }
+                  />
+                ))}
+              </>
+            )}
           {thread.owner_id === userId && thread.status === "open" && (
             <Action
               title="Create a beacon from this ping"
@@ -312,10 +351,13 @@ export default function PlanningDetailScreen() {
             />
           )}
           <Txt muted>
-            {planning.planning_ping_responses.filter(
-              (response) => response.thread_id === thread.id,
-            ).length} responses · Interested with Auto-RSVP will request or join
-            according to the beacon’s approval settings.
+            {
+              planning.planning_ping_responses.filter(
+                (response) => response.thread_id === thread.id,
+              ).length
+            }{" "}
+            responses · Interested with Auto-RSVP will request or join according
+            to the beacon’s approval settings.
           </Txt>
         </View>
       )}
@@ -340,11 +382,18 @@ export default function PlanningDetailScreen() {
               />
             )}
           </View>
-          {thread.status === "open" && canRespond && <Button
-            title="+ Suggested Beacon"
-            secondary
-            onPress={() => router.push({ pathname: "/create", params: { threadId: thread.id, editor: "yes" } })}
-          />}
+          {thread.status === "open" && canRespond && (
+            <Button
+              title="+ Suggested Beacon"
+              secondary
+              onPress={() =>
+                router.push({
+                  pathname: "/create",
+                  params: { threadId: thread.id, editor: "yes" },
+                })
+              }
+            />
+          )}
           {pendingReviews.length > 0 && manages && (
             <View style={[styles.card, { backgroundColor: colors.lime }]}>
               <Txt>
@@ -353,14 +402,21 @@ export default function PlanningDetailScreen() {
               </Txt>
             </View>
           )}
-          {proposals.length ? proposals.map(proposalCard) : (
+          {proposals.length ? (
+            proposals.map(proposalCard)
+          ) : (
             <Empty
               title="No options yet."
               body="Add a beacon option. An option host can approve it before the vote or draw."
             />
           )}
-          {thread.kind === "vote" && thread.status === "open" && canRespond &&
-            proposals.some((proposal) => proposal.approved && proposal.disqualified_at == null) &&
+          {thread.kind === "vote" &&
+            thread.status === "open" &&
+            canRespond &&
+            proposals.some(
+              (proposal) =>
+                proposal.approved && proposal.disqualified_at == null,
+            ) &&
             !myVote && (
               <Txt muted>
                 With no votes, the earliest approved option is chosen.
@@ -371,7 +427,9 @@ export default function PlanningDetailScreen() {
             Date.parse(thread.deadline_at) <= now && (
               <Action
                 title={thread.kind === "vote" ? "Resolve vote" : "Run draw"}
-                run={() => act("resolve_planning_thread", { thread_id: thread.id })}
+                run={() =>
+                  act("resolve_planning_thread", { thread_id: thread.id })
+                }
               />
             )}
           {thread.status === "resolved" && winner && (
@@ -452,10 +510,17 @@ export default function PlanningDetailScreen() {
         />
       )}
       {thread.status === "cancelled" && (
-        <Empty title="This thread was cancelled." body="Its history stays here." />
+        <Empty
+          title="This thread was cancelled."
+          body="Its history stays here."
+        />
       )}
       <View style={styles.row}>
-        <Button title="Pings & Decisions" secondary onPress={() => router.replace("/councils")} />
+        <Button
+          title="Pings & Decisions"
+          secondary
+          onPress={() => router.replace("/councils")}
+        />
         <Button title="Beacons" onPress={() => router.replace("/(tabs)")} />
       </View>
     </Screen>

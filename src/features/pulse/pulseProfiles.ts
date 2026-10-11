@@ -12,6 +12,7 @@ const seats: PulseGroup = {
 const food = { groups: [crowd, wait, seats] };
 const recreation = {
   groups: [
+    crowd,
     {
       kind: "availability" as const,
       options: [
@@ -39,8 +40,8 @@ export const pulseProfiles: Record<PlaceCategory, { groups: PulseGroup[] }> = {
   gym: {
     groups: [crowd, { kind: "availability", options: ["equipment_available"] }],
   },
-  court: recreation,
-  field: recreation,
+  court: { groups: recreation.groups.filter((group) => group.kind !== "condition") },
+  field: { groups: [crowd, { kind: "condition", options: ["field_wet"] }] },
   recreation,
   parking: { groups: [{ kind: "parking", options: [0, 1, 2] }] },
   trail: outdoors,

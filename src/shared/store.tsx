@@ -211,6 +211,7 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
           );
         const next = demoAction(baseData, action, payload);
         setData(next);
+        if (action === "join_public_beacon") return { status: next.rsvps.find(row => row.activity_id === payload.activity_id && row.user_id === DEMO_ID)?.status ?? "going" };
         if (action === "create_space") {
           const space = next.spaces.find(
             (item) => !baseData.spaces.some((old) => old.id === item.id),

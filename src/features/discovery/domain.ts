@@ -1,4 +1,8 @@
-import type { PublicBeaconSummary, PublicDiscoveryFilters, PublicDiscoveryOptIn } from "./types";
+import type {
+  PublicBeaconSummary,
+  PublicDiscoveryFilters,
+  PublicDiscoveryOptIn,
+} from "./types";
 
 export function validatePublicDiscoveryOptIn(input: PublicDiscoveryOptIn) {
   if (!input.activity_id.trim()) throw new Error("Choose a beacon to publish.");
@@ -46,7 +50,8 @@ export function filterPublicBeaconSummaries(
         )
       )
         return false;
-      if (!area || summary.area_label.toLocaleLowerCase().includes(area)) return true;
+      if (!area || summary.area_label.toLocaleLowerCase().includes(area))
+        return true;
       return false;
     })
     .sort(
@@ -66,7 +71,9 @@ export function rankPublicBeaconSummaries(
   coarseArea: string | null,
   now = Date.now(),
 ) {
-  const wanted = new Set(interests.map((tag) => tag.trim().toLocaleLowerCase()).filter(Boolean));
+  const wanted = new Set(
+    interests.map((tag) => tag.trim().toLocaleLowerCase()).filter(Boolean),
+  );
   const area = coarseArea?.trim().toLocaleLowerCase() ?? "";
   return [...summaries]
     .filter((summary) => !summary.closed && Date.parse(summary.ends_at) > now)
@@ -77,6 +84,9 @@ export function rankPublicBeaconSummaries(
           0,
         ) + Number(!!area && summary.area_label.toLocaleLowerCase() === area);
       return (
+        Number(!!b.viewer_response) - Number(!!a.viewer_response) ||
+        Number(Date.parse(b.starts_at) <= now) -
+          Number(Date.parse(a.starts_at) <= now) ||
         score(b) - score(a) ||
         Date.parse(a.starts_at) - Date.parse(b.starts_at) ||
         a.activity_id.localeCompare(b.activity_id)

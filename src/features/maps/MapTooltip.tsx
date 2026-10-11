@@ -1,7 +1,10 @@
+import { beaconPreviewWhen } from "./discoveryRanking";
+import { MapRelationshipActions } from "./MapRelationshipActions";
+import type { MapContextFilter } from "./contextFilters";
 import React, { useState } from "react";
 import { Linking, Pressable, Text, View } from "react-native";
 import {
-  Clock3,
+  ArrowUpRight,
   MapPin,
   MessageCircle,
   Monitor,
@@ -11,13 +14,12 @@ import {
 import { router } from "expo-router";
 import { useBeacon } from "@/src/shared/store";
 import { useNow } from "@/src/shared/useNow";
-import { PrimaryButton } from "@/src/shared/design-system";
 import { Button, IconButton, Txt, useTheme } from "@/src/shared/ui";
 import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
 import { canViewProfile } from "@/src/features/profile/privacy";
 import { canReadPlanningThread } from "@/src/features/planning/domain";
 import { crew, canChat } from "@/src/shared/browsing";
-import { friendIds, activityWhen } from "@/src/shared/domain";
+import { friendIds } from "@/src/shared/domain";
 import { isBeaconModuleEnabled } from "@/src/features/beacons/permissions";
 import { canUseBeaconModules } from "@/src/features/beacons/beaconModules";
 import { physicalDirectionsUrl } from "@/src/features/maps/directions";
@@ -25,26 +27,22 @@ import { ActivityBadge } from "@/src/features/beacons/ActivityBadge";
 import { BeaconResponse } from "@/src/features/beacons/BeaconResponse";
 import { canReadBeaconMeetingDetails } from "@/src/features/maps/filtering";
 
-import {
-  enabledMapBeaconFeatures,
-  beaconFeatureLabels,
-  type MapBeaconFeature,
-} from "./mapBeaconFeatures";
-
 export function MapTooltip({
+  community,
   beaconId,
+  onShowContext,
   personId,
   pinned,
-  onFeature,
   onPerson,
   onDetails,
   onMessage,
   onClose,
 }: {
+  onShowContext?: (filter: MapContextFilter) => void;
   beaconId: string | null;
   personId: string | null;
   pinned: boolean;
-  onFeature?: (tab: MapBeaconFeature) => void;
+  community?: { name: string; onPress(): void };
   onPerson?: (id: string) => void;
   onDetails: () => void;
   onMessage: () => void;
@@ -134,8 +132,8 @@ export function MapTooltip({
     <View
       testID="map-tooltip-card"
       style={{
-        gap: 8,
-        padding: 16,
+        gap: 6,
+        padding: 12,
         borderRadius: 20,
         borderWidth: 1,
         borderColor: colors.line,
@@ -182,11 +180,14 @@ export function MapTooltip({
           }}
           style={{ flex: 1, minWidth: 0 }}
         >
-          <Text style={styles.label} numberOfLines={1}>
+          <Text style={[styles.label, { textAlign: "left" }]} numberOfLines={1}>
             {person?.name ??
               (activity?.owner_id === userId ? "Your Beacon" : "BEACON")}
           </Text>
-          <Text numberOfLines={2} style={[styles.h2, { fontSize: 16 }]}>
+          <Text
+            numberOfLines={2}
+            style={[styles.h2, { fontSize: 16, textAlign: "left" }]}
+          >
             {activity?.title ?? person?.name ?? "Beacon unavailable"}
           </Text>
         </Pressable>
@@ -220,71 +221,55 @@ export function MapTooltip({
       {activity && (
         <>
           {personId && activity.mode === "solo" && (
-            <Text style={styles.label}>
+            <Text style={[styles.label, { textAlign: "left" }]}>
               {activity.available ? "Available" : "Sharing a status"}
               {activity.description ? ` · ${activity.description}` : ""}
             </Text>
           )}
-          <View style={[styles.row, { gap: 10 }]}>
+          <View style={[styles.row, { gap: 6, justifyContent: "flex-start" }]}>
             {place?.online_url ? (
               <Monitor size={15} color={colors.green} />
             ) : (
               <MapPin size={15} color={colors.green} />
             )}
-            <Text numberOfLines={1} style={[styles.muted, { flex: 1 }]}>
+            <Text
+              numberOfLines={1}
+              style={[styles.muted, { flexShrink: 1, textAlign: "left" }]}
+            >
               {place?.online_url
                 ? "Virtual"
                 : (place?.label ??
                   (pinned ? "Meeting place" : "No location shared"))}
             </Text>
-            <Clock3 size={14} color={colors.muted} />
-            <Text style={styles.muted}>
-              {activityWhen(activity, new Date(now))}
-            </Text>
           </View>
-          <View style={styles.between}>
-            {activity && (
-              <>
-                <PrimaryButton
-                  title="See overview"
-                  onPress={onDetails}
-                  style={{ width: "100%" }}
-                />
-                <View
-                  style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}
-                >
-                  {enabledMapBeaconFeatures(activity)
-                    .filter((tab) => tab !== "overview")
-                    .map((tab) => (
-                      <Button
-                        key={tab}
-                        title={
-                          tab === "reactions"
-                            ? "Add reaction"
-                            : beaconFeatureLabels[tab]
-                        }
-                        secondary
-                        compact
-                        onPress={() => onFeature?.(tab)}
-                      />
-                    ))}
-                </View>
-              </>
-            )}
-            <View style={[styles.row, { gap: 6 }]}>
+          <Text style={[styles.muted, { textAlign: "left" }]}>
+            {beaconPreviewWhen(activity, now)}
+          </Text>
+          <View
+            style={[
+              styles.row,
+              { justifyContent: "flex-start", flexWrap: "wrap" },
+            ]}
+          >
+            <View
+              style={[
+                styles.row,
+                { gap: 6, justifyContent: "flex-start", flexWrap: "wrap" },
+              ]}
+            >
               {participants.slice(0, 3).map(({ person: member }, index) => (
                 <View key={member.id} style={{ marginLeft: index ? -8 : 0 }}>
                   <ProfileAvatar profile={member} size={24} />
                 </View>
               ))}
-              <Text style={styles.label}>
+              <Text style={[styles.label, { textAlign: "left" }]}>
                 {activity.accepted_seat_count ?? participants.length} going
               </Text>
             </View>
             {activity.target_count != null &&
               activity.target_count >
                 (activity.accepted_seat_count ?? participants.length) && (
-                <Text style={styles.label}>
+                <Text style={[styles.label, { textAlign: "left" }]}>
                   Need{" "}
                   {activity.target_count -
                     (activity.accepted_seat_count ?? participants.length)}{" "}
@@ -300,13 +285,47 @@ export function MapTooltip({
         </>
       )}
       {!pinned && !activity && <Txt muted>No meeting pin shared yet.</Txt>}
-      {activity && <BeaconResponse activity={activity} compact />}
+      {activity && (
+        <View style={{ alignSelf: "flex-start" }}>
+          <MapRelationshipActions
+            beaconId={activity.id}
+            onShow={onShowContext}
+          />
+        </View>
+      )}
+      {community && (
+        <View style={{ alignSelf: "flex-start" }}>
+          <Button
+            title={`Hosted by ${community.name}`}
+            secondary
+            compact
+            onPress={community.onPress}
+          />
+        </View>
+      )}
       {!!starError && (
-        <Text accessibilityLiveRegion="polite" style={styles.muted}>
+        <Text
+          accessibilityLiveRegion="polite"
+          style={[styles.muted, { textAlign: "left" }]}
+        >
           {starError}
         </Text>
       )}
-      <View style={[styles.row, { gap: 6 }]}>
+      <View
+        style={[
+          styles.row,
+          { gap: 6, justifyContent: "flex-start", flexWrap: "wrap" },
+        ]}
+      >
+        {activity && (
+          <>
+            <BeaconResponse activity={activity} compact joinLabel="Join" />
+            <IconButton label="See overview" onPress={onDetails}>
+              <ArrowUpRight size={18} color={colors.green} />
+            </IconButton>
+          </>
+        )}
+
         {directions && (
           <IconButton
             label={`Directions to ${place?.label ?? "Beacon"}`}

@@ -175,3 +175,22 @@ Apply `202610040007_social_architecture.sql` after `202610040006_spaces.sql` for
 Apply `202610040001_organization_audience_type.sql` before `202610040002_organizations_group_chat.sql`, committing the enum migration before it is used. Apply `202610040003_plan_routines.sql` for independent Plan membership and recurring schedules. Routine generation reuses Plans rather than a second Beacon scheduler. See [the Plan inventory](src/features/plans/_inventory.md) for trusted runner setup. Local tests do not deploy these migrations or activate hosted automation.
 
 Plans, Favorites and My templates shortcuts are confined to Activities → Past. Widget Studio is in Profile; native widgets require an iOS rebuild and do not run on Android/web/Expo Go. Quick Create reuses existing Beacon/Status/Plan editors. Outstanding acceptance and product gaps are tracked in [the refinement ledger](REMAINING_UI_CHANGES.md).
+
+
+## Map discovery
+
+Apply `202610110001_map_discovery.sql` and redeploy `places-search` for real-account public Beacons and city search. The preceding `202610100001_create_flow.sql` has corrected SQL delimiters; the database discovery test applies the entire migration chain.
+
+Hosts explicitly publish a public preview from the existing Beacon settings, entering a city or general area. Discovery exposes a limited summary and coordinates rounded to two decimal places. Joining respects approval, blocks, exclusions and strict capacity, and does not join a Squad. Organization-audience and invite-only Beacons cannot be published. Exact meeting details remain behind the existing Beacon access rules.
+
+Android keeps Google Places. Web and iOS use [Photon's OpenStreetMap search API](https://github.com/komoot/photon/blob/master/docs/api-v1.md), through the same authenticated, rate-limited `places-search` function. Only explicit typed searches are sent. Optionally set `PHOTON_API_URL` on the function to an HTTPS Photon instance; the default public server has [usage and availability limits](https://github.com/komoot/photon#demo-server). Demo city searches stay offline.
+
+## Place context (Pulse)
+
+Apply `202610110002_place_knowledge.sql` after the existing migrations for connected accounts. The existing place preview now combines live conditions, short useful tips and temporary activity interest. No new markers, feeds or tabs are added. Courts and fields offer reporting choices appropriate to their type.
+
+Tips are limited to 180 characters, one per author per place. Helpful endorsements are idempotent. Other people can confirm accuracy once every 30 days; unconfirmed tips disappear after 90 days. Three reports hide a tip globally; three outdated votes hide it when they outnumber recent accuracy confirmations. Reporting also hides the tip immediately for that viewer. Blocks apply to tips and interest aggregates.
+
+Activity interest is an explicit, two-hour opt-in, limited to one area/activity per person. The server stores only a coarse 0.02-degree area cell for interest. A place shows a signal only when at least five other people are interested in a relevant activity in that cell. Responses contain no participant identities, coordinates or counts. Create Beacon retains the selected venue; Ping People opens the existing composer with a place question and explicit audience selection. It does not message anonymous interested people.
+
+Reads exclude expired information immediately. The existing service-role `cleanup_pulse_reports()` also removes expired interest, stale tips and old rate-limit events when run by the existing cleanup scheduler. Demo examples remain offline. This workspace does not apply remote migrations or configure hosted automation.

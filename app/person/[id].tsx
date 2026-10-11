@@ -1,3 +1,5 @@
+import { selectPersonPreview } from "@/src/features/people/previews/personPreview";
+import { useNow } from "@/src/shared/useNow";
 import React, { useState } from "react";
 import { Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
@@ -19,6 +21,7 @@ import {
 } from "@/src/shared/ui";
 export default function Person() {
   const { styles } = useTheme();
+  const now = useNow();
 
   const { id } = useLocalSearchParams<{ id: string }>(),
     { data, act, userId } = useBeacon(),
@@ -43,13 +46,22 @@ export default function Person() {
   if (!canViewFullProfile) {
     const isFriend = !!userId && friendIds(data, userId).includes(id);
     return (
-      <Screen title={person.name} eyebrow="PROFILE DETAILS PRIVATE" create={false}>
+      <Screen
+        title={person.name}
+        eyebrow="PROFILE DETAILS PRIVATE"
+        create={false}
+      >
         <View style={styles.card}>
-          <ProfileAvatar profile={person} size={76} />
+          <ProfileAvatar
+            profile={person}
+            size={76}
+            status={selectPersonPreview(data, id, userId, now).availability}
+          />
           <Text style={styles.title}>{person.name}</Text>
           <Txt muted>@{person.username}</Txt>
           <Txt muted>
-            They keep their profile details private. You can still connect directly.
+            They keep their profile details private. You can still connect
+            directly.
           </Txt>
         </View>
         {id !== userId &&
@@ -134,7 +146,11 @@ export default function Person() {
   return (
     <Screen title={person.name} eyebrow={"@" + person.username} create={false}>
       <View style={styles.card}>
-        <ProfileAvatar profile={person} size={76} />
+        <ProfileAvatar
+          profile={person}
+          size={76}
+          status={selectPersonPreview(data, id, userId, now).availability}
+        />
         <Txt>{person.bio}</Txt>
         {!!person.identity_tags?.length && (
           <View style={{ gap: 6 }}>
@@ -178,7 +194,8 @@ export default function Person() {
                   {aspiration.title} · {aspiration.category}
                 </Text>
                 <Txt muted>
-                  Aiming for {aspiration.target_per_week} linked beacons per week
+                  Aiming for {aspiration.target_per_week} linked beacons per
+                  week
                 </Txt>
               </View>
             );

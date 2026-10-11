@@ -4,8 +4,9 @@ export function mapCalloutLayout(
   measuredHeight: number,
   requestedHeight?: number,
   gutter = 16,
+  maximumWidth = 420,
 ) {
-  const width = Math.min(420, Math.max(0, bounds.width - gutter * 2));
+  const width = Math.min(maximumWidth, Math.max(0, bounds.width - gutter * 2));
   const availableHeight = Math.max(
     100,
     bounds.height - bounds.top - bounds.bottom,

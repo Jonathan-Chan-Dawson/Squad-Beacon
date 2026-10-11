@@ -45,6 +45,7 @@ export interface MapClusterBounds {
 export interface MapPointPriority {
   /** Lower values are more relevant. Tiers follow the map discovery policy. */
   tier: number;
+  affinity?: number;
   attendance?: number;
 }
 
@@ -78,13 +79,14 @@ export function rankClusterMembers(
     const rightPriority = priorities[right.id] ?? { tier: 7, attendance: 0 };
     return (
       leftPriority.tier - rightPriority.tier ||
+      (rightPriority.affinity ?? 0) - (leftPriority.affinity ?? 0) ||
       (rightPriority.attendance ?? 0) - (leftPriority.attendance ?? 0) ||
       left.id.localeCompare(right.id)
     );
   });
 }
 
-export function clusterPreviewOverflow(memberCount: number, previewCount = 14) {
+export function clusterPreviewOverflow(memberCount: number, previewCount = 3) {
   return Math.max(0, memberCount - previewCount);
 }
 
@@ -239,7 +241,7 @@ function buildIndex(
 export function clusterMapPoints(
   points: ClusterPoint[],
   viewport: ClusterViewport,
-  radius = 52,
+  radius = 24,
 ): MapPointGroup[] {
   const { centerLatitude, centerLongitude, zoom, width, height } = viewport;
   if (
@@ -362,5 +364,9 @@ export function formatLocationAge(updatedAt: string | null, now = Date.now()) {
   const updated = Date.parse(updatedAt);
   if (!Number.isFinite(updated) || updated > now) return null;
   const minutes = Math.floor((now - updated) / 60_000);
-  return minutes < 1 ? "now" : `${minutes}m ago`;
+  return minutes < 1
+    ? "now"
+    : minutes < 60
+      ? `${minutes}m ago`
+      : `${Math.floor(minutes / 60)}h ago`;
 }

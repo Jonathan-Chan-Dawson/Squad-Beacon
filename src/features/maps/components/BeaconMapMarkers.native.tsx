@@ -1,3 +1,9 @@
+import {
+  AvatarStatusBadge,
+  avatarAvailability,
+} from "@/src/features/profile/AvatarStatusBadge";
+import { useNow } from "@/src/shared/useNow";
+import { CLUSTER_PREVIEW_LIMIT } from "../mapClusterPolicy";
 import React, { useEffect, useRef, useState } from "react";
 import { Image, Text, View } from "react-native";
 import { Circle as MapCircle, Marker } from "react-native-maps";
@@ -27,7 +33,12 @@ import {
   CLUSTER_PREVIEW_GAP,
 } from "@/src/features/maps/cluster";
 import { useReducedMotion } from "@/src/shared/design-system";
-import type { Category, LocationSession, Profile } from "@/src/shared/types";
+import type {
+  Activity,
+  Category,
+  LocationSession,
+  Profile,
+} from "@/src/shared/types";
 
 const AnimatedMapCircle = Animated.createAnimatedComponent(MapCircle);
 
@@ -398,6 +409,23 @@ function FriendMapPinComponent({
             }}
           />
         </View>
+        {availabilityLabel !== "unknown" && (
+          <View
+            style={{
+              position: "absolute",
+              top: 0,
+              right: (64 - avatarSize) / 2,
+              width: 12,
+              height: 12,
+              borderRadius: 6,
+              borderWidth: 2,
+              borderColor: "#FFFFFF",
+              backgroundColor: availabilityColor,
+              zIndex: 5,
+              elevation: 5,
+            }}
+          />
+        )}
         <View
           style={{
             marginTop: 2,
@@ -465,12 +493,16 @@ function ClusterMapPinComponent({
   group,
   profiles,
   peopleCount,
+  areaSummary,
+  availabilityActivities = [],
   appearanceKey,
   accessibilityLabel,
   onPress,
 }: {
   profiles: Profile[];
   peopleCount?: number;
+  areaSummary?: { name: string; reason: string };
+  availabilityActivities?: Activity[];
   group: {
     id: string;
     latitude: number;
@@ -488,18 +520,19 @@ function ClusterMapPinComponent({
   }) => void;
 }) {
   const [avatarRevision, setAvatarRevision] = useState(0);
-  const preview = group.members.slice(0, 14);
+  const now = useNow();
+  const preview = group.members.slice(0, CLUSTER_PREVIEW_LIMIT);
   const avatarKey = preview
     .map((member) => {
       const profile = profiles.find((row) => `person:${row.id}` === member.id);
-      return `${member.id}:${profile?.avatar_updated_at ?? ""}:${profile?.avatar_seed ?? ""}:${profile?.avatar_style ?? ""}`;
+      return `${member.id}:${profile?.avatar_updated_at ?? ""}:${profile?.avatar_seed ?? ""}:${profile?.avatar_style ?? ""}:${avatarAvailability(availabilityActivities, profile?.id ?? "", now)}`;
     })
     .join("|");
   const tracking = useMarkerTracking(
-    `${group.id}:${appearanceKey}:${peopleCount}:${avatarKey}:${avatarRevision}:${CLUSTER_PREVIEW_ICON_SIZE}`,
+    `${group.id}:${appearanceKey}:${areaSummary?.name}:${areaSummary?.reason}:${peopleCount}:${avatarKey}:${avatarRevision}:${CLUSTER_PREVIEW_ICON_SIZE}`,
   );
   const overflow = clusterPreviewOverflow(group.members.length);
-  const columns = Math.min(7, preview.length);
+  const columns = Math.min(CLUSTER_PREVIEW_LIMIT, preview.length);
   const iconSize = CLUSTER_PREVIEW_ICON_SIZE;
   const gridWidth = columns * iconSize + (columns - 1) * CLUSTER_PREVIEW_GAP;
   const { colors } = useTheme();
@@ -515,60 +548,97 @@ function ClusterMapPinComponent({
         onPress(group);
       }}
     >
-      <View
-        style={{
-          padding: 3,
-          borderRadius: 22,
-          backgroundColor: colors.white,
-          borderWidth: 1,
-          borderColor: colors.line,
-          flexDirection: "row",
-          alignItems: "center",
-          gap: 4,
-        }}
-      >
+      {areaSummary ? (
         <View
           style={{
-            flexDirection: "row",
-            flexWrap: "wrap",
-            width: gridWidth,
-            gap: CLUSTER_PREVIEW_GAP,
+            minHeight: 36,
+            maxWidth: 150,
+            paddingHorizontal: 9,
+            paddingVertical: 5,
+            borderRadius: 12,
+            borderWidth: 1,
+            borderColor: colors.line,
+            backgroundColor: colors.white + "DD",
+            gap: 1,
           }}
         >
-          {preview.map((member) => (
-            <View
-              key={member.id}
-              style={{
-                width: iconSize,
-                height: iconSize,
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              {member.kind === "beacon" ? (
-                <ActivityBadge
-                  category={member.category ?? "Other"}
-                  size={iconSize}
-                  iconSize={22}
-                />
-              ) : (
-                <ClusterPersonAvatar
-                  profile={profiles.find(
-                    (row) => `person:${row.id}` === member.id,
-                  )}
-                  size={iconSize}
-                  onImageLoad={() =>
-                    setAvatarRevision((revision) => revision + 1)
-                  }
-                />
-              )}
-            </View>
-          ))}
+          <Text
+            numberOfLines={1}
+            style={{ color: colors.ink, fontSize: 11, fontWeight: "600" }}
+          >
+            {areaSummary.name}
+          </Text>
+          <Text numberOfLines={1} style={{ color: colors.green, fontSize: 10 }}>
+            {areaSummary.reason}
+          </Text>
         </View>
-        {!!overflow && (
-          <Text style={{ fontSize: 11, color: colors.ink }}>+{overflow}</Text>
-        )}
-      </View>
+      ) : (
+        <View
+          style={{
+            minHeight: 44,
+            padding: 3,
+            borderRadius: 22,
+            backgroundColor: colors.white,
+            borderWidth: 1,
+            borderColor: colors.line,
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 4,
+          }}
+        >
+          <View
+            style={{
+              flexDirection: "row",
+              flexWrap: "wrap",
+              width: gridWidth,
+              gap: CLUSTER_PREVIEW_GAP,
+            }}
+          >
+            {preview.map((member) => (
+              <View
+                key={member.id}
+                style={{
+                  width: iconSize,
+                  height: iconSize,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                {member.kind === "beacon" ? (
+                  <ActivityBadge
+                    category={member.category ?? "Other"}
+                    size={iconSize}
+                    iconSize={22}
+                  />
+                ) : (
+                  <View>
+                    <ClusterPersonAvatar
+                      profile={profiles.find(
+                        (row) => `person:${row.id}` === member.id,
+                      )}
+                      size={iconSize}
+                      onImageLoad={() =>
+                        setAvatarRevision((revision) => revision + 1)
+                      }
+                    />
+                    <AvatarStatusBadge
+                      state={avatarAvailability(
+                        availabilityActivities,
+                        member.id.slice(7),
+                        now,
+                      )}
+                      size={10}
+                    />
+                  </View>
+                )}
+              </View>
+            ))}
+          </View>
+          {!!overflow && (
+            <Text style={{ fontSize: 11, color: colors.ink }}>+{overflow}</Text>
+          )}
+        </View>
+      )}
     </Marker>
   );
 }
@@ -578,6 +648,9 @@ export const ClusterMapPin = React.memo(
   (left, right) =>
     left.profiles === right.profiles &&
     left.peopleCount === right.peopleCount &&
+    left.availabilityActivities === right.availabilityActivities &&
+    left.areaSummary?.name === right.areaSummary?.name &&
+    left.areaSummary?.reason === right.areaSummary?.reason &&
     left.group.id === right.group.id &&
     left.group.latitude === right.group.latitude &&
     left.group.longitude === right.group.longitude &&

@@ -555,6 +555,7 @@ export function Sheet({
   maxHeightPercent = 94,
   snapHeight,
   footer,
+  centered = false,
 }: {
   title: string;
   visible: boolean;
@@ -563,6 +564,7 @@ export function Sheet({
   maxHeightPercent?: number;
   snapHeight?: number;
   footer?: React.ReactNode;
+  centered?: boolean;
 }) {
   const { semanticColors: colors, resolvedAppearance, tokens } = useTheme();
   const insets = useSafeAreaInsets();
@@ -584,20 +586,34 @@ export function Sheet({
   const scrollLockRef = React.useRef(false);
   const isRegisteredRef = React.useRef(false);
   const capPercent = Math.max(35, Math.min(94, maxHeightPercent));
+  const centeredHeight = Math.min(
+    620,
+    ((height - insets.top - insets.bottom) * capPercent) / 100,
+  );
   const snapPoints = React.useMemo(
     () =>
-      snapHeight === undefined
-        ? [`${capPercent}%`]
-        : [
-            Math.min(
-              Math.max(240, snapHeight),
-              Math.max(
-                240,
-                ((height - insets.top - insets.bottom) * capPercent) / 100,
+      centered
+        ? [centeredHeight]
+        : snapHeight === undefined
+          ? [`${capPercent}%`]
+          : [
+              Math.min(
+                Math.max(240, snapHeight),
+                Math.max(
+                  240,
+                  ((height - insets.top - insets.bottom) * capPercent) / 100,
+                ),
               ),
-            ),
-          ],
-    [capPercent, height, insets.top, insets.bottom, snapHeight],
+            ],
+    [
+      capPercent,
+      height,
+      insets.top,
+      insets.bottom,
+      snapHeight,
+      centered,
+      centeredHeight,
+    ],
   );
   const animationConfigs = useBottomSheetSpringConfigs({
     damping: tokens.motion.spring.damping,
@@ -611,7 +627,10 @@ export function Sheet({
   // BottomSheet positions its container absolutely with left/right = 0.
   // Flex alignment cannot center that container once its width is capped;
   // the library also overrides left/right, so inset it with equal margins.
-  const sheetWidth = Math.min(width, tokens.layout.contentMaxWidth);
+  const sheetWidth = Math.min(
+    width - (centered ? insets.left + insets.right + 24 : 0),
+    tokens.layout.contentMaxWidth,
+  );
   const modalStyle = {
     marginHorizontal: (width - sheetWidth) / 2,
   };
@@ -718,6 +737,12 @@ export function Sheet({
             paddingHorizontal: tokens.space.md,
             paddingTop: tokens.space.sm,
             paddingBottom: tokens.space.sm,
+            ...(centered
+              ? {
+                  borderBottomLeftRadius: tokens.radius.sheet,
+                  borderBottomRightRadius: tokens.radius.sheet,
+                }
+              : {}),
           }}
         >
           {footer}
@@ -726,6 +751,8 @@ export function Sheet({
     [
       colors.bg,
       colors.border,
+      centered,
+      tokens.radius.sheet,
       footer,
       insets.bottom,
       tokens.space.md,
@@ -849,7 +876,8 @@ export function Sheet({
       index={0}
       snapPoints={snapPoints}
       maxDynamicContentSize={maxContentHeight}
-      enableDynamicSizing={snapHeight === undefined}
+      enableDynamicSizing={!centered && snapHeight === undefined}
+      detached={centered}
       enablePanDownToClose
       enableBlurKeyboardOnGesture
       keyboardBehavior="interactive"
@@ -857,7 +885,12 @@ export function Sheet({
       android_keyboardInputMode="adjustResize"
       stackBehavior="push"
       topInset={insets.top}
-      bottomInset={insets.bottom}
+      bottomInset={
+        centered
+          ? insets.bottom +
+            (height - insets.top - insets.bottom - centeredHeight) / 2
+          : insets.bottom
+      }
       overrideReduceMotion={ReduceMotion.System}
       animationConfigs={animationConfigs}
       backdropComponent={renderBackdrop}
@@ -867,6 +900,12 @@ export function Sheet({
         backgroundColor: colors.bg,
         borderTopLeftRadius: tokens.radius.sheet,
         borderTopRightRadius: tokens.radius.sheet,
+        ...(centered
+          ? {
+              borderBottomLeftRadius: tokens.radius.sheet,
+              borderBottomRightRadius: tokens.radius.sheet,
+            }
+          : {}),
       }}
       handleIndicatorStyle={{
         backgroundColor: colors.textSecondary,

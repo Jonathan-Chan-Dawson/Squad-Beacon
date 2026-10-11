@@ -1,3 +1,5 @@
+import { MapRelationshipActions } from "./MapRelationshipActions";
+import type { MapContextFilter } from "./contextFilters";
 import React, { useState } from "react";
 import { Linking, Pressable, ScrollView, Text, View } from "react-native";
 import { router } from "expo-router";
@@ -42,10 +44,12 @@ import { clusterPeople } from "./mapDiscovery";
 
 export function MapPanel({
   beaconId,
+  onShowContext,
   initialTab = "overview",
   onClose,
   onPerson,
 }: {
+  onShowContext?: (filter: MapContextFilter) => void;
   beaconId: string;
   initialTab?: MapBeaconFeature;
   onClose(): void;
@@ -195,6 +199,10 @@ export function MapPanel({
                 }
               />
             )}
+            <MapRelationshipActions
+              beaconId={activity.id}
+              onShow={onShowContext}
+            />
             <BeaconResponse activity={activity} compact />
             {allowed && <AttendanceControls activity={activity} />}
           </View>

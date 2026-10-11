@@ -16,7 +16,10 @@ export function activeSonarSession(
   });
 }
 
-export function sonarLocationIsFresh(session: LocationSession, now = Date.now()) {
+export function sonarLocationIsFresh(
+  session: LocationSession,
+  now = Date.now(),
+) {
   if (
     !session.updated_at ||
     session.latitude == null ||
@@ -25,9 +28,14 @@ export function sonarLocationIsFresh(session: LocationSession, now = Date.now())
     !Number.isFinite(session.longitude) ||
     Math.abs(session.latitude) > 90 ||
     Math.abs(session.longitude) > 180
-  ) return false;
+  )
+    return false;
   const updatedAt = Date.parse(session.updated_at);
-  return Number.isFinite(updatedAt) && updatedAt <= now + 30_000 && now - updatedAt < SONAR_LOCATION_FRESHNESS_MS;
+  return (
+    Number.isFinite(updatedAt) &&
+    updatedAt <= now + 30_000 &&
+    now - updatedAt < SONAR_LOCATION_FRESHNESS_MS
+  );
 }
 
 export function sonarMinutesRemaining(expiresAt: string, now = Date.now()) {
@@ -37,29 +45,39 @@ export function sonarMinutesRemaining(expiresAt: string, now = Date.now()) {
     : 0;
 }
 
-export type LocationShareDuration = "15 minutes" | "1 hour" | "Until activity ends";
-export const MAX_LOCATION_SHARE_MS = 4 * 60 * 60 * 1000;
+export type LocationShareDuration =
+  "15 minutes" | "1 hour" | "24 hours" | "Until activity ends";
+export const MAX_LOCATION_SHARE_MS = 24 * 60 * 60 * 1000;
 
-/** Add duration to an active expiry, capped at four hours from now as enforced by the server. */
+/** Add duration to an active expiry, capped at 24 hours from now as enforced by the server. */
 export function locationShareExpiry(
   duration: LocationShareDuration,
   now: number,
   activeExpiresAt?: string,
   activityEndsAt?: string,
 ) {
-  const parsedActiveExpiry = activeExpiresAt ? Date.parse(activeExpiresAt) : Number.NaN;
-  const base = Number.isFinite(parsedActiveExpiry) && parsedActiveExpiry > now
-    ? parsedActiveExpiry
-    : now;
+  const parsedActiveExpiry = activeExpiresAt
+    ? Date.parse(activeExpiresAt)
+    : Number.NaN;
+  const base =
+    Number.isFinite(parsedActiveExpiry) && parsedActiveExpiry > now
+      ? parsedActiveExpiry
+      : now;
   const maximumExpiry = now + MAX_LOCATION_SHARE_MS;
   if (base >= maximumExpiry) return undefined;
   let requestedExpiry: number;
   if (duration === "Until activity ends") {
-    const activityEnd = activityEndsAt ? Date.parse(activityEndsAt) : Number.NaN;
+    const activityEnd = activityEndsAt
+      ? Date.parse(activityEndsAt)
+      : Number.NaN;
     if (!Number.isFinite(activityEnd) || activityEnd <= base) return undefined;
     requestedExpiry = activityEnd;
   } else {
-    requestedExpiry = base + (duration === "15 minutes" ? 15 : 60) * 60 * 1000;
+    requestedExpiry =
+      base +
+      (duration === "15 minutes" ? 15 : duration === "24 hours" ? 1440 : 60) *
+        60 *
+        1000;
   }
   const expiry = Math.min(requestedExpiry, maximumExpiry);
   return expiry > base ? expiry : undefined;
@@ -68,7 +86,10 @@ export function locationShareExpiry(
 const recentQueriesByViewer = new Map<string, string[]>();
 
 /** Keep only searches the viewer actually submitted, in memory for this app session. */
-export function rememberMapSearchQuery(query: string, viewerId: string | null | undefined) {
+export function rememberMapSearchQuery(
+  query: string,
+  viewerId: string | null | undefined,
+) {
   if (!viewerId) return [];
   const value = query.trim().replace(/\s+/g, " ");
   const recentQueries = recentQueriesByViewer.get(viewerId) ?? [];

@@ -20,6 +20,8 @@ export interface PublicBeaconSummary {
   capacity_policy: "soft" | "strict";
   accepted_seat_count: number;
   closed: boolean;
+  /** Only the current viewer's response, never a public attendee list. */
+  viewer_response?: "going" | "requested" | null;
 }
 
 export interface PublicDiscoveryFilters {

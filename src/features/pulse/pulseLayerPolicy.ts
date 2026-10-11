@@ -9,6 +9,8 @@ export function meaningfulPulse(summary: PulseSummary) {
     summary.conditions.length > 0
   );
 }
+export const PULSE_DETAIL_ZOOM = 18;
+
 export function pulseLayerPolicy(
   zoom: number,
   bounds: MapBounds,
@@ -17,27 +19,28 @@ export function pulseLayerPolicy(
   const tier =
     zoom < 12
       ? ("far" as const)
-      : zoom < 15
+      : zoom < PULSE_DETAIL_ZOOM
         ? ("mid" as const)
         : ("close" as const);
-  const eligible = validPulseBounds(bounds)
-    ? summaries
-        .filter(
-          (summary) =>
-            summary.freshness >= 0.35 &&
-            meaningfulPulse(summary) &&
-            pulseInBounds(summary.lat, summary.lng, bounds),
-        )
-        .sort(
-          (a, b) =>
-            b.importance * b.freshness - a.importance * a.freshness ||
-            a.placeKey.localeCompare(b.placeKey),
-        )
-    : [];
-  const halos =
-    tier === "mid"
-      ? eligible.filter((summary) => (summary.crowd ?? 0) >= 2).slice(0, 12)
+  const eligible =
+    Number.isFinite(zoom) &&
+    zoom >= PULSE_DETAIL_ZOOM &&
+    validPulseBounds(bounds)
+      ? summaries
+          .filter(
+            (summary) =>
+              summary.freshness >= 0.35 &&
+              meaningfulPulse(summary) &&
+              pulseInBounds(summary.lat, summary.lng, bounds),
+          )
+          .sort(
+            (a, b) =>
+              b.importance * b.freshness - a.importance * a.freshness ||
+              a.placeKey.localeCompare(b.placeKey),
+          )
       : [];
+  // No per-place Pulse decoration at normal or medium zoom.
+  const halos: PulseSummary[] = [];
   const badges = tier === "close" ? eligible.slice(0, 20) : [];
   return {
     tier,

@@ -15,14 +15,11 @@ Deno.serve(async (request) => {
   let status = 400;
   try {
     const account = await user(request);
-    const apiKey = Deno.env.get("GOOGLE_PLACES_API_KEY");
-    if (!apiKey) {
-      status = 503;
-      throw new Error("Worldwide search has not been configured yet.");
-    }
     const raw = await request.text();
     if (raw.length > 1024) throw new Error("Search is too long.");
-    const { query } = JSON.parse(raw);
+    const { query, provider = "google" } = JSON.parse(raw);
+    if (provider !== "google" && provider !== "osm")
+      throw new Error("Invalid search provider.");
     if (
       typeof query !== "string" ||
       query.trim().length < 3 ||
@@ -35,6 +32,77 @@ Deno.serve(async (request) => {
     if (budget.error) {
       status = 429;
       throw new Error("Place search limit reached. Please try again later.");
+    }
+    if (provider === "osm") {
+      const endpoint = new URL(
+        "/api/",
+        Deno.env.get("PHOTON_API_URL") || "https://photon.komoot.io",
+      );
+      if (endpoint.protocol !== "https:")
+        throw new Error("Place search is unavailable.");
+      endpoint.searchParams.set("q", query.trim());
+      endpoint.searchParams.set("limit", "6");
+      const response = await fetch(endpoint, {
+        signal: AbortSignal.timeout(10000),
+        headers: { Accept: "application/json" },
+      });
+      if (!response.ok) {
+        status = 503;
+        throw new Error("Place search is unavailable.");
+      }
+      const result = await response.json();
+      const places = (Array.isArray(result.features) ? result.features : [])
+        .slice(0, 6)
+        .flatMap(
+          (feature: {
+            properties?: Record<string, unknown>;
+            geometry?: { coordinates?: number[] };
+          }) => {
+            const props = feature.properties ?? {};
+            const [longitude, latitude] = feature.geometry?.coordinates ?? [];
+            if (
+              typeof props.name !== "string" ||
+              !Number.isFinite(latitude) ||
+              !Number.isFinite(longitude) ||
+              Math.abs(latitude) > 90 ||
+              Math.abs(longitude) > 180
+            )
+              return [];
+            return [
+              {
+                id: `osm:${props.osm_type}:${props.osm_id}`,
+                name: { text: props.name },
+                address: [props.city, props.state, props.country]
+                  .filter((item) => typeof item === "string")
+                  .join(", "),
+                location: { latitude, longitude },
+                primaryType: [
+                  "city",
+                  "town",
+                  "village",
+                  "state",
+                  "county",
+                ].includes(String(props.type))
+                  ? "locality"
+                  : "place",
+                attributions: [
+                  {
+                    provider: "? OpenStreetMap contributors",
+                    providerUri: "https://www.openstreetmap.org/copyright",
+                  },
+                ],
+              },
+            ];
+          },
+        );
+      return new Response(JSON.stringify({ places }), {
+        headers: { ...cors, "Cache-Control": "no-store" },
+      });
+    }
+    const apiKey = Deno.env.get("GOOGLE_PLACES_API_KEY");
+    if (!apiKey) {
+      status = 503;
+      throw new Error("Worldwide search has not been configured yet.");
     }
     const response = await fetch(
       "https://places.googleapis.com/v1/places:searchText",
