@@ -51,7 +51,6 @@ import {
   Avatar as DesignAvatar,
   Card,
   Chip as DesignChip,
-  DemoChip,
   EmptyState,
   GlassBar,
   IconButton as DesignIconButton,
@@ -996,7 +995,6 @@ export function Screen({
   create: _create = true,
   footer,
   headerAction,
-  showDemoNotice = true,
 }: {
   title: string;
   eyebrow: string;
@@ -1009,7 +1007,7 @@ export function Screen({
   const { styles, colors, tokens } = useTheme();
   const insets = useSafeAreaInsets();
   const { width, fontScale } = useWindowDimensions();
-  const { demo, error, refresh } = useBeacon();
+  const { error, refresh } = useBeacon();
   const segments = useSegments();
   const inTabs = segments[0] === "(tabs)";
   const back = !inTabs;
@@ -1103,7 +1101,6 @@ export function Screen({
             },
           ]}
         >
-          {demo && showDemoNotice ? <DemoChip /> : null}
           {!!error && (
             <Card>
               <Text

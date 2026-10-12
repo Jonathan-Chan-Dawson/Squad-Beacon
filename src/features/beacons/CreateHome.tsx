@@ -77,6 +77,9 @@ export function CreateHome({
   const context = useLocalSearchParams<{
     threadId?: string;
     planId?: string;
+    latitude?: string;
+    longitude?: string;
+    placeLabel?: string;
   }>();
   const { styles, colors } = useTheme();
   const [tab, setTab] = useState("Beacon");
@@ -192,6 +195,9 @@ export function CreateHome({
       pathname: "/create",
       params: {
         template: id,
+        ...(context.latitude ? { latitude: context.latitude } : {}),
+        ...(context.longitude ? { longitude: context.longitude } : {}),
+        ...(context.placeLabel ? { placeLabel: context.placeLabel } : {}),
         ...(edit ? { editTemplate: "yes" } : {}),
         ...(context.threadId ? { threadId: context.threadId } : {}),
         ...(context.planId ? { planId: context.planId } : {}),

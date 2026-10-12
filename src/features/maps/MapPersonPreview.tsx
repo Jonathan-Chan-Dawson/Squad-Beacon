@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { router } from "expo-router";
 import {
@@ -24,6 +24,7 @@ import {
   MapTooltipButton,
 } from "./MapTooltipShell";
 import { mapTooltip } from "./tooltipConstants";
+import { visibleSoloActivity, canReactToSoloActivity } from "./soloActivity";
 
 export function MapPersonPreview({
   personId,
@@ -37,7 +38,25 @@ export function MapPersonPreview({
   const { data, userId, act } = useBeacon();
   const { styles, colors } = useTheme();
   const now = useNow();
+  const [reactionBusy, setReactionBusy] = useState(false);
+  const [reactionError, setReactionError] = useState("");
   const selection = selectPersonPreview(data, personId, userId, now);
+  // Solo statuses use the existing activity storage, but are not linked Beacon cards.
+  const linkedBeacon = selectPersonPreview(
+    {
+      ...data,
+      activities: data.activities.filter(
+        (activity) => activity.mode !== "solo",
+      ),
+    },
+    personId,
+    userId,
+    now,
+  ).beacon;
+  const solo =
+    linkedBeacon && Date.parse(linkedBeacon.starts_at) <= now
+      ? undefined
+      : visibleSoloActivity(data, personId, userId, now);
   if (!selection.canViewFullProfile || !selection.profile || !userId)
     return null;
   const profile = selection.profile;
@@ -115,13 +134,14 @@ export function MapPersonPreview({
         <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
           <Text
             accessibilityRole="header"
-            numberOfLines={1}
+            numberOfLines={solo ? 2 : 1}
             style={[
               styles.h2,
               { fontSize: mapTooltip.titleSize, textAlign: "left" },
             ]}
           >
             {profile.name}
+            {solo ? " · Solo Activity" : ""}
           </Text>
           <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
             <Text
@@ -203,11 +223,111 @@ export function MapPersonPreview({
           Shared {ago < 1 ? "just now" : `${ago}m ago`}
         </Text>
       )}
-      {selection.beacon && (
+      {solo && (
+        <View testID="map-solo-activity" style={{ gap: 6 }}>
+          <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
+            <ActivityBadge category={solo.category} size={26} />
+            <Text
+              numberOfLines={2}
+              style={[styles.label, { flex: 1, fontSize: 14 }]}
+            >
+              {solo.title}
+            </Text>
+          </View>
+          {!!solo.description?.trim() && (
+            <Text numberOfLines={3} style={[styles.body, { fontSize: 12 }]}>
+              {solo.description}
+            </Text>
+          )}
+          <Text style={[styles.muted, { fontSize: 11 }]}>
+            Started{" "}
+            {Math.max(
+              0,
+              Math.floor((now - Date.parse(solo.starts_at)) / 60000),
+            ) < 1
+              ? "just now"
+              : `${Math.floor((now - Date.parse(solo.starts_at)) / 60000)}m ago`}
+          </Text>
+          {canReactToSoloActivity(data, solo, userId, now) && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={
+                data.reactions.some(
+                  (row) =>
+                    row.activity_id === solo.id && row.user_id === userId,
+                )
+                  ? "Remove status reaction"
+                  : "React to status"
+              }
+              accessibilityState={{
+                selected: data.reactions.some(
+                  (row) =>
+                    row.activity_id === solo.id && row.user_id === userId,
+                ),
+                disabled: reactionBusy,
+              }}
+              disabled={reactionBusy}
+              onPress={async () => {
+                setReactionBusy(true);
+                setReactionError("");
+                try {
+                  await act("react", {
+                    id: solo.id,
+                    remove: data.reactions.some(
+                      (row) =>
+                        row.activity_id === solo.id && row.user_id === userId,
+                    ),
+                  });
+                } catch (error) {
+                  setReactionError(
+                    error instanceof Error
+                      ? error.message
+                      : "Could not react. Try again.",
+                  );
+                } finally {
+                  setReactionBusy(false);
+                }
+              }}
+              style={{
+                minHeight: 44,
+                alignSelf: "flex-start",
+                justifyContent: "center",
+                paddingHorizontal: 10,
+                borderRadius: 14,
+                backgroundColor: colors.green + "20",
+              }}
+            >
+              <Text style={{ color: colors.ink, fontSize: 12 }}>
+                🙌{" "}
+                {data.reactions.some(
+                  (row) =>
+                    row.activity_id === solo.id && row.user_id === userId,
+                )
+                  ? "Reacted"
+                  : "React"}{" "}
+                ·{" "}
+                {
+                  data.reactions.filter((row) => row.activity_id === solo.id)
+                    .length
+                }
+              </Text>
+            </Pressable>
+          )}
+          {!!reactionError && (
+            <Text
+              accessibilityRole="alert"
+              style={[styles.muted, { fontSize: 12 }]}
+            >
+              {reactionError}
+            </Text>
+          )}
+        </View>
+      )}
+      {linkedBeacon && (
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`Select ${selection.beacon.title} Beacon`}
-          onPress={() => onBeacon(selection.beacon!.id)}
+          accessibilityLabel={`Select ${linkedBeacon.title} Beacon`}
+          onPress={() => onBeacon(linkedBeacon.id)}
           style={{
             flexDirection: "row",
             alignItems: "center",
@@ -220,19 +340,19 @@ export function MapPersonPreview({
             borderRadius: 12,
           }}
         >
-          <ActivityBadge category={selection.beacon.category} size={28} />
+          <ActivityBadge category={linkedBeacon.category} size={28} />
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text
               numberOfLines={1}
               style={[styles.label, { fontSize: 13, textAlign: "left" }]}
             >
-              {selection.beacon.title}
+              {linkedBeacon.title}
             </Text>
             <Text
               numberOfLines={1}
               style={[styles.muted, { fontSize: 11, textAlign: "left" }]}
             >
-              {beaconPreviewWhen(selection.beacon, now)}
+              {beaconPreviewWhen(linkedBeacon, now)}
             </Text>
           </View>
           <ChevronRight size={17} color={colors.green} />

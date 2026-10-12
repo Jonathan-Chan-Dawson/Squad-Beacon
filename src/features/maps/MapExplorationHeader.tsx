@@ -10,7 +10,13 @@ import {
   type LayoutChangeEvent,
 } from "react-native";
 import { useReducedMotion } from "react-native-reanimated";
-import { Search, SlidersHorizontal, X } from "lucide-react-native";
+import {
+  MapPinned,
+  Search,
+  SlidersHorizontal,
+  X,
+  Zap,
+} from "lucide-react-native";
 import { GlassBar } from "@/src/shared/design-system";
 import { MotionPressable } from "@/src/shared/MotionPressable";
 import { useTheme } from "@/src/shared/ui";
@@ -38,7 +44,7 @@ function QuickChip({
       onPress={onPress}
       onLayout={onLayout}
       style={{
-        minHeight: 42,
+        minHeight: 38,
         flexShrink: 0,
         justifyContent: "center",
         paddingHorizontal: 13,
@@ -73,6 +79,8 @@ export function MapExplorationHeader({
   onRemoveChip,
   onClearContexts,
   onSearchFocus,
+  onExploreArea,
+  nowSelected,
   sharingIndicator,
   loading,
   calm = false,
@@ -91,6 +99,8 @@ export function MapExplorationHeader({
   onRemoveChip: (key: string) => void;
   onClearContexts?: () => void;
   onSearchFocus: () => void;
+  onExploreArea: () => void;
+  nowSelected: boolean;
   sharingIndicator?: React.ReactNode;
   loading?: boolean;
   calm?: boolean;
@@ -105,13 +115,7 @@ export function MapExplorationHeader({
   const [indicatorWidth] = useState(() => new Animated.Value(0));
   const [shimmerProgress] = useState(() => new Animated.Value(0));
   const [railWidth, setRailWidth] = useState(0);
-  const quickFilters: MapQuickFilter[] = [
-    "All",
-    "Friends",
-    "Squads",
-    "Public",
-    "Now",
-  ];
+  const quickFilters: MapQuickFilter[] = ["All", "Friends", "Squads", "Public"];
 
   useEffect(() => {
     if (!selectedQuickFilter) return;
@@ -167,6 +171,7 @@ export function MapExplorationHeader({
   return (
     <View
       testID="map-exploration-header"
+      pointerEvents="box-none"
       onLayout={(event) => onHeightChange(event.nativeEvent.layout.height)}
       style={{ width: "100%", gap: 6, paddingHorizontal: 16 }}
     >
@@ -207,6 +212,21 @@ export function MapExplorationHeader({
               } as never
             }
           />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Explore area"
+            onPress={onExploreArea}
+            style={{
+              minWidth: 44,
+              minHeight: 44,
+              justifyContent: "center",
+              alignItems: "center",
+              borderLeftWidth: 1,
+              borderLeftColor: colors.line,
+            }}
+          >
+            <MapPinned size={18} color={colors.green} />
+          </Pressable>
         </GlassBar>
       </View>
 
@@ -254,10 +274,10 @@ export function MapExplorationHeader({
                 <Animated.View
                   style={{
                     position: "absolute",
-                    top: 1,
+                    top: 3,
                     left: indicatorX,
                     width: indicatorWidth,
-                    height: 42,
+                    height: 38,
                     borderRadius: 20,
                     backgroundColor: colors.green,
                   }}
@@ -304,6 +324,31 @@ export function MapExplorationHeader({
             />
           ) : null}
         </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Now"
+          accessibilityState={{ selected: nowSelected }}
+          aria-selected={nowSelected}
+          onPress={() => onQuickFilter("Now")}
+          style={{
+            minHeight: 44,
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 4,
+            paddingHorizontal: 10,
+            borderRadius: 22,
+            backgroundColor: nowSelected
+              ? colors.green + "35"
+              : colors.white + "ED",
+            borderWidth: 1,
+            borderColor: nowSelected ? colors.green : colors.line,
+          }}
+        >
+          <Zap size={14} color={colors.green} />
+          <Text style={{ color: colors.ink, fontSize: 12, fontWeight: "700" }}>
+            Now
+          </Text>
+        </Pressable>
         <Pressable
           testID="map-filter-toggle"
           accessibilityRole="button"
@@ -354,57 +399,68 @@ export function MapExplorationHeader({
         </Pressable>
       </View>
 
-      {activeChips.length ? (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ gap: 6, paddingBottom: 1 }}
-          accessibilityLabel="Active filters"
-        >
-          {activeChips.map((chip) => (
-            <Pressable
-              key={chip.key}
-              accessibilityRole="button"
-              accessibilityLabel={`Remove ${chip.label} filter`}
-              onPress={() => onRemoveChip(chip.key)}
-              style={{
-                minHeight: 44,
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 5,
-                paddingHorizontal: 10,
-                borderRadius: 15,
-                borderWidth: 1,
-                borderColor: colors.line,
-                backgroundColor: colors.white + "E6",
-              }}
-            >
-              <Text
-                style={{ color: colors.ink, fontSize: 12, fontWeight: "600" }}
+      {[false, true].map((contextRail) =>
+        activeChips.some(
+          (chip) => chip.key.startsWith("context:") === contextRail,
+        ) ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ gap: 6, paddingBottom: 1 }}
+            key={String(contextRail)}
+            accessibilityLabel={contextRail ? "Map focus" : "Active filters"}
+          >
+            {activeChips
+              .filter((chip) => chip.key.startsWith("context:") === contextRail)
+              .map((chip) => (
+                <Pressable
+                  key={chip.key}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Remove ${chip.label} filter`}
+                  onPress={() => onRemoveChip(chip.key)}
+                  style={{
+                    minHeight: 44,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 5,
+                    paddingHorizontal: 10,
+                    borderRadius: 15,
+                    borderWidth: 1,
+                    borderColor: colors.line,
+                    backgroundColor: colors.white + "E6",
+                  }}
+                >
+                  <Text
+                    style={{
+                      color: colors.ink,
+                      fontSize: 12,
+                      fontWeight: "600",
+                    }}
+                  >
+                    {chip.label}
+                  </Text>
+                  <X size={13} color={colors.muted} />
+                </Pressable>
+              ))}
+            {contextRail && onClearContexts ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Clear all context filters"
+                onPress={onClearContexts}
+                style={{
+                  minHeight: 44,
+                  justifyContent: "center",
+                  paddingHorizontal: 10,
+                }}
               >
-                {chip.label}
-              </Text>
-              <X size={13} color={colors.muted} />
-            </Pressable>
-          ))}
-          {onClearContexts ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Clear all context filters"
-              onPress={onClearContexts}
-              style={{
-                minHeight: 44,
-                justifyContent: "center",
-                paddingHorizontal: 10,
-              }}
-            >
-              <Text style={{ color: colors.muted, fontSize: 12 }}>
-                Clear contexts
-              </Text>
-            </Pressable>
-          ) : null}
-        </ScrollView>
-      ) : null}
+                <Text style={{ color: colors.muted, fontSize: 12 }}>
+                  Clear contexts
+                </Text>
+              </Pressable>
+            ) : null}
+          </ScrollView>
+        ) : null,
+      )}
 
       {areaLabel && (
         <View

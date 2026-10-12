@@ -23,6 +23,7 @@ export type PulsePlacePreviewProps = {
   confirmedUntil?: number;
   lastAnswers?: PulseAnswers;
   onCreateBeacon: () => void;
+  onDirections?: () => void;
   onPing?: () => void;
   onNearby?: () => void;
   happeningHere?: React.ReactNode;
@@ -34,7 +35,7 @@ export function PulsePlacePreview(props: PulsePlacePreviewProps) {
 }
 
 function PulsePreviewContent({ scopeKey, place, summary, onClose, onAdd, onConfirm, confirmedUntil = 0, lastAnswers,
-  onCreateBeacon, onPing, onNearby, happeningHere, onReportNote }: PulsePlacePreviewProps) {
+  onCreateBeacon, onDirections, onPing, onNearby, happeningHere, onReportNote }: PulsePlacePreviewProps) {
   const { styles, semanticColors: colors, tokens } = useTheme();
   const reducedMotion = useReducedMotion();
   const tick = useNow();
@@ -117,6 +118,7 @@ function PulsePreviewContent({ scopeKey, place, summary, onClose, onAdd, onConfi
         <View style={{ flex: 1 }}><Button title={pulseCopy.update} secondary onPress={() => onAdd(lastAnswers)} /></View>
         <View style={{ flex: 1 }}><Button title={pulseCopy.createBeacon} secondary onPress={onCreateBeacon} /></View>
       </View>
+      {onDirections && <Button title={pulseCopy.directions} compact secondary onPress={onDirections} />}
       {happeningHere && <View style={{ gap: 8 }}><Text style={styles.h2}>{pulseCopy.happeningHere}</Text>
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8 }}>{happeningHere}</ScrollView></View>}
     <Toast visible={!!error} message={error} tone="danger" onDismiss={() => setError("")} />

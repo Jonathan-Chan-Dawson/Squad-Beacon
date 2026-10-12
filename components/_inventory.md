@@ -5,4 +5,6 @@ Root-level Expo shared components
 - useColorScheme.ts / useColorScheme.web.ts and useClientOnlyValue.ts / useClientOnlyValue.web.ts: platform-specific helper siblings.
 - leaflet.web.css and leaflet.LICENSE: web map styling and third-party license notice.
 
+Activity-detail sections live together in src/features/beacons/components/activity-detail/ and are shared with Map sheets.
+
 Product feature components belong under src/features/. Keep platform suffix variants adjacent.

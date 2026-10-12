@@ -31,28 +31,28 @@ import {
   activeOrganizationRole,
   canReadOrganization,
 } from "@/src/features/organizations/domain";
-import { canOpenSquadProfile } from "./squadProfile";
-import { searchablePeople } from "./communication";
-import { usePlanningResponses } from "./usePlanningResponses";
+import { canOpenSquadProfile } from "../squadProfile";
+import { searchablePeople } from "../communication";
+import { usePlanningResponses } from "../usePlanningResponses";
 import {
   filterHubConversations,
   selectHubConversations,
   selectStartChatFriends,
   type ChatFilter,
   type HubConversation,
-} from "./hubState";
+} from "../hubState";
 import type { SocialEntityType } from "@/src/features/social/types";
-import { ResponsesSheet } from "./components/ResponsesSheet";
-import { communityTypeLabel } from "./components/CommunityCard";
+import { ResponsesSheet } from "../components/ResponsesSheet";
+import { communityTypeLabel } from "../components/CommunityCard";
 import {
   ProfileActions,
   ProfileLink,
   ProfileSection,
-} from "./components/ProfilePrimitives";
-import { HubConversationRow } from "./components/HubConversationRow";
-import { HubDirectory } from "./components/HubDirectory";
+} from "../components/ProfilePrimitives";
+import { HubConversationRow } from "../components/HubConversationRow";
+import { HubDirectory } from "../components/HubDirectory";
 
-export type { ChatFilter } from "./hubState";
+export type { ChatFilter } from "../hubState";
 type Section = "Chats" | "Communities";
 type InitialSection = Section | "Pings" | "Organizations";
 type CommunityView = "All" | "Spaces" | "Organizations";

@@ -99,7 +99,7 @@ test("cluster opens searchable Beacons and People immediately without automatic 
 }) => {
   await startDemo(page);
   await expect(
-    page.getByRole("button", { name: "Compass", exact: true }),
+    page.getByRole("button", { name: "Navigation", exact: true }),
   ).toBeVisible();
   const settled = await findStableUnobstructedMarker(
     page,

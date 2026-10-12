@@ -3,12 +3,12 @@ People feature
 - components/CommunityAvatar.tsx, SquadIconPicker.tsx and squadIcons.ts: shared group/list symbols and an admin-only persisted Squad icon choice. People keep the existing privacy-aware ProfileAvatar minis/photos.
 
 - screens/ResponsesScreen.tsx: full-screen live decision/invitation/join-request inbox; compact filters/rows and existing canonical actions. components/ResponsesSheet.tsx retains compatibility for existing launchers.
-- SquadsScreen and RedesignedCommunicationHub use Chats/Communities access, one compact response row and a searchable vertical New Message directory. Interactive Ping cards remain in Squad chat.
+- SquadsScreen and CommunicationHubScreen use Chats/Communities access, one compact response row and a searchable vertical New Message directory. Interactive Ping cards remain in Squad chat.
 
 - screens/SquadsScreen.tsx: chat-first Squads entry with temporary search, compact communities and a secondary people/private-list directory, also reused by Profile’s Friends & Lists entry.
 - screens/SquadProfileScreen.tsx: one member-gated Squad Info overview; focused Members, Invite, Beacons & Plans and Settings routes retain existing handlers and normal Back navigation. Legacy tab parameters remain valid.
 - squadProfile.ts: current-snapshot Squad membership, privacy, Beacon, Plan, Routine, Ping/Vote and linked-Organization selectors; Space parent access is selected in spaces/domain.ts.
-- CommunicationHub.tsx / RedesignedCommunicationHub.tsx: chat-first home and a separate Communities directory; adaptive empty states, a bounded joined-community preview, contextual filters, compact discovery rows and existing invitation/creation menus.
+- CommunicationHub.tsx / screens/CommunicationHubScreen.tsx: chat-first home and a separate Communities directory; adaptive empty states, a bounded joined-community preview, contextual filters, compact discovery rows and existing invitation/creation menus.
 - communication.ts: snapshot-safe inbox counts and People search, plus canonical Squad chat summaries with source-linked latest Ping previews and separate pending-response state.
 - SocialDirectoryResults.tsx: stale-snapshot-safe paginated community summaries with server-backed join/request/invite actions.
 - priority.ts: Friends Now relevance tiers; search uses shared/search.ts.

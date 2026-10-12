@@ -1,3 +1,7 @@
+import {
+  visibleSoloActivity,
+  canReactToSoloActivity,
+} from "../src/features/maps/soloActivity";
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -406,4 +410,38 @@ test("a readable public profile remains previewable after friendship ends withou
   assert.equal(selected.canViewFullProfile, true);
   assert.equal(selected.profile?.name, "Jordan Ellis");
   assert.equal(selected.starred, false);
+});
+
+test("visible solo statuses allow reactions without joining and reject stale or unauthorized notes", () => {
+  const data = baseData();
+  const note = beacon("status", "jordan", {
+    mode: "solo",
+    title: "Studying at the library",
+  });
+  data.activities.push(note);
+  assert.equal(visibleSoloActivity(data, "jordan", "viewer", now)?.id, note.id);
+  assert.equal(canReactToSoloActivity(data, note, "viewer", now), true);
+  assert.equal(data.rsvps.length, 0);
+  assert.equal(
+    canReactToSoloActivity(
+      data,
+      { ...note, enable_reactions: false },
+      "viewer",
+      now,
+    ),
+    false,
+  );
+  assert.equal(
+    canReactToSoloActivity(
+      data,
+      { ...note, ends_at: new Date(now).toISOString() },
+      "viewer",
+      now,
+    ),
+    false,
+  );
+  assert.equal(visibleSoloActivity(data, "jordan", "other", now), undefined);
+  data.blocks.push({ blocker_id: "jordan", blocked_id: "viewer" });
+  assert.equal(visibleSoloActivity(data, "jordan", "viewer", now), undefined);
+  assert.equal(canReactToSoloActivity(data, note, "viewer", now), false);
 });

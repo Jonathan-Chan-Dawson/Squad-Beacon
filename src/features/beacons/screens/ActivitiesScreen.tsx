@@ -45,7 +45,7 @@ import { PeriodTabs } from "@/src/features/beacons/PeriodTabs";
 import FeedPager from "@/src/features/beacons/FeedPager";
 import type { FeedPage } from "@/src/features/beacons/FeedPager.types";
 import { usePastMemoryThumbnails } from "@/src/features/beacons/usePastMemoryThumbnails";
-import { DemoChip, GlassBar, Skeleton, useDesignTheme } from "@/src/shared/design-system";
+import { GlassBar, Skeleton, useDesignTheme } from "@/src/shared/design-system";
 import { Button, Chips, Field, InboxButton, Sheet, Txt, uiHaptics, useTheme } from "@/src/shared/ui";
 import { usePlanningResponses } from "@/src/features/people/usePlanningResponses";
 import { ResponsesSheet } from "@/src/features/people/components/ResponsesSheet";
@@ -114,7 +114,7 @@ function emptyFilters(filters: ExplorationFilters): ExplorationFilters {
 export default function ActivitiesScreen() {
   const { styles } = useTheme();
   const { colors: designColors, tokens } = useDesignTheme();
-  const { data, userId, act, demo, loading, error: storeError, refresh } = useBeacon();
+  const { data, userId, act, loading, error: storeError, refresh } = useBeacon();
   const exploration = useExploration();
   const insets = useSafeAreaInsets();
   const periodicNow = useNow();
@@ -1052,17 +1052,12 @@ export default function ActivitiesScreen() {
 
   const headerHeight = scrollY.interpolate({
     inputRange: [0, 110],
-    outputRange: [demo ? 128 : 100, 58],
+    outputRange: [100, 58],
     extrapolate: "clamp",
   });
   const titleSize = scrollY.interpolate({
     inputRange: [0, 110],
     outputRange: [36, 24],
-    extrapolate: "clamp",
-  });
-  const demoOpacity = scrollY.interpolate({
-    inputRange: [0, 40, 95],
-    outputRange: [1, 0.35, 0],
     extrapolate: "clamp",
   });
 
@@ -1076,11 +1071,6 @@ export default function ActivitiesScreen() {
       <View style={{ paddingTop: insets.top, backgroundColor: designColors.bg }}>
         <GlassBar style={{ borderRadius: 0, borderWidth: 0, borderBottomWidth: 1, borderBottomColor: designColors.border }}>
           <RNAnimated.View style={{ height: headerHeight, overflow: "hidden", justifyContent: "flex-end", paddingHorizontal: tokens.layout.screenGutter, paddingBottom: tokens.space.sm }}>
-            {demo ? (
-              <RNAnimated.View style={{ position: "absolute", left: tokens.layout.screenGutter, top: tokens.space.xs, opacity: demoOpacity }}>
-                <DemoChip />
-              </RNAnimated.View>
-            ) : null}
             <View style={{ minHeight: tokens.layout.minTapTarget, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: tokens.space.sm }}>
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text style={{ color: designColors.textSecondary, ...tokens.type.caption, fontWeight: "700", letterSpacing: 0.6 }}>MAKE TIME TOGETHER</Text>

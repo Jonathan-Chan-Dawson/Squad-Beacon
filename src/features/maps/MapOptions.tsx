@@ -66,6 +66,8 @@ export function MapOptions({
   style,
   onStyle,
   showFriends,
+  showWeather,
+  onShowWeather,
   friendsApplicable,
   onShowFriends,
   onFit,
@@ -78,6 +80,8 @@ export function MapOptions({
   style: MapStyle;
   onStyle(value: MapStyle): void;
   showFriends: boolean;
+  showWeather: boolean;
+  onShowWeather(value: boolean): void;
   friendsApplicable: boolean;
   onShowFriends(value: boolean): void;
   onFit(): void;
@@ -105,6 +109,22 @@ export function MapOptions({
         />
       </View>
       <MapStyleControls style={style} onStyle={onStyle} />
+      <View
+        style={{
+          minHeight: 52,
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+        }}
+      >
+        <Text style={styles.body}>Show Weather</Text>
+        <Switch
+          accessibilityLabel="Show Weather"
+          value={showWeather}
+          onValueChange={onShowWeather}
+          trackColor={{ true: colors.green }}
+        />
+      </View>
       {friendsApplicable ? (
         <View
           style={{

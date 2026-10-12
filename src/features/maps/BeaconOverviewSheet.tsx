@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Platform,
   Pressable,
@@ -17,7 +17,9 @@ import { MapPanel } from "./MapPanel";
 
 /** One map-owned sheet; secondary features replace its content rather than opening a modal. */
 export function BeaconOverviewSheet(
-  props: React.ComponentProps<typeof MapPanel>,
+  props: React.ComponentProps<typeof MapPanel> & {
+    onMapSpaceChange?: (height: number) => void;
+  },
 ) {
   const { colors, tokens } = useTheme();
   const insets = useSafeAreaInsets();
@@ -25,6 +27,14 @@ export function BeaconOverviewSheet(
   const [index, setIndex] = useState(1);
   const { width, height } = useWindowDimensions();
   const [containerHeight, setContainerHeight] = useState(height);
+  const { onMapSpaceChange } = props;
+  useEffect(() => {
+    onMapSpaceChange?.(
+      index === 0
+        ? containerHeight - 208 - insets.bottom
+        : containerHeight * (index === 1 ? 0.3 : 0.06),
+    );
+  }, [index, containerHeight, insets.bottom, onMapSpaceChange]);
   const position = useSharedValue(height);
   const contentStyle = useAnimatedStyle(() => ({
     height: Math.max(0, containerHeight - position.value - 24),

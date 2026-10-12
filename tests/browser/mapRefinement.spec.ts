@@ -15,7 +15,7 @@ test("advanced map filters keep multi-category selection and reset cleanly", asy
   await expect(header).toBeVisible();
   await expect(
     header.getByRole("textbox", {
-      name: "Search Beacons, People, and places",
+      name: "Search places, Beacons, people and communities",
     }),
   ).toBeVisible();
   await expect(
@@ -108,17 +108,14 @@ test("Compass opens without requesting location, and selecting a result opens it
   });
   await demo(page);
 
-  await page.getByRole("button", { name: "Compass", exact: true }).click();
-  const compass = page.getByTestId("map-side-menu");
+  await page.getByRole("button", { name: "Navigation", exact: true }).click();
+  const compass = page.getByTestId("map-navigation-popover");
   await expect(compass).toBeVisible();
-  await expect(
-    compass.getByText("Centering the map never shares your location."),
-  ).toBeVisible();
   for (const action of [
-    "Use my location",
-    "Return to overview",
-    "Explore everywhere",
-    "Search another place",
+    "Center on Me",
+    "Return to Overview",
+    "Explore Everywhere",
+    "Pin a Location",
   ])
     await expect(
       compass.getByRole("button", { name: action, exact: true }),
@@ -128,7 +125,9 @@ test("Compass opens without requesting location, and selecting a result opens it
       () => (window as Window & { __mapGeoCalls?: number }).__mapGeoCalls,
     ),
   ).toBe(0);
-  await compass.getByRole("button", { name: "Done", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Close navigation", exact: true })
+    .click();
   await expect(compass).toHaveCount(0);
 
   const search = page.getByRole("textbox", {

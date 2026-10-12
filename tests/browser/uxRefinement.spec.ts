@@ -83,29 +83,21 @@ test("worldwide search is explicit and demo results are clearly local examples",
   page,
 }) => {
   await demo(page);
-  await page.getByRole("button", { name: "Compass", exact: true }).click();
-  const compass = page.getByTestId("map-side-menu");
-  await expect(
-    compass.getByText("Centering the map never shares your location."),
-  ).toBeVisible();
-  await compass
-    .getByRole("button", { name: "Search another place", exact: true })
-    .click();
-  const placeSearch = compass.getByRole("textbox", {
-    name: "Search another place",
+  await page.getByRole("button", { name: "Explore area", exact: true }).click();
+  const search = page.getByRole("textbox", {
+    name: "Search places, Beacons, people and communities",
     exact: true,
   });
-  const search = compass.getByRole("button", {
+  await expect(page.getByTestId("map-search-results")).toBeVisible();
+  const worldSearch = page.getByRole("button", {
     name: "Search worldwide places",
     exact: true,
   });
-  await expect(search).toBeVisible();
-  await expect(search).toBeDisabled();
-  await placeSearch.fill("Tokyo");
-  await expect(search).toBeEnabled();
-  await search.click();
+  await search.fill("Tokyo");
+  await expect(worldSearch).toBeEnabled();
+  await worldSearch.click();
   await expect(
-    compass.getByText("Demo city examples. No search leaves your device."),
+    page.getByText("Demo city examples. No search leaves your device."),
   ).toBeVisible();
 });
 

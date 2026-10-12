@@ -39,6 +39,7 @@ test("one place preview supports useful tips, temporary interest, Beacon creatio
 });
 
 test("place creation reuses the Beacon form with venue coordinates and label", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");
   await page.getByRole("button", { name: /Explore the demo/ }).click();
   const preview = await court(page);
@@ -46,4 +47,11 @@ test("place creation reuses the Beacon form with venue coordinates and label", a
   await expect(page).toHaveURL(/\/create/);
   await expect(page).toHaveURL(/placeLabel=Willow/);
   await expect(page).toHaveURL(/latitude=41.889/);
+  await expect(page.getByRole("button", { name: "Create Blank Template", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Create Blank Template", exact: true }).click();
+  await expect(page).toHaveURL(/editor=yes/);
+  await expect(page).toHaveURL(/longitude=-87.626/);
+  await expect(page.getByRole("textbox", { name: "Where? (optional)", exact: true })).toHaveValue("Willow Courts");
+  await page.getByRole("button", { name: "Advanced Options ↓", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Edit meeting pin", exact: true })).toBeVisible();
 });

@@ -18,7 +18,7 @@ import {
   Pressable,
   useWindowDimensions,
 } from "react-native";
-import { LocateFixed, SlidersHorizontal } from "lucide-react-native";
+import { LocateFixed, MapPin, SlidersHorizontal } from "lucide-react-native";
 import MapView, {
   Circle,
   Marker,
@@ -131,6 +131,7 @@ export default function BeaconMap({
   onPerson,
   onPick,
   selected,
+  selectionIsTemporary = false,
   fullScreen = false,
   hideControls = false,
   controlsTop = 12,
@@ -146,6 +147,7 @@ export default function BeaconMap({
   areaName,
   onMapTap,
   onViewportChange,
+  onBearingChange,
   explorationTarget,
   onOptions,
   onRecenter,
@@ -167,6 +169,7 @@ export default function BeaconMap({
   const map = useRef<MapView>(null);
   const projectionBusy = useRef(false);
   const gestureActive = useRef(false);
+  const suppressMapPressUntil = useRef(0);
   const [ready, setReady] = useState(false);
   const [pulsePoints, setPulsePoints] = useState<ProjectedPulse[]>([]);
   const [pulseHalos, setPulseHalos] = useState<ProjectedPulse[]>([]);
@@ -338,6 +341,12 @@ export default function BeaconMap({
     if (appliedControlRevision.current === controlCommand.revision) return;
     const currentMap = map.current;
     if (!currentMap) return;
+    if (controlCommand.kind === "north") {
+      // A partial camera update preserves center, zoom and pitch.
+      currentMap.animateCamera({ heading: 0 }, { duration: 180 });
+      appliedControlRevision.current = controlCommand.revision;
+      return;
+    }
 
     if (controlCommand.kind === "restore" && controlCommand.camera) {
       const { center, bounds } = controlCommand.camera;
@@ -664,6 +673,11 @@ export default function BeaconMap({
         onRegionChangeComplete={(nextRegion, details) => {
           if (!isValidMapRegion(nextRegion)) return;
           setRegion(nextRegion);
+          if (onBearingChange)
+            void map.current
+              ?.getCamera()
+              .then((camera) => onBearingChange(camera.heading))
+              .catch(() => {});
           if (hasUsableMapViewport(mapSize))
             onViewportChange?.(
               {
@@ -737,24 +751,34 @@ export default function BeaconMap({
             ? 360 / 2 ** explorationTarget.zoom
             : 0.045,
         }}
-        onPress={
-          onPick
-            ? (e) =>
-                onPick(
-                  e.nativeEvent.coordinate.latitude,
-                  e.nativeEvent.coordinate.longitude,
-                )
-            : () => onMapTap?.()
-        }
+        onTouchStart={() => {
+          suppressMapPressUntil.current = 0;
+        }}
+        onPress={(event) => {
+          if (
+            (!onPick && event.nativeEvent.action === "marker-press") ||
+            Date.now() < suppressMapPressUntil.current
+          )
+            return;
+          if (onPick) {
+            onPick(
+              event.nativeEvent.coordinate.latitude,
+              event.nativeEvent.coordinate.longitude,
+            );
+          } else onMapTap?.();
+        }}
         onLongPress={(event) => {
-          if (!onPick)
+          if (!onPick) {
+            suppressMapPressUntil.current = Date.now() + 500;
             onLongPress?.({
               coordinate: event.nativeEvent.coordinate,
               point: event.nativeEvent.position,
             });
+          }
         }}
         onPoiClick={(event) => {
           if (!onPick) {
+            suppressMapPressUntil.current = Date.now() + 250;
             const value = event.nativeEvent;
             onPlace?.(
               {
@@ -991,9 +1015,29 @@ export default function BeaconMap({
         {selected && isValidCoordinate(selected) && (
           <Marker
             coordinate={selected}
-            accessibilityLabel="Selected meeting place"
-            tracksViewChanges={false}
-          />
+            accessibilityLabel={
+              selectionIsTemporary
+                ? "Selected map location"
+                : "Selected meeting place"
+            }
+            anchor={selectionIsTemporary ? { x: 0.5, y: 1 } : undefined}
+            onPress={
+              selectionIsTemporary
+                ? (event) => event.stopPropagation()
+                : undefined
+            }
+            tracksViewChanges={selectionIsTemporary}
+          >
+            {selectionIsTemporary ? (
+              <View
+                testID="map-temporary-pin"
+                pointerEvents="none"
+                style={{ width: 32, height: 34, alignItems: "center" }}
+              >
+                <MapPin size={30} color={colors.green} fill={colors.white} />
+              </View>
+            ) : null}
+          </Marker>
         )}
       </MapView>
       <PulseMapOverlay

@@ -131,6 +131,7 @@ export default function BeaconMap(props: MapProps) {
       const m = L.map(element.current, {
         zoomControl: false,
         maxZoom: MAP_MAX_ZOOM,
+        tapHold: false,
       }).setView([41.885, -87.642], 13);
       map.current = m;
       L.control.scale({ position: "bottomleft" }).addTo(m);
@@ -144,7 +145,21 @@ export default function BeaconMap(props: MapProps) {
         );
       };
       m.on("move", updateAnchor);
+      let holdTimer: ReturnType<typeof setTimeout> | null = null;
+      let touchOrigin: { x: number; y: number } | null = null;
+      let longPressFired = false;
+      let suppressClickUntil = 0;
+      const cancelHold = () => {
+        if (holdTimer) clearTimeout(holdTimer);
+        holdTimer = null;
+      };
+      const emptyMapTarget = (target: EventTarget | null) =>
+        target instanceof Element &&
+        !target.closest(
+          ".leaflet-marker-icon, .leaflet-interactive, .leaflet-control, button, a, input, [role='button']",
+        );
       const markGesture = () => {
+        cancelHold();
         programmaticMove.current = false;
         gestureActive.current = true;
         latest.current.onGestureChange?.(true);
@@ -159,6 +174,60 @@ export default function BeaconMap(props: MapProps) {
         if (event.touches.length > 1) markGesture();
       };
       const container = m.getContainer();
+      const startHold = (event: TouchEvent) => {
+        cancelHold();
+        touchOrigin = null;
+        longPressFired = false;
+        suppressClickUntil = 0;
+        if (
+          event.touches.length !== 1 ||
+          latest.current.onPick ||
+          !latest.current.onLongPress ||
+          !emptyMapTarget(event.target)
+        ) return;
+        const touch = event.touches[0];
+        touchOrigin = { x: touch.clientX, y: touch.clientY };
+        const bounds = container.getBoundingClientRect();
+        const point = L.point(touch.clientX - bounds.left, touch.clientY - bounds.top);
+        const coordinate = m.containerPointToLatLng(point);
+        holdTimer = setTimeout(() => {
+          holdTimer = null;
+          if (!touchOrigin || latest.current.onPick) return;
+          longPressFired = true;
+          suppressClickUntil = Date.now() + 1000;
+          latest.current.onLongPress?.({
+            coordinate: { latitude: coordinate.lat, longitude: coordinate.lng },
+            point,
+          });
+        }, 550);
+      };
+      const moveHold = (event: TouchEvent) => {
+        if (!touchOrigin) return;
+        const touch = event.touches[0];
+        if (
+          event.touches.length !== 1 ||
+          !touch ||
+          Math.hypot(touch.clientX - touchOrigin.x, touch.clientY - touchOrigin.y) > 8
+        ) {
+          cancelHold();
+          touchOrigin = null;
+        }
+      };
+      const endHold = (event: TouchEvent) => {
+        cancelHold();
+        touchOrigin = null;
+        if (longPressFired) {
+          suppressClickUntil = Date.now() + 450;
+          if (event.cancelable) event.preventDefault();
+        }
+      };
+      const suppressHoldClick = (event: MouseEvent) => {
+        if (Date.now() < suppressClickUntil) {
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          suppressClickUntil = 0;
+        }
+      };
       m.on("dragstart boxzoomstart", markGesture);
       m.on("zoomstart", markZoomGesture);
       container.addEventListener("wheel", markGesture, { passive: true });
@@ -167,11 +236,22 @@ export default function BeaconMap(props: MapProps) {
       container.addEventListener("touchstart", markPinchGesture, {
         passive: true,
       });
+      container.addEventListener("touchstart", startHold, { passive: true });
+      container.addEventListener("touchmove", moveHold, { passive: true });
+      container.addEventListener("touchend", endHold, { passive: false });
+      container.addEventListener("touchcancel", endHold, { passive: false });
+      container.addEventListener("click", suppressHoldClick, true);
       removeGestureListeners.current = () => {
+        cancelHold();
         container.removeEventListener("wheel", markGesture);
         container.removeEventListener("dblclick", markGesture);
         container.removeEventListener("keydown", markGesture);
         container.removeEventListener("touchstart", markPinchGesture);
+        container.removeEventListener("touchstart", startHold);
+        container.removeEventListener("touchmove", moveHold);
+        container.removeEventListener("touchend", endHold);
+        container.removeEventListener("touchcancel", endHold);
+        container.removeEventListener("click", suppressHoldClick, true);
       };
       m.on("moveend zoomend resize", () => {
         updateAnchor();
@@ -201,12 +281,22 @@ export default function BeaconMap(props: MapProps) {
         setViewVersion((version) => version + 1);
       });
       m.on("click", (e) => {
+        if (Date.now() < suppressClickUntil) return;
         if (latest.current.onPick)
           latest.current.onPick(e.latlng.lat, e.latlng.lng);
         else latest.current.onMapTap?.();
       });
       m.on("contextmenu", (event) => {
-        if (!latest.current.onPick)
+        cancelHold();
+        if (
+          !latest.current.onPick &&
+          Date.now() >= suppressClickUntil &&
+          emptyMapTarget(event.originalEvent.target)
+        ) {
+          if (touchOrigin) {
+            longPressFired = true;
+            suppressClickUntil = Date.now() + 1000;
+          }
           latest.current.onLongPress?.({
             coordinate: {
               latitude: event.latlng.lat,
@@ -214,6 +304,7 @@ export default function BeaconMap(props: MapProps) {
             },
             point: event.containerPoint,
           });
+        }
       });
       setReady(true);
     });
@@ -295,6 +386,7 @@ export default function BeaconMap(props: MapProps) {
     locations,
     profiles,
     selected,
+    selectionIsTemporary = false,
     selectedActivityId = null,
     focused,
     fullScreen,
@@ -866,11 +958,15 @@ export default function BeaconMap(props: MapProps) {
         });
     if (selected && isValidCoordinate(selected))
       L.marker([selected.latitude, selected.longitude], {
+        interactive: !selectionIsTemporary,
+        keyboard: !selectionIsTemporary,
         icon: L.divIcon({
-          html: `<span style="position:relative;width:34px;height:34px;border:2px solid ${colors.green};border-radius:50%;background:${colors.lime};display:flex;align-items:center;justify-content:center;color:${colors.green};font-size:22px;font-weight:700;box-shadow:0 3px 10px #172c2940"><span style="position:absolute;top:24px;z-index:-1;width:12px;height:12px;background:${colors.green};transform:rotate(45deg);border-radius:2px"></span>+</span>`,
+          html: selectionIsTemporary
+            ? `<span data-testid="map-temporary-pin" data-latitude="${selected.latitude}" data-longitude="${selected.longitude}" role="img" aria-label="Selected map location" style="display:block;width:26px;height:32px;filter:drop-shadow(0 2px 4px #0005)"><svg width="26" height="32" viewBox="0 0 24 28" fill="${colors.white}" stroke="${colors.green}" stroke-width="2"><path d="M21 10c0 7-9 15-9 15S3 17 3 10a9 9 0 0 1 18 0Z"/><circle cx="12" cy="10" r="3" fill="${colors.green}" stroke="none"/></svg></span>`
+            : `<span style="position:relative;width:34px;height:34px;border:2px solid ${colors.green};border-radius:50%;background:${colors.lime};display:flex;align-items:center;justify-content:center;color:${colors.green};font-size:22px;font-weight:700;box-shadow:0 3px 10px #172c2940"><span style="position:absolute;top:24px;z-index:-1;width:12px;height:12px;background:${colors.green};transform:rotate(45deg);border-radius:2px"></span>+</span>`,
           className: "beacon-marker",
-          iconSize: [44, 50],
-          iconAnchor: [22, 50],
+          iconSize: selectionIsTemporary ? [26, 32] : [44, 50],
+          iconAnchor: selectionIsTemporary ? [13, 32] : [22, 50],
         }),
       }).addTo(group);
     if (
@@ -919,6 +1015,7 @@ export default function BeaconMap(props: MapProps) {
     locations,
     profiles,
     selected,
+    selectionIsTemporary,
     selectedActivityId,
     showAvatars,
     now,

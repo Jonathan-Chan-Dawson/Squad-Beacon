@@ -1,7 +1,7 @@
 Maps feature
 
 - screens/MapScreen.tsx: full-map tab; coordinates search, safe area/context, inline discovery, area/compass, previews, and map options.
-- Map side controls: direct pin-to-create action; MapCompassSheet renders compact inline compass/search actions in a collapsible side menu. MapStyleControls is shared with MapOptions and uses the existing device preferences; additional map settings retain their existing sheet.
+- Map side controls: direct pin-to-create action and a compact compass toolbar for location, overview, everywhere, and place search. Map type lives in a secondary display menu; additional map settings retain their existing sheet and device preferences.
 - MapExplorationHeader.tsx: compact accessible search, area/count row, quick-scope chips, reduced-motion inline filter tray, and Search this area action.
 - AdvancedMapFilters.tsx: progressive People & groups, Activity, Time & place, Joining, and Plans sections in a sticky-footer partial Sheet.
 - filtering.ts: shared privacy-first Beacon filter selectors for Map and Upcoming, including local-date overlap and capacity/RSVP semantics; gates raw meeting-place details through the canonical profile-preview rule.
@@ -18,3 +18,8 @@ Maps feature
 - placeSearch.ts: validates bounded worldwide results without persistent caching.
 - searchWorldwidePlaces.ts: authenticated Places proxy client; no Google key in the app.
 - WorldwidePlaceSearch.tsx: explicit worldwide search, provider credits, and platform-safe result actions.
+
+- Final map controls: search includes Explore area; audience scopes scroll separately from fixed Now/Filters. Context focus chips use their own rail. Share location opens the existing consent flow; active sharing exposes Stop/Manage.
+- MapControlPopover.tsx: shared leftward anchored surfaces with outside-tap shield, Escape/Android Back dismissal, reduced motion, and screen bounds. Navigation, map-area weather, and Map Display are independently accessible and mutually exclusive.
+- mapWeather.ts: debounced Open-Meteo current conditions, bounded ten-minute area cache, validation and unavailable/loading handling; persisted Show Weather preference. Native bearing callbacks support heading-only north reset; Leaflet has no compass.
+- soloActivity.ts, MapPersonPreview.tsx: privacy-checked current solo Status Notes, compact activity previews and existing raised-hands reactions. The 202610120001 migration enables consented add/remove on visible current statuses without changing RLS or creating RSVPs.

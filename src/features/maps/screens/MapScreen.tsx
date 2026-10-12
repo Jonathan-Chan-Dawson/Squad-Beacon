@@ -7,6 +7,7 @@ import React, {
   useState,
 } from "react";
 import {
+  ActivityIndicator,
   KeyboardAvoidingView,
   Animated,
   Linking,
@@ -25,7 +26,26 @@ import {
 } from "expo-router";
 import * as Location from "expo-location";
 import * as Network from "expo-network";
-import { Compass, MapPin, Plus, UserRoundPlus } from "lucide-react-native";
+import {
+  Compass,
+  Navigation,
+  Radio,
+  Sun,
+  Moon,
+  Cloud,
+  CloudFog,
+  CloudRain,
+  CloudLightning,
+  Snowflake,
+  Layers,
+  Globe2,
+  LocateFixed,
+  MapPin,
+  Maximize,
+  Plus,
+  Settings2,
+  UserRoundPlus,
+} from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import BeaconMap, {
   type MapControlCommand,
@@ -88,14 +108,9 @@ import { SquadProfilePreview } from "@/src/features/people/previews/SquadProfile
 import { canOpenSquadProfile } from "@/src/features/people/squadProfile";
 import { SpaceProfilePreview } from "@/src/features/spaces/SpaceProfilePreview";
 import { activeOrganizationRole } from "@/src/features/organizations/domain";
-import {
-  DemoChip,
-  uiHaptics,
-  useReducedMotion,
-} from "@/src/shared/design-system";
+import { uiHaptics, useReducedMotion } from "@/src/shared/design-system";
 import { tokens } from "@/src/theme";
 import { MapSearchOverlay } from "@/src/features/maps/MapSearchOverlay";
-import { MapCompassSheet } from "@/src/features/maps/MapCompassSheet";
 import { SonarSharingIndicator } from "@/src/features/maps/SonarSharingIndicator";
 import {
   activeSonarSession,
@@ -119,7 +134,9 @@ import {
   nearPulsePlace,
 } from "@/src/features/maps/pulseMapPolicy";
 import { classifyPlaceCategory } from "@/src/features/maps/placeCategories";
-import { MapOptions } from "@/src/features/maps/MapOptions";
+import { MapControlPopover, MapNavigationRow } from "../MapControlPopover";
+import { useMapWeather, weatherCondition } from "../mapWeather";
+import { MapOptions, MapStyleControls } from "@/src/features/maps/MapOptions";
 import { MapContextMenu } from "@/src/features/maps/MapContextMenu";
 import {
   readMapDevicePreferences,
@@ -147,12 +164,18 @@ const defaultFilters = {
 
 function MapControl({
   label,
+  hint,
   onPress,
   children,
   expanded,
+  selected,
+  disabled,
 }: {
   expanded?: boolean;
+  selected?: boolean;
+  disabled?: boolean;
   label: string;
+  hint?: string;
   onPress: () => void;
   children: React.ReactNode;
 }) {
@@ -161,20 +184,27 @@ function MapControl({
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
-      accessibilityState={expanded === undefined ? undefined : { expanded }}
+      accessibilityHint={hint}
+      accessibilityState={{
+        ...(expanded === undefined ? {} : { expanded }),
+        ...(selected === undefined ? {} : { selected }),
+      }}
       aria-expanded={expanded}
+      disabled={disabled}
       onPress={onPress}
-      style={{
+      style={({ pressed }) => ({
         width: 44,
         height: 44,
         alignItems: "center",
         justifyContent: "center",
         borderRadius: 22,
         borderWidth: 1,
-        borderColor: colors.line,
-        backgroundColor: colors.white + "E8",
+        borderColor: selected ? colors.green : colors.line,
+        backgroundColor: selected ? colors.lime + "66" : colors.white + "E8",
         boxShadow: "0 3px 12px #132d2926",
-      }}
+        opacity: disabled ? 0.55 : pressed ? 0.78 : 1,
+        transform: [{ scale: pressed ? 0.96 : 1 }],
+      })}
     >
       {children}
     </Pressable>
@@ -213,6 +243,8 @@ export default function MapScreen() {
   const [contextPoint, setContextPoint] = useState<{
     x: number;
     y: number;
+    latitude: number;
+    longitude: number;
   } | null>(null);
   const [addUpdate, setAddUpdate] = useState(false);
   const [initialAnswers, setInitialAnswers] = useState<
@@ -286,17 +318,24 @@ export default function MapScreen() {
   const [compassBusy, setCompassBusy] = useState(false);
   const [compassMessage, setCompassMessage] = useState("");
   const [compassSheetOpen, setCompassSheetOpen] = useState(false);
-  const [compassReveal] = useState(() => new Animated.Value(0));
-  useEffect(() => {
-    compassReveal.stopAnimation();
-    compassReveal.setValue(0);
-    if (compassSheetOpen)
-      Animated.timing(compassReveal, {
-        toValue: 1,
-        duration: reducedMotion ? 120 : 180,
-        useNativeDriver: true,
-      }).start();
-  }, [compassSheetOpen, compassReveal, reducedMotion]);
+  const [mapControlSettingsOpen, setMapControlSettingsOpen] = useState(false);
+  const [weatherOpen, setWeatherOpen] = useState(false);
+  const [weatherButtonWidth, setWeatherButtonWidth] = useState(120);
+  const [bearing, setBearing] = useState(0);
+  const [sheetMapHeight, setSheetMapHeight] = useState<number | null>(null);
+
+  const closePopovers = useCallback(() => {
+    setCompassSheetOpen(false);
+    setMapControlSettingsOpen(false);
+    setWeatherOpen(false);
+  }, []);
+  const onSheetMapHeight = useCallback(
+    (height: number) => {
+      setSheetMapHeight(height);
+      closePopovers();
+    },
+    [closePopovers],
+  );
   const [selected, setSelected] = useState<string | null>(null);
   const [person, setPerson] = useState<string | null>(null);
   const [mapAnchor, setMapAnchor] = useState<{ x: number; y: number } | null>(
@@ -327,10 +366,40 @@ export default function MapScreen() {
     null,
   );
   const [placeSearchOpen, setPlaceSearchOpen] = useState(false);
-  const [searchPlaceOpen, setSearchPlaceOpen] = useState(false);
   const [headerHeight, setHeaderHeight] = useState(0);
   const [createdNotice, setCreatedNotice] = useState(false);
   const [viewport, setViewport] = useState<MapViewport | null>(null);
+  const weather = useMapWeather(
+    viewport,
+    mapPreferences.showWeather && mapIsFocused,
+  );
+  const condition = weather.value
+    ? weatherCondition(weather.value.code, weather.value.isDay)
+    : null;
+  const WeatherIcon =
+    (
+      {
+        sun: Sun,
+        moon: Moon,
+        cloud: Cloud,
+        fog: CloudFog,
+        rain: CloudRain,
+        storm: CloudLightning,
+        snow: Snowflake,
+      } as const
+    )[condition?.icon as "sun"] ?? Cloud;
+
+  useEffect(() => {
+    // Defer dismissal to the next frame as route selection or map scale settles.
+    const frame = requestAnimationFrame(closePopovers);
+    return () => cancelAnimationFrame(frame);
+  }, [selected, person, detailTab, closePopovers]);
+  useEffect(() => {
+    if (weather.visible) return;
+    const frame = requestAnimationFrame(() => setWeatherOpen(false));
+    return () => cancelAnimationFrame(frame);
+  }, [weather.visible]);
+
   const [targetRevision, setTargetRevision] = useState(0);
   const pulse = usePulse({
     enabled: preferencesReady && mapPreferences.liveUpdates && mapIsFocused,
@@ -360,6 +429,21 @@ export default function MapScreen() {
   function setPulsePlace(place: PulsePlace | null) {
     setPulseSelection(place ? { scope: pulseScopeKey, place } : null);
   }
+  function dismissLocationMenu() {
+    setContextPoint(null);
+    if (contextPoint) setPulsePlace(null);
+  }
+  useEffect(() => {
+    // Clear stale map anchors after the provider/focus transition settles.
+    const frame = requestAnimationFrame(() => {
+      if (!pulsePlace) setContextPoint(null);
+      else if (!mapIsFocused && contextPoint) {
+        setContextPoint(null);
+        setPulseSelection(null);
+      }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [mapIsFocused, pulsePlace, contextPoint]);
 
   const knownPulsePlaces = useMemo(
     () => [
@@ -493,7 +577,7 @@ export default function MapScreen() {
       if (gestureInProgress.current) return;
       gestureInProgress.current = true;
       setCalm(true);
-      setContextPoint(null);
+      dismissLocationMenu();
     } else
       idleTimer.current = setTimeout(() => {
         setCalm(false);
@@ -513,8 +597,6 @@ export default function MapScreen() {
     const canonicalPlace = existing
       ? {
           ...place,
-          lat: existing.lat,
-          lng: existing.lng,
           category: existing.category,
         }
       : place;
@@ -539,6 +621,7 @@ export default function MapScreen() {
   }
   function createAtPulsePlace() {
     if (!pulsePlace) return;
+    dismissLocationMenu();
     router.push({
       pathname: "/create",
       params: {
@@ -547,6 +630,12 @@ export default function MapScreen() {
         placeLabel: pulsePlace.name,
       },
     });
+  }
+  function directionsAtPulsePlace() {
+    if (!pulsePlace) return;
+    const url = physicalDirectionsUrl(pulsePlace.lat, pulsePlace.lng);
+    dismissLocationMenu();
+    if (url) void Linking.openURL(url).catch(() => {});
   }
 
   useEffect(() => {
@@ -1222,18 +1311,15 @@ export default function MapScreen() {
   ]);
 
   const selectedQuickFilter: MapQuickFilter | null =
-    exploration.filters.time === "Now"
-      ? "Now"
-      : exploration.filters.audience === "Friends"
-        ? "Friends"
-        : exploration.filters.audience === "Squads"
-          ? "Squads"
-          : exploration.filters.audience === "Public"
-            ? "Public"
-            : "All";
+    exploration.filters.audience === "Friends"
+      ? "Friends"
+      : exploration.filters.audience === "Squads"
+        ? "Squads"
+        : exploration.filters.audience === "Public"
+          ? "Public"
+          : "All";
 
   const activeSonar = activeSonarSession(data.locations, userId, now);
-  const compassSearchQuery = exploration.query;
   const recentQueries =
     recentSearchState.viewerId === userId
       ? recentSearchState.queries
@@ -1401,7 +1487,6 @@ export default function MapScreen() {
       );
     }
     setPlaceSearchOpen(false);
-    setSearchPlaceOpen(false);
     setCompassSheetOpen(false);
   }
 
@@ -1445,7 +1530,6 @@ export default function MapScreen() {
         ),
       });
     setPlaceSearchOpen(false);
-    setSearchPlaceOpen(false);
     if (isCity) setPulsePlace(null);
     setCompassSheetOpen(false);
   }
@@ -1569,6 +1653,7 @@ export default function MapScreen() {
   }
 
   function chooseQuickFilter(filter: MapQuickFilter) {
+    closePopovers();
     if (filter === "All") {
       resetFilters();
       return;
@@ -1664,7 +1749,6 @@ export default function MapScreen() {
     exploration.setQuery(queryValue);
     setPlaceSearchOpen(true);
     setCompassSheetOpen(false);
-    setSearchPlaceOpen(false);
   }
 
   function openActivityDetails(id: string, tab: MapBeaconFeature = "overview") {
@@ -1733,17 +1817,115 @@ export default function MapScreen() {
     : [];
   const headerTop = insets.top + 7;
   const mapBottomClearance = 24;
+  // An expanded sheet leaves only its exposed map available for floating controls.
+  const controlsTop = headerTop + headerHeight - 44;
+  const availableControlHeight = Math.max(
+    0,
+    (detailTab
+      ? (sheetMapHeight ?? mapSize.height * 0.3)
+      : mapSize.height - insets.bottom - 24) -
+      controlsTop -
+      8,
+  );
+  const controlsVisible = availableControlHeight >= 44;
+  const weatherControlVisible = weather.visible && availableControlHeight >= 98;
+  const displayControlVisible =
+    availableControlHeight >= (weatherControlVisible ? 152 : 98);
   const activeAreaTarget = explorationTarget;
   const activeSearchVisible = placeSearchOpen || params.search === "yes";
   const shareIndicator = (
-    <View style={{ flexDirection: "row", alignItems: "center", gap: 7 }}>
+    <View
+      pointerEvents="box-none"
+      style={{ flexDirection: "row", alignItems: "center", gap: 7 }}
+    >
+      {!activeSonar && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Share location"
+          onPress={() => {
+            closePopovers();
+            router.push("/location");
+          }}
+          style={{ minHeight: 44, justifyContent: "center" }}
+        >
+          <View
+            style={{
+              minHeight: 32,
+              paddingHorizontal: 10,
+              borderRadius: 18,
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 5,
+              backgroundColor: colors.white + "E8",
+            }}
+          >
+            <Radio size={13} color={colors.green} />
+            <Text style={{ color: colors.ink, fontSize: 12 }}>
+              Share location
+            </Text>
+          </View>
+        </Pressable>
+      )}
       <SonarSharingIndicator
+        compact
         session={activeSonar}
         onExtend={() =>
           router.push({ pathname: "/location", params: { extend: "yes" } })
         }
       />
     </View>
+  );
+  const renderCompassActions = () => (
+    <>
+      <MapNavigationRow
+        label="Center on Me"
+        icon={LocateFixed}
+        disabled={compassBusy}
+        onPress={() => void handleUseMyLocation()}
+      />
+      <MapNavigationRow
+        label="Return to Overview"
+        icon={Maximize}
+        onPress={() => {
+          closePopovers();
+          setControlCommand((previous) => ({
+            kind: "fit",
+            revision: (previous?.revision ?? 0) + 1,
+          }));
+        }}
+      />
+      <MapNavigationRow
+        label="Explore Everywhere"
+        icon={Globe2}
+        onPress={() => {
+          exploration.setArea(null);
+          closePopovers();
+          setControlCommand((previous) => ({
+            kind: "fit",
+            revision: (previous?.revision ?? 0) + 1,
+          }));
+        }}
+      />
+      <MapNavigationRow
+        label="Pin a Location"
+        icon={MapPin}
+        onPress={() => {
+          closePopovers();
+          startPickingLocation();
+        }}
+      />
+      {compassBusy && <ActivityIndicator size="small" color={colors.green} />}
+      {compassMessage ? (
+        <>
+          <Text style={styles.muted}>{compassMessage}</Text>
+          <MapNavigationRow
+            label="Open Settings"
+            icon={Settings2}
+            onPress={openSettings}
+          />
+        </>
+      ) : null}
+    </>
   );
 
   return (
@@ -1786,13 +1968,21 @@ export default function MapScreen() {
           onPlace={choosePulsePlace}
           onGestureChange={gestureChanged}
           onLongPress={(touch) => {
+            if (
+              pickMode ||
+              !isValidCoordinate(touch.coordinate) ||
+              !Number.isFinite(touch.point.x) ||
+              !Number.isFinite(touch.point.y)
+            )
+              return;
             choosePulsePlace(
               areaPulsePlace(
                 touch.coordinate.latitude,
                 touch.coordinate.longitude,
               ),
             );
-            setContextPoint(touch.point);
+            setContextPoint({ ...touch.point, ...touch.coordinate });
+            uiHaptics.light();
           }}
           hideControls
           viewportInsets={{
@@ -1838,7 +2028,8 @@ export default function MapScreen() {
                   })
               : undefined
           }
-          selected={pickedMapPoint}
+          selected={pickedMapPoint ?? contextPoint}
+          selectionIsTemporary={!!contextPoint && !pickedMapPoint}
           onActivity={(id) => chooseBeacon(id)}
           onPerson={choosePerson}
           clusterPersonCount={countClusterPeople}
@@ -1892,6 +2083,10 @@ export default function MapScreen() {
             }
           }}
           onMapTap={() => {
+            if (contextPoint) {
+              dismissLocationMenu();
+              return;
+            }
             setPublicSelection(null);
             setPulsePlace(null);
             setContextPoint(null);
@@ -1912,6 +2107,7 @@ export default function MapScreen() {
               ? () => setTargetRevision((revision) => revision + 1)
               : undefined
           }
+          onBearingChange={setBearing}
           onViewportChange={handleViewportChange}
         />
       ) : null}
@@ -1928,6 +2124,7 @@ export default function MapScreen() {
       />
 
       <View
+        pointerEvents="box-none"
         style={{
           position: "absolute",
           top: headerTop,
@@ -1968,14 +2165,26 @@ export default function MapScreen() {
           calm={calm}
           onQuickFilter={chooseQuickFilter}
           selectedQuickFilter={selectedQuickFilter}
-          onOpenFilters={() => setAdvancedFiltersOpen(true)}
+          nowSelected={exploration.filters.time === "Now"}
+          onExploreArea={() => {
+            closePopovers();
+            setPlaceSearchOpen(false);
+            setPlaceSearchOpen(true);
+          }}
+          onOpenFilters={() => {
+            closePopovers();
+            setAdvancedFiltersOpen(true);
+          }}
           activeFilterCount={activeFilterCount}
           activeChips={activeChips}
           onRemoveChip={removeActiveChip}
           onClearContexts={
             contextViews.length >= 3 ? () => clearContexts() : undefined
           }
-          onSearchFocus={() => setPlaceSearchOpen(true)}
+          onSearchFocus={() => {
+            closePopovers();
+            setPlaceSearchOpen(true);
+          }}
           loading={loading}
           sharingIndicator={shareIndicator}
           onHeightChange={setHeaderHeight}
@@ -2086,27 +2295,6 @@ export default function MapScreen() {
             onChooseWorldPlace={exploreWorldPlace}
             onStartPickingLocation={startPickingLocation}
           />
-        </View>
-      ) : null}
-
-      {demo &&
-      mapIsFocused &&
-      !panel &&
-      !pickMode &&
-      !pickedMapPoint &&
-      !placeSearchOpen ? (
-        <View
-          pointerEvents="none"
-          style={{
-            position: "absolute",
-            top: headerTop + headerHeight + tokens.space.xl,
-            left: tokens.space.md,
-            right: tokens.space.md,
-            alignItems: "flex-start",
-            zIndex: 8,
-          }}
-        >
-          <DemoChip />
         </View>
       ) : null}
 
@@ -2243,139 +2431,233 @@ export default function MapScreen() {
         </View>
       ) : null}
 
-      {compassSheetOpen && !pickMode && !pickedMapPoint && (
-        <Pressable
-          testID="map-side-menu-dismiss-area"
-          accessibilityRole="button"
-          accessibilityLabel="Dismiss map controls by tapping the map"
-          onPress={() => {
-            setCompassSheetOpen(false);
-            setSearchPlaceOpen(false);
-          }}
-          style={{
-            position: "absolute",
-            top: headerTop + headerHeight + 6,
-            bottom: 0,
-            left: 0,
-            right: 0,
-            zIndex: 7,
-          }}
-        />
-      )}
-      {!pickMode && !pickedMapPoint ? (
-        <Animated.View
+      {(compassSheetOpen || mapControlSettingsOpen || weatherOpen) &&
+        !pickMode &&
+        !pickedMapPoint && (
+          <Pressable
+            testID="map-toolbar-dismiss-area"
+            accessibilityRole="button"
+            accessibilityLabel="Dismiss map controls by tapping the map"
+            onPress={closePopovers}
+            style={{
+              position: "absolute",
+              top: 0,
+              bottom: 0,
+              left: 0,
+              right: 0,
+              zIndex: detailTab ? 31 : 20,
+            }}
+          />
+        )}
+      {!pickMode &&
+      !pickedMapPoint &&
+      !activeSearchVisible &&
+      controlsVisible ? (
+        <View
           pointerEvents="box-none"
           style={{
             position: "absolute",
-            top: headerTop + headerHeight + 10,
-            bottom: mapBottomClearance,
-            right: tokens.layout.screenGutter,
-            justifyContent: "flex-start",
-            gap: 12,
-            zIndex: 8,
-            opacity: rightOpacity,
+            top: controlsTop,
+            right: Math.max(insets.right + 12, 16),
+            height: availableControlHeight,
+            alignItems: "flex-end",
+            gap: 10,
+            zIndex: detailTab ? 32 : 21,
           }}
         >
-          {offline && <Text style={styles.label}>Offline</Text>}
-          <MapControl
-            label="Pin a location to create a Beacon"
-            onPress={startPickingLocation}
-          >
-            <MapPin size={19} color={colors.green} />
-          </MapControl>
-          <MapControl
-            label="Compass"
-            expanded={compassSheetOpen}
-            onPress={() => {
-              setCompassSheetOpen((open) => !open);
-              setSearchPlaceOpen(false);
-            }}
-          >
-            <Compass size={19} color={colors.green} />
-          </MapControl>
-          {compassSheetOpen && (
-            <Animated.View
-              style={{
-                opacity: compassReveal,
-                transform: reducedMotion
-                  ? []
-                  : [
-                      {
-                        translateY: compassReveal.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [12, 0],
-                        }),
-                      },
-                    ],
-                position: "absolute",
-                right: 52,
-                top: 0,
-                width: Math.min(250, mapSize.width - 84),
-                borderRadius: 18,
-                borderWidth: 1,
-                borderColor: colors.line,
-                backgroundColor: colors.white,
-                boxShadow: "0 8px 28px #142e3033",
-                overflow: "hidden",
+          <View style={{ flexDirection: "row", gap: 6 }}>
+            {Platform.OS !== "web" &&
+              Math.abs(((bearing + 540) % 360) - 180) > 3 && (
+                <MapControl
+                  label="Reset map north"
+                  onPress={() =>
+                    setControlCommand((previous) => ({
+                      kind: "north",
+                      revision: (previous?.revision ?? 0) + 1,
+                    }))
+                  }
+                >
+                  <View style={{ transform: [{ rotate: `${-bearing}deg` }] }}>
+                    <Compass size={17} color={colors.green} />
+                  </View>
+                </MapControl>
+              )}
+            <MapControl
+              label="Navigation"
+              expanded={compassSheetOpen}
+              selected={compassSheetOpen}
+              onPress={() => {
+                const next = !compassSheetOpen;
+                closePopovers();
+                setCompassSheetOpen(next);
+                setPlaceSearchOpen(false);
               }}
             >
-              <MapCompassSheet
-                visible={compassSheetOpen}
-                inline
-                mapStyle={mapStyle}
-                onMapStyle={(value) => {
-                  setMapStyle(value);
-                  updateMapPreference({ style: value });
-                }}
-                onOptions={() => {
-                  setCompassSheetOpen(false);
-                  setOptionsOpen(true);
-                }}
-                maxHeight={Math.max(
-                  120,
-                  mapSize.height -
-                    headerTop -
-                    headerHeight -
-                    mapBottomClearance -
-                    32,
-                )}
-                onClose={() => {
-                  setCompassSheetOpen(false);
-                  setSearchPlaceOpen(false);
-                }}
-                busy={compassBusy}
-                message={compassMessage}
-                onUseMyLocation={() => void handleUseMyLocation()}
-                onOpenSettings={openSettings}
-                onReturnOverview={() => {
-                  setCompassSheetOpen(false);
-                  setControlCommand((previous) => ({
-                    kind: "fit",
-                    revision: (previous?.revision ?? 0) + 1,
-                  }));
-                }}
-                onExploreEverywhere={() => {
-                  exploration.setArea(null);
-                  setCompassSheetOpen(false);
-                  setControlCommand((previous) => ({
-                    kind: "fit",
-                    revision: (previous?.revision ?? 0) + 1,
-                  }));
-                }}
-                query={compassSearchQuery}
-                onQueryChange={exploration.setQuery}
-                onQuerySubmit={searchSubmit}
-                searchPlaceOpen={searchPlaceOpen}
-                onToggleSearchPlace={() => setSearchPlaceOpen(true)}
-                places={searchPlaceResults}
-                recentQueries={recentQueries}
-                onChoosePlace={exploreSavedPlace}
-                onSelectRecent={chooseRecent}
-                onChooseWorldPlace={exploreWorldPlace}
-              />
-            </Animated.View>
+              <Navigation size={19} color={colors.green} />
+            </MapControl>
+          </View>
+          {weatherControlVisible && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Weather"
+              onLayout={(event) =>
+                setWeatherButtonWidth(event.nativeEvent.layout.width)
+              }
+              accessibilityHint={
+                weather.value
+                  ? `${Math.round(weather.value.temperature)} degrees Fahrenheit, ${condition?.label}`
+                  : "Weather for the viewed map area"
+              }
+              accessibilityState={{ expanded: weatherOpen }}
+              aria-expanded={weatherOpen}
+              onPress={() => {
+                const next = !weatherOpen;
+                closePopovers();
+                setWeatherOpen(next);
+              }}
+              style={{
+                minHeight: 44,
+                paddingHorizontal: 10,
+                maxWidth: Math.min(160, mapSize.width * 0.42),
+                borderRadius: 22,
+                backgroundColor: colors.white,
+                borderWidth: 1,
+                borderColor: weatherOpen ? colors.green : colors.line,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 5,
+              }}
+            >
+              <WeatherIcon size={16} color={colors.green} />
+              <Text
+                numberOfLines={1}
+                style={{ color: colors.ink, fontSize: 12, flexShrink: 1 }}
+              >
+                {weather.value
+                  ? `${Math.round(weather.value.temperature)}° ${condition?.label}`
+                  : weather.loading
+                    ? "Weather…"
+                    : "Unavailable"}
+              </Text>
+            </Pressable>
           )}
-        </Animated.View>
+          {displayControlVisible && (
+            <MapControl
+              label="Map Display"
+              expanded={mapControlSettingsOpen}
+              selected={mapControlSettingsOpen}
+              onPress={() => {
+                const next = !mapControlSettingsOpen;
+                closePopovers();
+                setMapControlSettingsOpen(next);
+              }}
+            >
+              <Layers size={19} color={colors.green} />
+            </MapControl>
+          )}
+          {(compassSheetOpen || mapControlSettingsOpen || weatherOpen) && (
+            <MapControlPopover
+              title={
+                compassSheetOpen
+                  ? "Navigation"
+                  : weatherOpen
+                    ? "Weather"
+                    : "Map Display"
+              }
+              onClose={closePopovers}
+              width={Math.min(
+                236,
+                mapSize.width -
+                  Math.max(insets.right + 12, 16) -
+                  (weatherOpen ? weatherButtonWidth + 8 : 52) -
+                  insets.left -
+                  12,
+              )}
+              right={weatherOpen ? weatherButtonWidth + 8 : 52}
+              top={Math.max(
+                0,
+                Math.min(
+                  compassSheetOpen
+                    ? 0
+                    : weatherOpen
+                      ? 54
+                      : weatherControlVisible
+                        ? 108
+                        : 54,
+                  availableControlHeight - (compassSheetOpen ? 250 : 210),
+                ),
+              )}
+              maxHeight={availableControlHeight}
+            >
+              {compassSheetOpen ? (
+                renderCompassActions()
+              ) : weatherOpen ? (
+                <>
+                  <Text style={styles.label}>Viewed map area</Text>
+                  {weather.value ? (
+                    <>
+                      <Text style={styles.h2}>
+                        {Math.round(weather.value.temperature)}°F ·{" "}
+                        {condition?.label}
+                      </Text>
+                      <Text style={styles.body}>
+                        Feels like {Math.round(weather.value.feelsLike)}°F
+                      </Text>
+                      <Text style={styles.muted}>
+                        Humidity {Math.round(weather.value.humidity)}% · Wind{" "}
+                        {Math.round(weather.value.wind)} mph
+                      </Text>
+                    </>
+                  ) : (
+                    <Text accessibilityLiveRegion="polite" style={styles.muted}>
+                      {weather.loading
+                        ? "Loading current weather…"
+                        : "Weather is unavailable. Try again shortly."}
+                    </Text>
+                  )}
+                  {!weather.value && !weather.loading && (
+                    <Button
+                      title="Retry Weather"
+                      compact
+                      secondary
+                      onPress={weather.retry}
+                    />
+                  )}
+                  <Pressable
+                    accessibilityRole="link"
+                    accessibilityLabel="Weather data by Open-Meteo"
+                    onPress={() =>
+                      void Linking.openURL("https://open-meteo.com/")
+                    }
+                    style={{ minHeight: 44, justifyContent: "center" }}
+                  >
+                    <Text style={styles.muted}>Weather data by Open-Meteo</Text>
+                  </Pressable>
+                </>
+              ) : (
+                <>
+                  <MapStyleControls
+                    style={mapStyle}
+                    onStyle={(value) => {
+                      setMapStyle(value);
+                      updateMapPreference({ style: value });
+                    }}
+                  />
+                  <Button
+                    title="More Map Settings"
+                    compact
+                    secondary
+                    onPress={() => {
+                      closePopovers();
+                      setOptionsOpen(true);
+                    }}
+                  />
+                </>
+              )}
+            </MapControlPopover>
+          )}
+          {offline && <Text style={styles.label}>Offline</Text>}
+        </View>
       ) : null}
 
       {pickMode || pickedMapPoint ? (
@@ -2555,6 +2837,7 @@ export default function MapScreen() {
       ) : null}
       {selected && detailTab ? (
         <BeaconOverviewSheet
+          onMapSpaceChange={onSheetMapHeight}
           key={selected}
           onShowContext={focusContext}
           beaconId={selected}
@@ -2601,6 +2884,7 @@ export default function MapScreen() {
               confirmedUntil={pulse.confirmedUntil(pulsePlace.placeKey)}
               lastAnswers={pulse.lastAnswers(pulsePlace.placeKey)}
               onCreateBeacon={createAtPulsePlace}
+              onDirections={directionsAtPulsePlace}
               onPing={() =>
                 router.push({
                   pathname: "/councils",
@@ -2635,10 +2919,8 @@ export default function MapScreen() {
           }}
           onUpdate={() => openAddUpdate()}
           onCreate={createAtPulsePlace}
-          onDirections={() => {
-            const url = physicalDirectionsUrl(pulsePlace.lat, pulsePlace.lng);
-            if (url) void Linking.openURL(url).catch(() => {});
-          }}
+          onClose={dismissLocationMenu}
+          onDirections={directionsAtPulsePlace}
         />
       ) : null}
       <AddLiveUpdateSheet
@@ -2663,6 +2945,8 @@ export default function MapScreen() {
           setMapStyle(value);
           updateMapPreference({ style: value });
         }}
+        showWeather={mapPreferences.showWeather}
+        onShowWeather={(value) => updateMapPreference({ showWeather: value })}
         showFriends={mapPreferences.showFriends}
         friendsApplicable={showAvatars && friends.length > 0}
         onShowFriends={(value) => updateMapPreference({ showFriends: value })}
@@ -2675,7 +2959,7 @@ export default function MapScreen() {
         }}
         onExplore={() => {
           setOptionsOpen(false);
-          setCompassSheetOpen(true);
+          setPlaceSearchOpen(true);
         }}
       />
       {mapPreferences.liveUpdates && pulse.error && pulsePlace ? (

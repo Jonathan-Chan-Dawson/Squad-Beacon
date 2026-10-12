@@ -128,7 +128,7 @@ const panelTitle: Record<Exclude<Panel, null>, string> = {
 };
 const hourLabel = (hour: number) => `${String(hour).padStart(2, "0")}:00`;
 
-export default function RedesignedSettingsScreen() {
+export default function SettingsScreen() {
   const { data, userId, loading, refresh } = useBeacon();
   const profile =
     data.viewer_id === userId

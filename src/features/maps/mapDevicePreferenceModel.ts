@@ -3,6 +3,7 @@ import type { MapStyle } from "./components/BeaconMap";
 export type MapDevicePreferences = {
   liveUpdates: boolean;
   showFriends: boolean;
+  showWeather: boolean;
   style: MapStyle;
   camera?: MapViewport;
   hintsSeen: number;
@@ -10,6 +11,7 @@ export type MapDevicePreferences = {
 export const defaultMapDevicePreferences: MapDevicePreferences = {
   liveUpdates: true,
   showFriends: true,
+  showWeather: true,
   style: "standard",
   hintsSeen: 0,
 };
@@ -38,6 +40,7 @@ export function parseMapDevicePreferences(
   return {
     liveUpdates: row.liveUpdates !== false,
     showFriends: row.showFriends !== false,
+    showWeather: row.showWeather !== false,
     style: row.style === "satellite" ? "satellite" : "standard",
     hintsSeen:
       typeof row.hintsSeen === "number" && Number.isFinite(row.hintsSeen)

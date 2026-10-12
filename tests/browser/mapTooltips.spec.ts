@@ -1,29 +1,63 @@
 import { expect, test } from "@playwright/test";
 
-test("side menu stays within phone bounds and map taps dismiss it", async ({
+test("compass toolbar stays within phone bounds and map taps collapse it", async ({
   page,
 }) => {
   await page.goto("/");
   await page.getByRole("button", { name: /Explore the demo/ }).click();
+  const discoveryHint = page.getByRole("button", {
+    name: "Got it",
+    exact: true,
+  });
+  if (await discoveryHint.isVisible()) await discoveryHint.click();
   for (const viewport of [
     { width: 320, height: 568 },
     { width: 390, height: 844 },
   ]) {
     await page.setViewportSize(viewport);
-    await page.getByRole("button", { name: "Compass", exact: true }).click();
-    const menu = page.getByTestId("map-side-menu");
-    await expect(menu).toBeVisible();
-    const bounds = await menu.boundingBox();
+    const compass = page.getByRole("button", {
+      name: "Navigation",
+      exact: true,
+    });
+    await expect(compass).toBeVisible();
+    await expect(compass).toHaveAttribute("aria-expanded", "false");
+    const compassBounds = await compass.boundingBox();
+    expect(compassBounds!.x).toBeGreaterThanOrEqual(0);
+    expect(compassBounds!.x + compassBounds!.width).toBeLessThanOrEqual(
+      viewport.width,
+    );
+    expect(compassBounds!.y + compassBounds!.height).toBeLessThanOrEqual(
+      viewport.height,
+    );
+    await page.screenshot({
+      path: `test-results/map-compass-collapsed-${viewport.width}.png`,
+    });
+    await compass.click();
+    const toolbar = page.getByTestId("map-navigation-popover");
+    await expect(toolbar).toBeVisible();
+    for (const action of [
+      "Center on Me",
+      "Return to Overview",
+      "Explore Everywhere",
+      "Pin a Location",
+    ]) {
+      const button = page.getByRole("button", { name: action, exact: true });
+      await expect(button).toBeVisible();
+      const buttonBounds = await button.boundingBox();
+      expect(buttonBounds!.width).toBeGreaterThanOrEqual(44);
+      expect(buttonBounds!.height).toBeGreaterThanOrEqual(44);
+    }
+    const bounds = await toolbar.boundingBox();
     expect(bounds!.x).toBeGreaterThanOrEqual(0);
     expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(viewport.width);
     expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(viewport.height);
     await page.screenshot({
-      path: `test-results/map-side-menu-${viewport.width}.png`,
+      path: `test-results/map-compass-toolbar-${viewport.width}.png`,
     });
     await page
-      .getByTestId("map-side-menu-dismiss-area")
+      .getByTestId("map-toolbar-dismiss-area")
       .click({ position: { x: 6, y: 180 } });
-    await expect(menu).toHaveCount(0);
+    await expect(toolbar).toHaveCount(0);
   }
 });
 
@@ -32,39 +66,43 @@ test("side controls collapse, persist map type, and pin a real Beacon location",
 }) => {
   await page.goto("/");
   await page.getByRole("button", { name: /Explore the demo/ }).click();
-  const pin = page.getByRole("button", {
-    name: "Pin a location to create a Beacon",
-    exact: true,
-  });
-  await expect(pin).toBeVisible();
-  const box = await pin.boundingBox();
-  expect(box!.x).toBeGreaterThan(300);
-  expect(box!.y).toBeLessThan(300);
-  expect(box!.width).toBeGreaterThanOrEqual(44);
-  const compass = page.getByRole("button", { name: "Compass", exact: true });
+  const compass = page.getByRole("button", { name: "Navigation", exact: true });
   await expect(compass).toHaveAttribute("aria-expanded", "false");
   await compass.click();
-  const menu = page.getByTestId("map-side-menu");
-  await expect(menu).toBeVisible();
+  const toolbar = page.getByTestId("map-navigation-popover");
+  await expect(toolbar).toBeVisible();
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await menu
+  await page.getByRole("button", { name: "Map Display", exact: true }).click();
+  const settings = page.getByTestId("map-map-display-popover");
+  await expect(settings).toBeVisible();
+  await settings
     .getByRole("button", { name: "Satellite map", exact: true })
     .click();
   await expect(
-    menu.getByRole("button", { name: "Satellite map", exact: true }),
+    settings.getByRole("button", { name: "Satellite map", exact: true }),
   ).toHaveAttribute("aria-selected", "true");
-  await page.screenshot({ path: "test-results/map-side-menu-390.png" });
-  await page.keyboard.press("Escape");
-  await expect(menu).toHaveCount(0);
+  await expect(
+    settings.getByRole("button", { name: "More Map Settings", exact: true }),
+  ).toBeVisible();
+  await page.screenshot({ path: "test-results/map-compass-settings-390.png" });
+  await page
+    .getByTestId("map-toolbar-dismiss-area")
+    .click({ position: { x: 6, y: 180 } });
+  await expect(toolbar).toHaveCount(0);
   await page.reload();
   await page.getByRole("button", { name: /Explore the demo/ }).click();
-  await compass.click();
+  await page.getByRole("button", { name: "Map Display", exact: true }).click();
   await expect(
-    menu.getByRole("button", { name: "Satellite map", exact: true }),
+    page
+      .getByTestId("map-map-display-popover")
+      .getByRole("button", { name: "Satellite map", exact: true }),
   ).toHaveAttribute("aria-selected", "true");
+  await page.getByRole("button", { name: "Close map display" }).click();
+  await expect(toolbar).toHaveCount(0);
   await compass.click();
-  await expect(menu).toHaveCount(0);
-  await pin.click();
+  await page
+    .getByRole("button", { name: "Pin a Location", exact: true })
+    .click();
   await expect(
     page.getByText("Tap the map to drop a pin", { exact: true }),
   ).toBeVisible();

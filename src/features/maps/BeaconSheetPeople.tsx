@@ -3,7 +3,7 @@ import { View } from "react-native";
 import {
   ActivityDetailPeople,
   type SafeRsvpRow,
-} from "@/components/activity-detail/ActivityDetailPeople";
+} from "@/src/features/beacons/components/activity-detail/ActivityDetailPeople";
 import type { Activity, RSVP } from "@/src/shared/types";
 import { useBeacon } from "@/src/shared/store";
 import { useNow } from "@/src/shared/useNow";

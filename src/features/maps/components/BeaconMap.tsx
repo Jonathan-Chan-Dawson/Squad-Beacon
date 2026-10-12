@@ -20,7 +20,7 @@ export type MapTouchPoint = {
   point: { x: number; y: number };
 };
 export type MapControlCommand = {
-  kind: "zoom-in" | "zoom-out" | "fit" | "restore";
+  kind: "zoom-in" | "zoom-out" | "fit" | "restore" | "north";
   revision: number;
   camera?: MapViewport;
   coordinates?: { latitude: number; longitude: number }[];
@@ -76,12 +76,15 @@ export interface MapProps {
   pulsePopPlaceKey?: string;
   calm?: boolean;
   onViewportChange?: (viewport: MapViewport, userMoved?: boolean) => void;
+  /** Native rotation only; web does not expose an unsupported compass. */
+  onBearingChange?: (bearing: number) => void;
   onOptions?: () => void;
   onRecenter?: () => void;
   controlCommand?: MapControlCommand;
   mapStyle?: MapStyle;
   onPick?: (latitude: number, longitude: number) => void;
   selected?: { latitude: number; longitude: number } | null;
+  selectionIsTemporary?: boolean;
 }
 export default function BeaconMap({
   activities,

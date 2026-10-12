@@ -81,13 +81,14 @@ export default function TabLayout() {
             >
               <View
                 style={{
-                  height: tokens.layout.tabBarHeight,
+                  height: tokens.layout.tabBarHeight + tokens.space.xs,
                   width: "100%",
                   maxWidth: tokens.layout.contentMaxWidth,
                   alignSelf: "center",
                   flexDirection: "row",
                   alignItems: "center",
                   paddingHorizontal: tokens.layout.screenGutter,
+                  paddingTop: tokens.space.xs,
                 }}
               >
                 {items.map(({ name, label, Icon }, index) => {

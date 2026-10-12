@@ -1,3 +1,4 @@
+import { canReactToSoloActivity } from "../features/maps/soloActivity";
 import { isSquadIconKey } from "@/src/features/people/squadIcons";
 import { validatePingAvailability, pingAvailabilityAllowsRsvp } from "@/src/features/planning/availability";
 import { demoPublicBeacons } from "@/src/features/discovery/publicDirectory";
@@ -3400,12 +3401,12 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
   }
   if (action === "react") {
     const activity = d.activities.find((item) => item.id === id);
-    if (!activity || !canWriteBeaconModule(d, activity, uid, "reactions"))
+    if (!activity || !(activity.mode === "solo" ? canReactToSoloActivity(d, activity, uid) : canWriteBeaconModule(d, activity, uid, "reactions")))
       throw new Error("Reactions are paused or unavailable for this beacon.");
     d.reactions = d.reactions.filter(
       (x) => !(x.activity_id === id && x.user_id === uid),
     );
-    d.reactions.push({ activity_id: id, user_id: uid, emoji: "🙌" });
+    if (activity.mode !== "solo" || p.remove !== true) d.reactions.push({ activity_id: id, user_id: uid, emoji: "🙌" });
   }
   if (action === "save_goal") {
     if (id)
