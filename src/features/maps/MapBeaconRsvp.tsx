@@ -1,3 +1,4 @@
+import { MapTooltipButton } from "./MapTooltipShell";
 import React, { useEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
 import { Check } from "lucide-react-native";
@@ -10,7 +11,10 @@ import {
   useDesignTheme,
   useReducedMotion,
 } from "@/src/shared/design-system";
-import { beaconCapacity, isApprovedGoing } from "@/src/features/beacons/permissions";
+import {
+  beaconCapacity,
+  isApprovedGoing,
+} from "@/src/features/beacons/permissions";
 import { canReadBeaconActivity } from "@/src/features/beacons/beaconModules";
 import type { Activity } from "@/src/shared/types";
 
@@ -18,9 +22,11 @@ import type { Activity } from "@/src/shared/types";
 export function MapBeaconRsvp({
   activity,
   compact = false,
+  tooltip = false,
 }: {
   activity: Activity;
   compact?: boolean;
+  tooltip?: boolean;
 }) {
   const { data, userId, act } = useBeacon();
   const { styles } = useTheme();
@@ -35,14 +41,16 @@ export function MapBeaconRsvp({
   }>({ activityId: activity.id, busy: false, error: "", check: false });
   const checkTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rsvp = data.rsvps.find(
-    (candidate) => candidate.activity_id === activity.id && candidate.user_id === userId,
+    (candidate) =>
+      candidate.activity_id === activity.id && candidate.user_id === userId,
   );
   const going = isApprovedGoing(activity, rsvp);
   const pending = rsvp?.status === "requested";
   const capacity = beaconCapacity(data, activity);
   const closed = capacity.closed && !pending && !going;
   const approval =
-    (activity.approval_required || activity.mode === "invite") && !rsvp?.approved;
+    (activity.approval_required || activity.mode === "invite") &&
+    !rsvp?.approved;
   const active =
     activity.status === "scheduled" && Date.parse(activity.ends_at) > now;
   const canRespond =
@@ -71,7 +79,12 @@ export function MapBeaconRsvp({
 
   async function respond(status: "going" | "interested" | "withdraw") {
     const hadGoing = going;
-    setTransient({ activityId: activity.id, busy: true, error: "", check: false });
+    setTransient({
+      activityId: activity.id,
+      busy: true,
+      error: "",
+      check: false,
+    });
     try {
       await act("rsvp", { id: activity.id, status });
       if (status === "going") {
@@ -104,11 +117,14 @@ export function MapBeaconRsvp({
       });
     } finally {
       setTransient((current) =>
-        current.activityId === activity.id ? { ...current, busy: false } : current,
+        current.activityId === activity.id
+          ? { ...current, busy: false }
+          : current,
       );
     }
   }
 
+  const ResponseButton = tooltip ? MapTooltipButton : Button;
   const disabled = busy || closed;
   const mainTitle = going
     ? "I'm Out"
@@ -125,9 +141,15 @@ export function MapBeaconRsvp({
 
   return (
     <View style={{ gap: 5 }}>
-      <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
+      <View
+        style={{
+          flexDirection: "row",
+          gap: tooltip ? 4 : 8,
+          alignItems: "center",
+        }}
+      >
         <View style={{ flex: 1 }}>
-          <Button
+          <ResponseButton
             title={busy ? "Working…" : mainTitle}
             onPress={() => void respond(going ? "withdraw" : "going")}
             disabled={disabled || pending}
@@ -153,7 +175,7 @@ export function MapBeaconRsvp({
         </View>
         {!going && !closed && !pending && (
           <View style={{ flex: 0.82 }}>
-            <Button
+            <ResponseButton
               title={busy ? "Working…" : "Maybe"}
               onPress={() => void respond("interested")}
               disabled={busy || rsvp?.status === "interested"}
@@ -164,7 +186,7 @@ export function MapBeaconRsvp({
         )}
         {pending && (
           <View style={{ flex: 0.82 }}>
-            <Button
+            <ResponseButton
               title={busy ? "Working…" : "Cancel request"}
               onPress={() => void respond("withdraw")}
               disabled={busy}
@@ -175,7 +197,10 @@ export function MapBeaconRsvp({
         )}
       </View>
       {!!error && (
-        <Text accessibilityRole="alert" style={[styles.error, { fontSize: 12 }]}>
+        <Text
+          accessibilityRole="alert"
+          style={[styles.error, { fontSize: 12 }]}
+        >
           {error}
         </Text>
       )}

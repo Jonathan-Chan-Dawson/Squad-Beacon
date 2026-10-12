@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState, type ReactNode } from "react";
-import { Text, View } from "react-native";
+import { Keyboard, Text, View } from "react-native";
 import { FlashList, type FlashListRef } from "@shopify/flash-list";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { MotionPressable } from "@/src/shared/MotionPressable";
@@ -28,6 +28,7 @@ function Bubble({
   profile,
   onRetry,
   retryDisabled,
+  onAuthorPress,
 }: {
   message: CanonicalChatMessage | QueuedChatMessage;
   own: boolean;
@@ -35,6 +36,7 @@ function Bubble({
   profile?: Profile;
   onRetry: (id: string) => void;
   retryDisabled: boolean;
+  onAuthorPress?: (id: string) => void;
 }) {
   const { colors } = useDesignTheme();
   const reducedMotion = useReducedMotion();
@@ -53,8 +55,26 @@ function Bubble({
       }}
     >
       {!own ? (
-        <View style={{ width: 28 }}>
-          {!grouped ? <ProfileAvatar profile={profile} size={28} /> : null}
+        <View style={{ width: 44 }}>
+          {!grouped && profile && onAuthorPress ? (
+            <MotionPressable
+              accessibilityRole="button"
+              accessibilityLabel={`View ${profile.name}'s profile`}
+              onPress={() => {
+                Keyboard.dismiss();
+                onAuthorPress(profile.id);
+              }}
+              style={{
+                minHeight: 44,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <ProfileAvatar profile={profile} size={28} />
+            </MotionPressable>
+          ) : !grouped ? (
+            <ProfileAvatar profile={profile} size={28} />
+          ) : null}
         </View>
       ) : null}
       <View style={{ maxWidth: "82%", gap: 3 }}>
@@ -88,6 +108,23 @@ function Bubble({
         >
           {!own && !grouped ? (
             <Text
+              accessibilityRole={
+                profile && onAuthorPress ? "button" : undefined
+              }
+              accessibilityLabel={
+                profile && onAuthorPress
+                  ? `View ${profile.name}'s profile`
+                  : undefined
+              }
+              onPress={
+                profile && onAuthorPress
+                  ? (event) => {
+                      event.stopPropagation();
+                      Keyboard.dismiss();
+                      onAuthorPress(profile.id);
+                    }
+                  : undefined
+              }
               style={{
                 color: colors.textSecondary,
                 fontSize: 11,
@@ -151,6 +188,7 @@ export function ChatBubbleList({
   onOpener,
   focusedId,
   scopeKey,
+  onAuthorPress,
 }: {
   events: ChatListEvent[];
   viewerId: string | null;
@@ -160,6 +198,7 @@ export function ChatBubbleList({
   onOpener: (body: string) => void;
   focusedId?: string;
   scopeKey: string;
+  onAuthorPress?: (id: string) => void;
 }) {
   const { colors } = useDesignTheme();
   const reducedMotion = useReducedMotion();
@@ -290,6 +329,7 @@ export function ChatBubbleList({
                 profile={profileForAuthor(item.message.authorId)}
                 onRetry={onRetry}
                 retryDisabled={retryDisabled}
+                onAuthorPress={onAuthorPress}
               />
             )}
           </View>

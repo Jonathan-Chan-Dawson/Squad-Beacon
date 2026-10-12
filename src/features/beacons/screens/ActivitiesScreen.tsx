@@ -161,6 +161,7 @@ export default function ActivitiesScreen() {
   useFocusEffect(
     useCallback(() => {
       if (params.filter === "Past") setPage("Past");
+      else if (params.filter === "Upcoming") setPage("Upcoming");
     }, [params.filter]),
   );
 

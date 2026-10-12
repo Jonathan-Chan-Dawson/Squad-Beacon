@@ -37,8 +37,24 @@ for (const example of [
       );
       await page
         .getByTestId("map-tooltip")
-        .getByRole("button", { name: /^\d+ activity choices$/ })
+        .getByRole("button", { name: "See overview", exact: true })
         .click();
+      const panel = page.getByTestId("beacon-overview-sheet");
+      await panel
+        .getByRole("button", { name: "View Draw decision", exact: true })
+        .click();
+      await expect(
+        panel.getByText("Beacon options", { exact: true }),
+      ).toBeVisible();
+      await expect(panel.getByText(/\d+ votes · APPROVED/)).toHaveCount(0);
+      await panel.getByRole("button", { name: "Back", exact: true }).click();
+      await page
+        .getByRole("button", {
+          name: "Dismiss Beacon panel by tapping the map",
+          exact: true,
+        })
+        .click();
+      await expect(panel).toHaveCount(0);
       await expect(chip).toHaveCount(1);
     }
     await chip.click();
@@ -50,7 +66,9 @@ test("suggested Beacon context is removable independently of normal filters", as
 }) => {
   await page.goto("/council/demo-vote-weekend");
   await page.getByRole("button", { name: /Explore the demo/ }).click();
-  await page.getByRole("button", { name: "Show Suggested Beacons", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Show Suggested Beacons", exact: true })
+    .click();
   const context = page.getByRole("button", {
     name: "Remove Vote: Which weekend plan sounds best? filter",
     exact: true,

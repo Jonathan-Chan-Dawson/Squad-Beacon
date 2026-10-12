@@ -11,37 +11,21 @@ function accentCss(appearance: "light" | "dark") {
   return `rgb(${channels.join(", ")})`;
 }
 
-test("Chats accepts an inline Ping response without opening a separate inbox", async ({
+test("Chats uses a compact response row and opens the canonical inbox", async ({
   page,
 }) => {
   await page.goto("/");
   await page.getByRole("button", { name: /Explore the demo/ }).click();
   await page.getByRole("tab", { name: "Squads", exact: true }).click();
-  const ping = page.getByTestId(/^planning-prompt-/).first();
-  await expect(ping).toBeVisible();
-  const promptId = await ping.getAttribute("data-testid");
-  await expect(page.getByTestId(/^planning-prompt-/)).toHaveCount(1);
-  await expect(
-    ping.getByRole("button", { name: "Maybe", exact: true }),
-  ).toBeVisible();
-  await expect(
-    ping.getByRole("button", { name: "Pass", exact: true }),
-  ).toBeVisible();
-  await ping.getByRole("button", { name: "Interested", exact: true }).click();
-  await expect(page.getByTestId(promptId!)).toHaveCount(0);
+  await expect(page.getByTestId(/^planning-prompt-/)).toHaveCount(0);
+  await page
+    .getByRole("button", { name: /Responses & Invitations, \d+ pending/ })
+    .click();
+  await expect(page).toHaveURL(/\/responses/);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: "Pings", exact: true }),
-  ).toHaveCount(0);
-  await expect(
-    page.getByRole("button", {
-      name: "See all responses and invitations",
-      exact: true,
-    }),
   ).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: /^All responses & invitations/ }),
-  ).toHaveCount(0);
-  await expect(page).toHaveURL(/\/squads/);
 });
 
 async function demo(page: Page) {
@@ -95,13 +79,15 @@ test("saved-place exploration carries into Upcoming without adding Past shortcut
   ).toBeVisible();
 });
 
-test("worldwide search is explicit and demo accounts get an honest sign-in message", async ({
+test("worldwide search is explicit and demo results are clearly local examples", async ({
   page,
 }) => {
   await demo(page);
   await page.getByRole("button", { name: "Compass", exact: true }).click();
-  const compass = page.getByRole("dialog");
-  await expect(compass.getByText("Centering the map never shares your location.")).toBeVisible();
+  const compass = page.getByTestId("map-side-menu");
+  await expect(
+    compass.getByText("Centering the map never shares your location."),
+  ).toBeVisible();
   await compass
     .getByRole("button", { name: "Search another place", exact: true })
     .click();
@@ -119,9 +105,7 @@ test("worldwide search is explicit and demo accounts get an honest sign-in messa
   await expect(search).toBeEnabled();
   await search.click();
   await expect(
-    compass.getByText(
-      /Connect a real account to search worldwide places|Sign in to search worldwide places/,
-    ),
+    compass.getByText("Demo city examples. No search leaves your device."),
   ).toBeVisible();
 });
 
@@ -169,7 +153,11 @@ test("a Routine pauses, resumes and creates a fresh ordered Plan", async ({
   ).toHaveCount(3);
   const steps = page.getByRole("button", { name: "Open Beacon", exact: true });
   await expect(steps).toHaveCount(3);
-  for (const [index, title] of ["Dinner together", "Bowling", "Wind down"].entries())
+  for (const [index, title] of [
+    "Dinner together",
+    "Bowling",
+    "Wind down",
+  ].entries())
     await expect(steps.nth(index).locator("xpath=..")).toContainText(title);
 });
 

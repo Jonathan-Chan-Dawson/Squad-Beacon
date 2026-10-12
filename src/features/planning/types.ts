@@ -52,6 +52,7 @@ export interface PlanningPingResponse {
   user_id: ID;
   response: PlanningResponse;
   auto_rsvp: boolean;
+  available_after?: string | null;
   created_at: string;
   updated_at: string;
 }

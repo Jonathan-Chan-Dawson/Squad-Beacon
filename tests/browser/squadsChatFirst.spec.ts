@@ -242,29 +242,31 @@ test("a response prompt jumps to its exact Squad Ping and shares its response st
   page,
 }) => {
   await squads(page);
-  const prompt = page.getByTestId("planning-prompt-demo-squad-ping-boxing");
-  if (!(await prompt.count())) {
-    await page
-      .getByRole("button", {
-        name: "See all responses and invitations",
-        exact: true,
-      })
-      .click();
-  }
   await page
-    .getByRole("button", { name: /^A quick boxing session\?,/ })
+    .getByRole("button", { name: /Responses & Invitations, \d+ pending/ })
+    .click();
+  await page
+    .getByRole("button", { name: "Open A quick boxing session?", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Open Squad chat", exact: true })
     .click();
   await expect(page).toHaveURL(
     /\/squad-chat\/boxing\?ping=demo-squad-ping-boxing/,
   );
-  const card = page.getByLabel("Squad Ping: A quick boxing session?", {
-    exact: true,
-  });
+  const card = page.getByTestId("planning-response-demo-squad-ping-boxing");
   await expect(card).toBeInViewport();
   await card.getByRole("button", { name: "Maybe", exact: true }).click();
-  await expect(card).toContainText(/You said Maybe/i);
+  await expect(card).toContainText("1 Maybe");
   await page.goBack();
   await expect(
-    page.getByTestId("planning-prompt-demo-squad-ping-boxing"),
+    page.getByText("Your response: maybe", { exact: true }),
+  ).toBeVisible();
+  await page.goBack();
+  await expect(
+    page.getByRole("button", {
+      name: "Open A quick boxing session?",
+      exact: true,
+    }),
   ).toHaveCount(0);
 });

@@ -72,18 +72,51 @@ function SummaryContent({ summary, onAction, pending }: SummaryContentProps) {
 export function SocialDirectorySummaryCard(
   props: SummaryContentProps & { onPreview: () => void },
 ) {
-  const { styles } = useTheme();
+  const { styles, colors } = useTheme();
+  const { summary } = props;
   return (
-    <View style={[styles.card, { gap: 8 }]}>
+    <View
+      style={{
+        gap: 8,
+        paddingVertical: 10,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.line,
+      }}
+    >
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`Preview ${props.summary.name}`}
         onPress={props.onPreview}
-        style={{ minHeight: 44, justifyContent: "center" }}
+        style={{ minHeight: 44, justifyContent: "center", gap: 4 }}
       >
-        <Text style={styles.label}>Preview community</Text>
+        <Text style={styles.h2}>{summary.name}</Text>
+        <Text style={styles.muted}>
+          {communityTypeLabel(summary.entity_type)} · {summary.member_count}{" "}
+          members
+        </Text>
+        {summary.description ? (
+          <Text numberOfLines={2} style={styles.muted}>
+            {summary.description}
+          </Text>
+        ) : null}
       </Pressable>
-      <SummaryContent {...props} />
+      {summary.action !== "joined" ? (
+        <View style={{ alignSelf: "flex-start" }}>
+          <Action
+            compact
+            title={directoryActionLabel(summary.action)}
+            secondary={
+              summary.action === "invite_required" ||
+              summary.action === "requested"
+            }
+            disabled={props.pending || summary.action === "invite_required"}
+            run={async () => {
+              if ((await props.onAction()) === false)
+                throw new Error("Community action was not completed.");
+            }}
+          />
+        </View>
+      ) : null}
     </View>
   );
 }

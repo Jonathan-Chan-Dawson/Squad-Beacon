@@ -142,7 +142,6 @@ export function GroupChatThread({
             await act("respond_planning_ping", {
               thread_id: thread.id,
               response,
-              auto_rsvp: false,
             });
             return true;
           }}
@@ -178,6 +177,9 @@ export function GroupChatThread({
   return (
     <ChatKeyboardFrame>
       <ChatBubbleList
+        onAuthorPress={(id) =>
+          router.push({ pathname: "/person/[id]", params: { id } })
+        }
         events={events}
         viewerId={userId}
         scopeKey={conversationKey}

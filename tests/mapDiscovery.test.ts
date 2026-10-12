@@ -39,7 +39,7 @@ test("discovery prioritizes involvement and live activities, preserving closed j
   activity.manual_closed = true;
   assert.equal(beaconDiscoveryTier(data, activity, DEMO_ID, now), 0);
   assert.equal(showBeaconOnMap(data, activity, DEMO_ID, {}, now), true);
-  assert.ok(beaconPreviewWhen(activity, now).startsWith("Now · Ends"));
+  assert.match(beaconPreviewWhen(activity, now), /^Now \u00b7 \d+ min left$/);
 });
 
 test("one query finds activities, people interests and unjoined public communities", () => {

@@ -130,6 +130,7 @@ test("planning migration enforces visibility, eligibility, one vote, safe resolu
     "202610030003_beacon_media_teams.sql",
     "202610040001_organization_audience_type.sql",
     "202610040002_organizations_group_chat.sql",
+    "202610110004_ping_availability.sql",
   ])
     await applyMigration(migration);
 
@@ -145,6 +146,49 @@ test("planning migration enforces visibility, eligibility, one vote, safe resolu
     "insert into public.friendships(sender_id,recipient_id,status) values($1,$2,'accepted'),($1,$3,'accepted')",
     [ids.alice, ids.bob, ids.carol],
   );
+
+  await test("availability persists without changing response or opt-in and conversion skips unavailable users", async () => {
+    const ping = await createThread("alice", "ping", { payload: beaconDraft("Availability walk") });
+    await actor("bob");
+    await assert.rejects(action("respond_planning_ping", { thread_id: ping.id, response: "interested", available_after: "2026-10-12T17:30:00" }), /timezone offset/i);
+    await assert.rejects(action("respond_planning_ping", { thread_id: ping.id, response: "maybe", available_after: isoAfter(10) }), /Interested/i);
+    await assert.rejects(action("respond_planning_ping", { thread_id: ping.id, response: "interested", available_after: "infinity" }), /timezone offset/i);
+    const later = isoAfter(10);
+    await action("respond_planning_ping", { thread_id: ping.id, response: "interested", auto_rsvp: true, available_after: later });
+    // Chat-card updates omit both preferences and must preserve the explicit choice.
+    await action("respond_planning_ping", { thread_id: ping.id, response: "interested" });
+    const snapshot = (await db.query<{ data: any }>("select public.beacon_snapshot() data")).rows[0].data;
+    const response = snapshot.planning_ping_responses.find((row: any) => row.thread_id === ping.id && row.user_id === ids.bob);
+    assert.equal(response.auto_rsvp, true);
+    assert.equal(Date.parse(response.available_after), Date.parse(later));
+    await actor("carol");
+    await action("respond_planning_ping", { thread_id: ping.id, response: "interested", available_after: isoAfter(2) });
+    await actor("alice");
+    const converted = await action("convert_planning_ping", { thread_id: ping.id });
+    await root();
+    const attendees = await db.query("select user_id from public.rsvps where activity_id=$1 and user_id<>$2", [converted.activity_id, ids.alice]);
+    assert.equal(attendees.rows.length, 0); // Bob unavailable; Carol never opted in.
+    await actor("alice");
+    const repeat = await action("convert_planning_ping", { thread_id: ping.id });
+    assert.equal(repeat.activity_id, converted.activity_id);
+
+    const editable = await createThread("alice", "ping", { payload: beaconDraft("Editable availability") });
+    await actor("bob");
+    await action("respond_planning_ping", { thread_id: editable.id, response: "interested", auto_rsvp: true, available_after: isoAfter(2) });
+    await action("respond_planning_ping", { thread_id: editable.id, response: "interested", available_after: null });
+    let row = (await db.query<{ available_after: string | null; auto_rsvp: boolean }>("select available_after,auto_rsvp from public.planning_ping_responses where thread_id=$1 and user_id=$2", [editable.id, ids.bob])).rows[0];
+    assert.equal(row.available_after, null);
+    assert.equal(row.auto_rsvp, true);
+    await action("respond_planning_ping", { thread_id: editable.id, response: "maybe" });
+    row = (await db.query<{ available_after: string | null; auto_rsvp: boolean }>("select available_after,auto_rsvp from public.planning_ping_responses where thread_id=$1 and user_id=$2", [editable.id, ids.bob])).rows[0];
+    assert.equal(row.auto_rsvp, false);
+    assert.equal(row.available_after, null);
+    await actor("outsider");
+    await assert.rejects(action("respond_planning_ping", { thread_id: editable.id, response: "interested", available_after: isoAfter(2) }), /no longer open/i);
+    await makePast(editable.id);
+    await actor("bob");
+    await assert.rejects(action("respond_planning_ping", { thread_id: editable.id, response: "interested", available_after: isoAfter(2) }), /no longer open/i);
+  });
 
   await test("ping conversion preserves host and approval-aware opt-in", async () => {
     const pingPayload = beaconDraft("Saturday walk");

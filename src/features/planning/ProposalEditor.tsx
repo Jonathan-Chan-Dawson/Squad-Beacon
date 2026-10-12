@@ -1,15 +1,8 @@
+import { PlanningEditor } from "./PlanningEditor";
 import React, { useMemo, useState } from "react";
 import { Text, View } from "react-native";
 import DateField from "@/components/DateField";
-import {
-  Action,
-  Button,
-  Chips,
-  Field,
-  Sheet,
-  Txt,
-  useTheme,
-} from "@/src/shared/ui";
+import { Action, Button, Chips, Field, Txt, useTheme } from "@/src/shared/ui";
 import { useNow } from "@/src/shared/useNow";
 import {
   beaconTemplateCatalog,
@@ -42,7 +35,11 @@ export function ProposalEditor({
   visible,
   onClose,
   onSave,
+  inline = false,
+  onOpenBeaconEditor,
 }: {
+  inline?: boolean;
+  onOpenBeaconEditor?: () => void;
   thread: PlanningThread;
   visible: boolean;
   onClose: () => void;
@@ -96,7 +93,8 @@ export function ProposalEditor({
 
   return (
     <>
-      <Sheet
+      <PlanningEditor
+        inline={inline}
         title="Add a beacon option"
         visible={visible && !advancedVisible}
         onClose={close}
@@ -105,6 +103,17 @@ export function ProposalEditor({
           Quick-add a starter or search the full recipe catalog. Every option
           stays within this decision&apos;s audience.
         </Txt>
+        {onOpenBeaconEditor ? (
+          <Button
+            compact
+            secondary
+            title="Use Beacon editor"
+            onPress={() => {
+              close();
+              onOpenBeaconEditor();
+            }}
+          />
+        ) : null}
         <View style={{ gap: 8 }}>
           <Text style={styles.label}>QUICK ADD</Text>
           {quickRecipes.map((recipe) => (
@@ -113,9 +122,11 @@ export function ProposalEditor({
               title={`Quick add ${recipe.label} - ${recipe.minutes} min`}
               secondary
               run={() =>
-                onSave(makeCouncilProposalDraft(thread, recipe, now)).then(() => {
-                  close();
-                })
+                onSave(makeCouncilProposalDraft(thread, recipe, now)).then(
+                  () => {
+                    close();
+                  },
+                )
               }
             />
           ))}
@@ -156,9 +167,12 @@ export function ProposalEditor({
               maxLength={120}
             />
             <Text style={styles.muted}>
-              {draft.category} - {Math.round(
-                (Date.parse(draft.ends_at) - Date.parse(draft.starts_at)) / 60000,
-              )} min
+              {draft.category} -{" "}
+              {Math.round(
+                (Date.parse(draft.ends_at) - Date.parse(draft.starts_at)) /
+                  60000,
+              )}{" "}
+              min
             </Text>
             <Button
               title="Advanced details"
@@ -168,9 +182,10 @@ export function ProposalEditor({
             <Action title="Add selected option" run={saveSelected} />
           </View>
         ) : null}
-      </Sheet>
+      </PlanningEditor>
 
-      <Sheet
+      <PlanningEditor
+        inline={inline}
         title="Advanced option details"
         visible={visible && advancedVisible}
         onClose={() => setAdvancedVisible(false)}
@@ -178,13 +193,17 @@ export function ProposalEditor({
         {draft ? (
           <>
             <Txt muted>
-              Shared with {thread.audience === "private" ? "you only" : thread.audience}
-              {thread.audience_id ? " group" : ""}; this audience cannot be changed here.
+              Shared with{" "}
+              {thread.audience === "private" ? "you only" : thread.audience}
+              {thread.audience_id ? " group" : ""}; this audience cannot be
+              changed here.
             </Txt>
             <Field
               label="Description (optional)"
               value={draft.description}
-              onChangeText={(description) => setDraft({ ...draft, description })}
+              onChangeText={(description) =>
+                setDraft({ ...draft, description })
+              }
               maxLength={2000}
               multiline
             />
@@ -236,7 +255,7 @@ export function ProposalEditor({
         ) : (
           <Txt muted>Choose an activity idea before editing its details.</Txt>
         )}
-      </Sheet>
+      </PlanningEditor>
     </>
   );
 }

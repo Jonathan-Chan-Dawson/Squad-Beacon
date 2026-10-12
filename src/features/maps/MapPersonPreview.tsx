@@ -1,16 +1,29 @@
-import React, { useState } from "react";
+import React from "react";
 import { Pressable, Text, View } from "react-native";
 import { router } from "expo-router";
-import { MessageCircle, UserRound, X } from "lucide-react-native";
+import {
+  CheckCircle2,
+  ChevronRight,
+  CircleHelp,
+  MinusCircle,
+} from "lucide-react-native";
+import { canReadBeaconActivity } from "@/src/features/beacons/beaconModules";
 import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
-import { selectPersonPreview } from "@/src/features/people/previews/personPreview";
+import {
+  selectPersonPreview,
+  selectFreshVisiblePersonLocation,
+} from "@/src/features/people/previews/personPreview";
 import { useBeacon } from "@/src/shared/store";
 import { useNow } from "@/src/shared/useNow";
-import { Action, Button, IconButton, useTheme } from "@/src/shared/ui";
-import { showBeaconOnMap } from "./mapDiscovery";
-import { isApprovedGoing } from "@/src/features/beacons/permissions";
-import { personDiscoveryReason } from "./discoveryRanking";
-import { activityWhen } from "@/src/shared/domain";
+import { Action, useTheme } from "@/src/shared/ui";
+import { ActivityBadge } from "@/src/features/beacons/ActivityBadge";
+import { beaconPreviewWhen } from "./discoveryRanking";
+import {
+  MapTooltipShell,
+  MapTooltipClose,
+  MapTooltipButton,
+} from "./MapTooltipShell";
+import { mapTooltip } from "./tooltipConstants";
 
 export function MapPersonPreview({
   personId,
@@ -22,86 +35,227 @@ export function MapPersonPreview({
   onBeacon(id: string): void;
 }) {
   const { data, userId, act } = useBeacon();
-  const { styles, tokens, colors } = useTheme();
+  const { styles, colors } = useTheme();
   const now = useNow();
-  const [expanded, setExpanded] = useState(false);
   const selection = selectPersonPreview(data, personId, userId, now);
   if (!selection.canViewFullProfile || !selection.profile || !userId)
     return null;
   const profile = selection.profile;
+  const location = selectFreshVisiblePersonLocation(
+    data,
+    personId,
+    userId,
+    now,
+  );
   const request = data.friendships.find(
     (row) =>
       row.status === "pending" &&
       ((row.sender_id === userId && row.recipient_id === personId) ||
         (row.sender_id === personId && row.recipient_id === userId)),
   );
-  const beacons = data.activities.filter(
-    (activity) =>
-      showBeaconOnMap(data, activity, userId, { personId }, now) &&
-      (activity.owner_id === personId ||
-        data.rsvps.some(
-          (row) =>
-            row.activity_id === activity.id &&
-            row.user_id === personId &&
-            isApprovedGoing(activity, row),
-        )),
+  const availability = data.activities.find(
+    (row) =>
+      row.owner_id === personId &&
+      row.mode === "solo" &&
+      row.status === "scheduled" &&
+      Date.parse(row.starts_at) <= now &&
+      Date.parse(row.ends_at) > now &&
+      canReadBeaconActivity(data, row, userId),
   );
+  const free =
+    selection.availability === "available" ||
+    selection.availability === "ending-soon";
+  const StatusIcon = free
+    ? CheckCircle2
+    : selection.availability === "unavailable"
+      ? MinusCircle
+      : CircleHelp;
+  const status = free
+    ? "Free to hang"
+    : selection.availability === "unavailable"
+      ? "Busy"
+      : "Availability not shared";
+  const minutes = availability
+    ? Math.max(1, Math.ceil((Date.parse(availability.ends_at) - now) / 60000))
+    : null;
+  const ago = location?.updated_at
+    ? Math.max(0, Math.floor((now - Date.parse(location.updated_at)) / 60000))
+    : null;
   return (
-    <View
-      testID="map-person-preview"
-      style={[styles.card, { padding: 12, gap: 6 }]}
-    >
-      <View style={styles.row}>
-        <ProfileAvatar
-          profile={profile}
-          size={36}
-          status={selection.availability}
-        />
-        <View style={{ flex: 1, minWidth: 0 }}>
+    <MapTooltipShell testID="map-person-preview">
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+        <View
+          style={{
+            padding: 2,
+            borderRadius: 24,
+            borderWidth: 1,
+            borderColor:
+              selection.availability === "unknown" ? colors.line : colors.green,
+          }}
+        >
+          <ProfileAvatar profile={profile} size={mapTooltip.avatarSize} />
+          <View
+            testID={
+              selection.availability !== "unknown"
+                ? `avatar-status-${selection.availability}`
+                : undefined
+            }
+            pointerEvents="none"
+            style={{
+              position: "absolute",
+              right: -2,
+              bottom: -2,
+              borderRadius: 8,
+              backgroundColor: colors.white,
+            }}
+          >
+            <StatusIcon size={13} color={colors.green} />
+          </View>
+        </View>
+        <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
           <Text
+            accessibilityRole="header"
             numberOfLines={1}
-            style={[styles.h2, { fontSize: 16, textAlign: "left" }]}
+            style={[
+              styles.h2,
+              { fontSize: mapTooltip.titleSize, textAlign: "left" },
+            ]}
           >
             {profile.name}
           </Text>
-          <Text
-            numberOfLines={1}
-            style={[styles.muted, { fontSize: 12, textAlign: "left" }]}
-          >
-            @{profile.username}
-          </Text>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+            <Text
+              numberOfLines={1}
+              style={[styles.muted, { flexShrink: 1, fontSize: 12 }]}
+            >
+              @{profile.username}
+            </Text>
+            {selection.canMessage && (
+              <Text
+                style={[
+                  styles.label,
+                  {
+                    fontSize: 10,
+                    borderRadius: 7,
+                    paddingHorizontal: 5,
+                    backgroundColor: colors.line,
+                  },
+                ]}
+              >
+                Friend
+              </Text>
+            )}
+          </View>
         </View>
-        <IconButton label="Close person preview" onPress={onClose}>
-          <X size={20} color={colors.ink} />
-        </IconButton>
+        <MapTooltipClose label="Close person preview" onClose={onClose} />
       </View>
-      <Text style={[styles.muted, { textAlign: "left" }]}>
-        {personDiscoveryReason(data, profile, userId)}
-      </Text>
       <View
         style={{
           flexDirection: "row",
-          flexWrap: "wrap",
-          gap: 6,
           alignItems: "center",
-          justifyContent: "flex-start",
+          alignSelf: "flex-start",
+          gap: 5,
+          backgroundColor: colors.green + "20",
+          paddingHorizontal: 8,
+          paddingVertical: 4,
+          borderRadius: 12,
+          maxWidth: "100%",
         }}
       >
-        <View>
-          <Button
-            title="View Profile"
-            compact
-            icon={<UserRound size={16} color={colors.bg} />}
-            onPress={() =>
-              router.push({
-                pathname: "/person/[id]",
-                params: { id: personId },
-              })
-            }
-          />
-        </View>
-        {!selection.canMessage && personId !== userId && (
-          <View>
+        <StatusIcon size={14} color={colors.green} />
+        <Text
+          numberOfLines={1}
+          style={[
+            styles.label,
+            { flexShrink: 1, fontSize: 12, color: colors.green },
+          ]}
+        >
+          {status}
+          {minutes
+            ? ` \u00b7 ends in ${minutes < 60 ? `${minutes} min` : `${Math.ceil(minutes / 60)} hrs`}`
+            : ""}
+        </Text>
+      </View>
+      {selection.sharedContexts[0] && (
+        <Text
+          numberOfLines={1}
+          style={[
+            styles.label,
+            {
+              alignSelf: "flex-start",
+              maxWidth: "100%",
+              fontSize: 11,
+              borderRadius: 8,
+              paddingHorizontal: 7,
+              paddingVertical: 3,
+              backgroundColor: colors.line,
+            },
+          ]}
+        >
+          {selection.sharedContexts[0].name}
+        </Text>
+      )}
+      {ago != null && Number.isFinite(ago) && (
+        <Text
+          numberOfLines={1}
+          style={[styles.muted, { fontSize: 11, textAlign: "left" }]}
+        >
+          Shared {ago < 1 ? "just now" : `${ago}m ago`}
+        </Text>
+      )}
+      {selection.beacon && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Select ${selection.beacon.title} Beacon`}
+          onPress={() => onBeacon(selection.beacon!.id)}
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 8,
+            padding: 8,
+            minHeight: 48,
+            borderWidth: 1,
+            borderColor: colors.line,
+            backgroundColor: colors.bg,
+            borderRadius: 12,
+          }}
+        >
+          <ActivityBadge category={selection.beacon.category} size={28} />
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text
+              numberOfLines={1}
+              style={[styles.label, { fontSize: 13, textAlign: "left" }]}
+            >
+              {selection.beacon.title}
+            </Text>
+            <Text
+              numberOfLines={1}
+              style={[styles.muted, { fontSize: 11, textAlign: "left" }]}
+            >
+              {beaconPreviewWhen(selection.beacon, now)}
+            </Text>
+          </View>
+          <ChevronRight size={17} color={colors.green} />
+        </Pressable>
+      )}
+      <View style={{ flexDirection: "row", gap: 6 }}>
+        {selection.canMessage ? (
+          <View style={{ flex: 1 }}>
+            <MapTooltipButton
+              title="Message"
+              accessibilityLabel={`Message ${profile.name}`}
+              secondary
+              compact
+              onPress={() =>
+                router.push({
+                  pathname: "/messages/[id]",
+                  params: { id: personId },
+                })
+              }
+            />
+          </View>
+        ) : personId !== userId ? (
+          <View style={{ flex: 1 }}>
             <Action
               title={
                 request
@@ -111,6 +265,7 @@ export function MapPersonPreview({
                   : "Add Friend"
               }
               disabled={request?.sender_id === userId}
+              secondary
               compact
               run={() =>
                 request
@@ -119,78 +274,20 @@ export function MapPersonPreview({
               }
             />
           </View>
-        )}
-        {selection.canMessage && (
-          <IconButton
-            label={`Message ${profile.name}`}
+        ) : null}
+        <View style={{ flex: 1 }}>
+          <MapTooltipButton
+            title="View profile"
+            compact
             onPress={() =>
               router.push({
-                pathname: "/messages/[id]",
+                pathname: "/person/[id]",
                 params: { id: personId },
               })
             }
-          >
-            <MessageCircle size={18} color={colors.green} />
-          </IconButton>
-        )}
-      </View>
-      {!!profile.bio && (
-        <Text
-          numberOfLines={1}
-          style={[styles.body, { fontSize: 13, textAlign: "left" }]}
-        >
-          {profile.bio}
-        </Text>
-      )}
-      {selection.canMessage && (
-        <Text style={[styles.muted, { textAlign: "left" }]}>
-          {selection.availability === "available"
-            ? "Free to hang"
-            : selection.availability === "unavailable"
-              ? "Busy"
-              : selection.availability === "ending-soon"
-                ? "Free to hang, ending soon"
-                : "Availability is not shared"}
-        </Text>
-      )}
-      {!!beacons.length && (
-        <Text style={[styles.label, { textAlign: "left" }]}>Beacons</Text>
-      )}
-      {(expanded ? beacons : beacons.slice(0, 2)).map((activity) => (
-        <Pressable
-          key={activity.id}
-          accessibilityRole="button"
-          accessibilityLabel={`Select ${activity.title} Beacon`}
-          onPress={() => onBeacon(activity.id)}
-          style={{
-            minHeight: tokens.layout.minTapTarget,
-            paddingVertical: 4,
-            gap: 0,
-          }}
-        >
-          <Text
-            numberOfLines={1}
-            style={[styles.body, { fontSize: 13, textAlign: "left" }]}
-          >
-            {activity.title}
-          </Text>
-          <Text style={[styles.muted, { fontSize: 12, textAlign: "left" }]}>
-            {activityWhen(activity, new Date(now))}
-          </Text>
-        </Pressable>
-      ))}
-      {beacons.length > 2 && (
-        <View style={{ alignSelf: "flex-start" }}>
-          <Button
-            compact
-            secondary
-            title={
-              expanded ? "Show fewer Beacons" : `+${beacons.length - 2} Beacons`
-            }
-            onPress={() => setExpanded(!expanded)}
           />
         </View>
-      )}
-    </View>
+      </View>
+    </MapTooltipShell>
   );
 }

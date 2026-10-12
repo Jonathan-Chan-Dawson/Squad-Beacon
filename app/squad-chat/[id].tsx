@@ -1,10 +1,10 @@
+import { CommunityAvatar } from "@/src/features/people/components/CommunityAvatar";
 import React, { useId, useRef, useState } from "react";
 import { Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { GroupChatThread } from "@/src/features/organizations/GroupChatThread";
 import { ChatIdentityHeader } from "@/src/features/people/previews/ChatIdentityHeader";
-import { SquadProfilePreview } from "@/src/features/people/previews/SquadProfilePreview";
 import { activeSquadMembership } from "@/src/features/people/squadProfile";
 import { useBeacon } from "@/src/shared/store";
 import { BackButton, Button, Sheet, Txt, useTheme } from "@/src/shared/ui";
@@ -19,9 +19,8 @@ export default function SquadChatRoute() {
     ? requestedPing[0]
     : requestedPing;
   const router = useRouter();
-  const { styles, colors } = useTheme();
+  const { styles } = useTheme();
   const { data, userId } = useBeacon();
-  const [profileOpen, setProfileOpen] = useState(false);
   const [composerActionsOpen, setComposerActionsOpen] = useState(false);
   const pingSeed = useId();
   const composerIntent = useRef(0);
@@ -49,35 +48,15 @@ export default function SquadChatRoute() {
                   name={squad.name}
                   subtitle={`${data.squad_members.filter((member) => member.squad_id === squadId).length} members · Squad info`}
                   avatar={
-                    <View
-                      style={{
-                        width: 42,
-                        height: 42,
-                        borderRadius: 12,
-                        backgroundColor: colors.lime,
-                        alignItems: "center",
-                        justifyContent: "center",
-                      }}
-                    >
-                      <Text
-                        style={{
-                          color: colors.ink,
-                          fontSize: 16,
-                          fontWeight: "700",
-                        }}
-                      >
-                        {squad.name
-                          .trim()
-                          .split(/\s+/)
-                          .slice(0, 2)
-                          .map((part) => part[0])
-                          .join("")
-                          .toUpperCase()}
-                      </Text>
-                    </View>
+                    <CommunityAvatar iconKey={squad.icon_key} size={42} />
                   }
                   accessibilityLabel={`Open Squad profile for ${squad.name}`}
-                  onPress={() => setProfileOpen(true)}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/squad/[id]",
+                      params: { id: squadId, fromChat: "yes" },
+                    })
+                  }
                 />
               </View>
             </View>
@@ -87,13 +66,6 @@ export default function SquadChatRoute() {
               squadId={squadId}
               focusedPingId={focusedPingId}
               onMoreActions={() => setComposerActionsOpen(true)}
-            />
-            <SquadProfilePreview
-              key={`${squadId}:active-member`}
-              squadId={squadId}
-              visible={profileOpen}
-              inChat
-              onClose={() => setProfileOpen(false)}
             />
             <Sheet
               title="Add to Squad chat"

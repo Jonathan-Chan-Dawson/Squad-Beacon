@@ -1,24 +1,42 @@
+import { CommunityAvatar } from "../components/CommunityAvatar";
 import { inviteContact } from "@/src/platform/contacts";
 import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
 import React, { useCallback, useState } from "react";
 import { Pressable, Share, Text, View } from "react-native";
-import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
+import {
+  type Href,
+  router,
+  useFocusEffect,
+  useLocalSearchParams,
+} from "expo-router";
+import { SegmentedControl } from "@/src/shared/design-system";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { ArrowUpRight, MessageCircle, Plus, Search, X } from "lucide-react-native";
+import {
+  ArrowUpRight,
+  MessageCircle,
+  Plus,
+  Search,
+  X,
+} from "lucide-react-native";
 import { useBeacon } from "@/src/shared/store";
 import { friendIds } from "@/src/shared/domain";
 import { InviteQR } from "@/src/features/people/InviteQR";
-import { CommunicationHub, type ChatFilter } from "@/src/features/people/CommunicationHub";
-import { canOpenSquadProfile, squadCurrentAndNextActivities } from "@/src/features/people/squadProfile";
-import { SquadProfilePreview } from "@/src/features/people/previews/SquadProfilePreview";
+import {
+  CommunicationHub,
+  type ChatFilter,
+} from "@/src/features/people/CommunicationHub";
+import {
+  canOpenSquadProfile,
+  squadCurrentAndNextActivities,
+} from "@/src/features/people/squadProfile";
 import {
   DirectoryActions,
   DirectoryControls,
   type DirectoryFilter,
 } from "@/src/features/people/DirectoryControls";
 import {
+  BackButton,
   Action,
-  Avatar,
   Button,
   Empty,
   Field,
@@ -28,8 +46,12 @@ import {
   useTheme,
 } from "@/src/shared/ui";
 
-export default function SquadsScreen() {
-  const { styles, colors, tokens } = useTheme();
+export default function SquadsScreen({
+  communities = false,
+}: {
+  communities?: boolean;
+}) {
+  const { styles, colors } = useTheme();
   const params = useLocalSearchParams<{ tab?: string; peopleLists?: string }>();
   const { data, userId, act, demo } = useBeacon();
   const [filter, setFilter] = useState<DirectoryFilter>(
@@ -39,15 +61,15 @@ export default function SquadsScreen() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
-  const [previewSquadId, setPreviewSquadId] = useState<string | null>(null);
   const [inviteOpen, setInviteOpen] = useState(false);
   const [directoryState, setDirectoryState] = useState<{
     route: string | undefined;
     open: boolean;
   }>(() => ({ route: params.peopleLists, open: params.peopleLists === "yes" }));
-  const directory = directoryState.route === params.peopleLists
-    ? directoryState.open
-    : params.peopleLists === "yes";
+  const directory =
+    directoryState.route === params.peopleLists
+      ? directoryState.open
+      : params.peopleLists === "yes";
   const [newChat, setNewChat] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -59,7 +81,8 @@ export default function SquadsScreen() {
 
   function setDirectory(open: boolean) {
     setDirectoryState({ route: params.peopleLists, open });
-    if (!open && params.peopleLists) router.setParams({ peopleLists: undefined });
+    if (!open && params.peopleLists)
+      router.setParams({ peopleLists: undefined });
   }
 
   useFocusEffect(
@@ -103,7 +126,7 @@ export default function SquadsScreen() {
     if (!canOpenSquadProfile(data, squadId, userId)) return;
     setDirectory(false);
     setSelected(null);
-    setPreviewSquadId(squadId);
+    router.push({ pathname: "/squad/[id]", params: { id: squadId } });
   }
 
   function updateSearchOpen(open: boolean) {
@@ -115,30 +138,73 @@ export default function SquadsScreen() {
 
   return (
     <SafeAreaView edges={["top"]} style={styles.screen}>
-      <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: 16, paddingVertical: 12 }}>
-        <Text accessibilityRole="header" style={[styles.title, tokens.type.display]}>Squads</Text>
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          paddingHorizontal: 16,
+          paddingVertical: 12,
+        }}
+      >
+        <View style={[styles.row, { flex: 1, minWidth: 0 }]}>
+          {communities ? <BackButton /> : null}
+          <Text
+            accessibilityRole="header"
+            style={[styles.title, { fontSize: 26 }]}
+          >
+            {communities ? "Communities" : "Squads"}
+          </Text>
+        </View>
         <View style={{ flexDirection: "row", gap: 4 }}>
           <IconButton
-            label={searchOpen ? "Close search" : "Search conversations"}
+            label={
+              searchOpen
+                ? "Close search"
+                : communities
+                  ? "Search communities"
+                  : "Search conversations"
+            }
             onPress={() => {
               updateSearchOpen(!searchOpen);
             }}
           >
-            {searchOpen ? <X size={20} color={colors.green} /> : <Search size={20} color={colors.green} />}
+            {searchOpen ? (
+              <X size={20} color={colors.green} />
+            ) : (
+              <Search size={20} color={colors.green} />
+            )}
           </IconButton>
           <IconButton label="New conversation" onPress={() => setNewChat(true)}>
             <Plus size={20} color={colors.green} />
           </IconButton>
         </View>
       </View>
+      {!communities ? (
+        <View style={{ paddingHorizontal: 16, paddingBottom: 4 }}>
+          <SegmentedControl
+            options={[
+              { value: "Chats", label: "Chats" },
+              { value: "Communities", label: "Communities" },
+            ]}
+            value="Chats"
+            onChange={(value) => {
+              if (value === "Communities") router.push("/communities" as Href);
+            }}
+            accessibilityLabel="Chats and Communities"
+          />
+        </View>
+      ) : null}
       <CommunicationHub
         key={params.tab ?? "Chats"}
         initialSection={
-          params.tab === "Pings"
-            ? "Pings"
-            : params.tab === "Organizations"
-              ? "Organizations"
-              : "Chats"
+          communities
+            ? "Communities"
+            : params.tab === "Pings"
+              ? "Pings"
+              : params.tab === "Organizations"
+                ? "Organizations"
+                : "Chats"
         }
         conversationFilter={conversationFilter}
         onConversationFilterChange={setConversationFilter}
@@ -237,7 +303,7 @@ export default function SquadsScreen() {
                     },
                   ]}
                 >
-                  <Avatar name={item.name} size={44} />
+                  <CommunityAvatar iconKey={item.icon_key} size={44} />
                   <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
                     <Text
                       numberOfLines={1}
@@ -408,7 +474,7 @@ export default function SquadsScreen() {
                 },
               ]}
             >
-              <Avatar name="General" size={44} />
+              <CommunityAvatar type="list" size={44} />
               <View style={{ flex: 1 }}>
                 <Text style={[styles.body, { fontWeight: "700" }]}>
                   General
@@ -445,7 +511,7 @@ export default function SquadsScreen() {
                     },
                   ]}
                 >
-                  <Avatar name={item.name} size={44} />
+                  <CommunityAvatar type="list" size={44} />
                   <View style={{ flex: 1 }}>
                     <Text
                       numberOfLines={1}
@@ -594,12 +660,6 @@ export default function SquadsScreen() {
           </>
         )}
       </Sheet>
-      <SquadProfilePreview
-        key={previewSquadId ?? "no-squad-preview"}
-        squadId={previewSquadId ?? ""}
-        visible={!!previewSquadId}
-        onClose={() => setPreviewSquadId(null)}
-      />
     </SafeAreaView>
   );
 }

@@ -338,7 +338,12 @@ export default function BeaconMap(props: MapProps) {
       )
         return undefined;
       const offsetX = (mapInsets.left - mapInsets.right) / 2;
-      const offsetY = (mapInsets.top - mapInsets.bottom) / 2;
+      const usableHeight =
+        currentMap.getSize().y - mapInsets.top - mapInsets.bottom;
+      const previewOffset = props.previewHeight
+        ? Math.min(props.previewHeight / 2, Math.max(0, usableHeight / 2 - 48))
+        : 0;
+      const offsetY = (mapInsets.top - mapInsets.bottom) / 2 + previewOffset;
       const center = currentMap.unproject(
         currentMap
           .project([latitude, longitude], zoom)
@@ -352,7 +357,13 @@ export default function BeaconMap(props: MapProps) {
         ? center
         : undefined;
     },
-    [mapInsets.bottom, mapInsets.left, mapInsets.right, mapInsets.top],
+    [
+      mapInsets.bottom,
+      mapInsets.left,
+      mapInsets.right,
+      mapInsets.top,
+      props.previewHeight,
+    ],
   );
   useEffect(() => {
     const L = library.current,
@@ -1073,7 +1084,13 @@ export default function BeaconMap(props: MapProps) {
     // A context fit must cancel an in-flight overview/exploration animation.
     currentMap.stop();
     programmaticMove.current = true;
-    if (command.kind === "zoom-in") currentMap.zoomIn();
+    if (command.kind === "restore" && command.camera)
+      currentMap.setView(
+        [command.camera.center.latitude, command.camera.center.longitude],
+        command.camera.zoom,
+        { animate: false },
+      );
+    else if (command.kind === "zoom-in") currentMap.zoomIn();
     else if (command.kind === "zoom-out") currentMap.zoomOut();
     else if (command.coordinates?.length)
       currentMap.fitBounds(

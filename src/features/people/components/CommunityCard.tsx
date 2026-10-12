@@ -7,9 +7,9 @@ import type { SocialEntityType, SocialRole } from "@/src/features/social/types";
 
 export const communityTypeLabel = (type: SocialEntityType) =>
   type === "organization"
-    ? "Organization"
+    ? "Super-Organization"
     : type === "space"
-      ? "Space"
+      ? "Organization"
       : "Squad";
 export const communityRoleLabel = (role: SocialRole) =>
   role === "coowner" ? "Co-owner" : role[0].toUpperCase() + role.slice(1);

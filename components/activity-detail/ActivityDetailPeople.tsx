@@ -18,6 +18,7 @@ export type SafeRsvpRow = {
   name: string;
   profile?: Profile;
   isSelf: boolean;
+  arrivalLabel?: string;
 };
 
 type ActivityDetailPeopleProps = {
@@ -267,12 +268,19 @@ function PersonRow({
         })}
       >
         <ProfileAvatar profile={row.profile} size={40} />
-        <Text
-          numberOfLines={1}
-          style={{ color: colors.textPrimary, ...type.body, flex: 1 }}
-        >
-          {name}
-        </Text>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text
+            numberOfLines={1}
+            style={{ color: colors.textPrimary, ...type.body }}
+          >
+            {name}
+          </Text>
+          {row.arrivalLabel && (
+            <Text style={{ color: colors.textSecondary, ...type.secondary }}>
+              {row.arrivalLabel}
+            </Text>
+          )}
+        </View>
       </Pressable>
       {actions ? (
         <>

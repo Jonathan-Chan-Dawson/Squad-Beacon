@@ -38,7 +38,8 @@ function QuickChip({
       onPress={onPress}
       onLayout={onLayout}
       style={{
-        minHeight: 44,
+        minHeight: 42,
+        flexShrink: 0,
         justifyContent: "center",
         paddingHorizontal: 13,
         borderRadius: 20,
@@ -223,7 +224,7 @@ export function MapExplorationHeader({
           style={{
             flex: 1,
             minWidth: 0,
-            height: 44,
+            height: 48,
             position: "relative",
             overflow: "hidden",
           }}
@@ -231,11 +232,12 @@ export function MapExplorationHeader({
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            style={{ flex: 1, minWidth: 0, height: 44, overflow: "hidden" }}
+            style={{ flex: 1, minWidth: 0, height: 48, overflow: "hidden" }}
             contentContainerStyle={{
               alignItems: "center",
               gap: 3,
-              minHeight: 42,
+              minHeight: 44,
+              paddingHorizontal: 2,
             }}
           >
             <View
@@ -255,7 +257,7 @@ export function MapExplorationHeader({
                     top: 1,
                     left: indicatorX,
                     width: indicatorWidth,
-                    height: 44,
+                    height: 42,
                     borderRadius: 20,
                     backgroundColor: colors.green,
                   }}

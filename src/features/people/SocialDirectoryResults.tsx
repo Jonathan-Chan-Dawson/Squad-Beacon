@@ -3,7 +3,10 @@ import React, { useEffect, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { Building2, Layers3, UsersRound } from "lucide-react-native";
 import { useBeacon } from "@/src/shared/store";
-import type { SocialDirectorySummary, SocialEntityType } from "@/src/features/social/types";
+import type {
+  SocialDirectorySummary,
+  SocialEntityType,
+} from "@/src/features/social/types";
 import { Action, Button, Empty, Txt, useTheme } from "@/src/shared/ui";
 import { ProfilePreviewFrame } from "@/src/features/people/previews/ProfilePreviewFrame";
 
@@ -16,13 +19,13 @@ type ResultSet = {
 };
 
 const entityTitle: Record<SocialEntityType, string> = {
-  organization: "Organizations",
-  space: "Spaces",
+  organization: "Super-Organizations",
+  space: "Organizations",
   squad: "Squads",
 };
 const entitySingular: Record<SocialEntityType, string> = {
-  organization: "Organization",
-  space: "Space",
+  organization: "Super-Organization",
+  space: "Organization",
   squad: "Squad",
 };
 
@@ -59,21 +62,85 @@ export function SocialDirectoryResults({
   const generation = useRef(0);
   const normalizedQuery = query.trim();
   const permissionSnapshot = JSON.stringify({
-    squads: data.squads.map(({ id, owner_id, discoverability, join_mode, archived_at }) => [id, owner_id, discoverability, join_mode, archived_at]),
-    spaces: data.spaces.map(({ id, owner_id, discoverability, join_mode, archived_at }) => [id, owner_id, discoverability, join_mode, archived_at]),
-    organizations: data.organizations.map(({ id, owner_id, discoverability, join_mode, archived_at }) => [id, owner_id, discoverability, join_mode, archived_at]),
-    squadMembers: data.squad_members.map(({ squad_id, user_id, role }) => [squad_id, user_id, role]),
-    spaceMembers: data.space_members.map(({ space_id, user_id, status, role }) => [space_id, user_id, status, role]),
-    organizationMembers: data.organization_members.map(({ organization_id, user_id, status, role }) => [organization_id, user_id, status, role]),
-    blocks: data.blocks.map(({ blocker_id, blocked_id }) => [blocker_id, blocked_id]),
+    squads: data.squads.map(
+      ({ id, owner_id, discoverability, join_mode, archived_at }) => [
+        id,
+        owner_id,
+        discoverability,
+        join_mode,
+        archived_at,
+      ],
+    ),
+    spaces: data.spaces.map(
+      ({ id, owner_id, discoverability, join_mode, archived_at }) => [
+        id,
+        owner_id,
+        discoverability,
+        join_mode,
+        archived_at,
+      ],
+    ),
+    organizations: data.organizations.map(
+      ({ id, owner_id, discoverability, join_mode, archived_at }) => [
+        id,
+        owner_id,
+        discoverability,
+        join_mode,
+        archived_at,
+      ],
+    ),
+    squadMembers: data.squad_members.map(({ squad_id, user_id, role }) => [
+      squad_id,
+      user_id,
+      role,
+    ]),
+    spaceMembers: data.space_members.map(
+      ({ space_id, user_id, status, role }) => [
+        space_id,
+        user_id,
+        status,
+        role,
+      ],
+    ),
+    organizationMembers: data.organization_members.map(
+      ({ organization_id, user_id, status, role }) => [
+        organization_id,
+        user_id,
+        status,
+        role,
+      ],
+    ),
+    blocks: data.blocks.map(({ blocker_id, blocked_id }) => [
+      blocker_id,
+      blocked_id,
+    ]),
     bans: data.squad_bans.map(({ squad_id, user_id }) => [squad_id, user_id]),
-    spaceBans: data.space_bans.map(({ space_id, user_id }) => [space_id, user_id]),
-    organizationBans: data.organization_bans.map(({ organization_id, user_id }) => [organization_id, user_id]),
-    organizationSpaces: data.organization_spaces.map(({ organization_id, space_id }) => [organization_id, space_id]),
-    spaceSquads: data.space_squads.map(({ space_id, squad_id }) => [space_id, squad_id]),
-    organizationSquads: data.organization_squads.map(({ organization_id, squad_id }) => [organization_id, squad_id]),
-    squadInvites: data.squad_invites.map(({ id, squad_id, recipient_id }) => [id, squad_id, recipient_id]),
-    squadJoinRequests: data.squad_join_requests.map(({ squad_id, user_id }) => [squad_id, user_id]),
+    spaceBans: data.space_bans.map(({ space_id, user_id }) => [
+      space_id,
+      user_id,
+    ]),
+    organizationBans: data.organization_bans.map(
+      ({ organization_id, user_id }) => [organization_id, user_id],
+    ),
+    organizationSpaces: data.organization_spaces.map(
+      ({ organization_id, space_id }) => [organization_id, space_id],
+    ),
+    spaceSquads: data.space_squads.map(({ space_id, squad_id }) => [
+      space_id,
+      squad_id,
+    ]),
+    organizationSquads: data.organization_squads.map(
+      ({ organization_id, squad_id }) => [organization_id, squad_id],
+    ),
+    squadInvites: data.squad_invites.map(({ id, squad_id, recipient_id }) => [
+      id,
+      squad_id,
+      recipient_id,
+    ]),
+    squadJoinRequests: data.squad_join_requests.map(({ squad_id, user_id }) => [
+      squad_id,
+      user_id,
+    ]),
   });
   const key = `${userId ?? "signed-out"}|${data.viewer_id ?? "no-snapshot"}|${permissionSnapshot}|${normalizedQuery}|${entityType}|${parentType ?? ""}|${parentId ?? ""}|${revision}`;
 
@@ -86,13 +153,20 @@ export function SocialDirectoryResults({
       pageSize: PAGE_SIZE,
       pageOffset: 0,
       ...(parentType && parentId ? { parentType, parentId } : {}),
-    }).then((rows) => {
-      if (!current || generation.current !== requestId) return;
-      setResult({ key, rows, hasMore: rows.length === PAGE_SIZE, error: false });
-    }).catch(() => {
-      if (!current || generation.current !== requestId) return;
-      setResult({ key, rows: [], hasMore: false, error: true });
-    });
+    })
+      .then((rows) => {
+        if (!current || generation.current !== requestId) return;
+        setResult({
+          key,
+          rows,
+          hasMore: rows.length === PAGE_SIZE,
+          error: false,
+        });
+      })
+      .catch(() => {
+        if (!current || generation.current !== requestId) return;
+        setResult({ key, rows: [], hasMore: false, error: true });
+      });
     return () => {
       current = false;
       if (generation.current === requestId) generation.current += 1;
@@ -102,8 +176,12 @@ export function SocialDirectoryResults({
   const current = result?.key === key ? result : null;
   const loadingMore = loadingMoreFor === key;
   const selected = selectedSummary?.key === key ? selectedSummary.row : null;
-  const rows = (current?.rows ?? []).filter((row) =>
-    !explore || (row.action !== "joined" && row.action !== "invited" && row.action !== "requested"),
+  const rows = (current?.rows ?? []).filter(
+    (row) =>
+      !explore ||
+      (row.action !== "joined" &&
+        row.action !== "invited" &&
+        row.action !== "requested"),
   );
 
   async function loadMore() {
@@ -120,13 +198,14 @@ export function SocialDirectoryResults({
         ...(parentType && parentId ? { parentType, parentId } : {}),
       });
       if (generation.current !== requestId) return;
-      setResult((previous) => previous?.key === key
-        ? {
-            ...previous,
-            rows: [...previous.rows, ...next],
-            hasMore: next.length === PAGE_SIZE,
-          }
-        : previous,
+      setResult((previous) =>
+        previous?.key === key
+          ? {
+              ...previous,
+              rows: [...previous.rows, ...next],
+              hasMore: next.length === PAGE_SIZE,
+            }
+          : previous,
       );
     } catch {
       if (generation.current === requestId) setLoadMoreErrorFor(key);
@@ -152,7 +231,10 @@ export function SocialDirectoryResults({
   }
 
   const groups = (["organization", "space", "squad"] as const)
-    .map((type) => ({ type, rows: rows.filter((row) => row.entity_type === type) }))
+    .map((type) => ({
+      type,
+      rows: rows.filter((row) => row.entity_type === type),
+    }))
     .filter((group) => group.rows.length > 0);
 
   return (
@@ -160,65 +242,139 @@ export function SocialDirectoryResults({
       {normalizedQuery.length === 1 ? (
         <Txt muted>Enter at least two characters to search communities.</Txt>
       ) : !current ? (
-        <Txt muted>{explore ? "Loading discoverable communities…" : "Searching communities…"}</Txt>
+        <Txt muted>
+          {explore
+            ? "Loading discoverable communitiesï¿½"
+            : "Searching communitiesï¿½"}
+        </Txt>
       ) : current.error ? (
-        <Empty title="Couldn’t load communities" body="Try the search again in a moment." />
+        <Empty
+          title="Couldnï¿½t load communities"
+          body="Try the search again in a moment."
+        />
       ) : !groups.length ? (
         <Empty
-          title={explore ? "Nothing to discover yet" : "No matching communities"}
-          body={explore ? "Eligible public and parent-community results will appear here." : "Try another name or description."}
+          title={
+            explore ? "Nothing to discover yet" : "No matching communities"
+          }
+          body={
+            explore
+              ? "Eligible public and parent-community results will appear here."
+              : "Try another name or description."
+          }
         />
       ) : (
         groups.map(({ type, rows: groupRows }) => {
-          const Icon = type === "organization" ? Building2 : type === "space" ? Layers3 : UsersRound;
+          const Icon =
+            type === "organization"
+              ? Building2
+              : type === "space"
+                ? Layers3
+                : UsersRound;
           return (
             <View key={type} style={{ gap: 7 }}>
-              <Text style={styles.label}>{entityTitle[type].toUpperCase()}</Text>
+              <Text style={styles.label}>
+                {entityTitle[type].toUpperCase()}
+              </Text>
               {groupRows.map((row) => {
-                const actionTitle = row.action === "join"
-                  ? "Join"
-                  : row.action === "request"
-                    ? "Request"
-                    : row.action === "requested"
-                      ? "Cancel request"
-                      : row.action === "invited"
-                        ? "Accept invite"
-                        : null;
-                const canAcceptSquadInvite = row.entity_type !== "squad" || data.squad_invites.some(
-                  (invite) => invite.squad_id === row.entity_id && invite.recipient_id === userId,
-                );
+                const actionTitle =
+                  row.action === "join"
+                    ? "Join"
+                    : row.action === "request"
+                      ? "Request"
+                      : row.action === "requested"
+                        ? "Cancel request"
+                        : row.action === "invited"
+                          ? "Accept invite"
+                          : null;
+                const canAcceptSquadInvite =
+                  row.entity_type !== "squad" ||
+                  data.squad_invites.some(
+                    (invite) =>
+                      invite.squad_id === row.entity_id &&
+                      invite.recipient_id === userId,
+                  );
                 const parent = row.parent_name
                   ? `${row.parent_type === "organization" ? "Inside" : "In"} ${row.parent_name}`
                   : null;
-                const children = row.child_count > 0
-                  ? `${row.child_count} ${row.entity_type === "space" ? "Squads" : "communities"}`
-                  : null;
+                const children =
+                  row.child_count > 0
+                    ? `${row.child_count} ${row.entity_type === "space" ? "Squads" : "communities"}`
+                    : null;
                 const subtitle = [
                   entitySingular[type],
                   `${row.member_count.toLocaleString()} ${row.member_count === 1 ? "member" : "members"}`,
                   children,
                   parent,
-                ].filter(Boolean).join(" · ");
+                ]
+                  .filter(Boolean)
+                  .join(" ï¿½ ");
                 return (
-                  <View key={`${row.entity_type}:${row.entity_id}`} style={[styles.card, { padding: 10, gap: 6 }]}>
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 9 }}>
-                      <View style={{ width: 36, height: 36, borderRadius: 12, backgroundColor: colors.lime, alignItems: "center", justifyContent: "center" }}>
+                  <View
+                    key={`${row.entity_type}:${row.entity_id}`}
+                    style={[styles.card, { padding: 10, gap: 6 }]}
+                  >
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 9,
+                      }}
+                    >
+                      <View
+                        style={{
+                          width: 36,
+                          height: 36,
+                          borderRadius: 12,
+                          backgroundColor: colors.lime,
+                          alignItems: "center",
+                          justifyContent: "center",
+                        }}
+                      >
                         <Icon size={19} color={colors.green} />
                       </View>
                       <Pressable
                         accessibilityRole="button"
                         accessibilityLabel={`Preview ${entitySingular[type]} ${row.name}`}
                         onPress={() => openRow(row)}
-                        style={{ flex: 1, minWidth: 0, minHeight: 44, justifyContent: "center", gap: 2 }}
+                        style={{
+                          flex: 1,
+                          minWidth: 0,
+                          minHeight: 44,
+                          justifyContent: "center",
+                          gap: 2,
+                        }}
                       >
-                        <Text numberOfLines={1} style={[styles.body, { fontWeight: "700" }]}>{row.name}</Text>
-                        <Text numberOfLines={1} style={styles.muted}>{subtitle}</Text>
+                        <Text
+                          numberOfLines={1}
+                          style={[styles.body, { fontWeight: "700" }]}
+                        >
+                          {row.name}
+                        </Text>
+                        <Text numberOfLines={1} style={styles.muted}>
+                          {subtitle}
+                        </Text>
                       </Pressable>
                     </View>
-                    {row.description ? <Text numberOfLines={2} style={styles.muted}>{row.description}</Text> : null}
-                    <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+                    {row.description ? (
+                      <Text numberOfLines={2} style={styles.muted}>
+                        {row.description}
+                      </Text>
+                    ) : null}
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: 8,
+                      }}
+                    >
                       {actionTitle && canAcceptSquadInvite ? (
-                        <Action compact title={actionTitle} run={() => performAction(row)} />
+                        <Action
+                          compact
+                          title={actionTitle}
+                          run={() => performAction(row)}
+                        />
                       ) : row.action === "invite_required" ? (
                         <Text style={styles.muted}>Invite required</Text>
                       ) : row.action === "invited" ? (
@@ -228,7 +384,12 @@ export function SocialDirectoryResults({
                       ) : row.action === "joined" ? (
                         <Text style={styles.muted}>Joined</Text>
                       ) : null}
-                      <Button compact secondary title="Preview" onPress={() => openRow(row)} />
+                      <Button
+                        compact
+                        secondary
+                        title="Preview"
+                        onPress={() => openRow(row)}
+                      />
                     </View>
                   </View>
                 );
@@ -239,8 +400,22 @@ export function SocialDirectoryResults({
       )}
       {current?.hasMore && (
         <View style={{ gap: 6 }}>
-          {loadMoreErrorFor === key ? <Txt muted>Couldn’t load more results. You can try again.</Txt> : null}
-          <Button compact secondary title={loadingMore ? "Loading…" : loadMoreErrorFor === key ? "Try again" : "Load more"} disabled={loadingMore} onPress={loadMore} />
+          {loadMoreErrorFor === key ? (
+            <Txt muted>Couldnï¿½t load more results. You can try again.</Txt>
+          ) : null}
+          <Button
+            compact
+            secondary
+            title={
+              loadingMore
+                ? "Loadingï¿½"
+                : loadMoreErrorFor === key
+                  ? "Try again"
+                  : "Load more"
+            }
+            disabled={loadingMore}
+            onPress={loadMore}
+          />
         </View>
       )}
       <ProfilePreviewFrame
@@ -249,47 +424,72 @@ export function SocialDirectoryResults({
         onClose={() => setSelectedSummary(null)}
         renderBeaconPreview={(_, onBack) => (
           <View style={{ gap: 10 }}>
-            <Empty title="Beacon unavailable" body="This summary does not include private activity details." />
+            <Empty
+              title="Beacon unavailable"
+              body="This summary does not include private activity details."
+            />
             <Button secondary title="Back to community" onPress={onBack} />
           </View>
         )}
       >
-        {() => selected ? (
-          <View style={{ gap: 12 }}>
-            <Text style={styles.h2}>{selected.name}</Text>
-            <Text style={styles.label}>{entitySingular[selected.entity_type].toUpperCase()}</Text>
-            <Text style={styles.body}>
-              {selected.member_count.toLocaleString()} {selected.member_count === 1 ? "member" : "members"}
-              {selected.child_count > 0
-                ? ` · ${selected.child_count} ${selected.entity_type === "space" ? "Squads" : "communities"}`
-                : ""}
-            </Text>
-            {!!selected.parent_name && <Text style={styles.muted}>In {selected.parent_name}</Text>}
-            {!!selected.description && <Txt>{selected.description}</Txt>}
-            {selected.action === "joined" ? (
-              <Button
-                title="Open community profile"
-                onPress={() => {
-                  openRow(selected);
-                  setSelectedSummary(null);
-                }}
-              />
-            ) : selected.action === "invite_required" ? (
-              <Txt muted>An invitation is required to join this community.</Txt>
-            ) : selected.action === "invited" && selected.entity_type === "squad" &&
-              !data.squad_invites.some((invite) => invite.squad_id === selected.entity_id && invite.recipient_id === userId) ? (
-              <Txt muted>The Squad invitation is no longer available.</Txt>
-            ) : (
-              <Action
-                title={selected.action === "join" ? "Join now" : selected.action === "request" ? "Request to join" : selected.action === "requested" ? "Cancel join request" : "Accept invitation"}
-                run={async () => {
-                  await performAction(selected);
-                  setSelectedSummary(null);
-                }}
-              />
-            )}
-          </View>
-        ) : null}
+        {() =>
+          selected ? (
+            <View style={{ gap: 12 }}>
+              <Text style={styles.h2}>{selected.name}</Text>
+              <Text style={styles.label}>
+                {entitySingular[selected.entity_type].toUpperCase()}
+              </Text>
+              <Text style={styles.body}>
+                {selected.member_count.toLocaleString()}{" "}
+                {selected.member_count === 1 ? "member" : "members"}
+                {selected.child_count > 0
+                  ? ` ï¿½ ${selected.child_count} ${selected.entity_type === "space" ? "Squads" : "communities"}`
+                  : ""}
+              </Text>
+              {!!selected.parent_name && (
+                <Text style={styles.muted}>In {selected.parent_name}</Text>
+              )}
+              {!!selected.description && <Txt>{selected.description}</Txt>}
+              {selected.action === "joined" ? (
+                <Button
+                  title="Open community profile"
+                  onPress={() => {
+                    openRow(selected);
+                    setSelectedSummary(null);
+                  }}
+                />
+              ) : selected.action === "invite_required" ? (
+                <Txt muted>
+                  An invitation is required to join this community.
+                </Txt>
+              ) : selected.action === "invited" &&
+                selected.entity_type === "squad" &&
+                !data.squad_invites.some(
+                  (invite) =>
+                    invite.squad_id === selected.entity_id &&
+                    invite.recipient_id === userId,
+                ) ? (
+                <Txt muted>The Squad invitation is no longer available.</Txt>
+              ) : (
+                <Action
+                  title={
+                    selected.action === "join"
+                      ? "Join now"
+                      : selected.action === "request"
+                        ? "Request to join"
+                        : selected.action === "requested"
+                          ? "Cancel join request"
+                          : "Accept invitation"
+                  }
+                  run={async () => {
+                    await performAction(selected);
+                    setSelectedSummary(null);
+                  }}
+                />
+              )}
+            </View>
+          ) : null
+        }
       </ProfilePreviewFrame>
     </View>
   );

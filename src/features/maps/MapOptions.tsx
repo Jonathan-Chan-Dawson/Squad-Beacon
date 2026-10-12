@@ -13,6 +13,51 @@ import {
 } from "lucide-react-native";
 import { usePulseColors } from "@/src/features/pulse/components/PulseVisuals";
 
+export function MapStyleControls({
+  style,
+  onStyle,
+}: {
+  style: MapStyle;
+  onStyle(value: MapStyle): void;
+}) {
+  const { colors } = useTheme();
+  return (
+    <View style={{ flexDirection: "row", gap: 6 }}>
+      {(["standard", "satellite"] as const).map((value) => (
+        <Pressable
+          key={value}
+          accessibilityRole="button"
+          accessibilityLabel={`${value === "standard" ? "Standard" : "Satellite"} map`}
+          accessibilityState={{ selected: style === value }}
+          aria-selected={style === value}
+          onPress={() => onStyle(value)}
+          style={{
+            flex: 1,
+            minHeight: 44,
+            justifyContent: "center",
+            alignItems: "center",
+            borderRadius: 12,
+            borderWidth: 1,
+            borderColor: style === value ? colors.green : colors.line,
+            backgroundColor:
+              style === value ? colors.green + "16" : "transparent",
+          }}
+        >
+          <Text
+            style={{
+              color: style === value ? colors.green : colors.ink,
+              fontSize: 12,
+              fontWeight: "600",
+            }}
+          >
+            {value === "standard" ? "Standard" : "Satellite"}
+          </Text>
+        </Pressable>
+      ))}
+    </View>
+  );
+}
+
 export function MapOptions({
   visible,
   onClose,
@@ -59,18 +104,7 @@ export function MapOptions({
           trackColor={{ true: colors.green }}
         />
       </View>
-      <View style={{ flexDirection: "row", gap: 8 }}>
-        <Button
-          title="Standard map"
-          secondary={style !== "standard"}
-          onPress={() => onStyle("standard")}
-        />
-        <Button
-          title="Satellite map"
-          secondary={style !== "satellite"}
-          onPress={() => onStyle("satellite")}
-        />
-      </View>
+      <MapStyleControls style={style} onStyle={onStyle} />
       {friendsApplicable ? (
         <View
           style={{

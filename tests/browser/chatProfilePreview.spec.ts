@@ -7,115 +7,151 @@ async function chats(page: Page) {
   await page.getByRole("tab", { name: "Squads", exact: true }).click();
 }
 
-test("Friend chat header opens a compact profile and an inline Beacon preview", async ({
+test("Friend chat header opens the full profile, compact actions and privacy controls", async ({
   page,
 }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
-  page.on("console", (message) => {
-    if (/Text strings must be rendered/.test(message.text()))
-      errors.push(message.text());
-  });
   await chats(page);
-  await openConversation(page, "Jordan Ellis");
-  await expect(page.getByLabel("Message", { exact: true })).toBeVisible();
+  await page
+    .getByRole("button", { name: "Expand Start a chat", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Message Jordan Ellis", exact: true })
+    .click();
+  await page
+    .getByLabel("Message", { exact: true })
+    .fill("Keep my friend draft");
   await page
     .getByRole("button", { name: "View Jordan Ellis's profile", exact: true })
     .click();
-  const preview = page.getByRole("dialog");
-  await expect(preview).toHaveCount(1);
+  await expect(page).toHaveURL(/\/person\/jordan\/?$/);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(
-    preview.getByText("Jordan Ellis", { exact: true }).first(),
-  ).toBeVisible();
-  await page.screenshot({ path: "test-results/friend-chat-preview-390.png" });
-  const star = preview.getByRole("button", { name: /^(Unstar|Star)$/ });
-  const wasStarred = (await star.getAttribute("aria-label")) === "Unstar";
+    page.getByRole("button", { name: "Report account", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Block account", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "More", exact: true }),
+  ).toHaveCount(0);
+  const message = await page
+    .getByRole("button", { name: "Message", exact: true })
+    .boundingBox();
+  expect(message!.height).toBeGreaterThanOrEqual(44);
+  expect(message!.height).toBeLessThanOrEqual(48);
+  expect(message!.width).toBeLessThan(180);
+  const star = page.getByRole("button", { name: /^(Unstar|Star)$/ });
+  const starred = (await star.getAttribute("aria-label")) === "Unstar";
   await star.click();
   await expect(
-    preview.getByRole("button", {
-      name: wasStarred ? "Star" : "Unstar",
+    page.getByRole("button", {
+      name: starred ? "Star" : "Unstar",
       exact: true,
     }),
   ).toBeEnabled();
-  await preview
-    .getByRole("button", {
-      name: "Current Beacon: A few rounds. Good company.",
-      exact: true,
-    })
+  await page.screenshot({ path: "test-results/person-profile-390.png" });
+  await page.getByRole("button", { name: "See all connections", exact: true }).click();
+  await expect(page.getByRole("dialog").getByRole("button", { name: "The training crew", exact: true })).toBeVisible();
+  await expect(page.getByRole("dialog").getByRole("button", { name: "Neighborhood Studio", exact: true })).toBeVisible();
+  await page.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).click();
+  await page.getByRole("button", { name: "Friends", exact: true }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Remove friendship", exact: true })
     .click();
-  await expect(page.getByRole("dialog")).toHaveCount(1);
   await expect(
-    preview.getByText("Chicago Boxing Club", { exact: true }),
+    page
+      .getByRole("dialog")
+      .getByRole("button", { name: "Confirm remove friendship", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Close", exact: true })
+    .click();
+  // Closing confirmation returns to friendship management; close it without removing anyone.
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Close", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Safety & Privacy", exact: true })
+    .click();
+  await expect(
+    page
+      .getByRole("dialog")
+      .getByRole("button", { name: "Report account", exact: true }),
   ).toBeVisible();
   await expect(
-    preview.getByRole("button", { name: "Open full Beacon", exact: true }),
+    page
+      .getByRole("dialog")
+      .getByRole("button", { name: "Block account", exact: true }),
   ).toBeVisible();
-  await preview
-    .getByRole("button", { name: "Back to profile", exact: true })
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Close", exact: true })
     .click();
-  await preview
-    .getByRole("button", { name: "View Full Profile", exact: true })
-    .click();
-  await expect(page).toHaveURL(/\/person\/jordan\/?$/);
+  await page.goBack();
+  await expect(page.getByLabel("Message", { exact: true })).toHaveValue(
+    "Keep my friend draft",
+  );
   expect(errors).toEqual([]);
 });
 
-test("Squad chat header shows current and next Beacons, then the full Squad profile", async ({
+test("Squad header opens compact info with member navigation and Back to the draft", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 320, height: 740 });
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
-  page.on("console", (message) => {
-    if (/Text strings must be rendered/.test(message.text()))
-      errors.push(message.text());
-  });
   await chats(page);
   await openConversation(page, "The training crew");
+  await page.getByLabel("Message", { exact: true }).fill("Keep my Squad draft");
+  await page
+    .getByRole("button", { name: "View Jordan Ellis's profile", exact: true })
+    .first()
+    .click();
+  await expect(page).toHaveURL(/\/person\/jordan/);
+  await page.goBack();
+  await expect(page.getByLabel("Message", { exact: true })).toHaveValue(
+    "Keep my Squad draft",
+  );
   await page
     .getByRole("button", {
       name: "Open Squad profile for The training crew",
       exact: true,
     })
     .click();
-  const preview = page.getByRole("dialog");
-  await expect(preview).toHaveCount(1);
-  await expect(
-    preview.getByRole("button", { name: "Open Squad chat", exact: true }),
-  ).toHaveCount(0);
-  await expect(
-    preview.getByRole("button", {
-      name: "Preview Organization Lakefront Collective",
-      exact: true,
-    }),
-  ).toBeVisible();
-  await expect(
-    preview.getByRole("button", { name: /Current Beacon/ }),
-  ).toBeVisible();
-  await preview
-    .getByRole("button", { name: /Next Beacon|Upcoming Beacon/ })
-    .filter({ visible: true })
-    .click();
-  await expect(
-    preview.getByText("Walk planning with the crew", { exact: true }).filter({ visible: true }),
-  ).toBeVisible();
-  await expect(page.getByRole("dialog")).toHaveCount(1);
-  await preview
-    .getByRole("button", { name: "Back to Squad", exact: true })
-    .click();
-  await page.screenshot({ path: "test-results/squad-chat-preview-320.png" });
-  await preview
-    .getByRole("button", { name: /View full Squad Profile/i })
-    .click();
-  await expect(page).toHaveURL(/\/squad\/boxing\/?$/);
+  await expect(page).toHaveURL(/\/squad\/boxing.*fromChat=yes/);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   for (const name of ["Overview", "Members", "Activity", "Settings"]) {
-    await expect(page.getByRole("tab", { name, exact: true })).toBeVisible();
+    await expect(page.getByRole("tab", { name, exact: true })).toHaveCount(0);
   }
-  await page.getByRole("tab", { name: "Members", exact: true }).click();
   await expect(
-    page.getByText("Jordan Ellis", { exact: true }).last(),
+    page.getByRole("button", { name: /^(Chat|Squad chat|Open Squad chat)$/ }),
+  ).toHaveCount(0);
+  const ping = await page
+    .getByRole("button", { name: "Ping", exact: true })
+    .boundingBox();
+  expect(ping!.height).toBeGreaterThanOrEqual(44);
+  expect(ping!.width).toBeLessThan(150);
+  await page.screenshot({ path: "test-results/squad-info-320.png" });
+  await page
+    .getByRole("button", { name: "See all members", exact: true })
+    .click();
+  await expect(page).toHaveURL(/tab=Members/);
+  await expect(
+    page.getByText("Jordan Ellis", { exact: true }).filter({ visible: true }),
   ).toBeVisible();
-  await page.screenshot({ path: "test-results/squad-members-320.png" });
+  await page.goBack();
+  await expect(
+    page.getByRole("button", { name: "Ping", exact: true }),
+  ).toBeVisible();
+  await page.goBack();
+  await expect(page.getByLabel("Message", { exact: true })).toHaveValue(
+    "Keep my Squad draft",
+  );
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= innerWidth,
@@ -124,39 +160,26 @@ test("Squad chat header shows current and next Beacons, then the full Squad prof
   expect(errors).toEqual([]);
 });
 
-test("Squad preview links open the connected Organization and a Squad-scoped Ping", async ({
+test("Squad info retains the related community and scoped Ping creation", async ({
   page,
 }) => {
   await chats(page);
-  const header = () =>
-    page.getByRole("button", {
+  await openConversation(page, "The training crew");
+  await page
+    .getByRole("button", {
       name: "Open Squad profile for The training crew",
       exact: true,
-    });
-  await openConversation(page, "The training crew");
-  await header().click();
+    })
+    .click();
   await page
-    .getByRole("dialog")
     .getByRole("button", {
-      name: "Preview Organization Lakefront Collective",
+      name: "Open super-organization Lakefront Collective",
       exact: true,
     })
     .click();
-  await expect(page).toHaveURL(/\/squad-chat\/boxing/);
-  await page
-    .getByRole("dialog")
-    .getByRole("button", {
-      name: "View full organization profile",
-      exact: true,
-    })
-    .click();
-  await expect(page).toHaveURL(/\/organization\/org-lakefront-collective\/?$/);
+  await expect(page).toHaveURL(/\/organization\/org-lakefront-collective/);
   await page.goBack();
-  await header().click();
-  await page
-    .getByRole("dialog")
-    .getByRole("button", { name: "Ping", exact: true })
-    .click();
+  await page.getByRole("button", { name: "Ping", exact: true }).click();
   await expect(
     page.getByText("Shared with The training crew", { exact: true }),
   ).toBeVisible();

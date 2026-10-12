@@ -7,12 +7,18 @@ import {
 export function ChatKeyboardProvider({ children }: { children: ReactNode }) {
   return <KeyboardProvider>{children}</KeyboardProvider>;
 }
-export function ChatKeyboardFrame({ children }: { children: ReactNode }) {
+export function ChatKeyboardFrame({
+  children,
+  compact = false,
+}: {
+  children: ReactNode;
+  compact?: boolean;
+}) {
   return (
     <KeyboardAvoidingView
       automaticOffset
       behavior="padding"
-      style={{ flex: 1, minHeight: 200 }}
+      style={{ flex: 1, minHeight: compact ? 0 : 200 }}
     >
       {children}
     </KeyboardAvoidingView>

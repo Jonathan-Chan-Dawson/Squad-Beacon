@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Keyboard, Text, TextInput, View } from "react-native";
 import Animated, { FadeIn, FadeOut } from "react-native-reanimated";
-import { ArrowUp, Plus } from "lucide-react-native";
+import { ArrowUp, Plus, Smile } from "lucide-react-native";
 import { MotionPressable } from "@/src/shared/MotionPressable";
 import { useDesignTheme, useReducedMotion } from "@/src/shared/design-system";
 import { radius, space } from "@/src/theme/data";
@@ -28,8 +28,40 @@ export function ChatComposer({
   const { colors } = useDesignTheme();
   const reducedMotion = useReducedMotion();
   const [height, setHeight] = useState(44);
+  const [emojiOpen, setEmojiOpen] = useState(false);
   return (
     <View style={{ paddingTop: space.sm, gap: space.xs }}>
+      {emojiOpen && !disabled ? (
+        <View
+          style={{
+            flexDirection: "row",
+            justifyContent: "space-between",
+            backgroundColor: colors.surface,
+            borderRadius: radius.md,
+          }}
+        >
+          {["👍", "❤️", "😂", "🎉", "👋", "✅"].map((emoji) => (
+            <MotionPressable
+              key={emoji}
+              accessibilityRole="button"
+              accessibilityLabel={`Insert ${emoji}`}
+              disabled={body.length + emoji.length > 2000}
+              onPress={() => {
+                onChange(body + emoji);
+                setEmojiOpen(false);
+              }}
+              style={{
+                minWidth: 44,
+                minHeight: 44,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Text style={{ fontSize: 23 }}>{emoji}</Text>
+            </MotionPressable>
+          ))}
+        </View>
+      ) : null}
       {error ? (
         <Text accessibilityRole="alert" style={{ color: colors.danger }}>
           {error}
@@ -57,6 +89,21 @@ export function ChatComposer({
             <Plus size={23} color={colors.accent} />
           </MotionPressable>
         ) : null}
+        <MotionPressable
+          accessibilityRole="button"
+          accessibilityLabel="Choose emoji"
+          accessibilityState={{ expanded: emojiOpen, disabled: !!disabled }}
+          disabled={disabled}
+          onPress={() => setEmojiOpen(!emojiOpen)}
+          style={{
+            width: 44,
+            height: 44,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Smile size={22} color={colors.textSecondary} />
+        </MotionPressable>
         <TextInput
           accessibilityLabel="Message"
           value={body}

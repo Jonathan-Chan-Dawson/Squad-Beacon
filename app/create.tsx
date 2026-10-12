@@ -861,7 +861,7 @@ function CreateEditor() {
               key={`${row.entity_type}:${row.entity_id}`}
               compact
               secondary
-              title={`${row.entity_type === "organization" ? "Organization" : row.entity_type === "space" ? "Space" : "Squad"} · ${row.name}`}
+              title={`${row.entity_type === "organization" ? "Super-Organization" : row.entity_type === "space" ? "Organization" : "Squad"} · ${row.name}`}
               onPress={() => {
                 setAssociationDraft({
                   routeKey: associationRouteKey,

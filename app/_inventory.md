@@ -1,5 +1,7 @@
 Expo Router map
 
+- responses.tsx: full-screen Responses & Invitations inbox, reusing the existing planning and social records.
+
 - space/[id].tsx: independent Space overview, people and privacy-preserving Squad links.
 
 - _layout.tsx, +html.tsx, +not-found.tsx: root app shell, web HTML wrapper, and fallback route.

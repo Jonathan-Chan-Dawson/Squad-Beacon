@@ -168,13 +168,17 @@ export function OrganizationProfilePreview({
       key={`${organizationId}:${authorized ? "active" : "unavailable"}:${visible ? "open" : "closed"}`}
       visible={visible}
       onClose={closePreview}
-      title={authorized ? "About this Organization" : "Organization preview"}
+      title={
+        authorized
+          ? "About this Super-Organization"
+          : "Super-Organization preview"
+      }
       renderBeaconPreview={(beaconId, onBack) => (
         <BeaconProfilePreview
           beaconId={beaconId}
           onBack={onBack}
           backLabel={
-            selectedCommunity ? "Back to preview" : "Back to organization"
+            selectedCommunity ? "Back to preview" : "Back to super-organization"
           }
           onOpenFullBeacon={(id) => {
             closePreview();
@@ -193,14 +197,14 @@ export function OrganizationProfilePreview({
             entityType={selectedCommunity.type}
             entityId={selectedCommunity.id}
             onBack={() => setSelectedCommunity(null)}
-            backLabel="Back to organization"
+            backLabel="Back to super-organization"
             onOpenBeacon={openBeacon}
             onOpenFullProfile={openFullProfile}
           />
         ) : !authorized || !organization ? (
           <Empty
-            title="Organization preview unavailable"
-            body="This organization is no longer available to your account."
+            title="Super-Organization preview unavailable"
+            body="This super-organization is no longer available to your account."
           />
         ) : (
           <View style={{ gap: 14 }}>
@@ -224,7 +228,8 @@ export function OrganizationProfilePreview({
                 <Text style={styles.h2}>{organization.name}</Text>
                 <Text style={styles.muted}>
                   {memberCount.toLocaleString()}{" "}
-                  {memberCount === 1 ? "member" : "members"} · Organization
+                  {memberCount === 1 ? "member" : "members"} ·
+                  Super-Organization
                 </Text>
                 {role ? (
                   <Text style={[styles.label, { color: colors.green }]}>
@@ -240,7 +245,7 @@ export function OrganizationProfilePreview({
               <Text style={styles.label}>COMMUNITIES YOU CAN ACCESS</Text>
               <Text style={styles.muted}>
                 {linkedSpaces.length}{" "}
-                {linkedSpaces.length === 1 ? "Space" : "Spaces"} ·{" "}
+                {linkedSpaces.length === 1 ? "Organization" : "Organizations"} ·{" "}
                 {linkedSquads.length}{" "}
                 {linkedSquads.length === 1 ? "Squad" : "Squads"}
               </Text>
@@ -250,7 +255,7 @@ export function OrganizationProfilePreview({
                     <MotionPressable
                       key={space.id}
                       accessibilityRole="button"
-                      accessibilityLabel={`Preview Space ${space.name}`}
+                      accessibilityLabel={`Preview Organization ${space.name}`}
                       onPress={() =>
                         setSelectedCommunity({ type: "space", id: space.id })
                       }
@@ -311,7 +316,8 @@ export function OrganizationProfilePreview({
                 </Text>
               )}
               <Text style={styles.muted}>
-                Linked Spaces and Squads keep separate membership and privacy.
+                Linked Organizations and Squads keep separate membership and
+                privacy.
               </Text>
             </View>
             {activities.length > 0 && (
@@ -350,7 +356,7 @@ export function OrganizationProfilePreview({
               />
             </View>
             <Button
-              title="View full organization profile"
+              title="View full super-organization profile"
               onPress={() => openFullProfile("organization", organizationId)}
             />
           </View>

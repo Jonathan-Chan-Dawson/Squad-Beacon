@@ -24,11 +24,12 @@ test("crowded demo Map discovers recent history and distinct public events", asy
   );
   const card = page.getByTestId("map-tooltip-card");
   expect((await card.boundingBox())!.width).toBeLessThanOrEqual(320);
-  expect(
-    (await card
-      .getByRole("button", { name: "See overview", exact: true })
-      .boundingBox())!.width,
-  ).toBeLessThan(250);
+  const overview = await card
+    .getByRole("button", { name: "See overview", exact: true })
+    .boundingBox();
+  expect(overview!.width).toBeGreaterThan(
+    (await card.boundingBox())!.width - 32,
+  );
 
   await page
     .getByRole("button", { name: "Close map preview", exact: true })
@@ -95,7 +96,7 @@ test("friend preview keeps compact profile and message actions", async ({
   expect(box.height).toBeLessThan(340);
   expect(
     (await preview
-      .getByRole("button", { name: "View Profile", exact: true })
+      .getByRole("button", { name: "View profile", exact: true })
       .boundingBox())!.width,
   ).toBeLessThan(200);
   const marker = page.getByRole("button", {
@@ -103,10 +104,13 @@ test("friend preview keeps compact profile and message actions", async ({
   });
   await expect(marker.getByTestId("avatar-status-available")).toBeVisible();
   await preview
-    .getByRole("button", { name: "View Profile", exact: true })
+    .getByRole("button", { name: "View profile", exact: true })
     .click();
   await expect(
-    page.getByTestId("avatar-status-available").filter({ visible: true }).first(),
+    page
+      .getByTestId("avatar-status-available")
+      .filter({ visible: true })
+      .first(),
   ).toBeVisible();
 });
 

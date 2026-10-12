@@ -1,3 +1,4 @@
+import { CommunityAvatar } from "../components/CommunityAvatar";
 import React, { useId, useState } from "react";
 import { Text, View } from "react-native";
 import { router } from "expo-router";
@@ -53,7 +54,7 @@ export function SquadProfilePreview({
 }: SquadProfilePreviewProps) {
   const pingSeed = useId();
   const { data, userId, act } = useBeacon();
-  const { styles, colors } = useTheme();
+  const { styles } = useTheme();
   const now = useNow();
   const [selectedCommunity, setSelectedCommunity] = useState<{
     type: SocialEntityType;
@@ -175,25 +176,7 @@ export function SquadProfilePreview({
         ) : (
           <View style={{ gap: 14 }}>
             <View style={styles.row}>
-              <View
-                style={{
-                  width: 52,
-                  height: 52,
-                  borderRadius: 16,
-                  backgroundColor: colors.lime,
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <Text style={[styles.h2, { color: colors.green }]}>
-                  {squad.name
-                    .split(/\s+/)
-                    .slice(0, 2)
-                    .map((word) => word[0])
-                    .join("")
-                    .toUpperCase()}
-                </Text>
-              </View>
+              <CommunityAvatar iconKey={squad.icon_key} size={52} />
               <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
                 <Text style={styles.h2} numberOfLines={1}>
                   {squad.name}

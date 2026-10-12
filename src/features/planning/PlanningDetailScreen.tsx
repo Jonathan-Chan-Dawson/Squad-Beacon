@@ -1,4 +1,7 @@
-import React, { useMemo, useState } from "react";
+import { PingAvailabilityEditor } from "./PingAvailabilityEditor";
+import { canOpenSquadPing } from "@/src/features/people/communication";
+import { PlanningEditor } from "./PlanningEditor";
+import React, { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import {
@@ -10,15 +13,7 @@ import {
 } from "lucide-react-native";
 import { useBeacon } from "@/src/shared/store";
 import { useNow } from "@/src/shared/useNow";
-import {
-  Action,
-  Button,
-  Empty,
-  Screen,
-  Sheet,
-  Txt,
-  useTheme,
-} from "@/src/shared/ui";
+import { Action, Button, Empty, Screen, Txt, useTheme } from "@/src/shared/ui";
 import {
   canManagePlanningThread,
   canReadPlanningThread,
@@ -45,8 +40,17 @@ const labelForStatus = (status: string) =>
       ? "The approved options are now in the past"
       : status.replaceAll("_", " ");
 
-export default function PlanningDetailScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+export default function PlanningDetailScreen({
+  threadId,
+  embedded = false,
+  onShowSuggested,
+}: {
+  threadId?: string;
+  embedded?: boolean;
+  onShowSuggested?: (id: string) => void;
+} = {}) {
+  const params = useLocalSearchParams<{ id: string }>();
+  const id = threadId ?? params.id;
   const { data, userId, act } = useBeacon();
   const { colors, styles } = useTheme();
   const now = useNow();
@@ -55,25 +59,25 @@ export default function PlanningDetailScreen() {
   const [proposalOpen, setProposalOpen] = useState(false);
   const [pingAutoRsvp, setPingAutoRsvp] = useState<boolean | null>(null);
   const [replaceConfirm, setReplaceConfirm] = useState(false);
+  const [availabilityOpen, setAvailabilityOpen] = useState(false);
 
   const accessible =
-    !!thread && canReadPlanningThread(data, thread, userId ?? "");
+    !!userId &&
+    data.viewer_id === userId &&
+    !!thread &&
+    canReadPlanningThread(data, thread, userId);
   const manages =
     !!thread && accessible && canManagePlanningThread(thread, userId ?? "");
-  const proposals = useMemo(
-    () =>
-      thread
-        ? visiblePlanningProposals(
-            data,
-            planning.planning_proposals,
-            thread.id,
-            userId ?? "",
-          ).filter((proposal) =>
-            canReadPlanningThread(data, thread, proposal.author_id),
-          )
-        : [],
-    [data, planning.planning_proposals, thread, userId],
-  );
+  const proposals = thread
+    ? visiblePlanningProposals(
+        data,
+        planning.planning_proposals,
+        thread.id,
+        userId ?? "",
+      ).filter((proposal) =>
+        canReadPlanningThread(data, thread, proposal.author_id),
+      )
+    : [];
   const votes = planning.planning_votes.filter((vote) => vote.thread_id === id);
   const approvedIds = new Set(
     proposals
@@ -89,7 +93,7 @@ export default function PlanningDetailScreen() {
   );
   const autoRsvpChoice = pingAutoRsvp ?? !!myResponse?.auto_rsvp;
   const canRespond =
-    !!thread && canRespondToPlanningThread(data, thread, userId ?? "");
+    !!thread && canRespondToPlanningThread(data, thread, userId ?? "", now);
   const winner = thread
     ? proposals.find((proposal) => proposal.id === thread.winner_proposal_id)
     : undefined;
@@ -171,7 +175,9 @@ export default function PlanningDetailScreen() {
           {proposal.disqualified_at
             ? "REPLACED"
             : proposal.approved
-              ? `${voteCounts.get(proposal.id) ?? 0} votes · APPROVED`
+              ? thread?.kind === "vote"
+                ? `${voteCounts.get(proposal.id) ?? 0} votes · APPROVED`
+                : "APPROVED"
               : "WAITING FOR APPROVAL"}
         </Text>
         {canReview && proposal.disqualified_at == null && (
@@ -207,19 +213,27 @@ export default function PlanningDetailScreen() {
 
   if (!thread || !accessible)
     return (
-      <Screen title="Planning decision" eyebrow="PING, VOTE, OR DRAW">
+      <PlanningFrame
+        embedded={embedded}
+        title="Planning decision"
+        eyebrow="PING, VOTE, OR DRAW"
+      >
         <Empty
           title="This planning thread isn’t available."
           body="It may have closed or no longer be shared with you."
         />
-      </Screen>
+      </PlanningFrame>
     );
 
   const Icon =
     thread.kind === "ping" ? CircleHelp : thread.kind === "vote" ? Vote : Dices;
 
   return (
-    <Screen title={thread.title} eyebrow={thread.kind.toUpperCase()}>
+    <PlanningFrame
+      embedded={embedded}
+      title={thread.title}
+      eyebrow={thread.kind.toUpperCase()}
+    >
       <Button
         title={
           thread.kind === "ping"
@@ -228,14 +242,25 @@ export default function PlanningDetailScreen() {
         }
         secondary
         onPress={() =>
-          router.push({ pathname: "/", params: { mapThread: thread.id } })
+          onShowSuggested
+            ? onShowSuggested(thread.id)
+            : router.push({ pathname: "/", params: { mapThread: thread.id } })
         }
       />
       <View style={styles.card}>
         <View style={styles.row}>
           <Icon color={colors.green} size={19} />
-          <Text style={styles.h2}>{labelForStatus(thread.status)}</Text>
+          <Text style={styles.h2}>
+            {thread.status === "open" && Date.parse(thread.deadline_at) <= now
+              ? "Closed · awaiting organizer"
+              : labelForStatus(thread.status)}
+          </Text>
         </View>
+        <Txt muted>
+          Created by{" "}
+          {data.profiles.find((person) => person.id === thread.owner_id)
+            ?.name ?? "Organizer"}
+        </Txt>
         {thread.body ? <Txt>{thread.body}</Txt> : null}
         <View style={styles.row}>
           <CalendarClock color={colors.muted} size={16} />
@@ -254,6 +279,30 @@ export default function PlanningDetailScreen() {
           <Txt muted>
             {thread.payload.category} · {dateLabel(thread.payload.starts_at)}
           </Txt>
+          {thread.payload.label ? (
+            <Txt muted>{thread.payload.label}</Txt>
+          ) : null}
+          {canOpenSquadPing(data, thread, userId) ? (
+            <Button
+              compact
+              secondary
+              title="Open Squad chat"
+              onPress={() =>
+                router.push({
+                  pathname: "/squad-chat/[id]",
+                  params: { id: thread.audience_id!, ping: thread.id },
+                })
+              }
+            />
+          ) : null}
+          {myResponse ? (
+            <Txt muted>
+              Your response: {myResponse.response}
+              {myResponse.available_after
+                ? ` · Available after ${dateLabel(myResponse.available_after)}`
+                : ""}
+            </Txt>
+          ) : null}
           {thread.status === "open" &&
             userId !== thread.owner_id &&
             canRespond && (
@@ -261,6 +310,7 @@ export default function PlanningDetailScreen() {
                 <Pressable
                   accessibilityRole="checkbox"
                   accessibilityState={{ checked: autoRsvpChoice }}
+                  aria-checked={autoRsvpChoice}
                   accessibilityLabel="Auto-RSVP if this ping becomes a beacon"
                   onPress={() =>
                     setPingAutoRsvp(
@@ -298,7 +348,7 @@ export default function PlanningDetailScreen() {
                       <Check color={colors.white} size={15} />
                     ) : null}
                   </View>
-                  <Text style={styles.body}>
+                  <Text style={[styles.body, { flex: 1 }]}>
                     Auto-RSVP if this becomes a beacon
                   </Text>
                 </Pressable>
@@ -320,6 +370,29 @@ export default function PlanningDetailScreen() {
                     }
                   />
                 ))}
+                <Button
+                  title="Interested After…"
+                  compact
+                  secondary
+                  onPress={() => setAvailabilityOpen(true)}
+                />
+                {availabilityOpen ? (
+                  <PingAvailabilityEditor
+                    inline={embedded}
+                    availableAfter={myResponse?.available_after}
+                    autoRsvp={autoRsvpChoice}
+                    startsAt={thread.payload.starts_at}
+                    onClose={() => setAvailabilityOpen(false)}
+                    onSave={(available_after) =>
+                      act("respond_planning_ping", {
+                        thread_id: thread.id,
+                        response: "interested",
+                        auto_rsvp: autoRsvpChoice,
+                        available_after,
+                      })
+                    }
+                  />
+                ) : null}
               </>
             )}
           {thread.owner_id === userId && thread.status === "open" && (
@@ -370,7 +443,7 @@ export default function PlanningDetailScreen() {
               <Text style={styles.muted}>
                 {thread.kind === "vote"
                   ? "One changeable vote per person."
-                  : "At the deadline, an approved option is drawn at random; no entries are needed."}
+                  : "After the deadline, an organizer runs the draw. No entries are needed."}
               </Text>
             </View>
             {thread.status === "open" && canRespond && (
@@ -382,18 +455,6 @@ export default function PlanningDetailScreen() {
               />
             )}
           </View>
-          {thread.status === "open" && canRespond && (
-            <Button
-              title="+ Suggested Beacon"
-              secondary
-              onPress={() =>
-                router.push({
-                  pathname: "/create",
-                  params: { threadId: thread.id, editor: "yes" },
-                })
-              }
-            />
-          )}
           {pendingReviews.length > 0 && manages && (
             <View style={[styles.card, { backgroundColor: colors.lime }]}>
               <Txt>
@@ -403,7 +464,17 @@ export default function PlanningDetailScreen() {
             </View>
           )}
           {proposals.length ? (
-            proposals.map(proposalCard)
+            proposals
+              .filter(
+                (proposal) =>
+                  manages ||
+                  proposal.author_id === userId ||
+                  proposal.id === thread.winner_proposal_id ||
+                  (proposal.approved &&
+                    !proposal.disqualified_at &&
+                    Date.parse(proposal.payload.starts_at) > now),
+              )
+              .map(proposalCard)
           ) : (
             <Empty
               title="No options yet."
@@ -459,12 +530,20 @@ export default function PlanningDetailScreen() {
         </>
       )}
       <ProposalEditor
+        inline={embedded}
         thread={thread}
         visible={proposalOpen}
         onClose={() => setProposalOpen(false)}
         onSave={saveProposal}
+        onOpenBeaconEditor={() =>
+          router.push({
+            pathname: "/create",
+            params: { threadId: thread.id, editor: "yes" },
+          })
+        }
       />
-      <Sheet
+      <PlanningEditor
+        inline={embedded}
         title="Replace the selected beacon?"
         visible={replaceConfirm}
         onClose={() => setReplaceConfirm(false)}
@@ -490,8 +569,8 @@ export default function PlanningDetailScreen() {
               });
           }}
         />
-      </Sheet>
-      {thread.kind === "vote" && thread.status === "resolved" && !winner && (
+      </PlanningEditor>
+      {thread.kind !== "ping" && thread.status === "resolved" && !winner && (
         <Empty
           title="No beacon was created."
           body={labelForStatus(thread.status)}
@@ -515,14 +594,37 @@ export default function PlanningDetailScreen() {
           body="Its history stays here."
         />
       )}
-      <View style={styles.row}>
-        <Button
-          title="Pings & Decisions"
-          secondary
-          onPress={() => router.replace("/councils")}
-        />
-        <Button title="Beacons" onPress={() => router.replace("/(tabs)")} />
-      </View>
-    </Screen>
+      {!embedded && (
+        <View style={styles.row}>
+          <Button
+            title="Pings & Decisions"
+            secondary
+            onPress={() => router.replace("/councils")}
+          />
+          <Button title="Beacons" onPress={() => router.replace("/(tabs)")} />
+        </View>
+      )}
+    </PlanningFrame>
+  );
+}
+
+function PlanningFrame({
+  embedded,
+  title,
+  eyebrow,
+  children,
+}: React.ComponentProps<typeof Screen> & { embedded: boolean }) {
+  const { styles } = useTheme();
+  if (!embedded)
+    return (
+      <Screen title={title} eyebrow={eyebrow}>
+        {children}
+      </Screen>
+    );
+  return (
+    <View style={{ gap: 12 }}>
+      <Text style={styles.h2}>{title}</Text>
+      {children}
+    </View>
   );
 }

@@ -20,8 +20,9 @@ export type MapTouchPoint = {
   point: { x: number; y: number };
 };
 export type MapControlCommand = {
-  kind: "zoom-in" | "zoom-out" | "fit";
+  kind: "zoom-in" | "zoom-out" | "fit" | "restore";
   revision: number;
+  camera?: MapViewport;
   coordinates?: { latitude: number; longitude: number }[];
 };
 export type MapStyle = "standard" | "satellite";
@@ -44,6 +45,7 @@ export interface MapProps {
   viewportInsets?: MapViewportInsets;
   controlsTop?: number;
   panelHeight?: number;
+  previewHeight?: number;
   focused?: { latitude: number; longitude: number } | null;
   explorationTarget?: ExplorationTarget | null;
   activities: Activity[];

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
+import Svg, { Circle as SvgCircle } from "react-native-svg";
 import * as Crypto from "expo-crypto";
 import {
   Check,
@@ -17,6 +18,7 @@ import {
 } from "lucide-react-native";
 import {
   canAddBeaconNote,
+  beaconChecklistLabel,
   canDeleteBeaconModuleEntry,
   canEditBeaconChecklist,
   canReadBeaconModuleEntry,
@@ -67,9 +69,11 @@ function formatTime(seconds: number) {
 export function BeaconTools({
   activity,
   section,
+  inlineEditors = false,
 }: {
   activity: Activity;
   section?: ToolSection;
+  inlineEditors?: boolean;
 }) {
   const { colors, styles } = useTheme();
   const { data, userId, act, refresh } = useBeacon();
@@ -90,11 +94,14 @@ export function BeaconTools({
     enabledSections[0] ?? null,
   );
   const displayedSection =
-    section ??
-    (enabledSections.includes(activeSection as ToolSection)
-      ? activeSection
-      : (enabledSections[0] ?? null));
+    activeSection === null
+      ? null
+      : (section ??
+        (enabledSections.includes(activeSection as ToolSection)
+          ? activeSection
+          : (enabledSections[0] ?? null)));
 
+  const [checklistOptions, setChecklistOptions] = useState(false);
   const [checklistText, setChecklistText] = useState("");
   const [checklistDraftId, setChecklistDraftId] = useState(() =>
     Crypto.randomUUID(),
@@ -377,7 +384,7 @@ export function BeaconTools({
   return (
     <View style={{ gap: 10 }}>
       {allowed && checklistEnabled ? (
-        <View style={styles.card}>
+        <View style={[styles.card, inlineEditors && { padding: 12, gap: 8 }]}>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={
@@ -399,7 +406,9 @@ export function BeaconTools({
             })}
           >
             <ListChecks size={21} color={colors.green} />
-            <Text style={[styles.h2, { flex: 1 }]}>Checklist</Text>
+            <Text style={[styles.h2, { flex: 1 }]}>
+              {beaconChecklistLabel(activity)}
+            </Text>
             <Text style={styles.muted}>
               {checklist.length}/50 · {completedCount} done
             </Text>
@@ -409,9 +418,45 @@ export function BeaconTools({
               <ChevronDown size={20} color={colors.muted} />
             )}
           </Pressable>
+          {inlineEditors && (
+            <View
+              accessibilityRole="progressbar"
+              accessibilityLabel="Checklist progress"
+              accessibilityValue={{
+                min: 0,
+                max: Math.max(1, checklist.length),
+                now: completedCount,
+              }}
+              style={{
+                height: 4,
+                borderRadius: 4,
+                backgroundColor: colors.line,
+                marginVertical: 6,
+              }}
+            >
+              <View
+                style={{
+                  height: 4,
+                  borderRadius: 4,
+                  backgroundColor: colors.green,
+                  width: `${checklist.length ? (100 * completedCount) / checklist.length : 0}%`,
+                }}
+              />
+            </View>
+          )}
+          {inlineEditors && checklistEditable && (
+            <Button
+              title="Checklist options"
+              compact
+              secondary
+              onPress={() => setChecklistOptions((open) => !open)}
+            />
+          )}
           {displayedSection === "checklist" ? (
             <View style={{ gap: 9 }}>
-              {canManage && activity.status === "scheduled" ? (
+              {canManage &&
+              activity.status === "scheduled" &&
+              (!inlineEditors || checklistOptions) ? (
                 <View style={{ gap: 5 }}>
                   <Text style={styles.label}>
                     Who can edit checklist items?
@@ -613,7 +658,9 @@ export function BeaconTools({
                   />
                 </>
               ) : null}
-              {checklistEditable && sections.length < 20 ? (
+              {checklistEditable &&
+              sections.length < 20 &&
+              (!inlineEditors || checklistOptions) ? (
                 <View style={[styles.card, { padding: 11, gap: 7 }]}>
                   <Field
                     label="New checklist section"
@@ -662,7 +709,7 @@ export function BeaconTools({
       ) : null}
 
       {allowed && journalEnabled ? (
-        <View style={styles.card}>
+        <View style={[styles.card, inlineEditors && { padding: 12, gap: 8 }]}>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={
@@ -834,11 +881,11 @@ export function BeaconTools({
       ) : null}
 
       {focusEnabled ? (
-        <View style={styles.card}>
+        <View style={[styles.card, inlineEditors && { padding: 12, gap: 8 }]}>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={
-              (displayedSection === "focus" ? "Collapse" : "Expand") + " timer"
+              displayedSection === "focus" ? "Collapse timer" : "Expand timer"
             }
             accessibilityState={{ expanded: displayedSection === "focus" }}
             onPress={() =>
@@ -881,22 +928,102 @@ export function BeaconTools({
                   maxLength={4}
                 />
               ) : null}
-              <Text
-                accessibilityLabel={formatTime(remaining) + " remaining"}
-                style={{
-                  color: colors.ink,
-                  fontSize: 38,
-                  fontWeight: "700",
-                  fontVariant: ["tabular-nums"],
-                }}
-              >
-                {formatTime(remaining)}
-              </Text>
+              {inlineEditors ? (
+                <View
+                  style={{
+                    width: "100%",
+                    alignItems: "center",
+                    paddingVertical: 4,
+                  }}
+                >
+                  <View
+                    accessibilityRole="timer"
+                    accessibilityLabel={formatTime(remaining) + " remaining"}
+                    style={{
+                      width: 144,
+                      height: 144,
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    <Svg
+                      width={144}
+                      height={144}
+                      style={{ position: "absolute" }}
+                      aria-hidden
+                    >
+                      <SvgCircle
+                        cx={72}
+                        cy={72}
+                        r={60}
+                        stroke={colors.line}
+                        strokeWidth={9}
+                        fill="none"
+                      />
+                      <SvgCircle
+                        cx={72}
+                        cy={72}
+                        r={60}
+                        stroke={colors.green}
+                        strokeWidth={9}
+                        strokeLinecap="round"
+                        fill="none"
+                        strokeDasharray={2 * Math.PI * 60}
+                        strokeDashoffset={
+                          2 *
+                          Math.PI *
+                          60 *
+                          (1 - remaining / Math.max(1, timer.durationSeconds))
+                        }
+                        rotation={-90}
+                        origin="72,72"
+                      />
+                    </Svg>
+                    <Text
+                      style={{
+                        color: colors.ink,
+                        fontSize: 34,
+                        fontWeight: "800",
+                        fontVariant: ["tabular-nums"],
+                      }}
+                    >
+                      {formatTime(remaining)}
+                    </Text>
+                    <Text style={[styles.muted, { fontSize: 12 }]}>
+                      {timer.phase === "paused"
+                        ? "On pause"
+                        : timerMode === "Pomodoro"
+                          ? `${pomodoroPhase} session`
+                          : "Your focus time"}
+                    </Text>
+                  </View>
+                </View>
+              ) : (
+                <>
+                  <Text
+                    accessibilityLabel={formatTime(remaining) + " remaining"}
+                    style={{
+                      color: colors.ink,
+                      fontSize: 38,
+                      fontWeight: "700",
+                      fontVariant: ["tabular-nums"],
+                    }}
+                  >
+                    {formatTime(remaining)}
+                  </Text>
+                </>
+              )}
               <Txt muted>
-                {timerMode === "Pomodoro"
-                  ? "25-minute focus, then an optional 5-minute break."
-                  : "Choose a duration for this local timer."}{" "}
-                On this device only.
+                {inlineEditors ? (
+                  "On this device only."
+                ) : (
+                  <>
+                    {timerMode === "Pomodoro"
+                      ? "25-minute focus, then an optional 5-minute break."
+                      : "Choose a duration for this local timer."}{" "}
+                    On this device only.
+                  </>
+                )}
               </Txt>
               {timer.phase === "complete" ? (
                 <Txt>
@@ -907,7 +1034,14 @@ export function BeaconTools({
                     : "Timer complete."}
                 </Txt>
               ) : null}
-              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+              <View
+                style={{
+                  flexDirection: "row",
+                  flexWrap: "wrap",
+                  gap: 8,
+                  alignSelf: inlineEditors ? "center" : "flex-start",
+                }}
+              >
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={timerActionTitle}
@@ -982,7 +1116,7 @@ export function BeaconTools({
       ) : null}
 
       {!allowed && (checklistEnabled || journalEnabled) ? (
-        <View style={styles.card}>
+        <View style={[styles.card, inlineEditors && { padding: 12, gap: 8 }]}>
           <Txt muted>
             Join this Beacon to use its shared Checklist and Beacon Sketchboard.
           </Txt>
@@ -994,7 +1128,8 @@ export function BeaconTools({
         </Text>
       ) : null}
 
-      <Sheet
+      <ToolEditor
+        inline={inlineEditors}
         title="Edit checklist item"
         visible={!!editingItem}
         onClose={() => setEditingItem(null)}
@@ -1047,8 +1182,9 @@ export function BeaconTools({
           disabled={itemSaving || !itemText.trim()}
           onPress={() => void saveItemEdit()}
         />
-      </Sheet>
-      <Sheet
+      </ToolEditor>
+      <ToolEditor
+        inline={inlineEditors}
         title="Edit checklist section"
         visible={!!editingSection}
         onClose={() => setEditingSection(null)}
@@ -1082,11 +1218,13 @@ export function BeaconTools({
             }
           }}
         />
-      </Sheet>
-      <Txt muted>
-        Shared tool access follows the Beacon’s current access and block
-        settings.
-      </Txt>
+      </ToolEditor>
+      {!inlineEditors && (
+        <Txt muted>
+          Shared tool access follows the Beacon’s current access and block
+          settings.
+        </Txt>
+      )}
     </View>
   );
 }
@@ -1130,6 +1268,7 @@ function ChecklistItemRow({
     >
       <Pressable
         accessibilityRole="checkbox"
+        aria-checked={item.completed}
         accessibilityLabel={
           (item.completed ? "Uncheck " : "Check ") + item.text
         }
@@ -1222,5 +1361,29 @@ function deleteNoteAllowed(
     userId &&
     note.activity_id === activity.id &&
     canDeleteBeaconModuleEntry(data, activity, note.author_id, userId)
+  );
+}
+
+function ToolEditor({
+  inline,
+  title,
+  visible,
+  onClose,
+  children,
+}: React.ComponentProps<typeof Sheet> & { inline: boolean }) {
+  const { styles } = useTheme();
+  if (!inline)
+    return (
+      <Sheet title={title} visible={visible} onClose={onClose}>
+        {children}
+      </Sheet>
+    );
+  if (!visible) return null;
+  return (
+    <View style={[styles.card, { gap: 12 }]}>
+      <Button title="Back to checklist" secondary compact onPress={onClose} />
+      <Txt>{title}</Txt>
+      {children}
+    </View>
   );
 }

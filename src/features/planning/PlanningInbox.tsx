@@ -174,7 +174,6 @@ export function PlanningInbox({
                     await act("respond_planning_ping", {
                       thread_id: thread.id,
                       response,
-                      auto_rsvp: false,
                     });
                     return true;
                   } catch (error) {

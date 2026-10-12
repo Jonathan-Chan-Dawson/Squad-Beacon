@@ -1,20 +1,18 @@
-import React, { useState } from "react";
+import React from "react";
 import { View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useBeacon } from "@/src/shared/store";
 import { ChatThread } from "@/src/features/messages/ChatThread";
 import { BackButton, Txt, useTheme } from "@/src/shared/ui";
 import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
 import { ChatIdentityHeader } from "@/src/features/people/previews/ChatIdentityHeader";
-import { PersonProfilePreview } from "@/src/features/people/previews/PersonProfilePreview";
 import { selectPersonPreview } from "@/src/features/people/previews/personPreview";
 import { useNow } from "@/src/shared/useNow";
 export default function Messages() {
   const { colors, styles } = useTheme();
   const { id } = useLocalSearchParams<{ id: string }>();
   const { data, userId } = useBeacon();
-  const [previewVisible, setPreviewVisible] = useState(false);
   const selection = selectPersonPreview(data, id, userId, useNow());
   const name = selection.canViewFullProfile
     ? (selection.profile?.name ?? "Friend")
@@ -51,7 +49,9 @@ export default function Messages() {
                   ? `View ${name}'s profile`
                   : "Profile preview unavailable"
               }
-              onPress={() => setPreviewVisible(true)}
+              onPress={() =>
+                router.push({ pathname: "/person/[id]", params: { id } })
+              }
             />
           </View>
         </View>
@@ -64,11 +64,6 @@ export default function Messages() {
           </Txt>
         )}
       </View>
-      <PersonProfilePreview
-        personId={id}
-        visible={previewVisible}
-        onClose={() => setPreviewVisible(false)}
-      />
     </SafeAreaView>
   );
 }

@@ -15,8 +15,10 @@ import {
 } from "@/src/shared/ui";
 import { activeOrganizationRole } from "./domain";
 import { canReadBeaconActivity } from "@/src/features/beacons/beaconModules";
-import { OrganizationProfilePreview } from "./OrganizationProfilePreview";
-import { SocialPolicyFields, type SocialPolicyValue } from "@/src/features/social/SocialPolicyControls";
+import {
+  SocialPolicyFields,
+  type SocialPolicyValue,
+} from "@/src/features/social/SocialPolicyControls";
 
 export function OrganizationDirectory({
   onOpen,
@@ -38,7 +40,8 @@ export function OrganizationDirectory({
   const { styles, colors } = useTheme();
   const { data, userId, act } = useBeacon();
   const [localCreateOpen, setLocalCreateOpen] = useState(false);
-  const [previewOrganizationId, setPreviewOrganizationId] = useState<string | null>(null);
+  const setPreviewOrganizationId = (id: string) =>
+    router.push({ pathname: "/organization/[id]", params: { id } });
   const createOpen = controlledCreateOpen ?? localCreateOpen;
   const setCreateOpen = onCreateOpenChange ?? setLocalCreateOpen;
   const [name, setName] = useState("");
@@ -115,7 +118,7 @@ export function OrganizationDirectory({
       {showHeader && !compact && (
         <View style={styles.between}>
           <View style={{ flex: 1, gap: 4 }}>
-            <Text style={styles.h2}>Organizations</Text>
+            <Text style={styles.h2}>Super-Organizations</Text>
             <Txt muted>Shared homes for the Squads you bring together.</Txt>
           </View>
           <Button
@@ -127,7 +130,7 @@ export function OrganizationDirectory({
       )}
       {showHeader && compact && (
         <View style={styles.between}>
-          <Text style={styles.h2}>Organizations</Text>
+          <Text style={styles.h2}>Super-Organizations</Text>
           <Button
             compact
             title="+ Create"
@@ -138,7 +141,7 @@ export function OrganizationDirectory({
 
       {showSearch && (
         <Field
-          label="Search your organizations"
+          label="Search your super-organizations"
           placeholder="Name or description"
           value={search}
           onChangeText={setSearch}
@@ -161,7 +164,7 @@ export function OrganizationDirectory({
             </View>
             <Txt muted>
               {organization.description ||
-                "An organization invited you to join."}
+                "An super-organization invited you to join."}
             </Txt>
             <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
               <Action
@@ -268,24 +271,24 @@ export function OrganizationDirectory({
       {!organizations.length && !pending.length ? (
         <Empty
           title="Your people, gathered together"
-          body="Create an organization to connect several Squads and give everyone one shared place to coordinate."
+          body="Create an super-organization to connect several Squads and give everyone one shared place to coordinate."
         />
       ) : !visibleOrganizations.length && !visiblePending.length ? (
         <Empty
           title="No matches"
-          body="Try another organization name or description."
+          body="Try another super-organization name or description."
         />
       ) : null}
       {compact && visibleOrganizations.length > 0 && (
         <Button
           secondary
-          title="See all organizations"
+          title="See all super-organizations"
           onPress={() => router.push("/organizations")}
         />
       )}
 
       <Sheet
-        title="Create an organization"
+        title="Create an super-organization"
         visible={createOpen}
         onClose={() => setCreateOpen(false)}
       >
@@ -294,7 +297,7 @@ export function OrganizationDirectory({
           connect Squads next.
         </Txt>
         <Field
-          label="Organization name"
+          label="Super-Organization name"
           placeholder="Lakefront Collective"
           value={name}
           onChangeText={setName}
@@ -310,17 +313,21 @@ export function OrganizationDirectory({
         />
         <SocialPolicyFields value={policy} onChange={setPolicy} collapsible />
         <Action
-          title="Create organization"
+          title="Create super-organization"
           run={async () => {
             if (!name.trim())
-              throw new Error("Give your organization a name first.");
+              throw new Error("Give your super-organization a name first.");
             const result = await act("create_organization", {
               name: name.trim(),
               description: description.trim(),
               ...policy,
             });
             setCreateOpen(false);
-            setPolicy({ discoverability: "private", join_mode: "invite", invite_policy: "admins" });
+            setPolicy({
+              discoverability: "private",
+              join_mode: "invite",
+              invite_policy: "admins",
+            });
             const id =
               typeof result.organization_id === "string"
                 ? result.organization_id
@@ -331,13 +338,6 @@ export function OrganizationDirectory({
           }}
         />
       </Sheet>
-      {previewOrganizationId && (
-        <OrganizationProfilePreview
-          organizationId={previewOrganizationId}
-          visible
-          onClose={() => setPreviewOrganizationId(null)}
-        />
-      )}
     </View>
   );
 }

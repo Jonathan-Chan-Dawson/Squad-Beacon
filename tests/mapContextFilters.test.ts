@@ -201,3 +201,61 @@ test("Ping context shows its permitted draft or converted Beacon, never a denied
   data.activities[0].owner_id = "stranger";
   assert.deepEqual(resolveMapContext(data, "viewer", filter)?.points, []);
 });
+
+// Geometry checks cover sideways attachment and protected controls at both orientations.
+import { mapCalloutLayout } from "../src/features/maps/mapCalloutLayout";
+import { mapTooltip } from "../src/features/maps/tooltipConstants";
+test("compact callouts stay above or below their markers and aim sideways after shifting", () => {
+  const bounds = { width: 390, height: 700, top: 130, bottom: 24 };
+  const above = mapCalloutLayout(
+    { x: 360, y: 570 },
+    bounds,
+    240,
+    undefined,
+    16,
+    mapTooltip.width,
+  );
+  assert.equal(above.above, true);
+  assert.equal(above.attached, true);
+  assert.equal(above.pointerTip + above.left, 360);
+  assert.ok(above.top + 240 < 570);
+  const below = mapCalloutLayout(
+    { x: 110, y: 150 },
+    bounds,
+    240,
+    undefined,
+    16,
+    mapTooltip.width,
+  );
+  assert.equal(below.above, false);
+  assert.ok(below.top > 150);
+  assert.ok(below.top + 240 <= 676);
+});
+test("callouts reserve the control rail only where they overlap it", () => {
+  const bounds = {
+    width: 390,
+    height: 700,
+    top: 130,
+    bottom: 24,
+    exclusionRight: 64,
+    exclusionBottom: 290,
+  };
+  const nearControls = mapCalloutLayout(
+    { x: 300, y: 150 },
+    bounds,
+    160,
+    undefined,
+    16,
+    mapTooltip.width,
+  );
+  assert.ok(nearControls.left + nearControls.width <= 326);
+  const away = mapCalloutLayout(
+    { x: 200, y: 650 },
+    bounds,
+    160,
+    undefined,
+    16,
+    mapTooltip.width,
+  );
+  assert.equal(away.width, mapTooltip.width);
+});

@@ -141,12 +141,14 @@ export function SpaceProfilePreview({
       key={`${spaceId}:${authorized ? "active" : "unavailable"}:${visible ? "open" : "closed"}`}
       visible={visible}
       onClose={closePreview}
-      title={authorized ? "About this Space" : "Space preview"}
+      title={authorized ? "About this Organization" : "Organization preview"}
       renderBeaconPreview={(beaconId, onBack) => (
         <BeaconProfilePreview
           beaconId={beaconId}
           onBack={onBack}
-          backLabel={selectedCommunity ? "Back to preview" : "Back to Space"}
+          backLabel={
+            selectedCommunity ? "Back to preview" : "Back to Organization"
+          }
           onOpenFullBeacon={(id) => {
             closePreview();
             setTimeout(
@@ -164,14 +166,14 @@ export function SpaceProfilePreview({
             entityType={selectedCommunity.type}
             entityId={selectedCommunity.id}
             onBack={() => setSelectedCommunity(null)}
-            backLabel="Back to Space"
+            backLabel="Back to Organization"
             onOpenBeacon={openBeacon}
             onOpenFullProfile={openFullProfile}
           />
         ) : !authorized || !space ? (
           <Empty
-            title="Space preview unavailable"
-            body="This Space is no longer available to your account."
+            title="Organization preview unavailable"
+            body="This Organization is no longer available to your account."
           />
         ) : (
           <View style={{ gap: 14 }}>
@@ -302,7 +304,7 @@ export function SpaceProfilePreview({
               />
             </View>
             <Button
-              title="View full Space profile"
+              title="View full Organization profile"
               onPress={() => openFullProfile("space", spaceId)}
             />
           </View>

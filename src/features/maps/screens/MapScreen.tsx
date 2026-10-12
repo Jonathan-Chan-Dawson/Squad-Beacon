@@ -1,3 +1,4 @@
+import { mapTooltip } from "../tooltipConstants";
 import React, {
   useCallback,
   useEffect,
@@ -24,14 +25,7 @@ import {
 } from "expo-router";
 import * as Location from "expo-location";
 import * as Network from "expo-network";
-import {
-  Compass,
-  LocateFixed,
-  SlidersHorizontal,
-  MapPin,
-  Plus,
-  UserRoundPlus,
-} from "lucide-react-native";
+import { Compass, MapPin, Plus, UserRoundPlus } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import BeaconMap, {
   type MapControlCommand,
@@ -82,7 +76,7 @@ import {
 import { MapPersonPreview } from "@/src/features/maps/MapPersonPreview";
 import { MapNearbyPanel } from "@/src/features/maps/MapNearbyPanel";
 import { MapCallout } from "@/src/features/maps/MapCallout";
-import { MapPanel } from "@/src/features/maps/MapPanel";
+import { BeaconOverviewSheet } from "@/src/features/maps/BeaconOverviewSheet";
 import {
   beaconHasSquadParticipant,
   clusterPeople,
@@ -155,7 +149,9 @@ function MapControl({
   label,
   onPress,
   children,
+  expanded,
 }: {
+  expanded?: boolean;
   label: string;
   onPress: () => void;
   children: React.ReactNode;
@@ -165,6 +161,8 @@ function MapControl({
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={label}
+      accessibilityState={expanded === undefined ? undefined : { expanded }}
+      aria-expanded={expanded}
       onPress={onPress}
       style={{
         width: 44,
@@ -251,6 +249,7 @@ export default function MapScreen() {
   const [mapSize, setMapSize] = useState({ width, height });
   const now = useNow();
   const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
+  const previousContextCamera = useRef<MapViewport | null>(null);
   const [contextState, setContextState] = useState<{
     viewerId: string | null;
     filters: MapContextFilter[];
@@ -287,6 +286,17 @@ export default function MapScreen() {
   const [compassBusy, setCompassBusy] = useState(false);
   const [compassMessage, setCompassMessage] = useState("");
   const [compassSheetOpen, setCompassSheetOpen] = useState(false);
+  const [compassReveal] = useState(() => new Animated.Value(0));
+  useEffect(() => {
+    compassReveal.stopAnimation();
+    compassReveal.setValue(0);
+    if (compassSheetOpen)
+      Animated.timing(compassReveal, {
+        toValue: 1,
+        duration: reducedMotion ? 120 : 180,
+        useNativeDriver: true,
+      }).start();
+  }, [compassSheetOpen, compassReveal, reducedMotion]);
   const [selected, setSelected] = useState<string | null>(null);
   const [person, setPerson] = useState<string | null>(null);
   const [mapAnchor, setMapAnchor] = useState<{ x: number; y: number } | null>(
@@ -400,6 +410,14 @@ export default function MapScreen() {
     label: string;
   } | null>(null);
   const processedRouteSelection = useRef<string | null>(null);
+  const clearRouteSelection = useCallback(() => {
+    processedRouteSelection.current = JSON.stringify([
+      userId,
+      params.beacon ?? "",
+      params.person ?? "",
+    ]);
+    router.setParams({ beacon: undefined, person: undefined });
+  }, [userId, params.beacon, params.person]);
   useEffect(() => {
     if (
       !preferencesReady ||
@@ -483,6 +501,7 @@ export default function MapScreen() {
       }, 400);
   }
   function choosePulsePlace(place: PulsePlace) {
+    setCompassSheetOpen(false);
     const existing = mapPreferences.liveUpdates
       ? pulse.summaries.find(
           (summary) =>
@@ -581,15 +600,6 @@ export default function MapScreen() {
     (params.person === userId || friends.includes(params.person))
       ? selectFreshVisiblePersonLocation(data, params.person, userId, now)
       : undefined;
-
-  function clearRouteSelection() {
-    processedRouteSelection.current = JSON.stringify([
-      userId,
-      params.beacon ?? "",
-      params.person ?? "",
-    ]);
-    router.setParams({ beacon: undefined, person: undefined });
-  }
 
   const safeActivities = useMemo(() => {
     if (!userId || data.viewer_id !== userId) return [];
@@ -947,6 +957,7 @@ export default function MapScreen() {
     suggestion: false,
   }));
   function choosePublicBeacon(id: string) {
+    setCompassSheetOpen(false);
     setSelected(null);
     setPerson(null);
     setClusterActivityIds(null);
@@ -1302,6 +1313,7 @@ export default function MapScreen() {
   }
 
   function chooseBeacon(id: string) {
+    setCompassSheetOpen(false);
     setDetailTab(null);
     if (
       !userId ||
@@ -1325,6 +1337,7 @@ export default function MapScreen() {
   }
 
   function choosePerson(id: string) {
+    setCompassSheetOpen(false);
     if (
       !userId ||
       data.viewer_id !== userId ||
@@ -1344,6 +1357,11 @@ export default function MapScreen() {
   }
 
   function startPickingLocation() {
+    setDetailTab(null);
+    setCompassSheetOpen(false);
+    setPulsePlace(null);
+    setContextPoint(null);
+    setPublicSelection(null);
     clearRouteSelection();
     setClusterActivityIds(null);
     setClusterPersonIds(null);
@@ -1451,6 +1469,13 @@ export default function MapScreen() {
     (filter: MapContextFilter) => {
       const view = resolveMapContext(data, userId, filter);
       if (!view) return;
+      if (!contextViews.length) previousContextCamera.current = viewport;
+      clearRouteSelection();
+      setSelected(null);
+      setPerson(null);
+      setDetailTab(null);
+      setClusterActivityIds(null);
+      setClusterPersonIds(null);
       setContextState((current) => ({
         viewerId: userId,
         filters: [
@@ -1467,7 +1492,7 @@ export default function MapScreen() {
           revision: (previous?.revision ?? 0) + 1,
         }));
     },
-    [data, userId],
+    [data, userId, contextViews.length, viewport, clearRouteSelection],
   );
 
   useEffect(() => {
@@ -1484,6 +1509,15 @@ export default function MapScreen() {
 
   function clearContexts(key?: string) {
     const remaining = contextViews.filter((view) => key && view.key !== key);
+    if (!remaining.length && previousContextCamera.current) {
+      const camera = previousContextCamera.current;
+      setControlCommand((previous) => ({
+        kind: "restore",
+        camera,
+        revision: (previous?.revision ?? 0) + 1,
+      }));
+      previousContextCamera.current = null;
+    }
     if (
       selected &&
       !normalActivities.some((activity) => activity.id === selected) &&
@@ -1767,6 +1801,11 @@ export default function MapScreen() {
             bottom: mapBottomClearance,
             left: 12,
           }}
+          previewHeight={
+            person || (selected && !detailTab)
+              ? mapTooltip.maxHeight
+              : undefined
+          }
           focused={pickedMapPoint ?? focusedCoordinate}
           anchorCoordinate={
             clusterActivityIds ? clusterCenter : focusedCoordinate
@@ -2082,6 +2121,7 @@ export default function MapScreen() {
         !panel &&
         !pickMode &&
         !optionsOpen &&
+        !compassSheetOpen &&
         !calm &&
         ((!hasVisibleBeacons &&
           !publicMapRows.length &&
@@ -2203,6 +2243,25 @@ export default function MapScreen() {
         </View>
       ) : null}
 
+      {compassSheetOpen && !pickMode && !pickedMapPoint && (
+        <Pressable
+          testID="map-side-menu-dismiss-area"
+          accessibilityRole="button"
+          accessibilityLabel="Dismiss map controls by tapping the map"
+          onPress={() => {
+            setCompassSheetOpen(false);
+            setSearchPlaceOpen(false);
+          }}
+          style={{
+            position: "absolute",
+            top: headerTop + headerHeight + 6,
+            bottom: 0,
+            left: 0,
+            right: 0,
+            zIndex: 7,
+          }}
+        />
+      )}
       {!pickMode && !pickedMapPoint ? (
         <Animated.View
           pointerEvents="box-none"
@@ -2218,15 +2277,104 @@ export default function MapScreen() {
           }}
         >
           {offline && <Text style={styles.label}>Offline</Text>}
-          <MapControl label="Compass" onPress={() => setCompassSheetOpen(true)}>
+          <MapControl
+            label="Pin a location to create a Beacon"
+            onPress={startPickingLocation}
+          >
+            <MapPin size={19} color={colors.green} />
+          </MapControl>
+          <MapControl
+            label="Compass"
+            expanded={compassSheetOpen}
+            onPress={() => {
+              setCompassSheetOpen((open) => !open);
+              setSearchPlaceOpen(false);
+            }}
+          >
             <Compass size={19} color={colors.green} />
           </MapControl>
-          <MapControl label="Locate" onPress={() => void handleUseMyLocation()}>
-            <LocateFixed size={19} color={colors.green} />
-          </MapControl>
-          <MapControl label="Options" onPress={() => setOptionsOpen(true)}>
-            <SlidersHorizontal size={19} color={colors.green} />
-          </MapControl>
+          {compassSheetOpen && (
+            <Animated.View
+              style={{
+                opacity: compassReveal,
+                transform: reducedMotion
+                  ? []
+                  : [
+                      {
+                        translateY: compassReveal.interpolate({
+                          inputRange: [0, 1],
+                          outputRange: [12, 0],
+                        }),
+                      },
+                    ],
+                position: "absolute",
+                right: 52,
+                top: 0,
+                width: Math.min(250, mapSize.width - 84),
+                borderRadius: 18,
+                borderWidth: 1,
+                borderColor: colors.line,
+                backgroundColor: colors.white,
+                boxShadow: "0 8px 28px #142e3033",
+                overflow: "hidden",
+              }}
+            >
+              <MapCompassSheet
+                visible={compassSheetOpen}
+                inline
+                mapStyle={mapStyle}
+                onMapStyle={(value) => {
+                  setMapStyle(value);
+                  updateMapPreference({ style: value });
+                }}
+                onOptions={() => {
+                  setCompassSheetOpen(false);
+                  setOptionsOpen(true);
+                }}
+                maxHeight={Math.max(
+                  120,
+                  mapSize.height -
+                    headerTop -
+                    headerHeight -
+                    mapBottomClearance -
+                    32,
+                )}
+                onClose={() => {
+                  setCompassSheetOpen(false);
+                  setSearchPlaceOpen(false);
+                }}
+                busy={compassBusy}
+                message={compassMessage}
+                onUseMyLocation={() => void handleUseMyLocation()}
+                onOpenSettings={openSettings}
+                onReturnOverview={() => {
+                  setCompassSheetOpen(false);
+                  setControlCommand((previous) => ({
+                    kind: "fit",
+                    revision: (previous?.revision ?? 0) + 1,
+                  }));
+                }}
+                onExploreEverywhere={() => {
+                  exploration.setArea(null);
+                  setCompassSheetOpen(false);
+                  setControlCommand((previous) => ({
+                    kind: "fit",
+                    revision: (previous?.revision ?? 0) + 1,
+                  }));
+                }}
+                query={compassSearchQuery}
+                onQueryChange={exploration.setQuery}
+                onQuerySubmit={searchSubmit}
+                searchPlaceOpen={searchPlaceOpen}
+                onToggleSearchPlace={() => setSearchPlaceOpen(true)}
+                places={searchPlaceResults}
+                recentQueries={recentQueries}
+                onChoosePlace={exploreSavedPlace}
+                onSelectRecent={chooseRecent}
+                onChooseWorldPlace={exploreWorldPlace}
+              />
+            </Animated.View>
+          )}
         </Animated.View>
       ) : null}
 
@@ -2306,17 +2454,28 @@ export default function MapScreen() {
       {person || (selected && !detailTab) ? (
         <MapCallout
           testID="map-tooltip"
-          maxWidth={320}
+          key={person ?? selected}
+          compact
+          onDismiss={() => {
+            clearRouteSelection();
+            setPerson(null);
+            setSelected(null);
+            setDetailTab(null);
+          }}
+          maxWidth={mapTooltip.width}
           anchor={mapAnchor}
           bounds={{
             ...mapSize,
             top: headerTop + headerHeight + 12,
             bottom: 24,
+            exclusionRight: mapTooltip.controlRailWidth,
+            exclusionBottom:
+              headerTop + headerHeight + mapTooltip.controlRailHeight,
           }}
         >
           <ScrollView
             keyboardShouldPersistTaps="handled"
-            contentContainerStyle={{ paddingBottom: 8 }}
+            contentContainerStyle={{ paddingBottom: 0 }}
           >
             {person ? (
               <MapPersonPreview
@@ -2343,6 +2502,9 @@ export default function MapScreen() {
                 pinned={!!focusedPlace}
                 onDetails={() => selected && openActivityDetails(selected)}
                 onPerson={choosePerson}
+                onFeature={(feature) =>
+                  selected && openActivityDetails(selected, feature)
+                }
                 onMessage={() =>
                   selected && openActivityDetails(selected, "chat")
                 }
@@ -2392,24 +2554,14 @@ export default function MapScreen() {
         </MapCallout>
       ) : null}
       {selected && detailTab ? (
-        <MapCallout
-          anchor={mapAnchor}
-          height={450}
-          bounds={{
-            ...mapSize,
-            top: headerTop + headerHeight + 12,
-            bottom: 24,
-          }}
-        >
-          <MapPanel
-            key={`${selected}:${detailTab}`}
-            onShowContext={focusContext}
-            beaconId={selected}
-            initialTab={detailTab}
-            onPerson={choosePerson}
-            onClose={() => setDetailTab(null)}
-          />
-        </MapCallout>
+        <BeaconOverviewSheet
+          key={selected}
+          onShowContext={focusContext}
+          beaconId={selected}
+          initialTab={detailTab}
+          onBeacon={(id) => openActivityDetails(id)}
+          onClose={() => setDetailTab(null)}
+        />
       ) : null}
 
       {pulsePlace && !contextPoint ? (
@@ -2595,43 +2747,6 @@ export default function MapScreen() {
               category: "All categories",
             });
         }}
-      />
-
-      <MapCompassSheet
-        visible={compassSheetOpen}
-        onClose={() => {
-          setCompassSheetOpen(false);
-          setSearchPlaceOpen(false);
-        }}
-        busy={compassBusy}
-        message={compassMessage}
-        onUseMyLocation={() => void handleUseMyLocation()}
-        onOpenSettings={openSettings}
-        onReturnOverview={() => {
-          setCompassSheetOpen(false);
-          setControlCommand((previous) => ({
-            kind: "fit",
-            revision: (previous?.revision ?? 0) + 1,
-          }));
-        }}
-        onExploreEverywhere={() => {
-          exploration.setArea(null);
-          setCompassSheetOpen(false);
-          setControlCommand((previous) => ({
-            kind: "fit",
-            revision: (previous?.revision ?? 0) + 1,
-          }));
-        }}
-        query={compassSearchQuery}
-        onQueryChange={exploration.setQuery}
-        onQuerySubmit={searchSubmit}
-        searchPlaceOpen={searchPlaceOpen}
-        onToggleSearchPlace={() => setSearchPlaceOpen(true)}
-        places={searchPlaceResults}
-        recentQueries={recentQueries}
-        onChoosePlace={exploreSavedPlace}
-        onSelectRecent={chooseRecent}
-        onChooseWorldPlace={exploreWorldPlace}
       />
 
       {squadPreviewId ? (

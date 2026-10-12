@@ -4,7 +4,9 @@ import {
   canViewBeaconMeetingDetails,
   selectFreshVisiblePersonLocation,
   selectPersonPreview,
+  selectSharedProfileContexts,
 } from "../src/features/people/previews/personPreview";
+import { DEMO_ID, makeDemo } from "../src/shared/demo";
 import {
   emptyData,
   type Activity,
@@ -14,6 +16,43 @@ import {
 } from "../src/shared/types";
 
 const now = Date.parse("2026-10-04T15:00:00.000Z");
+
+test("full shared connections retain a small preview and independent membership/privacy gates", () => {
+  const data = makeDemo();
+  const contexts = selectSharedProfileContexts(data, "jordan", DEMO_ID);
+  assert.ok(
+    contexts.some(
+      (row) =>
+        row.entityType === "space" && row.id === "space-neighborhood-studio",
+    ),
+  );
+  assert.ok(
+    contexts.some((row) => row.entityType === "squad" && row.id === "boxing"),
+  );
+  assert.ok(
+    contexts.length >
+      selectPersonPreview(data, "jordan", DEMO_ID).sharedContexts.length,
+  );
+  data.space_members = data.space_members.filter(
+    (row) => row.user_id !== DEMO_ID,
+  );
+  assert.equal(
+    selectSharedProfileContexts(data, "jordan", DEMO_ID).some(
+      (row) => row.entityType === "space",
+    ),
+    false,
+  );
+  assert.ok(
+    selectSharedProfileContexts(data, "jordan", DEMO_ID).some(
+      (row) => row.entityType === "squad",
+    ),
+  );
+  data.blocks.push({ blocker_id: DEMO_ID, blocked_id: "jordan" });
+  assert.deepEqual(selectSharedProfileContexts(data, "jordan", DEMO_ID), []);
+  data.blocks = [];
+  data.viewer_id = "another-viewer";
+  assert.deepEqual(selectSharedProfileContexts(data, "jordan", DEMO_ID), []);
+});
 
 function profile(
   id: ID,

@@ -109,6 +109,36 @@ test("public discovery is opt-in, summary-only, and joins without social members
   await migration("202610110001_map_discovery.sql");
   await migration("202610110002_place_knowledge.sql");
   await migration("202610110003_map_preview_refinement.sql");
+  await migration("202610110004_ping_availability.sql");
+  await migration("202610110005_squad_icons.sql");
+  await test("Squad icons persist in authorized snapshots with admin-only writes and request deduplication", async () => {
+    await actor("owner");
+    const createdSquad = await action("create_squad", { name: "Icon crew", description: "Shared identity" });
+    const squad = { id: createdSquad.squad_id };
+    assert.equal(typeof squad.id, "string");
+    await root();
+    await db.query("insert into public.squad_members(squad_id,user_id,role) values($1,$2,'admin'),($1,$3,'member')", [squad.id, ids.admin, ids.member]);
+    await actor("admin");
+    await assert.rejects(action("update_squad_icon", { squad_id: squad.id, icon_key: "invalid" }), /valid Squad icon/i);
+    const requestId = crypto.randomUUID();
+    const saved = await action("update_squad_icon", { squad_id: squad.id, icon_key: "coffee" }, requestId);
+    assert.equal(saved.icon_key, "coffee");
+    const repeated = await action("update_squad_icon", { squad_id: squad.id, icon_key: "sports" }, requestId);
+    assert.equal(repeated.icon_key, "coffee");
+    await actor("member");
+    const snapshot = (await db.query<{ data: any }>("select public.beacon_snapshot() data")).rows[0].data;
+    assert.equal(snapshot.squads.find((row: any) => row.id === squad.id).icon_key, "coffee");
+    await assert.rejects(action("update_squad_icon", { squad_id: squad.id, icon_key: "sports" }), /current Squad admins/i);
+    await assert.rejects(db.query("update public.squads set icon_key='sports' where id=$1", [squad.id]), /permission denied/i);
+    await actor("stranger");
+    await assert.rejects(action("update_squad_icon", { squad_id: squad.id, icon_key: "sports" }), /current Squad admins/i);
+    await root();
+    await db.query("delete from public.squad_members where squad_id=$1 and user_id=$2", [squad.id, ids.admin]);
+    await actor("admin");
+    await assert.rejects(action("update_squad_icon", { squad_id: squad.id, icon_key: "sports" }), /current Squad admins/i);
+    await actor("owner");
+    await action("update_squad_icon", { squad_id: squad.id, icon_key: "sports" });
+  });
   await actor("owner");
   await assert.rejects(
     action("start_location", {

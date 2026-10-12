@@ -12,7 +12,7 @@ import { selectPersonPreview } from "@/src/features/people/previews/personPrevie
 import { useBeacon } from "@/src/shared/store";
 import { activityWhen } from "@/src/shared/domain";
 import { useNow } from "@/src/shared/useNow";
-import { Button, IconButton, Txt, useTheme } from "@/src/shared/ui";
+import { Action, Button, IconButton, Txt, useTheme } from "@/src/shared/ui";
 import { MotionPressable } from "@/src/shared/MotionPressable";
 import { SocialCommunityInlinePreview } from "@/src/features/people/previews/SocialCommunityInlinePreview";
 import type { SocialEntityType } from "@/src/features/social/types";
@@ -45,6 +45,12 @@ export function PersonProfilePreview({
     onClose();
   };
   const selection = selectPersonPreview(data, personId, userId, now);
+  const request = data.friendships.find(
+    (row) =>
+      row.status === "pending" &&
+      ((row.sender_id === userId && row.recipient_id === personId) ||
+        (row.sender_id === personId && row.recipient_id === userId)),
+  );
   const name = selection.canViewFullProfile
     ? (selection.profile?.name ?? "Friend")
     : "Friend";
@@ -280,11 +286,53 @@ export function PersonProfilePreview({
             ) : null}
 
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 9 }}>
+              {selection.canMessage ? (
+                <Button
+                  compact
+                  title="Message"
+                  onPress={() =>
+                    delayNavigation(
+                      () =>
+                        router.push({
+                          pathname: "/messages/[id]",
+                          params: { id: personId },
+                        }),
+                      closePreview,
+                    )
+                  }
+                />
+              ) : profile &&
+                selection.canViewFullProfile &&
+                userId &&
+                personId !== userId ? (
+                <Action
+                  compact
+                  title={
+                    request
+                      ? request.sender_id === userId
+                        ? "Requested"
+                        : "Accept Friend"
+                      : "Add Friend"
+                  }
+                  secondary
+                  disabled={request?.sender_id === userId}
+                  run={() =>
+                    request
+                      ? act("accept_friend", { id: request.id })
+                      : act("friend_request", { username: profile.username })
+                  }
+                />
+              ) : null}
               {selection.canViewMap ? (
-                <Button title="View Map" secondary onPress={openMap} />
+                <Button compact title="View Map" secondary onPress={openMap} />
               ) : null}
               {selection.canViewFullProfile ? (
-                <Button title="View Full Profile" onPress={openFullProfile} />
+                <Button
+                  compact
+                  secondary
+                  title="View Profile"
+                  onPress={openFullProfile}
+                />
               ) : null}
             </View>
           </View>

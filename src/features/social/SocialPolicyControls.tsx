@@ -1,7 +1,12 @@
 import React, { useState } from "react";
 import { Text, View } from "react-native";
 import { ChevronDown, ChevronUp } from "lucide-react-native";
-import type { Discoverability, InvitePolicy, JoinMode, SocialEntityType } from "./types";
+import type {
+  Discoverability,
+  InvitePolicy,
+  JoinMode,
+  SocialEntityType,
+} from "./types";
 import { Action, Txt, useTheme } from "@/src/shared/ui";
 import { MotionPressable } from "@/src/shared/MotionPressable";
 
@@ -11,7 +16,10 @@ export type SocialPolicyValue = {
   invite_policy: InvitePolicy;
 };
 
-const discoverabilityOptions: readonly { value: Discoverability; label: string }[] = [
+const discoverabilityOptions: readonly {
+  value: Discoverability;
+  label: string;
+}[] = [
   { value: "public", label: "Public" },
   { value: "community", label: "Community" },
   { value: "private", label: "Private" },
@@ -27,9 +35,13 @@ const invitePolicyOptions: readonly { value: InvitePolicy; label: string }[] = [
   { value: "members", label: "All members" },
 ];
 
-const discoverabilityLabel = (value: Discoverability) => discoverabilityOptions.find((item) => item.value === value)?.label ?? "Private";
-const joinModeLabel = (value: JoinMode) => joinModeOptions.find((item) => item.value === value)?.label ?? "Invite only";
-const invitePolicyLabel = (value: InvitePolicy) => invitePolicyOptions.find((item) => item.value === value)?.label ?? "Admins";
+const discoverabilityLabel = (value: Discoverability) =>
+  discoverabilityOptions.find((item) => item.value === value)?.label ??
+  "Private";
+const joinModeLabel = (value: JoinMode) =>
+  joinModeOptions.find((item) => item.value === value)?.label ?? "Invite only";
+const invitePolicyLabel = (value: InvitePolicy) =>
+  invitePolicyOptions.find((item) => item.value === value)?.label ?? "Admins";
 
 function PolicyChoices<T extends string>({
   value,
@@ -57,10 +69,17 @@ function PolicyChoices<T extends string>({
             style={[
               styles.chip,
               { minHeight: 44, justifyContent: "center" },
-              selected && { backgroundColor: colors.ink, borderColor: colors.ink },
+              selected && {
+                backgroundColor: colors.ink,
+                borderColor: colors.ink,
+              },
             ]}
           >
-            <Text style={[styles.chipText, selected && { color: colors.white }]}>{option.label}</Text>
+            <Text
+              style={[styles.chipText, selected && { color: colors.white }]}
+            >
+              {option.label}
+            </Text>
           </MotionPressable>
         );
       })}
@@ -87,32 +106,55 @@ export function SocialPolicyFields({
           accessibilityLabel="Access and joining settings"
           accessibilityState={{ expanded }}
           onPress={() => setExpanded((current) => !current)}
-          style={[styles.row, { minHeight: 48, paddingHorizontal: 8, borderWidth: 1, borderColor: colors.line, borderRadius: 14 }]}
+          style={[
+            styles.row,
+            {
+              minHeight: 48,
+              paddingHorizontal: 8,
+              borderWidth: 1,
+              borderColor: colors.line,
+              borderRadius: 14,
+            },
+          ]}
         >
           <View style={{ flex: 1, gap: 2 }}>
             <Text style={styles.body}>Access & joining</Text>
             <Text style={styles.muted}>
-              {discoverabilityLabel(value.discoverability)} · {joinModeLabel(value.join_mode)} · {invitePolicyLabel(value.invite_policy)}
+              {discoverabilityLabel(value.discoverability)} ·{" "}
+              {joinModeLabel(value.join_mode)} ·{" "}
+              {invitePolicyLabel(value.invite_policy)}
             </Text>
           </View>
-          {expanded ? <ChevronUp size={17} color={colors.muted} /> : <ChevronDown size={17} color={colors.muted} />}
+          {expanded ? (
+            <ChevronUp size={17} color={colors.muted} />
+          ) : (
+            <ChevronDown size={17} color={colors.muted} />
+          )}
         </MotionPressable>
       ) : null}
       {expanded ? (
         <>
           <View style={{ gap: 5 }}>
             <Text style={styles.label}>WHO CAN FIND IT</Text>
-            <Txt muted>Community discovery only includes linked community members. Private communities stay out of discovery.</Txt>
+            <Txt muted>
+              Community discovery only includes linked community members.
+              Private communities stay out of discovery.
+            </Txt>
             <PolicyChoices
               prefix="Discoverability"
               options={discoverabilityOptions}
               value={value.discoverability}
-              onChange={(discoverability) => onChange({ ...value, discoverability })}
+              onChange={(discoverability) =>
+                onChange({ ...value, discoverability })
+              }
             />
           </View>
           <View style={{ gap: 5 }}>
             <Text style={styles.label}>HOW PEOPLE JOIN</Text>
-            <Txt muted>Requests are reviewed by community admins. Invitations can still be accepted directly.</Txt>
+            <Txt muted>
+              Requests are reviewed by community admins. Invitations can still
+              be accepted directly.
+            </Txt>
             <PolicyChoices
               prefix="Join mode"
               options={joinModeOptions}
@@ -126,7 +168,9 @@ export function SocialPolicyFields({
               prefix="Invite policy"
               options={invitePolicyOptions}
               value={value.invite_policy}
-              onChange={(invite_policy) => onChange({ ...value, invite_policy })}
+              onChange={(invite_policy) =>
+                onChange({ ...value, invite_policy })
+              }
             />
           </View>
         </>
@@ -145,7 +189,12 @@ export function SocialPolicySettings({
   onSave: (value: SocialPolicyValue) => Promise<unknown>;
 }) {
   const [value, setValue] = useState(initial);
-  const label = entityType === "organization" ? "Organization" : entityType === "space" ? "Space" : "Squad";
+  const label =
+    entityType === "organization"
+      ? "Super-Organization"
+      : entityType === "space"
+        ? "Organization"
+        : "Squad";
   return (
     <View style={{ gap: 10 }}>
       <SocialPolicyFields value={value} onChange={setValue} />

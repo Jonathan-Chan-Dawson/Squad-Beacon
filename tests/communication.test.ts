@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   canOpenSquadPing,
   pendingSocialCount,
+  pendingCommunityJoinRequests,
   searchablePeople,
   squadChatRowSummary,
 } from "@/src/features/people/communication";
@@ -63,6 +64,29 @@ function squadPingData() {
   return { data, thread };
 }
 
+test("inbox join requests and counts require current admin membership and reject blocked or stale access", () => {
+  const { data } = squadPingData();
+  data.squad_join_requests.push({
+    squad_id: "squad",
+    user_id: "applicant",
+    created_at: new Date().toISOString(),
+  });
+  assert.equal(pendingCommunityJoinRequests(data, "viewer").length, 0);
+  const member = data.squad_members.find((row) => row.user_id === "viewer")!;
+  member.role = "admin";
+  assert.equal(pendingCommunityJoinRequests(data, "viewer").length, 1);
+  assert.equal(pendingSocialCount(data, "viewer"), 1);
+  data.blocks.push({ blocker_id: "applicant", blocked_id: "viewer" });
+  assert.equal(pendingSocialCount(data, "viewer"), 0);
+  data.blocks = [];
+  data.squad_members = data.squad_members.filter(
+    (row) => row.user_id !== "viewer",
+  );
+  assert.equal(pendingCommunityJoinRequests(data, "viewer").length, 0);
+  data.viewer_id = "host";
+  assert.equal(pendingCommunityJoinRequests(data, "viewer").length, 0);
+});
+
 test("Squad Ping card jumps require a matching snapshot and current Squad membership", () => {
   const { data, thread } = squadPingData();
   assert.equal(canOpenSquadPing(data, thread, "viewer"), true);
@@ -72,7 +96,11 @@ test("Squad Ping card jumps require a matching snapshot and current Squad member
   );
   assert.equal(canOpenSquadPing(data, thread, "viewer"), false);
 
-  data.squad_members.push({ squad_id: "squad", user_id: "viewer", role: "member" });
+  data.squad_members.push({
+    squad_id: "squad",
+    user_id: "viewer",
+    role: "member",
+  });
   data.viewer_id = "other-viewer";
   assert.equal(canOpenSquadPing(data, thread, "viewer"), false);
 
@@ -94,7 +122,10 @@ test("Squad chat rows link a newer Ping and separate its pending response from u
     data,
     "squad",
     "viewer",
-    { body: "Older chat note", created_at: new Date(now - 3_000).toISOString() },
+    {
+      body: "Older chat note",
+      created_at: new Date(now - 3_000).toISOString(),
+    },
     "Plan something together",
     now,
   );
@@ -115,7 +146,10 @@ test("Squad chat rows link a newer Ping and separate its pending response from u
     data,
     "squad",
     "viewer",
-    { body: "Older chat note", created_at: new Date(now - 3_000).toISOString() },
+    {
+      body: "Older chat note",
+      created_at: new Date(now - 3_000).toISOString(),
+    },
     "Plan something together",
     now,
   );
@@ -224,7 +258,10 @@ test("search-only People results exclude friends, private profiles, blocks, and 
   });
   data.blocks.push({ blocker_id: "viewer", blocked_id: "blocked" });
 
-  assert.deepEqual(searchablePeople(data, "viewer", "Person").map((item) => item.id), ["public"]);
+  assert.deepEqual(
+    searchablePeople(data, "viewer", "Person").map((item) => item.id),
+    ["public"],
+  );
   assert.deepEqual(searchablePeople(data, "viewer", "Private"), []);
   data.viewer_id = "someone-else";
   assert.deepEqual(searchablePeople(data, "viewer", "Public"), []);

@@ -1,0 +1,22 @@
+/** Shared phone-first map preview dimensions. */
+export const mapTooltip = {
+  width: 292,
+  maxHeight: 336,
+  padding: 11,
+  gap: 6,
+  radius: 18,
+  titleSize: 16,
+  detailSize: 12,
+  avatarSize: 36,
+  markerGap: 34,
+  pointerSize: 12,
+  duration: 180,
+  actionHeight: 44,
+  actionTextSize: 13,
+  actionPadding: 9,
+  actionRadius: 11,
+  closeWidth: 32,
+  iconSize: 18,
+  controlRailWidth: 64,
+  controlRailHeight: 160,
+} as const;

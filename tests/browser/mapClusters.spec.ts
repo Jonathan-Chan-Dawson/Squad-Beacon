@@ -191,9 +191,9 @@ for (const width of [320, 390]) {
     await page.screenshot({
       path: test.info().outputPath("map-sketchboard-panel.png"),
     });
-    await panel
-      .getByRole("button", { name: "Close Beacon panel", exact: true })
-      .click();
+    await page
+      .getByTestId("beacon-sheet-dismiss-area")
+      .click({ position: { x: 5, y: 5 } });
     await expect(panel).toHaveCount(0);
   });
 }

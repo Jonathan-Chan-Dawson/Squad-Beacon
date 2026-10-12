@@ -1,3 +1,5 @@
+import { isSquadIconKey } from "@/src/features/people/squadIcons";
+import { validatePingAvailability, pingAvailabilityAllowsRsvp } from "@/src/features/planning/availability";
 import { demoPublicBeacons } from "@/src/features/discovery/publicDirectory";
 import { validatePublicDiscoveryOptIn } from "@/src/features/discovery/domain";
 import { canChat } from "@/src/shared/browsing";
@@ -2173,9 +2175,14 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
     const existing = d.planning_ping_responses.find(
       (item) => item.thread_id === thread.id && item.user_id === uid,
     );
+    const availableAfter = validatePingAvailability(
+      "available_after" in p ? p.available_after : response === "interested" ? existing?.available_after : null, response,
+    );
+    const savedAutoRsvp = response === "interested" && ("auto_rsvp" in p ? autoRsvp : !!existing?.auto_rsvp);
     if (existing) {
       existing.response = response;
-      existing.auto_rsvp = autoRsvp;
+      existing.auto_rsvp = savedAutoRsvp;
+      existing.available_after = availableAfter;
       existing.updated_at = new Date().toISOString();
     } else {
       const now = new Date().toISOString();
@@ -2183,7 +2190,8 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
         thread_id: thread.id,
         user_id: uid,
         response,
-        auto_rsvp: autoRsvp,
+        auto_rsvp: savedAutoRsvp,
+        ...(availableAfter != null ? { available_after: availableAfter } : {}),
         created_at: now,
         updated_at: now,
       });
@@ -2207,6 +2215,7 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
         response.thread_id !== thread.id ||
         response.response !== "interested" ||
         !response.auto_rsvp ||
+        !pingAvailabilityAllowsRsvp(response.available_after, activity.starts_at) ||
         !canReadThread(thread, response.user_id)
       )
         continue;
@@ -3440,6 +3449,17 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
         owner_id: uid,
         local_date: date,
       });
+  }
+  if (action === "update_squad_icon") {
+    const squad = d.squads.find((row) => row.id === p.squad_id);
+    const member = d.squad_members.find((row) => row.squad_id === p.squad_id && row.user_id === uid);
+    if (!squad || d.viewer_id !== uid || squad.archived_at || !member || SOCIAL_ROLE_RANK[member.role] < SOCIAL_ROLE_RANK.admin ||
+      d.squad_bans.some((row) => row.squad_id === squad.id && row.user_id === uid) ||
+      d.blocks.some((row) => row.blocker_id === uid && row.blocked_id === squad.owner_id || row.blocked_id === uid && row.blocker_id === squad.owner_id))
+      throw new Error("Only current Squad admins can change its icon.");
+    if (!isSquadIconKey(p.icon_key)) throw new Error("Choose a valid Squad icon.");
+    squad.icon_key = p.icon_key;
+    return d;
   }
   if (action === "create_squad") {
     const sid = newId();

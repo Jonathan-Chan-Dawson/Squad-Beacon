@@ -1,5 +1,5 @@
 import React, { useEffect, useId, useRef, useState } from "react";
-import { Text, View } from "react-native";
+import { Text, View, ScrollView } from "react-native";
 import { useRouter } from "expo-router";
 import { useBeacon } from "@/src/shared/store";
 import { useDesignTheme } from "@/src/shared/design-system";
@@ -20,9 +20,13 @@ import { useOptimisticChat } from "./useOptimisticChat";
 export function ChatThread({
   activityId,
   personId,
+  inlineActions = false,
+  onPerson,
 }: {
   activityId?: string;
   personId?: string;
+  inlineActions?: boolean;
+  onPerson?: (id: string) => void;
 }) {
   const { colors } = useDesignTheme();
   const { data, userId, act } = useBeacon();
@@ -112,40 +116,53 @@ export function ChatThread({
       : "Only the host and approved Going participants can use this chat."
     : "A current friendship is required to read and send messages.";
   return (
-    <ChatKeyboardFrame>
-      <ChatBubbleList
-        events={events}
-        viewerId={userId}
-        scopeKey={scope}
-        profileForAuthor={(id) => {
-          const profile = data.profiles.find((item) => item.id === id);
-          return profile && userId && canViewProfile(data, profile, userId)
-            ? profile
-            : undefined;
+    <ChatKeyboardFrame compact={inlineActions}>
+      <View
+        style={{
+          flex: 1,
+          minHeight: 0,
+          display: inlineActions && actionsOpen ? "none" : "flex",
         }}
-        onRetry={(id) => {
-          void chat.submit(id);
-        }}
-        retryDisabled={!canWrite || chat.busy}
-        onOpener={chat.setDraft}
-      />
-      {canWrite ? (
-        <ChatComposer
-          body={chat.draft}
-          onChange={chat.setDraft}
-          onSend={() => {
-            void chat.submit();
+      >
+        <ChatBubbleList
+          events={events}
+          viewerId={userId}
+          scopeKey={scope}
+          onAuthorPress={
+            onPerson ??
+            ((id) => router.push({ pathname: "/person/[id]", params: { id } }))
+          }
+          profileForAuthor={(id) => {
+            const profile = data.profiles.find((item) => item.id === id);
+            return profile && userId && canViewProfile(data, profile, userId)
+              ? profile
+              : undefined;
           }}
-          onMore={() => setActionsOpen(true)}
-          busy={chat.busy}
-          error={chat.error}
+          onRetry={(id) => {
+            void chat.submit(id);
+          }}
+          retryDisabled={!canWrite || chat.busy}
+          onOpener={chat.setDraft}
         />
-      ) : (
-        <View style={{ paddingVertical: 12 }}>
-          <Text style={{ color: colors.textSecondary }}>{readOnlyText}</Text>
-        </View>
-      )}
-      <Sheet
+        {canWrite ? (
+          <ChatComposer
+            body={chat.draft}
+            onChange={chat.setDraft}
+            onSend={() => {
+              void chat.submit();
+            }}
+            onMore={() => setActionsOpen(true)}
+            busy={chat.busy}
+            error={chat.error}
+          />
+        ) : (
+          <View style={{ paddingVertical: 12 }}>
+            <Text style={{ color: colors.textSecondary }}>{readOnlyText}</Text>
+          </View>
+        )}
+      </View>
+      <ChatActions
+        inline={inlineActions}
         title="Add to chat"
         visible={actionsOpen && canWrite}
         onClose={() => setActionsOpen(false)}
@@ -195,7 +212,32 @@ export function ChatThread({
             );
           }}
         />
-      </Sheet>
+      </ChatActions>
     </ChatKeyboardFrame>
+  );
+}
+
+function ChatActions({
+  inline,
+  title,
+  visible,
+  onClose,
+  children,
+}: React.ComponentProps<typeof Sheet> & { inline: boolean }) {
+  if (!inline)
+    return (
+      <Sheet title={title} visible={visible} onClose={onClose}>
+        {children}
+      </Sheet>
+    );
+  if (!visible) return null;
+  return (
+    <ScrollView
+      style={{ flex: 1, minHeight: 0 }}
+      contentContainerStyle={{ gap: 8, padding: 12 }}
+    >
+      <Button title="Back to chat" compact secondary onPress={onClose} />
+      {children}
+    </ScrollView>
   );
 }

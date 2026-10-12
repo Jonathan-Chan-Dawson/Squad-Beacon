@@ -22,7 +22,7 @@ export function ChatIdentityHeader({
     <MotionPressable
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
-      accessibilityHint="Opens a compact profile preview"
+      accessibilityHint="Opens the full profile"
       onPress={() => {
         Keyboard.dismiss();
         onPress();

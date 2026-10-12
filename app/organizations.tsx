@@ -4,7 +4,11 @@ import { Screen } from "@/src/shared/ui";
 
 export default function OrganizationsRoute() {
   return (
-    <Screen title="Organizations" eyebrow="CONNECTED COMMUNITIES" create={false}>
+    <Screen
+      title="Super-Organizations"
+      eyebrow="CONNECTED COMMUNITIES"
+      create={false}
+    >
       <OrganizationDirectory compact />
     </Screen>
   );

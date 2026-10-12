@@ -219,9 +219,9 @@ function ProfileContent({ profile }: { profile: Profile }) {
             accessibilityLabel="Edit profile photo"
             onPress={() => edit()}
             style={{
-              width: 104,
-              height: 104,
-              borderRadius: 52,
+              width: 84,
+              height: 84,
+              borderRadius: 42,
               borderWidth: 2,
               borderColor: colors.accent,
               alignItems: "center",
@@ -230,7 +230,7 @@ function ProfileContent({ profile }: { profile: Profile }) {
           >
             <ProfileAvatar
               profile={profile}
-              size={96}
+              size={76}
               status={avatarAvailability(data.activities, profile.id, now)}
             />
           </Pressable>
@@ -283,11 +283,12 @@ function ProfileContent({ profile }: { profile: Profile }) {
             </Pressable>
           ))}
         </View>
-        <Button title="Edit profile" onPress={() => edit()} />
-        <View style={[styles.row, { gap: 8 }]}>
-          <View style={{ flex: 1 }}>
+        <View style={[styles.row, { gap: 8, flexWrap: "wrap" }]}>
+          <Button compact title="Edit profile" onPress={() => edit()} />
+          <View>
             <Button
               title="Share profile"
+              compact
               secondary
               onPress={() => setShareOpen(true)}
             />

@@ -1,6 +1,12 @@
 import { canChat } from "@/src/shared/browsing";
 import type { Activity, Data } from "@/src/shared/types";
 
+export function beaconChecklistLabel(activity: Activity) {
+  return /\bgrocer(?:y|ies)\b/i.test(activity.title)
+    ? "Grocery List"
+    : "Checklist";
+}
+
 function isBlocked(data: Data, left: string, right: string) {
   return data.blocks.some(
     (block) =>
@@ -46,7 +52,8 @@ export function canReadBeaconActivity(
           member.status === "active",
       ) &&
         !data.organization_bans.some(
-          (ban) => ban.organization_id === organization.id && ban.user_id === memberId,
+          (ban) =>
+            ban.organization_id === organization.id && ban.user_id === memberId,
         ));
     return isActiveMember(activity.owner_id) && isActiveMember(userId);
   }
@@ -89,15 +96,12 @@ export function canReadBeaconActivity(
       )
     );
   if (activity.audience === "squad") {
-    const squad = data.squads.find(
-      (item) => item.id === activity.audience_id,
-    );
+    const squad = data.squads.find((item) => item.id === activity.audience_id);
     return !!(
       squad &&
       !isBlocked(data, squad.owner_id, userId) &&
       data.squad_members.some(
-        (member) =>
-          member.squad_id === squad.id && member.user_id === userId,
+        (member) => member.squad_id === squad.id && member.user_id === userId,
       ) &&
       data.squad_members.some(
         (member) =>
@@ -127,14 +131,20 @@ export function canEditBeaconChecklist(
   activity: Activity,
   userId: string,
 ) {
-  if (activity.status !== "scheduled" || !canUseBeaconModules(data, activity, userId))
+  if (
+    activity.status !== "scheduled" ||
+    !canUseBeaconModules(data, activity, userId)
+  )
     return false;
   if (activity.checklist_edit_policy !== "managers") return true;
-  return activity.owner_id === userId || data.beacon_roles.some(
-    (role) =>
-      role.activity_id === activity.id &&
-      role.user_id === userId &&
-      (role.role === "coowner" || role.role === "admin"),
+  return (
+    activity.owner_id === userId ||
+    data.beacon_roles.some(
+      (role) =>
+        role.activity_id === activity.id &&
+        role.user_id === userId &&
+        (role.role === "coowner" || role.role === "admin"),
+    )
   );
 }
 
@@ -144,7 +154,10 @@ export function canAddBeaconNote(
   activity: Activity,
   userId: string,
 ) {
-  return activity.status !== "cancelled" && canUseBeaconModules(data, activity, userId);
+  return (
+    activity.status !== "cancelled" &&
+    canUseBeaconModules(data, activity, userId)
+  );
 }
 
 /** Blocked participants' module content stays hidden even in stale local data. */
@@ -171,7 +184,9 @@ export function canReadBeaconNote(
   if (!current || current.author_id !== note.author_id) return false;
   if (current.visibility === "private") return current.author_id === userId;
   if (!current.activity_id) return current.author_id === userId;
-  const activity = data.activities.find((item) => item.id === current.activity_id);
+  const activity = data.activities.find(
+    (item) => item.id === current.activity_id,
+  );
   return !!(
     activity &&
     canReadBeaconModuleEntry(data, activity, current.author_id, userId)

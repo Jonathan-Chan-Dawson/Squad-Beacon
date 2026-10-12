@@ -6,8 +6,7 @@ async function openPlanning(page: import("@playwright/test").Page) {
   await page.getByRole("tab", { name: "Squads", exact: true }).click();
   await page
     .getByRole("button", {
-      name: "See all responses and invitations",
-      exact: true,
+      name: /Responses & Invitations, \d+ pending/,
     })
     .click();
 }
@@ -19,7 +18,8 @@ test("planning supports ping replies, conversion, and an approved vote option", 
 
   await page
     .getByRole("button", {
-      name: /A Saturday trail loop\?, Reply to this ping/,
+      name: "Open A Saturday trail loop?",
+      exact: true,
     })
     .click();
   await page
@@ -49,7 +49,7 @@ test("planning supports ping replies, conversion, and an approved vote option", 
     .getByRole("button", { name: "Create a beacon from this ping" })
     .click();
   await expect(page).toHaveURL(/\/activity\/[^/]+$/i);
-  await expect(page.getByText(/Audience: friends/)).toBeVisible();
+  await expect(page.getByText("Friends only", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Back", exact: true }).click();
   await page
     .getByRole("button", { name: "Pings & Decisions", exact: true })

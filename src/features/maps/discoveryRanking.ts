@@ -193,19 +193,19 @@ export function beaconPreviewWhen(
   )
     return activityWhen(activity as Activity, new Date(now));
   if (Date.parse(activity.ends_at) <= now) {
-    const minutes = Math.max(0, Math.floor((now - Date.parse(activity.ends_at)) / 60000));
-    return minutes < 1 ? "Just ended" : `Ended ${minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h`} ago`;
+    const minutes = Math.max(
+      0,
+      Math.floor((now - Date.parse(activity.ends_at)) / 60000),
+    );
+    return minutes < 1
+      ? "Just ended"
+      : `Ended ${minutes < 60 ? `${minutes}m` : `${Math.floor(minutes / 60)}h`} ago`;
   }
   if (
     Date.parse(activity.starts_at) <= now &&
     Date.parse(activity.ends_at) > now
   ) {
-    const time = new Date(activity.ends_at).toLocaleTimeString([], {
-      hour: "numeric",
-      minute: "2-digit",
-      timeZone: activity.timezone || undefined,
-    });
-    return `Now · Ends ${time}`;
+    return `Now \u00b7 ${Math.max(1, Math.ceil((Date.parse(activity.ends_at) - now) / 60000))} min left`;
   }
   return activityWhen(activity as Activity, new Date(now));
 }

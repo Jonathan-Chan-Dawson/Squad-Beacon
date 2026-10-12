@@ -82,11 +82,13 @@ export interface ListMember {
   list_id: ID;
   user_id: ID;
 }
+export type SquadIconKey = "users" | "fitness" | "sports" | "gaming" | "coffee" | "study" | "music" | "sparkles";
 export interface Squad {
   id: ID;
   owner_id: ID;
   name: string;
   description: string;
+  icon_key?: SquadIconKey;
   space_type?: string;
   discoverability?: "public" | "community" | "private";
   join_mode?: "open" | "request" | "invite";
@@ -433,6 +435,7 @@ export interface PlanningPingResponse {
   user_id: ID;
   response: PlanningResponse;
   auto_rsvp: boolean;
+  available_after?: string | null;
   created_at: string;
   updated_at: string;
 }

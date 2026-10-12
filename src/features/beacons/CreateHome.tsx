@@ -1,12 +1,47 @@
 import React, { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import { ArrowRight, Sparkles } from "lucide-react-native";
+import {
+  Pencil,
+  ChevronRight,
+  Sparkles,
+  Coffee,
+  UsersRound,
+  Dumbbell,
+  BookOpen,
+  ShoppingBasket,
+  Ticket,
+  Trees,
+  Gamepad2,
+  Palette,
+  Briefcase,
+  Heart,
+  Plane,
+  HandHeart,
+  PartyPopper,
+  Music2,
+  Camera,
+  Car,
+  House,
+  LayoutGrid,
+  Bookmark,
+  Plus,
+  Footprints,
+  CircleDot,
+  UtensilsCrossed,
+} from "lucide-react-native";
+import { ActivityBadge } from "./ActivityBadge";
+import { matchesSearch } from "@/src/shared/search";
+import {
+  mainTemplateFamilies,
+  moreTemplateFamilies,
+  familyTemplates,
+  type TemplateFamily,
+} from "./templateBrowser";
 import { useBeacon } from "@/src/shared/store";
 import {
   beaconTemplateCatalog,
-  beaconTemplateGroups,
-  searchBeaconTemplates,
+  templateMatchesSearch,
   templates,
   type BeaconTemplate,
 } from "@/src/shared/templates";
@@ -15,11 +50,21 @@ import {
   Chips,
   Empty,
   Field,
+  IconButton,
   Screen,
   Sheet,
   Txt,
   useTheme,
 } from "@/src/shared/ui";
+
+function recommendationFamily(item: BeaconTemplate) {
+  const quickFamilies: Record<string, string> = {
+    "quick-coffee": "food-dining",
+    "quick-study": "study-learning",
+    "quick-walk": "nature-outdoors",
+  };
+  return item.groupId ?? quickFamilies[item.id ?? ""] ?? item.category;
+}
 
 export function CreateHome({
   onBlank,
@@ -36,10 +81,13 @@ export function CreateHome({
   const { styles, colors } = useTheme();
   const [tab, setTab] = useState("Beacon");
   const [browser, setBrowser] = useState(false);
-  const [source, setSource] = useState("For You");
+  const [source, setSource] = useState("Browse");
   const [query, setQuery] = useState("");
-  const [group, setGroup] = useState("");
-  const own = data.templates.filter((item) => item.owner_id === userId);
+  const [family, setFamily] = useState<TemplateFamily | null>(null);
+  const own =
+    data.viewer_id === userId
+      ? data.templates.filter((item) => item.owner_id === userId)
+      : [];
   const history = data.activities
     .filter((item) => item.owner_id === userId)
     .slice()
@@ -78,7 +126,10 @@ export function CreateHome({
     })
     .filter(
       (item, index, items) =>
-        items.findIndex((other) => other.title === item.title) === index,
+        items.findIndex((other) => other.title === item.title) === index &&
+        items.findIndex(
+          (other) => recommendationFamily(other) === recommendationFamily(item),
+        ) === index,
     )
     .slice(0, 3);
   const planTemplates = data.plan_templates.filter(
@@ -92,6 +143,7 @@ export function CreateHome({
     title: string,
     detail: string,
     onPress: () => void,
+    icon: React.ReactNode = <Sparkles size={20} color={colors.green} />,
   ) => (
     <Pressable
       key={key}
@@ -99,59 +151,149 @@ export function CreateHome({
       accessibilityLabel={title}
       onPress={onPress}
       style={({ pressed }) => [
-        styles.card,
         {
           flexDirection: "row",
           alignItems: "center",
           gap: 12,
-          padding: 14,
+          paddingVertical: 11,
+          minHeight: 64,
+          borderBottomWidth: 1,
+          borderColor: colors.line,
           opacity: pressed ? 0.75 : 1,
         },
       ]}
     >
-      <Sparkles size={19} color={colors.green} />
-      <View style={{ flex: 1, gap: 3 }}>
-        <Text style={styles.h2}>{title}</Text>
-        <Txt muted>{detail}</Txt>
+      <View style={{ width: 38, alignItems: "center" }}>{icon}</View>
+      <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
+        <Text numberOfLines={1} style={[styles.h2, { fontSize: 15 }]}>
+          {title}
+        </Text>
+        <Text numberOfLines={2} style={[styles.muted, { fontSize: 12 }]}>
+          {detail}
+        </Text>
       </View>
-      <ArrowRight size={18} color={colors.green} />
+      <ChevronRight size={17} color={colors.muted} />
     </Pressable>
   );
   const recipeCard = (item: BeaconTemplate) =>
     card(
       item.id ?? item.title,
       item.title,
-      `${item.category} · ${item.minutes} min`,
+      `${item.category} \u00b7 ${item.minutes} min${item.suggestedTools?.includes("checklist") ? " \u00b7 Checklist" : item.suggestedTools?.includes("focus") ? " \u00b7 Focus Timer" : ""}`,
       () => {
         setBrowser(false);
         onTemplate(item);
       },
+      recipeIcon(item),
     );
+  const savedRoute = (id: string, edit = false) => {
+    setBrowser(false);
+    router.push({
+      pathname: "/create",
+      params: {
+        template: id,
+        ...(edit ? { editTemplate: "yes" } : {}),
+        ...(context.threadId ? { threadId: context.threadId } : {}),
+        ...(context.planId ? { planId: context.planId } : {}),
+      },
+    });
+  };
   const savedCard = (item: (typeof own)[number]) =>
-    card(item.id, item.name, `${item.title} · ${item.minutes} min`, () =>
-      router.push({
-        pathname: "/create",
-        params: {
-          template: item.id,
-          ...(context.threadId ? { threadId: context.threadId } : {}),
-          ...(context.planId ? { planId: context.planId } : {}),
-        },
-      }),
+    card(
+      item.id,
+      item.name,
+      `${item.title} \u00b7 ${item.minutes} min`,
+      () => savedRoute(item.id),
+      <ActivityBadge category={item.category} size={34} />,
     );
+  const icons = {
+    hangout: UsersRound,
+    food: Coffee,
+    sports: Dumbbell,
+    study: BookOpen,
+    errands: ShoppingBasket,
+    outing: Ticket,
+    outdoors: Trees,
+    gaming: Gamepad2,
+    creative: Palette,
+    work: Briefcase,
+    wellness: Heart,
+    travel: Plane,
+    community: HandHeart,
+    celebrations: PartyPopper,
+    music: Music2,
+    photography: Camera,
+    transport: Car,
+    home: House,
+  };
+  function recipeIcon(item: BeaconTemplate) {
+    const family = [...mainTemplateFamilies, ...moreTemplateFamilies].find(
+      (row) => !!item.groupId && row.groupId === item.groupId,
+    );
+    const Icon = /coffee/i.test(item.title)
+      ? Coffee
+      : /photography|filming|content|video/i.test(item.title)
+        ? Camera
+        : /music|band|karaoke/i.test(item.title)
+          ? Music2
+          : /walk/i.test(item.title)
+            ? Footprints
+            : /basketball|bowling/i.test(item.title)
+              ? CircleDot
+              : family?.icon === "food"
+                ? UtensilsCrossed
+                : item.id === "quick-study"
+                  ? BookOpen
+                  : family
+                    ? (icons[family.icon as keyof typeof icons] ?? Sparkles)
+                    : Sparkles;
+    return (
+      <View
+        style={{
+          width: 34,
+          height: 34,
+          borderRadius: 12,
+          borderWidth: 1,
+          borderColor: colors.line,
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <Icon size={20} color={colors.green} />
+      </View>
+    );
+  }
+  const familyCard = (item: TemplateFamily) => {
+    const Icon = icons[item.icon as keyof typeof icons] ?? Sparkles;
+    return card(
+      item.id,
+      item.title,
+      item.description,
+      () => setFamily(item),
+      <Icon size={23} color={colors.green} />,
+    );
+  };
+  const openBrowser = (nextSource = "Browse") => {
+    setSource(nextSource);
+    setFamily(null);
+    setBrowser(true);
+  };
+  const appResults = (family ? familyTemplates(family) : catalog).filter(
+    (item) => templateMatchesSearch(item, query),
+  );
+  const savedResults = own.filter((item) =>
+    matchesSearch(query, item.name, item.title, item.category),
+  );
   const section = (title: string, children: React.ReactNode) => (
     <View style={{ gap: 8 }}>
       <Text style={styles.label}>{title}</Text>
       {children}
     </View>
   );
-  const appResults =
-    source === "For You" && !query.trim() && !group
-      ? recommended
-      : searchBeaconTemplates(query, group || undefined);
   return (
     <Screen
-      title="Create"
-      eyebrow="MAKE TIME FOR SOMETHING GOOD"
+      title={tab === "Beacon" ? "Create Beacon" : `Create ${tab}`}
+      eyebrow="MAKE TIME TOGETHER"
       create={false}
     >
       <Chips
@@ -167,43 +309,83 @@ export function CreateHome({
             ? "Arrange Beacons into a simple itinerary."
             : "Save a Plan to reuse or repeat."}
       </Txt>
-      {section(
-        "QUICK START",
-        <Button
-          title={tab === "Routine" ? "+ Create Routine" : `+ Blank ${tab}`}
-          onPress={() => {
-            if (tab === "Beacon") onBlank();
-            else
+      {tab === "Beacon" ? (
+        <>
+          {card(
+            "blank",
+            "Create Blank Template",
+            "Start fresh, then make it yours",
+            onBlank,
+            <Plus size={24} color={colors.green} />,
+          )}
+          <Field
+            label="Search activities"
+            placeholder="Search activities or templates…"
+            value={query}
+            onChangeText={setQuery}
+          />
+          {query.trim() ? (
+            <>
+              {section("SEARCH RESULTS", appResults.map(recipeCard))}
+              {!!savedResults.length &&
+                section("MY TEMPLATES", savedResults.map(savedCard))}
+              {!appResults.length && !savedResults.length && (
+                <Empty
+                  title="No matching templates"
+                  body="Try a different activity, or start blank."
+                />
+              )}
+              <Button
+                compact
+                secondary
+                title="Clear search"
+                onPress={() => setQuery("")}
+              />
+            </>
+          ) : (
+            <>
+              {section("FOR YOU", recommended.map(recipeCard))}
+              {!!recent.length &&
+                section(
+                  "RECENT",
+                  recent.map((id) =>
+                    id.startsWith("mine:")
+                      ? savedCard(own.find((item) => `mine:${item.id}` === id)!)
+                      : recipeCard(
+                          catalog.find((item) => `app:${item.id}` === id)!,
+                        ),
+                  ),
+                )}
+            </>
+          )}
+          {card(
+            "browse",
+            "Browse More Templates",
+            "Explore activities by family",
+            () => openBrowser(),
+            <LayoutGrid size={21} color={colors.muted} />,
+          )}
+          {card(
+            "mine",
+            "My Templates",
+            "Reuse or edit your saved starting points",
+            () => openBrowser("My Templates"),
+            <Bookmark size={21} color={colors.muted} />,
+          )}
+        </>
+      ) : (
+        section(
+          "QUICK START",
+          <Button
+            title={tab === "Routine" ? "+ Create Routine" : "+ Blank Plan"}
+            onPress={() =>
               router.push({
                 pathname: tab === "Plan" ? "/plans" : "/routines",
                 params: { create: "yes" },
-              });
-          }}
-        />,
-      )}
-      {tab === "Beacon" && (
-        <>
-          {section("FOR YOU", recommended.map(recipeCard))}
-          {!!recent.length &&
-            section(
-              "RECENT",
-              recent.map((id) =>
-                id.startsWith("mine:")
-                  ? savedCard(own.find((item) => `mine:${item.id}` === id)!)
-                  : recipeCard(
-                      catalog.find((item) => `app:${item.id}` === id)!,
-                    ),
-              ),
-            )}
-          {!!own.length &&
-            section("MY TEMPLATES", own.slice(0, 3).map(savedCard))}
-          <Button
-            title="Browse Beacon Templates →"
-            secondary
-            onPress={() => setBrowser(true)}
-          />
-          <Txt muted>Sports · Food · Study · Social · Outdoors · Gaming</Txt>
-        </>
+              })
+            }
+          />,
+        )
       )}
       {tab === "Plan" && (
         <>
@@ -283,7 +465,11 @@ export function CreateHome({
         />
       </View>
       <Sheet
-        title="Beacon Templates"
+        title={
+          source === "My Templates"
+            ? "My Templates"
+            : (family?.title ?? "Beacon Templates")
+        }
         visible={browser}
         onClose={() => setBrowser(false)}
       >
@@ -294,37 +480,68 @@ export function CreateHome({
           onChangeText={setQuery}
         />
         <Chips
-          options={
-            own.length
-              ? ["For You", "App Templates", "My Templates"]
-              : ["For You", "App Templates"]
-          }
+          options={["Browse", "My Templates"]}
           value={source}
-          onChange={setSource}
+          onChange={(next) => {
+            setSource(next);
+            setFamily(null);
+          }}
           showSelectedCheckmark={false}
         />
-        {source !== "My Templates" && (
+        {source === "My Templates" ? (
           <>
-            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
-              <Button
-                compact
-                secondary
-                title="All"
-                onPress={() => setGroup("")}
+            {savedResults.map((item) => (
+              <View
+                key={item.id}
+                style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
+              >
+                <View style={{ flex: 1 }}>{savedCard(item)}</View>
+                <IconButton
+                  label={`Edit template ${item.name}`}
+                  onPress={() => savedRoute(item.id, true)}
+                >
+                  <Pencil size={18} color={colors.muted} />
+                </IconButton>
+              </View>
+            ))}
+            {!savedResults.length && (
+              <Empty
+                title={
+                  query.trim()
+                    ? "No matching saved templates"
+                    : "No saved templates yet"
+                }
+                body="Save a configuration from Advanced Options in the Beacon editor."
               />
-              {beaconTemplateGroups.map((item) => (
-                <Button
-                  key={item.id}
-                  compact
-                  secondary={group !== item.id}
-                  title={item.title}
-                  onPress={() => {
-                    setGroup(item.id);
-                    setSource("App Templates");
-                  }}
-                />
-              ))}
-            </View>
+            )}
+            <Button
+              secondary
+              title="Create Blank Template"
+              onPress={() => {
+                setBrowser(false);
+                onBlank();
+              }}
+            />
+          </>
+        ) : family ? (
+          <>
+            <Button
+              compact
+              secondary
+              title="Back to categories"
+              onPress={() => setFamily(null)}
+            />
+            <Txt muted>{family.description}</Txt>
+            {appResults.map(recipeCard)}
+            {!appResults.length && (
+              <Empty
+                title="No matching templates"
+                body="Try another activity or go back to categories."
+              />
+            )}
+          </>
+        ) : query.trim() ? (
+          <>
             {appResults.map(recipeCard)}
             {!appResults.length && (
               <Empty
@@ -333,15 +550,12 @@ export function CreateHome({
               />
             )}
           </>
+        ) : (
+          <>
+            {section("QUICK START", mainTemplateFamilies.map(familyCard))}
+            {section("MORE ACTIVITIES", moreTemplateFamilies.map(familyCard))}
+          </>
         )}
-        {source === "My Templates" &&
-          own
-            .filter((item) =>
-              `${item.name} ${item.title} ${item.category}`
-                .toLowerCase()
-                .includes(query.trim().toLowerCase()),
-            )
-            .map(savedCard)}
         <Button secondary title="Done" onPress={() => setBrowser(false)} />
       </Sheet>
     </Screen>

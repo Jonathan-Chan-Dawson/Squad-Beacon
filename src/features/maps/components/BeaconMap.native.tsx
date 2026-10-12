@@ -138,6 +138,7 @@ export default function BeaconMap({
   viewportInsets,
   focused,
   anchorCoordinate,
+  previewHeight,
   onAnchor,
   onCluster,
   clusterPriorities = {},
@@ -338,6 +339,20 @@ export default function BeaconMap({
     const currentMap = map.current;
     if (!currentMap) return;
 
+    if (controlCommand.kind === "restore" && controlCommand.camera) {
+      const { center, bounds } = controlCommand.camera;
+      currentMap.animateToRegion(
+        {
+          latitude: center.latitude,
+          longitude: center.longitude,
+          latitudeDelta: bounds.north - bounds.south,
+          longitudeDelta: bounds.east - bounds.west,
+        },
+        180,
+      );
+      appliedControlRevision.current = controlCommand.revision;
+      return;
+    }
     if (controlCommand.kind === "fit") {
       didInitialFit.current = true;
       const visibleCoordinates =
@@ -431,8 +446,25 @@ export default function BeaconMap({
       if (!currentMap) return;
       currentMap.animateToRegion(
         {
-          latitude: focusedLat,
-          longitude: focusedLng,
+          latitude:
+            focusedLat +
+            0.006 *
+              (((mapPadding.top - mapPadding.bottom) / 2 +
+                (previewHeight
+                  ? Math.min(
+                      previewHeight / 2,
+                      Math.max(
+                        0,
+                        (mapSize.height - mapPadding.top - mapPadding.bottom) /
+                          2 -
+                          48,
+                      ),
+                    )
+                  : 0)) /
+                mapSize.height),
+          longitude:
+            focusedLng -
+            0.006 * ((mapPadding.left - mapPadding.right) / 2 / mapSize.width),
           latitudeDelta: 0.006,
           longitudeDelta: 0.006,
         },
@@ -440,7 +472,17 @@ export default function BeaconMap({
       );
       appliedFocusedTarget.current = focusKey;
     }
-  }, [ready, focusedLat, focusedLng, mapSize]);
+  }, [
+    ready,
+    focusedLat,
+    focusedLng,
+    mapSize,
+    mapPadding.top,
+    mapPadding.bottom,
+    mapPadding.left,
+    mapPadding.right,
+    previewHeight,
+  ]);
   function recenter() {
     if (onRecenter) onRecenter();
     else if (points.length && hasUsableMapViewport(mapSize))

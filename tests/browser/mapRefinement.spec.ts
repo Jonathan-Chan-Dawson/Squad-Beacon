@@ -109,7 +109,7 @@ test("Compass opens without requesting location, and selecting a result opens it
   await demo(page);
 
   await page.getByRole("button", { name: "Compass", exact: true }).click();
-  const compass = page.getByRole("dialog");
+  const compass = page.getByTestId("map-side-menu");
   await expect(compass).toBeVisible();
   await expect(
     compass.getByText("Centering the map never shares your location."),
@@ -132,7 +132,7 @@ test("Compass opens without requesting location, and selecting a result opens it
   await expect(compass).toHaveCount(0);
 
   const search = page.getByRole("textbox", {
-    name: "Search Beacons, People, and places",
+    name: "Search places, Beacons, people and communities",
   });
   await search.fill("Coffee & a little focus");
   const match = page.getByRole("button", {
@@ -146,70 +146,14 @@ test("Compass opens without requesting location, and selecting a result opens it
     .getByTestId("map-tooltip-card")
     .first();
   await expect(preview).toBeVisible();
-  await page
-    .getByRole("button", { name: "Open Beacon list", exact: true })
+  await preview
+    .getByRole("button", { name: "See overview", exact: true })
     .click();
-  const selectedRow = page.getByRole("button", {
-    name: "Select Coffee & a little focus Beacon",
-    exact: true,
-  });
-  await expect(selectedRow).toBeVisible();
-  const rowStyles = await page
-    .locator('[role="button"][aria-label^="Select "][aria-label$=" Beacon"]')
-    .evaluateAll((rows) =>
-      rows.map((row) => ({
-        label: row.getAttribute("aria-label"),
-        borderColor: getComputedStyle(row.parentElement?.parentElement ?? row)
-          .borderColor,
-      })),
-    );
-  const selectedStyle = rowStyles.find(
-    (row) => row.label === "Select Coffee & a little focus Beacon",
-  );
-  const unselectedStyle = rowStyles.find(
-    (row) => row.label !== "Select Coffee & a little focus Beacon",
-  );
-  expect(
-    selectedStyle,
-    "the selected Beacon row should be rendered",
-  ).toBeDefined();
-  expect(
-    unselectedStyle,
-    "another visible row should provide an unselected comparison",
-  ).toBeDefined();
-  expect(selectedStyle!.borderColor).not.toBe(unselectedStyle!.borderColor);
-  await page
-    .getByRole("button", { name: "Return to map", exact: true })
-    .click();
-  await expect(preview).toContainText("Coffee & a little focus");
-  await expect(preview).toContainText("going");
-  await page.screenshot({ path: "test-results/map-redesign-preview-390.png" });
-
-  await page
-    .getByRole("button", { name: "Open Beacon list", exact: true })
-    .click();
-  const row = page.getByRole("button", {
-    name: "Select Coffee & a little focus Beacon",
-    exact: true,
-  });
-  await row.click();
-  await page
-    .getByRole("button", { name: "Return to map", exact: true })
-    .click();
-  await expect(page.getByTestId("map-tooltip-card").first()).toContainText(
+  await expect(page.getByTestId("map-panel")).toBeVisible();
+  await expect(page.getByTestId("map-panel")).toContainText(
     "Coffee & a little focus",
   );
-  await page
-    .getByRole("button", { name: "Open Beacon list", exact: true })
-    .click();
-  await page
-    .getByRole("button", {
-      name: "Open Coffee & a little focus Beacon details",
-      exact: true,
-    })
-    .first()
-    .click();
-  await expect(page).toHaveURL(/\/activity\/[^/]+(?:\?.*)?$/);
+  await expect(page).not.toHaveURL(/\/activity\//);
 });
 
 test("map controls and persistent results stay inside four phone viewports", async ({

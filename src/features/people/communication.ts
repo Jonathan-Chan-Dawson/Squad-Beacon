@@ -13,6 +13,73 @@ import {
   visibleSquadPingResponses,
 } from "@/src/features/organizations/squadChat";
 import { canOpenSquadProfile } from "@/src/features/people/squadProfile";
+import { canManageSpace } from "@/src/features/spaces/domain";
+import {
+  canManageOrganization,
+  canReadOrganization,
+} from "@/src/features/organizations/domain";
+import { SOCIAL_ROLE_RANK } from "@/src/features/social/domain";
+
+/** The same authorized requests drive both the notification count and inbox rows. */
+export function pendingCommunityJoinRequests(data: Data, userId: ID | null) {
+  if (!userId || data.viewer_id !== userId) return [];
+  const blocked = (id: string) =>
+    data.blocks.some(
+      (row) =>
+        (row.blocker_id === userId && row.blocked_id === id) ||
+        (row.blocked_id === userId && row.blocker_id === id),
+    );
+  return [
+    ...data.squad_join_requests
+      .filter((row) => {
+        const role = data.squad_members.find(
+          (member) =>
+            member.squad_id === row.squad_id && member.user_id === userId,
+        )?.role;
+        return (
+          !!role &&
+          SOCIAL_ROLE_RANK[role] >= SOCIAL_ROLE_RANK.admin &&
+          canOpenSquadProfile(data, row.squad_id, userId) &&
+          !blocked(row.user_id)
+        );
+      })
+      .map((row) => ({
+        type: "squad" as const,
+        entityId: row.squad_id,
+        userId: row.user_id,
+      })),
+    ...data.space_members
+      .filter(
+        (row) =>
+          row.status === "requested" &&
+          canManageSpace(data, row.space_id, userId) &&
+          !blocked(row.user_id),
+      )
+      .map((row) => ({
+        type: "space" as const,
+        entityId: row.space_id,
+        userId: row.user_id,
+      })),
+    ...data.organization_members
+      .filter((row) => {
+        const org = data.organizations.find(
+          (item) => item.id === row.organization_id,
+        );
+        return (
+          row.status === "requested" &&
+          !!org &&
+          canReadOrganization(data, org.id, userId) &&
+          canManageOrganization(org, data.organization_members, userId) &&
+          !blocked(row.user_id)
+        );
+      })
+      .map((row) => ({
+        type: "organization" as const,
+        entityId: row.organization_id,
+        userId: row.user_id,
+      })),
+  ];
+}
 
 export type SquadChatRowSummary = {
   preview: string;
@@ -123,6 +190,7 @@ export function pendingSocialCount(
 ) {
   if (!userId || data.viewer_id !== userId) return 0;
   return (
+    pendingCommunityJoinRequests(data, userId).length +
     pendingPlanningThreads(data, normalizePlanningData(data), userId, now)
       .length +
     data.friendships.filter(

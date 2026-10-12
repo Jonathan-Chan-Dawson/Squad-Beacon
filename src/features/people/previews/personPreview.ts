@@ -1,6 +1,8 @@
 import { canReadBeaconActivity } from "@/src/features/beacons/beaconModules";
 import { isApprovedGoing } from "@/src/features/beacons/permissions";
 import { activeOrganizationRole } from "@/src/features/organizations/domain";
+import { activeSpaceRole, canReadSpace } from "@/src/features/spaces/domain";
+import type { SocialEntityType } from "@/src/features/social/types";
 import { canViewProfile } from "@/src/features/profile/privacy";
 import type { FriendAvailabilityState } from "@/src/shared/domain";
 import {
@@ -42,8 +44,7 @@ export function canViewBeaconMeetingDetails(
 ) {
   if (!viewerId || data.viewer_id !== viewerId) return false;
   const beacon = data.activities.find((item) => item.id === beaconId);
-  if (!beacon || !canReadBeaconActivity(data, beacon, viewerId))
-    return false;
+  if (!beacon || !canReadBeaconActivity(data, beacon, viewerId)) return false;
   const rsvp = data.rsvps.find(
     (row) => row.activity_id === beacon.id && row.user_id === viewerId,
   );
@@ -85,7 +86,7 @@ function isBlocked(data: Data, viewerId: ID, personId: ID) {
   );
 }
 
-function sharedContexts(data: Data, viewerId: ID, personId: ID) {
+function sharedContexts(data: Data, viewerId: ID, personId: ID, limit = 2) {
   const sharedSquads = data.squads
     .filter((squad) => {
       if (
@@ -128,7 +129,49 @@ function sharedContexts(data: Data, viewerId: ID, personId: ID) {
     }));
   return [...sharedSquads, ...sharedOrganizations]
     .sort((left, right) => left.name.localeCompare(right.name))
-    .slice(0, 2);
+    .slice(0, limit);
+}
+
+/** Full-profile directory; the lightweight map selector keeps its two-row preview. */
+export function selectSharedProfileContexts(
+  data: Data,
+  personId: ID,
+  viewerId: ID | null,
+): { id: ID; name: string; entityType: SocialEntityType }[] {
+  if (
+    !viewerId ||
+    data.viewer_id !== viewerId ||
+    isBlocked(data, viewerId, personId) ||
+    !canViewProfile(data, personId, viewerId)
+  )
+    return [];
+  const contexts = sharedContexts(data, viewerId, personId, Infinity).map(
+    (context) => ({
+      id: context.id,
+      name: context.name,
+      entityType:
+        context.kind === "Organization"
+          ? ("organization" as const)
+          : ("squad" as const),
+    }),
+  );
+  const spaces = data.spaces
+    .filter(
+      (space) =>
+        canReadSpace(data, space.id, viewerId) &&
+        activeSpaceRole(space, data.space_members, viewerId) &&
+        activeSpaceRole(space, data.space_members, personId) &&
+        !isBlocked(data, space.owner_id, personId) &&
+        !data.space_bans.some(
+          (ban) => ban.space_id === space.id && ban.user_id === personId,
+        ),
+    )
+    .map((space) => ({
+      id: space.id,
+      name: space.name,
+      entityType: "space" as const,
+    }));
+  return [...contexts, ...spaces].sort((a, b) => a.name.localeCompare(b.name));
 }
 
 /** Re-resolves profile, Beacon, relationship, and location data from this viewer's snapshot. */
@@ -213,12 +256,14 @@ export function selectPersonPreview(
     canMessage,
     canViewFullProfile: true,
     profile: candidate,
-    starred: canMessage && data.favorites.some(
-      (favorite) =>
-        favorite.owner_id === viewerId &&
-        favorite.kind === "friend" &&
-        favorite.target_id === personId,
-    ),
+    starred:
+      canMessage &&
+      data.favorites.some(
+        (favorite) =>
+          favorite.owner_id === viewerId &&
+          favorite.kind === "friend" &&
+          favorite.target_id === personId,
+      ),
     availability: friendAvailabilityState(activeAvailability, now),
     beacon,
     sharedContexts: sharedContexts(data, viewerId, personId),

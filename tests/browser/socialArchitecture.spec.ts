@@ -8,42 +8,36 @@ async function communities(page: Page) {
   await page.getByRole("button", { name: "Communities", exact: true }).click();
 }
 
-test("Space cards open a compact preview before the full profile", async ({
+test("Organization opens directly with compact content and focused directories", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 320, height: 740 });
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await communities(page);
+  await expect(page).toHaveURL(/\/communities/);
   await page
-    .getByRole("button", {
-      name: "Preview Space Neighborhood Studio",
-      exact: true,
-    })
-    .click();
-  const preview = page.getByRole("dialog");
-  await expect(
-    preview.getByText("Neighborhood Studio", { exact: true }).last(),
-  ).toBeVisible();
-  await expect(page).toHaveURL(/\/squads/);
-  await expect(
-    preview.getByRole("button", {
-      name: "View full Space profile",
-      exact: true,
-    }),
-  ).toBeVisible();
-  await page.screenshot({ path: "test-results/social-space-preview-320.png" });
-  await preview
-    .getByRole("button", { name: "View full Space profile", exact: true })
+    .getByRole("button", { name: "Neighborhood Studio", exact: true })
     .click();
   await expect(page).toHaveURL(/\/space\/space-neighborhood-studio/);
-  for (const name of ["Overview", "Squads", "Activity"]) {
-    await expect(page.getByRole("button", { name, exact: true })).toBeVisible();
-  }
-  await page.getByRole("button", { name: "Activity", exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  for (const name of ["Overview", "Squads", "Activity"])
+    await expect(page.getByRole("button", { name, exact: true })).toHaveCount(
+      0,
+    );
+  await page.screenshot({ path: "test-results/organization-overview-320.png" });
+  await page.getByRole("button", { name: "All Squads", exact: true }).click();
+  await expect(page).toHaveURL(/tab=squads/);
   await expect(
-    page.getByRole("button", { name: "Activity", exact: true }),
-  ).toHaveAttribute("aria-selected", "true");
+    page.getByRole("textbox", { name: "Search this Space", exact: true }),
+  ).toHaveCount(0);
+  await page.goBack();
+  await page.getByRole("button", { name: "All Beacons", exact: true }).click();
+  await expect(page).toHaveURL(/tab=activity/);
+  await page.goBack();
+  await expect(
+    page.getByRole("button", { name: "All Squads", exact: true }),
+  ).toBeVisible();
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= innerWidth,
@@ -52,44 +46,38 @@ test("Space cards open a compact preview before the full profile", async ({
   expect(errors).toEqual([]);
 });
 
-test("Organization preview leads to Overview, Communities and Activity without admin clutter", async ({
+test("Super-Organization overview keeps directories and settings secondary", async ({
   page,
 }) => {
-  const errors: string[] = [];
-  page.on("pageerror", (error) => errors.push(error.message));
   await communities(page);
   await page
-    .getByRole("button", { name: /^Preview Lakefront / })
-    .first()
+    .getByRole("button", { name: "Lakefront Collective", exact: true })
     .click();
-  const preview = page.getByRole("dialog");
-  await expect(page).toHaveURL(/\/squads/);
+  await expect(page).toHaveURL(/\/organization\//);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(
-    preview.getByRole("button", {
-      name: "View full organization profile",
-      exact: true,
-    }),
+    page.getByRole("button", { name: "Browse Organizations", exact: true }),
   ).toBeVisible();
+  for (const name of ["Overview", "Communities", "Activity"])
+    await expect(page.getByRole("button", { name, exact: true })).toHaveCount(
+      0,
+    );
   await expect(
-    preview.getByRole("button", {
-      name: /Transfer ownership|Ban member|Delete organization/,
+    page.getByRole("button", {
+      name: /Transfer ownership|Ban member|Delete organization/i,
     }),
   ).toHaveCount(0);
   await page.screenshot({
-    path: "test-results/social-organization-preview-390.png",
+    path: "test-results/super-organization-overview-390.png",
   });
-  await preview
-    .getByRole("button", {
-      name: "View full organization profile",
-      exact: true,
-    })
+  await page
+    .getByRole("button", { name: "Browse Organizations", exact: true })
     .click();
-  await expect(page).toHaveURL(/\/organization\//);
-  for (const name of ["Overview", "Communities", "Activity"]) {
-    await expect(page.getByRole("button", { name, exact: true })).toBeVisible();
-  }
-  await page.getByRole("button", { name: "Communities", exact: true }).click();
-  expect(errors).toEqual([]);
+  await expect(page).toHaveURL(/tab=squads/);
+  await page.goBack();
+  await expect(
+    page.getByRole("button", { name: "Browse Organizations", exact: true }),
+  ).toBeVisible();
 });
 
 test("a growing Squad requires explicit member-copy confirmation and preserves its chat", async ({
@@ -99,7 +87,7 @@ test("a growing Squad requires explicit member-copy confirmation and preserves i
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await communities(page);
-  await page.getByRole("button", { name: "Chats", exact: true }).click();
+  await page.goBack();
   await openConversation(page, "Pickup Basketball");
   await page
     .getByLabel("Message", { exact: true })
@@ -116,22 +104,18 @@ test("a growing Squad requires explicit member-copy confirmation and preserves i
       exact: true,
     })
     .click();
-  await page
-    .getByRole("dialog")
-    .getByRole("button", { name: /View full Squad Profile/i })
-    .click();
   await expect(
     page.getByText(/^35 members · Huge Squad/).first(),
   ).toBeVisible();
   await page
-    .getByRole("button", { name: "Organize as a Space", exact: true })
+    .getByRole("button", { name: "Organize as an Organization", exact: true })
     .click();
   const sheet = page.getByRole("dialog");
   await sheet
-    .getByRole("textbox", { name: "Space name", exact: true })
+    .getByRole("textbox", { name: "Organization name", exact: true })
     .fill("Basketball home");
   await expect(
-    sheet.getByRole("button", { name: "Create Space", exact: true }),
+    sheet.getByRole("button", { name: "Create Organization", exact: true }),
   ).toBeDisabled();
   await sheet
     .getByRole("checkbox", { name: "Confirm member copy", exact: true })
@@ -146,11 +130,13 @@ test("a growing Squad requires explicit member-copy confirmation and preserves i
     path: "test-results/social-conversion-confirmation-320.png",
   });
   await sheet
-    .getByRole("button", { name: "Create Space", exact: true })
+    .getByRole("button", { name: "Create Organization", exact: true })
     .click();
   await expect(page).toHaveURL(/\/space\//);
   await expect(
-    page.getByText("Basketball home", { exact: true }).filter({ visible: true }),
+    page
+      .getByText("Basketball home", { exact: true })
+      .filter({ visible: true }),
   ).toHaveCount(1);
   await page
     .getByRole("button", { name: "Message Pickup Basketball", exact: true })
@@ -173,7 +159,7 @@ test("grouping managed Squads creates a lightweight Space without copying their 
     .click();
   await page
     .getByRole("dialog")
-    .getByRole("button", { name: "Create Space", exact: true })
+    .getByRole("button", { name: "Create Organization", exact: true })
     .click();
   const sheet = page.getByRole("dialog");
   await sheet
@@ -192,10 +178,10 @@ test("grouping managed Squads creates a lightweight Space without copying their 
     })
     .click();
   await sheet
-    .getByRole("textbox", { name: "Space name", exact: true })
+    .getByRole("textbox", { name: "Organization name", exact: true })
     .fill("Active weekends");
   await sheet
-    .getByRole("button", { name: "Create Space", exact: true })
+    .getByRole("button", { name: "Create Organization", exact: true })
     .click();
   await expect(page).toHaveURL(/\/space\//);
   await expect(
@@ -221,21 +207,21 @@ test("public discovery joins a Space without enrolling the viewer in its Squad",
   await communities(page);
   await expect(page.getByText("Discover", { exact: true })).toBeVisible();
   await page
-    .getByRole("button", { name: "Preview Space Lakefront Runs", exact: true })
+    .getByRole("button", { name: "Preview Lakefront Runs", exact: true })
     .click();
   await page
     .getByRole("dialog")
-    .getByRole("button", { name: "Join now", exact: true })
+    .getByRole("button", { name: "Join", exact: true })
     .click();
   await page
-    .getByRole("button", { name: "Preview Squad Open Run Club", exact: true })
+    .getByRole("button", { name: "Preview Open Run Club", exact: true })
     .click();
   const preview = page.getByRole("dialog");
   await expect(
-    preview.getByRole("button", { name: "Join now", exact: true }),
+    preview.getByRole("button", { name: "Join", exact: true }),
   ).toBeVisible();
   await expect(
-    preview.getByText("In Lakefront Runs", { exact: true }),
+    preview.getByText("Linked to Lakefront Runs", { exact: true }),
   ).toBeVisible();
   await expect(
     preview.getByRole("button", {
@@ -252,81 +238,115 @@ test("request-to-join communities offer a cancellable request, not automatic mem
   await communities(page);
   await expect(page.getByText("Discover", { exact: true })).toBeVisible();
   await page
-    .getByRole("button", { name: "Preview Space Park Care Crew", exact: true })
+    .getByRole("button", { name: "Preview Park Care Crew", exact: true })
     .click();
   await page
     .getByRole("dialog")
-    .getByRole("button", { name: "Request to join", exact: true })
+    .getByRole("button", { name: "Request", exact: true })
     .click();
   await page
-    .getByRole("button", { name: "Search conversations", exact: true })
+    .getByRole("button", { name: "Search communities", exact: true })
     .click();
   await page
     .getByRole("textbox", {
-      name: "Search people, Beacons, Squads and communities",
+      name: "Search chats, people and communities",
       exact: true,
     })
     .fill("Park Care Crew");
   await page
-    .getByRole("button", { name: "Preview Space Park Care Crew", exact: true })
+    .getByRole("button", { name: "Preview Park Care Crew", exact: true })
     .click();
   const preview = page.getByRole("dialog");
   await expect(
-    preview.getByRole("button", { name: "Cancel join request", exact: true }),
+    preview.getByRole("button", { name: "Cancel request", exact: true }),
   ).toBeVisible();
   await expect(
-    preview.getByRole("button", { name: "Join now", exact: true }),
+    preview.getByRole("button", { name: "Join", exact: true }),
   ).toHaveCount(0);
   await preview
-    .getByRole("button", { name: "Cancel join request", exact: true })
+    .getByRole("button", { name: "Cancel request", exact: true })
     .click();
   await page
-    .getByRole("button", { name: "Preview Space Park Care Crew", exact: true })
+    .getByRole("button", { name: "Preview Park Care Crew", exact: true })
     .click();
   await expect(
     page
       .getByRole("dialog")
-      .getByRole("button", { name: "Request to join", exact: true }),
+      .getByRole("button", { name: "Request", exact: true }),
   ).toBeVisible();
 });
 
-test("related community previews and their Beacons stay in one sheet with a working Back path", async ({ page }) => {
+test("related community navigation keeps full pages and a working Back path", async ({
+  page,
+}) => {
   await communities(page);
-  await page.getByRole("button", { name: "Preview Space Neighborhood Studio", exact: true }).click();
-  const preview = page.getByRole("dialog");
-  await preview.getByRole("button", { name: "Preview Organization Lakefront Collective", exact: true }).click();
-  await expect(page).toHaveURL(/\/squads/);
-  await preview.getByRole("button", { name: "Preview Beacon Lakefront trail loop", exact: true }).click();
-  await expect(preview.getByText("Lakefront trail loop", { exact: true }).filter({ visible: true })).toBeVisible();
-  await preview.getByRole("button", { name: /Back to (preview|Space)/i }).click();
-  await expect(preview.getByRole("button", { name: "View full organization profile", exact: true })).toBeVisible();
-  await expect(page.getByRole("dialog")).toHaveCount(1);
-  await preview.getByRole("button", { name: "Close", exact: true }).click();
-  await page.getByRole("button", { name: "Preview Space Neighborhood Studio", exact: true }).click();
-  await expect(preview.getByRole("button", { name: "View full Space profile", exact: true })).toBeVisible();
+  await page
+    .getByRole("button", { name: "Neighborhood Studio", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Organization settings", exact: true })
+    .click();
+  const settings = page.getByRole("dialog");
+  await expect(settings).toHaveCount(1);
+  await settings.getByRole("button", { name: "Close", exact: true }).click();
+  await page.goBack();
+  await expect(page).toHaveURL(/\/communities/);
+  await expect(
+    page.getByRole("button", { name: "Neighborhood Studio", exact: true }),
+  ).toBeVisible();
 });
 
-test("Profile opens the existing friend and private-list manager without adding community tabs", async ({ page }) => {
+test("Profile opens the existing friend and private-list manager without adding community tabs", async ({
+  page,
+}) => {
   await communities(page);
+  await page.goBack();
   await page.getByRole("tab", { name: "Profile", exact: true }).click();
-  await page.getByRole("button", { name: "Open Friends & Lists", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Open Friends & Lists", exact: true })
+    .click();
   const manager = page.getByRole("dialog");
-  await expect(manager.getByRole("button", { name: "Private lists", exact: true })).toBeVisible();
+  await expect(
+    manager.getByRole("button", { name: "Private lists", exact: true }),
+  ).toBeVisible();
   await manager.getByRole("button", { name: "Close", exact: true }).click();
   await page.getByRole("button", { name: "Communities", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Private lists", exact: true })).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Private lists", exact: true }),
+  ).toHaveCount(0);
 });
 
-test("a Space seeds optional Beacon association without introducing a Space audience", async ({ page }) => {
+test("a Space seeds optional Beacon association without introducing a Space audience", async ({
+  page,
+}) => {
   await communities(page);
-  await page.getByRole("button", { name: "Preview Space Neighborhood Studio", exact: true }).click();
-  await page.getByRole("dialog").getByRole("button", { name: "View full Space profile", exact: true }).click();
-  await page.getByRole("button", { name: "Activity", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Neighborhood Studio", exact: true })
+    .click();
+  await page.getByRole("button", { name: "All Beacons", exact: true }).click();
   await page.getByRole("button", { name: "+ Beacon", exact: true }).click();
   await expect(page).toHaveURL(/\/create\?spaceId=space-neighborhood-studio/);
-  await expect(page.getByRole("button", { name: "Associated with Neighborhood Studio", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "space", exact: true })).toHaveCount(0);
-  await page.getByRole("button", { name: "Associated with Neighborhood Studio", exact: true }).click();
-  await page.getByRole("dialog").getByRole("button", { name: "No community association", exact: true }).click();
-  await expect(page.getByRole("button", { name: "Choose a community", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: /^Advanced Options/ }).click();
+  await expect(
+    page.getByRole("button", {
+      name: "Associated with Neighborhood Studio",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "space", exact: true }),
+  ).toHaveCount(0);
+  await page
+    .getByRole("button", {
+      name: "Associated with Neighborhood Studio",
+      exact: true,
+    })
+    .click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "No community association", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Choose a community", exact: true }),
+  ).toBeVisible();
 });
