@@ -1,0 +1,72 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { DEMO_ID, makeDemo, demoAction } from "../src/shared/demo";
+import { demoRoutineCalendar, parseRoutineCalendarResult, personalCalendarRoutine, validateRoutineCalendarRange, type RoutineCalendarRow } from "../src/features/beacons/calendarRoutineProjection";
+import { selectCalendarItems } from "../src/features/beacons/calendarSelectors";
+import { addLocalDays } from "../src/features/plans/routines";
+const now=Date.now();
+function fixture() {
+  const data=makeDemo();
+  const routine=data.plan_routines[0];
+  const plan=data.plans.find((item)=>item.id===routine.plan_id)!;
+  const startOn=routine.next_occurrence_on!;
+  return {data,routine,plan,range:{startOn,endOn:addLocalDays(startOn,28)}};
+}
+test("calendar read range bounds and response acknowledgement fail closed",()=>{
+  const range={startOn:"2026-10-13",endOn:"2026-12-13"};
+  assert.deepEqual(validateRoutineCalendarRange(range),range);
+  assert.throws(()=>validateRoutineCalendarRange({...range,endOn:"2026-12-14"}),/1 to 62/);
+  assert.throws(()=>validateRoutineCalendarRange({...range,startOn:"2026-02-30"}),/1 to 62/);
+  assert.throws(()=>validateRoutineCalendarRange({startOn:range.endOn,endOn:range.startOn}),/1 to 62/);
+  const payload={viewer_id:DEMO_ID,rows:[{routine_id:"routine",plan_id:"plan",occurrence_on:"2026-11-01",state:"projected",secret:"ignored"}],truncated:false,limit:500};
+  assert.deepEqual(parseRoutineCalendarResult(payload,DEMO_ID,range).rows,[{routineId:"routine",planId:"plan",date:"2026-11-01",state:"projected"}]);
+  assert.throws(()=>parseRoutineCalendarResult({...payload,viewer_id:"other-account"},DEMO_ID,range),/verified/);
+  assert.throws(()=>parseRoutineCalendarResult({},DEMO_ID,range),/verified/);
+  assert.throws(()=>parseRoutineCalendarResult({...payload,rows:[{...payload.rows[0],occurrence_on:"2026-12-14"}]},DEMO_ID,range),/invalid occurrence/);
+  assert.throws(()=>parseRoutineCalendarResult({...payload,rows:[{...payload.rows[0],state:"materialized"}]},DEMO_ID,range),/invalid occurrence/);
+  assert.throws(()=>parseRoutineCalendarResult({...payload,rows:[payload.rows[0],payload.rows[0]]},DEMO_ID,range),/duplicate/);
+});
+test("demo lifecycle skip/run ledger projects bounded dates and replaces materialized occurrences",()=>{
+  const {data,routine,range}=fixture();
+  const initial=demoRoutineCalendar(data,DEMO_ID,range,now);
+  assert.ok(initial.rows.length>=3);
+  const before=data.activities.length;
+  const skipped=demoAction(data,"skip_routine_next",{id:routine.id});
+  assert.equal(skipped.demo_routine_occurrences?.[0].status,"skipped");
+  assert.ok(!demoRoutineCalendar(skipped,DEMO_ID,range,now).rows.some((row)=>row.date===range.startOn));
+  const run=demoAction(skipped,"run_routine_once",{id:routine.id});
+  const materialized=demoRoutineCalendar(run,DEMO_ID,range,now).rows.find((row)=>row.state==="materialized");
+  assert.ok(materialized?.occurrencePlanId);
+  const count=run.activities.length;
+  demoRoutineCalendar(run,DEMO_ID,range,now);
+  assert.equal(run.activities.length,count,"reads never materialize records");
+  assert.equal(data.activities.length,before,"original draft snapshot stays intact");
+  const cancelled=structuredClone(run);
+  cancelled.plans.find((item)=>item.id===materialized.occurrencePlanId)!.status="cancelled";
+  assert.ok(!demoRoutineCalendar(cancelled,DEMO_ID,range,now).rows.some((row)=>row.date===materialized.date));
+});
+test("stale viewers, source revocation and unreadable child metadata never become calendar rows",()=>{
+  const {data,routine,plan,range}=fixture();
+  const projected: RoutineCalendarRow={routineId:routine.id,planId:plan.id,date:range.startOn,state:"projected"};
+  assert.ok(personalCalendarRoutine(data,DEMO_ID,routine.id));
+  assert.equal(personalCalendarRoutine(data,"other-account",routine.id),undefined);
+  const child={...plan,id:"private-child",owner_id:"jordan",squad_id:null};
+  data.plans.push(child);
+  const materialized: RoutineCalendarRow={...projected,state:"materialized",occurrencePlanId:child.id};
+  assert.ok(!selectCalendarItems(data,DEMO_ID,range.startOn.slice(0,7),plan.timezone,now,[materialized]).some((row)=>row.id===child.id));
+  routine.status="paused";
+  assert.ok(!selectCalendarItems(data,DEMO_ID,range.startOn.slice(0,7),plan.timezone,now,[projected]).some((row)=>row.kind==="routine"));
+  data.viewer_id="other-account";
+  assert.deepEqual(selectCalendarItems(data,DEMO_ID,range.startOn.slice(0,7),plan.timezone,now,[projected]),[]);
+});
+test("materialized Plan schedules deduplicate actual calendar commitments without implying RSVP",()=>{
+  const {data,routine,plan,range}=fixture();
+  data.activities.filter((item)=>item.plan_id===plan.id).forEach((item)=>{item.mode="squad";});
+  const run=demoAction(data,"run_routine_once",{id:routine.id});
+  const rows=demoRoutineCalendar(run,DEMO_ID,range,now).rows;
+  const materialized=rows.find((row)=>row.state==="materialized")!;
+  const items=selectCalendarItems(run,DEMO_ID,range.startOn.slice(0,7),plan.timezone,now,rows);
+  assert.ok(items.some((row)=>row.id===materialized.occurrencePlanId && row.kind==="plan"));
+  assert.ok(!items.some((row)=>row.key.startsWith("routine-plan:")),"existing actual child schedule already represents that date");
+  assert.equal(run.rsvps.length,data.rsvps.length,"Routine materialization never infers member attendance");
+});

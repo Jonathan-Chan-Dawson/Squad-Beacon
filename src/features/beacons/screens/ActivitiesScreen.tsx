@@ -1,14 +1,18 @@
+import { StatusReactionPicker } from "../components/feed/StatusReactionPicker";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated as RNAnimated,
   Pressable,
+  RefreshControl,
   ScrollView,
   Share,
   Text,
   View,
+  useWindowDimensions,
 } from "react-native";
+import { BottomSheetFlatList } from "@gorhom/bottom-sheet";
 import { FlashList, type FlashListRef } from "@shopify/flash-list";
-import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
+import { router, useFocusEffect, useLocalSearchParams, type Href } from "expo-router";
 import * as ExpoLinking from "expo-linking";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, { FadeInDown, useReducedMotion } from "react-native-reanimated";
@@ -31,15 +35,15 @@ import { canViewBeaconMeetingDetails, selectFreshVisiblePersonLocation, selectPe
 import { canViewProfile } from "@/src/features/profile/privacy";
 import { canOpenSquadProfile } from "@/src/features/people/squadProfile";
 import { activeOrganizationRole } from "@/src/features/organizations/domain";
-import { beaconCapacity, beaconSeatCount, isApprovedGoing } from "@/src/features/beacons/permissions";
+import { beaconCapacity, beaconSeatCount, isApprovedGoing, isBeaconModuleEnabled } from "@/src/features/beacons/permissions";
 import { crew } from "@/src/shared/browsing";
 import { matchesBeaconFilters } from "@/src/features/maps/filtering";
 import { matchesSelectedCategories, mapAdvancedFilterCount } from "@/src/features/maps/mapUIselectors";
 import { AdvancedMapFilters, type MapAudienceChoice } from "@/src/features/maps/AdvancedMapFilters";
 import { BeaconFeedCard, type BeaconFeedCardProps } from "@/src/features/beacons/components/BeaconFeedCard";
-import { StatusPanel, type FeedStatusSave } from "@/src/features/beacons/components/feed/StatusPanel";
-import { FriendsNowHeader, FriendNowRow, type FriendsNowFilter, type SafeFriendNowRow } from "@/src/features/beacons/components/feed/FriendsNow";
-import { PastHistoryEmpty, PastHistoryRow, PastMonthHeader, PastWeeklyProgressView, getPastMonthKey, type PastWeeklyProgress, type SafePastHistoryRow } from "@/src/features/beacons/components/feed/PastPanels";
+import { SharedStatusControl } from "@/src/features/beacons/components/feed/SharedStatusControl";
+import { type SafeFriendNowRow } from "@/src/features/beacons/components/feed/FriendsNow";
+import { PastHistoryEmpty, PastHistoryRow, PastMonthHeader, getPastMonthKey, type SafePastHistoryRow } from "@/src/features/beacons/components/feed/PastPanels";
 import { PastToolkit } from "@/src/features/beacons/components/feed/PastPanels";
 import { PeriodTabs } from "@/src/features/beacons/PeriodTabs";
 import FeedPager from "@/src/features/beacons/FeedPager";
@@ -50,13 +54,13 @@ import { Button, Chips, Field, InboxButton, Sheet, Txt, uiHaptics, useTheme } fr
 import { usePlanningResponses } from "@/src/features/people/usePlanningResponses";
 import { ResponsesSheet } from "@/src/features/people/components/ResponsesSheet";
 import type { ExplorationFilters } from "@/src/shared/exploration";
+import { confirmedHubActivities, confirmedHubPeriodActivities, hubInviteeParams, hubToolShortcuts, nearestHubActivity, toggleHubFriend } from "@/src/features/beacons/hubSelectors";
+import { matchesSearch } from "@/src/shared/search";
+import { HubFriendRow, HubFriendsFade } from "@/src/features/beacons/components/feed/HubFriends";
+import { canReactToSoloActivity, visibleSoloActivity } from "@/src/features/maps/soloActivity";
 
 type FeedItem =
   | { key: string; type: "status" }
-  | { key: string; type: "friends-header" }
-  | { key: string; type: "friend"; friend: SafeFriendNowRow }
-  | { key: string; type: "friends-expand"; expanded: boolean }
-  | { key: string; type: "friends-find" }
   | { key: string; type: "section"; title: string }
   | { key: string; type: "activity"; activity: Activity; index: number }
   | { key: string; type: "week" }
@@ -64,7 +68,6 @@ type FeedItem =
   | { key: string; type: "area-controls"; activeFilters: number }
   | { key: string; type: "day"; date: Date; dateKey: string }
   | { key: string; type: "toolkit" }
-  | { key: string; type: "weekly"; items: PastWeeklyProgress[] }
   | { key: string; type: "month"; date: string }
   | { key: string; type: "history"; row: SafePastHistoryRow }
   | { key: string; type: "past-empty" }
@@ -117,13 +120,24 @@ export default function ActivitiesScreen() {
   const { data, userId, act, loading, error: storeError, refresh } = useBeacon();
   const exploration = useExploration();
   const insets = useSafeAreaInsets();
-  const periodicNow = useNow();
-  const [acknowledgedStatusTime, setAcknowledgedStatusTime] = useState(0);
-  // A successful status starts after the last periodic tick. Advance the clock on
-  // acknowledgement so the canonical record is visible immediately.
-  const now = Math.max(periodicNow, acknowledgedStatusTime);
+  const now = useNow();
   const reducedMotion = useReducedMotion();
-  const params = useLocalSearchParams<{ filter?: string }>();
+  const params = useLocalSearchParams<{ filter?: string; participation?: string }>();
+  const detailedBrowse = params.filter === "Now" || params.filter === "Upcoming" || params.filter === "Past";
+  const [friendPickerOpen, setFriendPickerOpen] = useState(false);
+  const [friendQuery, setFriendQuery] = useState("");
+  const [selectedFriendIds, setSelectedFriendIds] = useState<string[]>([]);
+  const [selectionError, setSelectionError] = useState("");
+  const [savedToolsOpen, setSavedToolsOpen] = useState(false);
+  const [selectionOwner, setSelectionOwner] = useState(userId);
+  const { height: windowHeight } = useWindowDimensions();
+  if (selectionOwner !== userId) {
+    setSelectionOwner(userId);
+    setSelectedFriendIds([]);
+    setSelectionError("");
+    setFriendQuery("");
+    setFriendPickerOpen(false);
+  }
   const { showAvatars } = usePreferences();
   const [page, setPage] = useState<FeedPage>("Now");
   const [scrollY] = useState(() => new RNAnimated.Value(0));
@@ -137,16 +151,11 @@ export default function ActivitiesScreen() {
   const [responsesOpen, setResponsesOpen] = useState(false);
   const [favoritesOpen, setFavoritesOpen] = useState(false);
   const [templatesOpen, setTemplatesOpen] = useState(false);
-  const [statusEditorOpen, setStatusEditorOpen] = useState(false);
-  const [statusSaving, setStatusSaving] = useState(false);
-  const [statusError, setStatusError] = useState("");
   const [reportActivityId, setReportActivityId] = useState<string | null>(null);
   const [reportReason, setReportReason] = useState("");
   const [reportBusy, setReportBusy] = useState(false);
   const [rsvpActivityId, setRsvpActivityId] = useState<string | null>(null);
   const [rsvpBusy, setRsvpBusy] = useState(false);
-  const [friendFilter, setFriendFilter] = useState<FriendsNowFilter>("everyone");
-  const [friendsExpanded, setFriendsExpanded] = useState(false);
   const [joined, setJoined] = useState(false);
   const [sort, setSort] = useState<SortOrder>("Soonest");
   const [selectedCategories, setSelectedCategories] = useState<Category[]>(() =>
@@ -162,6 +171,7 @@ export default function ActivitiesScreen() {
     useCallback(() => {
       if (params.filter === "Past") setPage("Past");
       else if (params.filter === "Upcoming") setPage("Upcoming");
+      else setPage("Now");
     }, [params.filter]),
   );
 
@@ -170,21 +180,10 @@ export default function ActivitiesScreen() {
     scrollY.setValue(scrollOffsets[next]);
   }, [scrollOffsets, scrollY]);
 
-  const ownStatusActivity = useMemo(() => {
-    if (!userId || data.viewer_id !== userId) return undefined;
-    return data.activities
-      .filter((activity) =>
-        activity.owner_id === userId &&
-        activity.mode === "solo" &&
-        activity.status === "scheduled" &&
-        Number.isFinite(Date.parse(activity.starts_at)) &&
-        Number.isFinite(Date.parse(activity.ends_at)) &&
-        Date.parse(activity.starts_at) <= now &&
-        Date.parse(activity.ends_at) > now,
-      )
-      .sort((left, right) => right.starts_at.localeCompare(left.starts_at))[0];
-  }, [data.activities, data.viewer_id, now, userId]);
-  const ownProfile = data.profiles.find((profile) => profile.id === userId);
+  const confirmedActivities = useMemo(() => confirmedHubActivities(data, userId), [data, userId]);
+  const nearestActivity = nearestHubActivity(confirmedActivities, now);
+  const returnActivity = nearestActivity && Date.parse(nearestActivity.starts_at) <= now ? nearestActivity : undefined;
+  const matchesParticipation = useCallback((activity: Activity) => params.participation !== "confirmed" || confirmedActivities.some((row) => row.id === activity.id), [confirmedActivities, params.participation]);
 
   const friends = useMemo<SafeFriendNowRow[]>(() => {
     if (!userId || data.viewer_id !== userId) return [];
@@ -194,10 +193,7 @@ export default function ActivitiesScreen() {
         if (!preview.canMessage) return [];
         const profile = preview.canViewFullProfile ? preview.profile : undefined;
         const activity = preview.beacon;
-        const status = preview.canViewFullProfile ? data.activities
-          .filter((row) => row.owner_id === personId && row.mode === "solo" && row.status === "scheduled" &&
-            Date.parse(row.starts_at) <= now && Date.parse(row.ends_at) > now && canReadBeaconActivity(data, row, userId))
-          .sort((left, right) => left.starts_at.localeCompare(right.starts_at))[0] : undefined;
+        const status = preview.canViewFullProfile ? visibleSoloActivity(data, personId, userId, now) : undefined;
         const availability = preview.availability;
         const statusText =
           availability === "available"
@@ -228,18 +224,6 @@ export default function ActivitiesScreen() {
       });
   }, [data, now, userId]);
 
-  const filteredFriends = useMemo(
-    () => friends.filter((friend) =>
-      friendFilter === "everyone" ||
-      (friendFilter === "free"
-        ? friend.availability === "available" || friend.availability === "ending-soon"
-        : friend.starred),
-    ),
-    [friendFilter, friends],
-  );
-  const shownFriends = friendsExpanded
-    ? filteredFriends
-    : filteredFriends.slice(0, COLLAPSED_FRIENDS);
 
   const mapAudiences = useMemo<MapAudienceChoice[]>(() => {
     if (!userId || data.viewer_id !== userId) return [];
@@ -291,6 +275,7 @@ export default function ActivitiesScreen() {
   const readableActivities = useMemo(() => {
     if (!userId || data.viewer_id !== userId) return [] as Activity[];
     const browsePeriod = page === "Now" ? "Active" : page;
+    if (params.participation === "confirmed") return confirmedHubPeriodActivities(data, userId, browsePeriod, sort, now);
     const activities = browseBeacons(
       data,
       userId,
@@ -305,6 +290,7 @@ export default function ActivitiesScreen() {
       now,
     )
       .filter((activity) => activity.mode !== "solo")
+      .filter(matchesParticipation)
       .filter((activity) => canReadBeaconActivity(data, activity, userId))
       .filter((activity) => matchesSelectedCategories(activity.category, activeCategories))
       .filter((activity) => {
@@ -352,11 +338,14 @@ export default function ActivitiesScreen() {
     page,
     sort,
     userId,
+    matchesParticipation,
+    params.participation,
   ]);
 
   const nowActivities = useMemo(() => {
     if (page === "Now") return readableActivities;
     if (!userId || data.viewer_id !== userId) return [] as Activity[];
+    if (params.participation === "confirmed") return confirmedHubPeriodActivities(data, userId, "Active", sort, now);
     return browseBeacons(data, userId, {
       period: "Active",
       sort,
@@ -366,12 +355,14 @@ export default function ActivitiesScreen() {
       joined,
     }, now)
       .filter((activity) => activity.mode !== "solo" && canReadBeaconActivity(data, activity, userId))
+      .filter(matchesParticipation)
       .filter((activity) => matchesSelectedCategories(activity.category, activeCategories));
-  }, [activeCategories, data, exploration.filters.audience, exploration.query, joined, now, page, readableActivities, sort, userId]);
+  }, [activeCategories, data, exploration.filters.audience, exploration.query, joined, now, page, readableActivities, sort, userId, matchesParticipation, params.participation]);
 
   const upcomingActivities = useMemo(() => {
     if (page === "Upcoming") return readableActivities;
     if (!userId || data.viewer_id !== userId) return [] as Activity[];
+    if (params.participation === "confirmed") return confirmedHubPeriodActivities(data, userId, "Upcoming", sort, now);
     return browseBeacons(data, userId, {
       period: "Upcoming",
       sort,
@@ -381,13 +372,15 @@ export default function ActivitiesScreen() {
       joined,
     }, now)
       .filter((activity) => activity.mode !== "solo" && canReadBeaconActivity(data, activity, userId))
+      .filter(matchesParticipation)
       .filter((activity) => matchesSelectedCategories(activity.category, activeCategories))
       .filter((activity) => matchesBeaconFilters(data, activity, userId, exploration.filters, now, { includeBaseFilters: false, query: exploration.query }));
-  }, [activeCategories, data, exploration.filters, exploration.query, joined, now, page, readableActivities, sort, userId]);
+  }, [activeCategories, data, exploration.filters, exploration.query, joined, now, page, readableActivities, sort, userId, matchesParticipation, params.participation]);
 
   const pastActivities = useMemo(() => {
     if (page === "Past") return readableActivities;
     if (!userId || data.viewer_id !== userId) return [] as Activity[];
+    if (params.participation === "confirmed") return confirmedHubPeriodActivities(data, userId, "Past", sort, now);
     return browseBeacons(data, userId, {
       period: "Past",
       sort,
@@ -397,10 +390,11 @@ export default function ActivitiesScreen() {
       joined: false,
     }, now)
       .filter((activity) => activity.mode !== "solo" && canReadBeaconActivity(data, activity, userId))
+      .filter(matchesParticipation)
       .filter((activity) => matchesSelectedCategories(activity.category, activeCategories));
-  }, [activeCategories, data, exploration.query, now, page, readableActivities, sort, userId]);
+  }, [activeCategories, data, exploration.query, now, page, readableActivities, sort, userId, matchesParticipation, params.participation]);
 
-  const { count: responsesCount, cards: responseCards, invitations } = usePlanningResponses(now, () => setResponsesOpen(false));
+  const { cards: responseCards, invitations } = usePlanningResponses(now, () => setResponsesOpen(false));
 
   const personalPlans = data.plans.filter((plan) => plan.owner_id === userId && plan.squad_id === null);
   const ownTemplates = data.templates.filter((template) => template.owner_id === userId);
@@ -417,27 +411,6 @@ export default function ActivitiesScreen() {
       data.library_saved_checklists.filter((item) => item.owner_id === userId).length,
   };
 
-  const weeklyProgress = useMemo<PastWeeklyProgress[]>(() => {
-    const goals = ownProfile?.aspiration_goals ?? [];
-    if (!userId || data.viewer_id !== userId || goals.length === 0) return [];
-    const monday = new Date(now);
-    monday.setHours(0, 0, 0, 0);
-    monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7));
-    const nextMonday = new Date(monday.getTime() + 7 * DAY_MS);
-    return goals.flatMap((goal) => {
-      const current = data.activities.filter((activity) =>
-        activity.owner_id === userId &&
-        activity.status === "completed" &&
-        activity.aspiration_ids?.includes(goal.id) &&
-        Date.parse(activity.ends_at) >= monday.getTime() &&
-        Date.parse(activity.ends_at) < nextMonday.getTime(),
-      ).length;
-      return Number.isInteger(goal.target_per_week) && goal.target_per_week > 0
-        ? [{ title: goal.title, current, target: goal.target_per_week }]
-        : [];
-    });
-  }, [data.activities, data.viewer_id, now, ownProfile?.aspiration_goals, userId]);
-
   const memoryThumbnails = usePastMemoryThumbnails(data, pastActivities, userId, page === "Past");
   const pastHistoryRows = useMemo<SafePastHistoryRow[]>(() =>
     pastActivities.map((activity) => ({
@@ -451,14 +424,8 @@ export default function ActivitiesScreen() {
 
   const nowItems = useMemo<FeedItem[]>(() => {
     const items: FeedItem[] = [
-      { key: "status", type: "status" },
-      { key: "friends-header", type: "friends-header" },
+      ...(params.participation !== "confirmed" ? [{ key: "area-controls", type: "area-controls" as const, activeFilters: advancedFilterCount }] : []),
     ];
-    shownFriends.forEach((friend) => items.push({ key: `friend:${friend.id}`, type: "friend", friend }));
-    if (filteredFriends.length > COLLAPSED_FRIENDS) {
-      items.push({ key: "friends-expand", type: "friends-expand", expanded: friendsExpanded });
-    }
-    items.push({ key: "friends-find", type: "friends-find" });
     items.push({ key: "now-section", type: "section", title: "Happening now" });
     if (nowActivities.length) {
       nowActivities.forEach((activity, index) => items.push({ key: `now:${activity.id}`, type: "activity", activity, index }));
@@ -471,13 +438,12 @@ export default function ActivitiesScreen() {
       });
     }
     return items;
-  }, [filteredFriends.length, friendsExpanded, nowActivities, shownFriends]);
+  }, [advancedFilterCount, nowActivities, params.participation]);
 
   const upcomingItems = useMemo<FeedItem[]>(() => {
     const items: FeedItem[] = [
       { key: "week-strip", type: "week" },
-      ...(responsesCount > 0 ? [{ key: "responses", type: "responses" as const, count: responsesCount }] : []),
-      { key: "area-controls", type: "area-controls", activeFilters: advancedFilterCount },
+      ...(params.participation !== "confirmed" ? [{ key: "area-controls", type: "area-controls" as const, activeFilters: advancedFilterCount }] : []),
     ];
     const groups = new Map<string, { date: Date; activities: Activity[] }>();
     for (const activity of upcomingActivities) {
@@ -503,11 +469,10 @@ export default function ActivitiesScreen() {
       );
     }
     return items;
-  }, [advancedFilterCount, upcomingActivities, responsesCount]);
+  }, [advancedFilterCount, upcomingActivities, params.participation]);
 
   const pastItems = useMemo<FeedItem[]>(() => {
-    const items: FeedItem[] = [{ key: "toolkit", type: "toolkit" }];
-    if (weeklyProgress.length) items.push({ key: "weekly-progress", type: "weekly", items: weeklyProgress });
+    const items: FeedItem[] = [];
     if (!pastHistoryRows.length) {
       items.push({ key: "past-empty", type: "past-empty" });
       return items;
@@ -522,7 +487,7 @@ export default function ActivitiesScreen() {
       items.push({ key: `history:${row.id}`, type: "history", row });
     }
     return items;
-  }, [pastHistoryRows, weeklyProgress]);
+  }, [pastHistoryRows]);
 
   const loadingItems = useMemo<FeedItem[]>(() =>
     Array.from({ length: 6 }, (_, index) => ({ key: `loading:${index}`, type: "skeleton", index })),
@@ -556,86 +521,6 @@ export default function ActivitiesScreen() {
       setRefreshing(false);
     }
   }, [refresh]);
-
-  const createStatus = useCallback(async (value: FeedStatusSave) => {
-    if (!userId || data.viewer_id !== userId) throw new Error("Refresh your profile before sharing a status.");
-    const startsAt = new Date().toISOString();
-    const audience = ownStatusActivity?.audience ?? "friends";
-    const audienceId = ownStatusActivity?.audience_id ?? null;
-    const payload = {
-      title: value.title.trim(),
-      description: "",
-      available: value.available,
-      category: ownStatusActivity?.category ?? "Social",
-      mode: "solo",
-      starts_at: startsAt,
-      ends_at: value.endsAt,
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
-      audience,
-      audience_id: audienceId,
-      target_count: null,
-      approval_required: false,
-      aspiration_ids: [],
-      label: "",
-      online_url: null,
-      latitude: null,
-      longitude: null,
-    };
-    if (!payload.title) throw new Error("Add a short status note.");
-    if (Date.parse(payload.ends_at) <= Date.parse(payload.starts_at)) throw new Error("Choose an end time in the future.");
-    const result = await act("create_activity", payload);
-    return typeof result.id === "string" ? result.id : null;
-  }, [act, data.viewer_id, ownStatusActivity, userId]);
-
-  const saveStatus = useCallback(async (value: FeedStatusSave) => {
-    setStatusSaving(true);
-    setStatusError("");
-    try {
-      if (!ownStatusActivity) {
-        await createStatus(value);
-      } else if (ownStatusActivity.available === value.available) {
-        await act("edit_activity", {
-          id: ownStatusActivity.id,
-          title: value.title.trim(),
-          starts_at: ownStatusActivity.starts_at,
-          ends_at: value.endsAt,
-        });
-      } else {
-        const createdId = await createStatus(value);
-        try {
-          await act("activity_status", { id: ownStatusActivity.id, status: "cancelled" });
-        } catch {
-          setRequestError("Your new status is live, but the previous status could not be cleared.");
-        }
-        if (!createdId) setRequestError("Your status was saved. Refresh to verify its current state.");
-      }
-      setAcknowledgedStatusTime(Date.now());
-      setStatusEditorOpen(false);
-    } catch (failure) {
-      const message = failure instanceof Error ? failure.message : "Could not save your status.";
-      setStatusError(message);
-      throw failure;
-    } finally {
-      setStatusSaving(false);
-    }
-  }, [act, createStatus, ownStatusActivity]);
-
-  const clearStatus = useCallback(async () => {
-    if (!ownStatusActivity) return;
-    setStatusSaving(true);
-    setStatusError("");
-    try {
-      await act("activity_status", { id: ownStatusActivity.id, status: "cancelled" });
-      setAcknowledgedStatusTime(Date.now());
-      setStatusEditorOpen(false);
-    } catch (failure) {
-      const message = failure instanceof Error ? failure.message : "Could not clear your status.";
-      setStatusError(message);
-      throw failure;
-    } finally {
-      setStatusSaving(false);
-    }
-  }, [act, ownStatusActivity]);
 
   const shareActivity = useCallback(async (activity: Activity) => {
     const url = ExpoLinking.createURL(`/activity/${activity.id}`);
@@ -813,67 +698,19 @@ export default function ActivitiesScreen() {
     const entering = reducedMotion ? undefined : FadeInDown.delay(Math.min(index * 35, 245)).duration(220);
     switch (item.type) {
       case "status":
-        return (
-          <StatusPanel
-            profile={ownProfile}
-            status={ownStatusActivity ? {
-              id: ownStatusActivity.id,
-              title: ownStatusActivity.title,
-              available: ownStatusActivity.available === true,
-              startsAt: ownStatusActivity.starts_at,
-              endsAt: ownStatusActivity.ends_at,
-            } : null}
-            editorVisible={statusEditorOpen}
-            saving={statusSaving}
-            error={statusError}
-            onCreate={() => { setStatusError(""); setStatusEditorOpen(true); }}
-            onEdit={() => { setStatusError(""); setStatusEditorOpen(true); }}
-            onCloseEditor={() => setStatusEditorOpen(false)}
-            onSave={saveStatus}
-            onClear={clearStatus}
-            onConvert={() => ownStatusActivity && router.push({ pathname: "/create", params: { kind: "beacon", repeat: ownStatusActivity.id } })}
-          />
-        );
-      case "friends-header":
-        return <FriendsNowHeader count={friends.length} filter={friendFilter} onFilterChange={setFriendFilter} />;
-      case "friend":
-        return (
-          <FriendNowRow
-            friend={item.friend}
-            onProfile={(id) => router.push({ pathname: "/person/[id]", params: { id } })}
-            onMessage={(id) => router.push({ pathname: "/messages/[id]", params: { id } })}
-            onToggleStar={(id) => { void toggleFriendStar(id); }}
-            onOpenBeacon={goToActivity}
-          />
-        );
-      case "friends-expand":
-        return (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityState={{ expanded: item.expanded }}
-            accessibilityLabel={item.expanded ? "Show fewer friends" : "Show more friends"}
-            onPress={() => setFriendsExpanded((value) => !value)}
-            style={{ minHeight: 44, alignItems: "center", justifyContent: "center" }}
-          >
-            <Text style={{ color: designColors.accent, ...tokens.type.secondary, fontWeight: "700" }}>
-              {item.expanded ? "Show less" : `See all ${filteredFriends.length} friends`}
-            </Text>
-          </Pressable>
-        );
-      case "friends-find":
-        return <Button title="Find friends" secondary onPress={goFindFriends} />;
+        return <SharedStatusControl compact />;
       case "section":
         return (
           <View style={{ minHeight: 38, flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
             <Text style={[styles.h2, { ...tokens.type.titleSmall }]}>{item.title}</Text>
-            <View style={{ flexDirection: "row" }}>
+            {params.participation !== "confirmed" ? <View style={{ flexDirection: "row" }}>
               <Pressable accessibilityRole="button" accessibilityLabel="Search Beacons" onPress={() => setBasicFiltersOpen(true)} style={{ minHeight: 44, minWidth: 44, alignItems: "center", justifyContent: "center" }}>
                 <Search size={18} color={designColors.textSecondary} />
               </Pressable>
               <Pressable accessibilityRole="button" accessibilityLabel="Filter Beacons" onPress={() => setFiltersOpen(true)} style={{ minHeight: 44, minWidth: 44, alignItems: "center", justifyContent: "center" }}>
                 <SlidersHorizontal size={18} color={designColors.textSecondary} />
               </Pressable>
-            </View>
+            </View> : null}
           </View>
         );
       case "activity":
@@ -959,8 +796,6 @@ export default function ActivitiesScreen() {
             onLibrary={() => router.push("/library")}
           />
         );
-      case "weekly":
-        return <PastWeeklyProgressView items={item.items} />;
       case "month":
         return (
           <View style={{ backgroundColor: designColors.bg, paddingVertical: tokens.space.xs }}>
@@ -1066,22 +901,101 @@ export default function ActivitiesScreen() {
   const savedFriendFavorites = data.favorites.filter((entry) => entry.owner_id === userId && entry.kind === "friend");
   const savedSquadFavorites = data.favorites.filter((entry) => entry.owner_id === userId && entry.kind === "squad");
 
+  const browse = (filter: FeedPage, confirmed = false) => router.push({ pathname: "/(tabs)/activities", params: { filter, participation: confirmed ? "confirmed" : "all" } });
+  const toggleSelection = (id: string) => {
+    setSelectedFriendIds((current) => toggleHubFriend(current, id));
+    setSelectionError("");
+  };
+  const planWithSelection = () => {
+    if (!selectedFriendIds.length) { setFriendPickerOpen(true); return; }
+    try {
+      const inviteParams = hubInviteeParams(selectedFriendIds, friends.map((friend) => friend.id));
+      setSelectionError("");
+      setFriendPickerOpen(false);
+      router.push({ pathname: "/create", params: inviteParams });
+    } catch (failure) {
+      setSelectionError(failure instanceof Error ? failure.message : "Review your selected friends.");
+      setFriendPickerOpen(true);
+    }
+  };
+  const planTitle = selectedFriendIds.length ? `Plan with ${selectedFriendIds.length} Selected` : "Plan with Friends";
+  const renderHubFriend = (friend: SafeFriendNowRow) => {
+    const solo = visibleSoloActivity(data, friend.id, userId, now);
+    const canReact = solo && canReactToSoloActivity(data, solo, userId, now);
+    return <HubFriendRow key={friend.id} friend={friend} selected={selectedFriendIds.includes(friend.id)} onSelect={() => toggleSelection(friend.id)}
+      onProfile={(id) => router.push({ pathname: "/person/[id]", params: { id } })}
+      onMessage={(id) => router.push({ pathname: "/messages/[id]", params: { id } })}
+      onToggleStar={(id) => { void toggleFriendStar(id); }} onOpenBeacon={goToActivity}
+      reactionAction={canReact ? <StatusReactionPicker activityId={solo.id} compact /> : undefined} />;
+  };
+  const hubHeading = (title: string, link: string, onPress: () => void) => <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: tokens.space.sm }}>
+    <Text accessibilityRole="header" style={{ color: designColors.textPrimary, ...tokens.type.titleSmall }}>{title}</Text>
+    <Button compact secondary title={link} onPress={onPress} />
+  </View>;
+  const renderHub = () => <ScrollView refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void handleRefresh()} />}
+    keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: PAGE_GUTTER, gap: tokens.space.md, paddingBottom: tokens.layout.tabBarHeight + insets.bottom + tokens.layout.scrollClearance }}>
+    {visibleError ? renderItem({ key: "hub-error", type: "error", message: visibleError }, 0) : null}
+    {returnActivity ? <Pressable accessibilityRole="button" onPress={() => goToActivity(returnActivity.id)} style={{ minHeight: 44, justifyContent: "center" }}>
+      <Text numberOfLines={1} style={{ color: designColors.accent, ...tokens.type.caption, fontWeight: "700" }}>Return to {returnActivity.title} →</Text>
+    </Pressable> : null}
+    {renderItem({ key: "hub-status", type: "status" }, 0)}
+    <View>
+      {hubHeading("Friends Right Now", "See all", () => setFriendPickerOpen(true))}
+      {friends.slice(0, COLLAPSED_FRIENDS).map(renderHubFriend)}
+      {!friends.length ? <View style={{ paddingVertical: tokens.space.sm, gap: tokens.space.xs }}><Txt muted>{loading ? "Loading friends…" : "Find your people to make plans together."}</Txt><Button compact secondary title="Find friends" onPress={goFindFriends} /></View> : null}
+      <HubFriendsFade />
+      <Button title={planTitle} onPress={planWithSelection} />
+      {selectedFriendIds.length ? <Button compact secondary title={`Review ${selectedFriendIds.length} selected`} onPress={() => setFriendPickerOpen(true)} /> : null}
+    </View>
+    <View style={{ gap: tokens.space.sm }}>
+      {hubHeading("Your Activity", "See all", () => browse("Upcoming", true))}
+      {nearestActivity ? <View style={{ gap: tokens.space.xs }}>
+        <Pressable accessibilityRole="button" onPress={() => goToActivity(nearestActivity.id)} style={{ minHeight: 48, justifyContent: "center", gap: 3 }}>
+          <Text numberOfLines={1} style={{ color: designColors.textPrimary, ...tokens.type.secondary, fontWeight: "700" }}>{nearestActivity.title}</Text>
+          <Text style={{ color: designColors.textSecondary, ...tokens.type.caption }}>{activityWhen(nearestActivity, new Date(now))} · {nearestActivity.owner_id === userId ? "Hosting" : "Going"}</Text>
+          <Text numberOfLines={1} style={{ color: designColors.textSecondary, ...tokens.type.caption }}>{findActivityPlace(nearestActivity)?.online_url ? "Online · " : findActivityPlace(nearestActivity)?.label ? `${findActivityPlace(nearestActivity)!.label} · ` : ""}{beaconSeatCount(data, nearestActivity)} people</Text>
+        </Pressable>
+        {!!userId && canUseBeaconModules(data, nearestActivity, userId) ? <View style={{ flexDirection: "row", flexWrap: "wrap", gap: tokens.space.sm }}>
+          {hubToolShortcuts(data, nearestActivity, userId).map((shortcut) => <Button key={shortcut.tool} compact secondary title={shortcut.label} onPress={() => router.push({ pathname: "/activity/[id]", params: { id: nearestActivity.id, tab: shortcut.tool === "chat" ? "chat" : "tools", ...(shortcut.tool !== "chat" ? { tool: shortcut.tool } : {}) } })} />)}
+          {(["checklist", "journal", "focus", "experiences", "scoreboard", "music"] as const).some((module) => isBeaconModuleEnabled(nearestActivity, module)) ? <Button compact secondary title="Tools" onPress={() => router.push({ pathname: "/activity/[id]", params: { id: nearestActivity.id, tab: "tools" } })} /> : null}
+        </View> : null}
+      </View> : <Txt muted>No confirmed plans yet.</Txt>}
+      <View style={{ flexDirection: "row", gap: tokens.space.sm }}>
+        <Button compact secondary title="Happening now" onPress={() => browse("Now", true)} />
+        <Button compact secondary title="History" onPress={() => browse("Past", true)} />
+      </View>
+    </View>
+    <View style={{ gap: tokens.space.sm }}>
+      <Text accessibilityRole="header" style={{ color: designColors.textPrimary, ...tokens.type.titleSmall }}>Beacons</Text>
+      {hubHeading("Happening Now", "Browse", () => browse("Now"))}
+      {loading && !data.activities.length ? renderItem({ key: "hub-loading", type: "skeleton", index: 0 }, 0) : nowActivities.some((activity) => activity.id !== nearestActivity?.id) ? <BeaconFeedCard {...buildCardProps(nowActivities.find((activity) => activity.id !== nearestActivity?.id)!)} /> : <Txt muted>A little quiet right now.</Txt>}
+      {hubHeading("Coming Up", "Browse", () => browse("Upcoming"))}
+      {upcomingActivities.some((activity) => activity.id !== nearestActivity?.id) ? <BeaconFeedCard {...buildCardProps(upcomingActivities.find((activity) => activity.id !== nearestActivity?.id)!)} /> : <Txt muted>Nothing coming up yet.</Txt>}
+    </View>
+    <Button secondary title="Saved & Tools" onPress={() => setSavedToolsOpen(true)} />
+  </ScrollView>;
+
   return (
     <View style={{ flex: 1, backgroundColor: designColors.bg }}>
       <View style={{ paddingTop: insets.top, backgroundColor: designColors.bg }}>
         <GlassBar style={{ borderRadius: 0, borderWidth: 0, borderBottomWidth: 1, borderBottomColor: designColors.border }}>
-          <RNAnimated.View style={{ height: headerHeight, overflow: "hidden", justifyContent: "flex-end", paddingHorizontal: tokens.layout.screenGutter, paddingBottom: tokens.space.sm }}>
+          <RNAnimated.View style={{ height: detailedBrowse ? headerHeight : 56, overflow: "hidden", justifyContent: "flex-end", paddingHorizontal: tokens.layout.screenGutter, paddingBottom: tokens.space.sm }}>
             <View style={{ minHeight: tokens.layout.minTapTarget, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: tokens.space.sm }}>
               <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={{ color: designColors.textSecondary, ...tokens.type.caption, fontWeight: "700", letterSpacing: 0.6 }}>MAKE TIME TOGETHER</Text>
-                <RNAnimated.Text accessibilityRole="header" style={{ color: designColors.textPrimary, fontSize: titleSize, lineHeight: 42, fontWeight: "800" }}>Beacons</RNAnimated.Text>
+                {detailedBrowse ? <Text style={{ color: designColors.textSecondary, ...tokens.type.caption, fontWeight: "700", letterSpacing: 0.6 }}>MAKE TIME TOGETHER</Text> : null}
+                <RNAnimated.Text accessibilityRole="header" style={{ color: designColors.textPrimary, fontSize: detailedBrowse ? titleSize : 24, lineHeight: detailedBrowse ? 42 : 30, fontWeight: "800" }}>Beacons</RNAnimated.Text>
               </View>
+              <Pressable accessibilityRole="button" accessibilityLabel="Open calendar" onPress={() => router.push("/calendar" as Href)}
+                style={{ width: tokens.layout.minTapTarget, height: tokens.layout.minTapTarget, alignItems: "center", justifyContent: "center" }}>
+                <CalendarDays size={22} color={designColors.textSecondary} />
+              </Pressable>
               <InboxButton />
             </View>
           </RNAnimated.View>
         </GlassBar>
       </View>
-      <View style={{ paddingHorizontal: tokens.layout.screenGutter, paddingTop: tokens.space.xs, paddingBottom: tokens.space.xs, backgroundColor: designColors.bg }}>
+      {detailedBrowse ? <><View style={{ paddingHorizontal: tokens.layout.screenGutter, paddingTop: tokens.space.xs, paddingBottom: tokens.space.xs, backgroundColor: designColors.bg }}>
+        <Button compact secondary title="Back to Beacons" onPress={() => router.setParams({ filter: undefined, participation: undefined })} />
         <PeriodTabs
           value={page}
           onChange={setActivePage}
@@ -1091,7 +1005,30 @@ export default function ActivitiesScreen() {
       </View>
       <FeedPager page={page} onPageSelected={setActivePage} pageSwipeEnabled={pageSwipeEnabled} reducedMotion={reducedMotion}>
         {[renderPage("Now"), renderPage("Upcoming"), renderPage("Past")]}
-      </FeedPager>
+      </FeedPager></> : renderHub()}
+
+      <Sheet title="Plan with Friends" visible={friendPickerOpen} scrollable={false} onClose={() => setFriendPickerOpen(false)}>
+        <Field label="Search friends" value={friendQuery} onChangeText={setFriendQuery} placeholder="Friend name" />
+        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}><Txt muted>{selectedFriendIds.length} selected</Txt><Button compact secondary title="Find friends" onPress={() => { setFriendPickerOpen(false); goFindFriends(); }} /></View>
+        {selectionError ? <Text accessibilityRole="alert" style={{ color: designColors.danger, ...tokens.type.caption }}>{selectionError}</Text> : null}
+        {!!selectedFriendIds.length && <ScrollView horizontal style={{ maxHeight: 48 }} keyboardShouldPersistTaps="handled" contentContainerStyle={{ alignItems: "center", gap: tokens.space.xs }}>
+          <Button compact secondary title="Clear selection" onPress={() => { setSelectedFriendIds([]); setSelectionError(""); }} />
+          {selectedFriendIds.map((id) => <Button key={id} compact secondary title={`Remove ${friends.find((friend) => friend.id === id)?.name ?? "unavailable friend"}`} onPress={() => toggleSelection(id)} />)}
+        </ScrollView>}
+        <View style={{ height: Math.max(120, Math.min(320, windowHeight - 430 - (selectedFriendIds.length ? 48 : 0) - (selectionError ? 48 : 0))) }}>
+          <BottomSheetFlatList data={friends.filter((friend) => matchesSearch(friendQuery, friend.name))}
+            extraData={{ selectedFriendIds, reactions: data.reactions }} keyExtractor={(friend) => friend.id}
+            renderItem={({ item }) => renderHubFriend(item)} keyboardShouldPersistTaps="handled"
+            ListEmptyComponent={<Txt muted>No friends match your search.</Txt>} />
+        </View>
+        <Button title={planTitle} disabled={!selectedFriendIds.length} onPress={planWithSelection} />
+      </Sheet>
+      <Sheet title="Saved & Tools" visible={savedToolsOpen} onClose={() => setSavedToolsOpen(false)}>
+        <Button compact secondary title={`Plans · ${toolkitCounts.plans}`} onPress={() => { setSavedToolsOpen(false); router.push("/plans"); }} />
+        <Button compact secondary title={`Favorites · ${toolkitCounts.favorites}`} onPress={() => { setSavedToolsOpen(false); setFavoritesOpen(true); }} />
+        <Button compact secondary title={`My Templates · ${toolkitCounts.templates}`} onPress={() => { setSavedToolsOpen(false); setTemplatesOpen(true); }} />
+        <Button compact secondary title={`Library · ${toolkitCounts.library}`} onPress={() => { setSavedToolsOpen(false); router.push("/library"); }} />
+      </Sheet>
 
       <AdvancedMapFilters
         visible={filtersOpen}

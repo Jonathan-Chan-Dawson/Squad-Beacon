@@ -42,6 +42,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ],
   extra: {
     ...config.extra,
+    cartoBasemapsApiKey: process.env.CARTO_BASEMAPS_API_KEY?.trim() || undefined,
     eas: { projectId: process.env.EXPO_PUBLIC_EAS_PROJECT_ID },
   },
 });

@@ -220,7 +220,7 @@ export default function TabLayout() {
             <MotionPressable
               accessibilityRole="button"
               accessibilityLabel="Create"
-              onPress={() => router.push("/create")}
+              onPress={() => router.push(state.routes[state.index].name === "index" ? { pathname: "/create", params: { fromMap: "yes" } } : "/create")}
               style={{
                 position: "absolute",
                 left: "50%",

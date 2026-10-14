@@ -9,7 +9,7 @@ import {
   activityWhen,
   validateActivity,
 } from "@/src/shared/domain";
-import { makeDemo } from "@/src/shared/demo";
+import { makeDemo, DEMO_ID } from "@/src/shared/demo";
 import type { Activity, Habit, Checkin } from "@/src/shared/types";
 const habit: Habit = {
   id: "h",
@@ -253,25 +253,19 @@ test("repeat suggestions use only your completed activities and rank repeats fir
   assert.match(suggestions[0].label, /^Your usual:/);
 });
 
-test("testing neighborhood has friends, social growth fixtures, and expiring locations", () => {
+test("testing neighborhood retains unique identities, social growth, and fresh/stale location coverage", () => {
   const d = makeDemo();
-  assert.equal(d.profiles.length, 166);
-  assert.equal(
-    d.friendships.filter((f) => f.status === "accepted").length,
-    119,
-  );
-  assert.equal(
-    d.profiles.filter(
-      (p) =>
-        p.id !== "demo-you" &&
-        !d.friendships.some((f) => f.recipient_id === p.id),
-    ).length,
-    46,
-  );
+  const profileIds = new Set(d.profiles.map((profile) => profile.id));
+  assert.equal(profileIds.size, d.profiles.length);
+  for (const id of [DEMO_ID, "maya", "jordan", "sam", "neighbor-20", "map-friend-0"]) assert.ok(profileIds.has(id));
+  const accepted = d.friendships.filter((friendship) => friendship.status === "accepted");
+  assert.ok(accepted.every((friendship) => profileIds.has(friendship.sender_id) && profileIds.has(friendship.recipient_id) && friendship.sender_id !== friendship.recipient_id));
+  assert.ok(accepted.some((friendship) => [friendship.sender_id, friendship.recipient_id].includes(DEMO_ID) && [friendship.sender_id, friendship.recipient_id].includes("jordan")));
+  assert.ok(!accepted.some((friendship) => [friendship.sender_id, friendship.recipient_id].includes("neighbor-20")), "the social-growth neighbor remains outside accepted friendships");
   assert.ok(d.activities.some((a) => a.available && a.mode === "solo"));
-  assert.ok(
-    d.locations.every(
-      (l) => Date.parse(l.expires_at) > Date.now() && locationIsFresh(l),
-    ),
-  );
+  assert.ok(d.locations.every((location) => profileIds.has(location.owner_id) && Number.isFinite(Date.parse(location.expires_at))));
+  const fresh = d.locations.find((location) => location.owner_id === "neighbor-0")!;
+  assert.ok(Date.parse(fresh.expires_at) > Date.now() && locationIsFresh(fresh));
+  const stale = d.locations.find((location) => location.owner_id === "map-friend-18")!;
+  assert.equal(locationIsFresh(stale), false);
 });

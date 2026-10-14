@@ -475,6 +475,8 @@ export interface ProfileVisibilityGrant {
   target_id: ID;
 }
 export interface Data {
+  /** Internal demo lifecycle ledger; never supplied by a hosted snapshot. */
+  demo_routine_occurrences?: import("@/src/features/beacons/calendarRoutineProjection").DemoRoutineOccurrence[];
   public_beacons: import("@/src/features/discovery/types").PublicBeaconSummary[];
   plan_members: PlanMember[];
   plan_routines: PlanRoutine[];

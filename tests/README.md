@@ -9,3 +9,13 @@
 Run `npm test`, `npm run export:web -- --max-workers 2`, then `npm run test:e2e`.
 
 In demo: Beacons > Find friends. Search a fictional profile, send a request, then use the clearly marked simulated acceptance action. Leave/re-enter demo to reset all changes. Real accounts continue to use username, QR and contact invitations.
+
+## Remaining redesign extensions (2026-10-13)
+
+- `statusReactions.*`, `statusAtomic.database.test.ts`, `statusControl.test.ts` and `statusRouteSeed.test.ts` cover finite persisted emoji, atomic history-preserving status mutation and legacy-editor seed privacy.
+- `calendarProjection.*` covers bounded recurrence reads, private skipped/materialized linkage, revocation, truncation and internal demo-ledger parity. Projection never materializes future records.
+- `creationAtomic.database.test.ts` and `createHandoff.test.ts` cover transactional invitations, quota/permission rollback, parent request replay, frozen UUID/payload reconciliation, actor-switch protection and legacy already-created retries.
+- New database fixtures apply the complete chronological migration chain in disposable PGlite. They do not apply migrations to a linked or remote project. Hosted rollout requires migrations `202610130001` through `202610130004` after project/authorization setup and review.
+- This refinement uses `npm test`, `npm run typecheck` and `npm run lint`; no exports or native builds were performed. Native acceptance remains unavailable because no device or configured AVD was connected.
+
+Final results: all 369 tests passed in the single full run; TypeScript, all-source zero-warning lint and diff check passed. The temporary test output was removed during cleanup; results are recorded here.

@@ -55,6 +55,7 @@ import { useBeacon } from "@/src/shared/store";
 import { useNow } from "@/src/shared/useNow";
 import { matchesSearch } from "@/src/shared/search";
 import { canReadBeaconActivity } from "@/src/features/beacons/beaconModules";
+import { creationHandoffParams } from "@/src/features/beacons/createHandoff";
 import { Button, IconButton, Sheet, Txt, useTheme } from "@/src/shared/ui";
 import { usePreferences } from "@/src/shared/preferences";
 import { friendIds, locationIsFresh } from "@/src/shared/domain";
@@ -275,6 +276,15 @@ export default function MapScreen() {
     search?: string;
     mapPlan?: string;
     mapThread?: string;
+    pickLocation?: string;
+    inviteeIds?: string;
+    statusSourceId?: string;
+    startsAt?: string;
+    fromMap?: string;
+    latitude?: string;
+    longitude?: string;
+    placeLabel?: string;
+    timezone?: string;
   }>();
   const insets = useSafeAreaInsets();
   const { height, width } = useWindowDimensions();
@@ -488,6 +498,7 @@ export default function MapScreen() {
   }));
   const [offline, setOffline] = useState(false);
   const [pickMode, setPickMode] = useState(false);
+  const creationLocationContext = useRef<Record<string, string>>({});
   const [pickedMapPoint, setPickedMapPoint] = useState<{
     latitude: number;
     longitude: number;
@@ -1442,10 +1453,11 @@ export default function MapScreen() {
     setPlaceSearchOpen(false);
   }
 
-  function startPickingLocation() {
+  const startPickingLocation = useCallback(() => {
+    creationLocationContext.current = {};
     setDetailTab(null);
     setCompassSheetOpen(false);
-    setPulsePlace(null);
+    setPulseSelection(null);
     setContextPoint(null);
     setPublicSelection(null);
     clearRouteSelection();
@@ -1453,10 +1465,22 @@ export default function MapScreen() {
     setClusterPersonIds(null);
     setSelected(null);
     setPerson(null);
-    setPickedMapPoint(null);
+    setPickedMapPoint((point) => point && isValidCoordinate(point) ? point : null);
     setPickMode(true);
     setPlaceSearchOpen(false);
-  }
+  }, [clearRouteSelection]);
+
+  useEffect(() => {
+    if (params.pickLocation !== "yes") return;
+    const frame = requestAnimationFrame(() => {
+      startPickingLocation();
+      const context = creationHandoffParams(params);
+      creationLocationContext.current = context;
+      if (context.latitude && context.longitude) setPickedMapPoint({ latitude: Number(context.latitude), longitude: Number(context.longitude), label: context.placeLabel || "Pinned map location" });
+      router.setParams({ pickLocation: undefined, inviteeIds: undefined, statusSourceId: undefined, startsAt: undefined, fromMap: undefined, latitude: undefined, longitude: undefined, placeLabel: undefined });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [params, startPickingLocation]);
 
   function exploreSavedPlace(place: ActivityPlace) {
     if (!validPhysicalPlace(place)) return;
@@ -1767,12 +1791,16 @@ export default function MapScreen() {
   }
 
   function createBeaconHere() {
-    if (!pickedMapPoint) return;
+    if (!pickedMapPoint || !isValidCoordinate(pickedMapPoint)) return;
+    const context = creationLocationContext.current;
+    creationLocationContext.current = {};
     setPickedMapPoint(null);
     setPickMode(false);
     router.push({
       pathname: "/create",
       params: {
+        ...context,
+        fromMap: "yes",
         latitude: String(pickedMapPoint.latitude),
         longitude: String(pickedMapPoint.longitude),
         placeLabel: pickedMapPoint.label,
@@ -2699,6 +2727,7 @@ export default function MapScreen() {
             <IconButton
               label="Cancel location selection"
               onPress={() => {
+                creationLocationContext.current = {};
                 setPickedMapPoint(null);
                 setPickMode(false);
               }}

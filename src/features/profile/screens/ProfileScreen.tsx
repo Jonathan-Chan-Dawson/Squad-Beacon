@@ -1,5 +1,3 @@
-import { avatarAvailability } from "../AvatarStatusBadge";
-import { useNow } from "@/src/shared/useNow";
 import React, { useState } from "react";
 import { Platform, Pressable, Share, Text, View } from "react-native";
 import { router, type Href } from "expo-router";
@@ -33,7 +31,7 @@ import { getAspirationProgress } from "@/src/features/profile/aspirations";
 import { InviteQR } from "@/src/features/people/InviteQR";
 import { ProfileVisibilityContent } from "./ProfilePrivacySettings";
 import { ProfileSonarCard } from "../components/ProfileSonarCard";
-import { ProfileAvailability } from "../components/ProfileAvailability";
+import { SharedStatusControl } from "@/src/features/beacons/components/feed/SharedStatusControl";
 import { ProfileMemories } from "../components/ProfileMemories";
 import {
   Button,
@@ -82,7 +80,6 @@ function ProfileContent({ profile }: { profile: Profile }) {
   const { styles, semanticColors: colors, tokens } = useTheme();
   const { data, userId } = useBeacon();
   const reducedMotion = useReducedMotion();
-  const now = useNow();
   const entrance = (index: number) =>
     reducedMotion
       ? undefined
@@ -213,7 +210,7 @@ function ProfileContent({ profile }: { profile: Profile }) {
           />
         </Svg>
         <View style={{ alignItems: "center", gap: 8 }}>
-          <Pressable
+          <View style={{ width: 84, height: 84 }}><Pressable
             testID="profile-avatar"
             accessibilityRole="button"
             accessibilityLabel="Edit profile photo"
@@ -231,9 +228,10 @@ function ProfileContent({ profile }: { profile: Profile }) {
             <ProfileAvatar
               profile={profile}
               size={76}
-              status={avatarAvailability(data.activities, profile.id, now)}
             />
           </Pressable>
+            <View style={{ position: "absolute", top: -12, right: -15 }}><SharedStatusControl avatarControl /></View>
+          </View>
           <Text style={[tokens.type.title, { color: colors.textPrimary }]}>
             {profile.name}
           </Text>
@@ -319,9 +317,6 @@ function ProfileContent({ profile }: { profile: Profile }) {
         </Pressable>
       </Animated.View>
 
-      <Animated.View entering={entrance(1)}>
-        <ProfileAvailability />
-      </Animated.View>
       {readableFeatured && (
         <View style={[styles.card, { gap: 8 }]}>
           <View style={[styles.between, { flexWrap: "wrap", gap: 8 }]}>

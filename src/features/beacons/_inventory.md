@@ -1,6 +1,10 @@
 Beacons feature
 
-- screens/ActivitiesScreen.tsx: Current, Upcoming, and Past beacon feed.
+- screens/ActivitiesScreen.tsx: compact Beacons home with personal status, friend selection, Your Activity, Now/Coming Up previews and secondary saved tools; filter links retain detailed period browsing. Confirmed activity/history bypass discovery preferences.
+- screens/CalendarScreen.tsx, calendarSelectors.ts: personal month/week agendas, existing weekly progress, authorized Plan schedules and date-only authoritative next Routine previews. Date/timezone handoffs reuse existing creation and Plan/Routine routes; no recurrence materialization.
+- hubSelectors.ts, activityToolEntry.ts: permission-gated confirmed activity, checklist totals and sanitized exact module links.
+- components/feed/HubFriends.tsx, SharedStatusControl.tsx, StatusPanel.tsx, statusActions.ts: compact independent friend targets/raised-hands reactions and the shared Beacons/Profile quick status editor, with existing services and visible partial cleanup. Legacy advanced status creation remains in CreateScreen.
+- createHandoff.ts: validated invitee/context/status-text handoff and serialized post-creation invitation retries; a partial invitation failure never recreates the Beacon.
 - screens/CreateScreen.tsx: creation launcher/editor, parameter-driven resets, drafts, validation, persistence and placement.
 - screens/ActivityDetailScreen.tsx: Beacon detail workspace, navigation, RSVP actions and permission-gated tools.
 - components/activity-detail/: shared Hero, Info (with native variant), Progress, People and Tools sections, also reused by Map sheets.
@@ -14,3 +18,5 @@ Beacons feature
 - CreateHome.tsx: compact creation launcher with blank first, diverse For You, Recent, direct activity search, and saved-template reuse/editing. Plan/Routine tabs retain their existing creation routes. The existing Quick/Advanced editor in screens/CreateScreen.tsx owns persistence and placement.
 - templateBrowser.ts: presentation-only template families referencing stable IDs in shared/templates.ts; six core families and seventeen additional families use one catalog, including cross-listed Music, Photography, Home and Classes presets. No saved-template migration.
 - PeriodTabs.tsx: activity period selector.
+
+- Remaining redesign extensions (2026-10-13): shared status-reaction registry/picker; atomic own-status service and legacy StatusPanel route; bounded Routine projection DTO/read hook; transactional selected-invitation creation with frozen request UUID/reconciliation. Chronological Supabase migrations 202610130001 through 004 are source-only pending hosted rollout. Existing template, status-conversion and map/date handoffs remain supported.

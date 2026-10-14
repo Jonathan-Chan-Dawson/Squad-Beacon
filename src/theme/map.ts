@@ -69,9 +69,10 @@ export function googleMapStyles(appearance: ResolvedAppearance) {
   ];
 }
 
-export function cartoTileUrl(appearance: ResolvedAppearance) {
+export function cartoTileUrl(appearance: ResolvedAppearance, apiKey?: string) {
   const style = appearance === "dark" ? "dark_all" : "light_all";
-  return `https://{s}.basemaps.cartocdn.com/${style}/{z}/{x}/{y}{r}.png`;
+  const key = apiKey?.trim();
+  return `https://{s}.basemaps.cartocdn.com/${style}/{z}/{x}/{y}{r}.png${key ? `?key=${encodeURIComponent(key)}` : ""}`;
 }
 
 export const cartoAttribution =

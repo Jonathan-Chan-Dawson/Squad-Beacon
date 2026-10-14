@@ -29,6 +29,7 @@ import {
   Footprints,
   CircleDot,
   UtensilsCrossed,
+  MapPin,
 } from "lucide-react-native";
 import { ActivityBadge } from "./ActivityBadge";
 import { matchesSearch } from "@/src/shared/search";
@@ -39,6 +40,7 @@ import {
   type TemplateFamily,
 } from "./templateBrowser";
 import { useBeacon } from "@/src/shared/store";
+import { creationHandoffParams } from "./createHandoff";
 import {
   beaconTemplateCatalog,
   templateMatchesSearch,
@@ -69,24 +71,44 @@ function recommendationFamily(item: BeaconTemplate) {
 export function CreateHome({
   onBlank,
   onTemplate,
+  context: handoffContext,
+  selectedFriends = [],
+  contextError = "",
+  onRemoveInvitee,
+  onClearInvitees,
+  onClearStatusSource,
 }: {
   onBlank: () => void;
   onTemplate: (template: BeaconTemplate) => void;
+  context?: Record<string, string>;
+  selectedFriends?: { id: string; name: string }[];
+  contextError?: string;
+  onRemoveInvitee?: (id: string) => void;
+  onClearInvitees?: () => void;
+  onClearStatusSource?: () => void;
 }) {
   const { data, userId } = useBeacon();
-  const context = useLocalSearchParams<{
+  const routeContext = useLocalSearchParams<{
     threadId?: string;
     planId?: string;
     latitude?: string;
     longitude?: string;
     placeLabel?: string;
+    inviteeIds?: string;
+    statusSourceId?: string;
+    startsAt?: string;
+    fromMap?: string;
+    timezone?: string;
   }>();
+  const context = handoffContext ?? creationHandoffParams(routeContext);
   const { styles, colors } = useTheme();
   const [tab, setTab] = useState("Beacon");
   const [browser, setBrowser] = useState(false);
   const [source, setSource] = useState("Browse");
   const [query, setQuery] = useState("");
   const [family, setFamily] = useState<TemplateFamily | null>(null);
+  const [launcherError, setLauncherError] = useState("");
+  const hasSelectedContext = selectedFriends.length > 0 || !!context.statusSourceId || !!contextError;
   const own =
     data.viewer_id === userId
       ? data.templates.filter((item) => item.owner_id === userId)
@@ -195,12 +217,8 @@ export function CreateHome({
       pathname: "/create",
       params: {
         template: id,
-        ...(context.latitude ? { latitude: context.latitude } : {}),
-        ...(context.longitude ? { longitude: context.longitude } : {}),
-        ...(context.placeLabel ? { placeLabel: context.placeLabel } : {}),
+        ...context,
         ...(edit ? { editTemplate: "yes" } : {}),
-        ...(context.threadId ? { threadId: context.threadId } : {}),
-        ...(context.planId ? { planId: context.planId } : {}),
       },
     });
   };
@@ -305,7 +323,10 @@ export function CreateHome({
       <Chips
         options={["Beacon", "Plan", "Routine"]}
         value={tab}
-        onChange={setTab}
+        onChange={(next) => {
+          if (next !== "Beacon" && hasSelectedContext) { setLauncherError("Clear selected friends and the status source before switching to a Plan or Routine. They apply to the new Beacon."); return; }
+          setLauncherError(""); setTab(next);
+        }}
         showSelectedCheckmark={false}
       />
       <Txt muted>
@@ -315,8 +336,17 @@ export function CreateHome({
             ? "Arrange Beacons into a simple itinerary."
             : "Save a Plan to reuse or repeat."}
       </Txt>
+      {!!(contextError || launcherError) && <Text accessibilityRole="alert" style={styles.error}>{contextError || launcherError}</Text>}
+      {(selectedFriends.length > 0 || contextError && context.inviteeIds !== "[]") && <View style={{ gap: 8 }}>
+        <Txt muted>{selectedFriends.length} friends selected for this Beacon</Txt>
+        <View style={[styles.row, { flexWrap: "wrap" }]}>{selectedFriends.map((friend) => <Button key={friend.id} compact secondary title={`Remove ${friend.name}`} onPress={() => onRemoveInvitee?.(friend.id)} />)}</View>
+        <Button compact secondary title="Clear selected friends" onPress={() => { onClearInvitees?.(); setLauncherError(""); }} />
+      </View>}
+      {!!context.statusSourceId && <View style={{ gap: 4 }}><Txt muted>Starting from your status note. Your status stays as it is.</Txt>
+        <Button compact secondary title="Clear status source" onPress={() => { onClearStatusSource?.(); setLauncherError(""); }} /></View>}
       {tab === "Beacon" ? (
         <>
+          {context.fromMap === "yes" ? card("map-location", "Create Beacon on Map", "Choose a physical meeting point, then a template", () => router.push({ pathname: "/(tabs)", params: { ...context, pickLocation: "yes" } }), <MapPin size={22} color={colors.green} />) : null}
           {card(
             "blank",
             "Create Blank Template",
@@ -457,16 +487,17 @@ export function CreateHome({
           compact
           secondary
           title="Share a status"
-          onPress={() =>
-            router.push({ pathname: "/create", params: { kind: "status" } })
-          }
+          onPress={() => {
+            if (hasSelectedContext) { setLauncherError("Clear selected friends and the status source before sharing a separate status."); return; }
+            router.push({ pathname: "/create", params: { ...context, kind: "status" } });
+          }}
         />
         <Button
           compact
           secondary
           title="Beacon for a Squad"
           onPress={() =>
-            router.push({ pathname: "/create", params: { kind: "squad" } })
+            router.push({ pathname: "/create", params: { ...context, kind: "squad" } })
           }
         />
       </View>

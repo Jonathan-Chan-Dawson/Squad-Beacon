@@ -1,3 +1,4 @@
+import { demoRoutineCalendar, parseRoutineCalendarResult, validateRoutineCalendarRange, type RoutineCalendarRange, type RoutineCalendarResult } from "@/src/features/beacons/calendarRoutineProjection";
 import React, {
   createContext,
   useCallback,
@@ -39,7 +40,8 @@ type Store = {
   getCurrentProfile: () => Profile | null;
   getViewerEpoch: () => number;
   viewerEpoch: number;
-  act: (action: string, payload?: Payload) => Promise<Record<string, unknown>>;
+  act: (action: string, payload?: Payload, requestId?: string) => Promise<Record<string, unknown>>;
+  loadRoutineCalendar: (range: RoutineCalendarRange) => Promise<RoutineCalendarResult>;
   searchDirectory: (
     input: SocialDirectoryQuery,
   ) => Promise<SocialDirectorySummary[]>;
@@ -54,6 +56,7 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
     [loading, setLoading] = useState(!!supabase),
     [error, setError] = useState<string | null>(null);
   const dataRef = useRef(data);
+  const demoRequests = useRef(new Map<string, Record<string, unknown>>());
   const setData = useCallback((next: Data) => {
     // Sequential actions can reuse a callback before React commits the next render.
     dataRef.current = next;
@@ -117,6 +120,17 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
     }
     setLoading(false);
   }, [session, demo, setData]);
+  const loadRoutineCalendar = useCallback(async (input: RoutineCalendarRange) => {
+    const range=validateRoutineCalendarRange(input);
+    if (demo) return demoRoutineCalendar(dataRef.current,DEMO_ID,range,Date.now());
+    if (!session || !supabase || dataRef.current.viewer_id!==session.user.id) throw new Error("Refresh your profile before loading Routine dates.");
+    const viewer=session.user.id, generation=epoch.current;
+    const {data: result,error: failure}=await supabase.rpc("calendar_routine_occurrences",{start_on:range.startOn,end_on:range.endOn});
+    const {data: auth}=await supabase.auth.getSession();
+    if (generation!==epoch.current || auth.session?.user.id!==viewer || dataRef.current.viewer_id!==viewer) throw new Error("Your calendar session changed. Refresh to continue.");
+    if (failure) throw new Error(failure.code==="PGRST202" || failure.code==="42883" ? "Routine calendar needs a backend update; existing activities remain available." : failure.message);
+    return parseRoutineCalendarResult(result,viewer,range);
+  },[demo,session]);
   const searchDirectory = useCallback(
     async (input: SocialDirectoryQuery) => {
       const query = normalizeSocialDirectoryQuery(input);
@@ -202,15 +216,37 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
     };
   }, [session, demo, refresh, setData]);
   const act = useCallback(
-    async (action: string, payload: Payload = {}) => {
+    async (action: string, payload: Payload = {}, requestId?: string) => {
       if (demo) {
         const baseData = dataRef.current;
         if (baseData.viewer_id !== DEMO_ID)
           throw new Error(
             "The demo session ended. Open the demo again to continue.",
           );
-        const next = demoAction(baseData, action, payload);
+        const atomic = action === "create_activity_with_invitees" || action === "create_plan_beacon_with_invitees";
+        const requestKey = requestId ? `${DEMO_ID}:${action}:${requestId}` : "";
+        if (atomic && requestKey && demoRequests.current.has(requestKey)) return demoRequests.current.get(requestKey)!;
+        let next: Data;
+        try { next = demoAction(baseData, action, payload); }
+        catch (failure) {
+          if (atomic && failure instanceof Error) Object.assign(failure,{definitive:true});
+          throw failure;
+        }
         setData(next);
+        if (atomic) {
+          const created=next.activities.find((item)=>!baseData.activities.some((previous)=>previous.id===item.id));
+          const result={id:created?.id,event:action,committed:true,invited_ids:payload.invitee_ids};
+          if (requestKey) demoRequests.current.set(requestKey,result);
+          return result;
+        }
+        if (action === "save_status_note" || action === "clear_status_notes") {
+          const created = next.activities.find((item) => !baseData.activities.some((old) => old.id === item.id));
+          const edited = next.activities.find((item) => baseData.activities.some((old) => old.id === item.id && old.status === "scheduled" && item.status === "scheduled" && (old.title !== item.title || old.ends_at !== item.ends_at)));
+          const source = baseData.activities.filter((item) => item.owner_id === DEMO_ID && item.mode === "solo" && item.status === "scheduled" && Date.parse(item.starts_at) <= Date.now() && Date.parse(item.ends_at) > Date.now()).sort((a,b) => b.starts_at.localeCompare(a.starts_at))[0];
+          const cleared = baseData.activities.filter((old) => old.status === "scheduled" && next.activities.some((item) => item.id === old.id && item.status === "cancelled")).length;
+          return { event: action, cleared_count: cleared, ...(action === "save_status_note" ? { id: created?.id ?? edited?.id ?? payload.source_id ?? source?.id } : {}) };
+        }
+        if (action === "react_status") return { event: action, id: payload.id };
         if (action === "join_public_beacon") return { status: next.rsvps.find(row => row.activity_id === payload.activity_id && row.user_id === DEMO_ID)?.status ?? "going" };
         if (action === "create_space") {
           const space = next.spaces.find(
@@ -377,15 +413,24 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
         return {};
       }
       if (!session) throw new Error("Sign in to continue.");
+      const generation = epoch.current;
+      const viewer = session.user.id;
+      const atomicCreation = action === "create_activity_with_invitees" || action === "create_plan_beacon_with_invitees";
+      const assertAtomicViewer = () => {
+        if (atomicCreation && (generation !== epoch.current || dataRef.current.viewer_id !== viewer)) throw new Error("Your account changed before publication. Return to the account that started this Beacon.");
+      };
+      assertAtomicViewer();
       const network = await Network.getNetworkStateAsync();
+      assertAtomicViewer();
       if (
         network.isConnected === false ||
         network.isInternetReachable === false
       )
         throw new Error("Reconnect to save changes. Nothing was queued.");
-      const generation = epoch.current;
-      const result = await rpc(action, payload);
+      const result = await rpc(action, payload, requestId, atomicCreation ? viewer : undefined);
+      assertAtomicViewer();
       if (generation === epoch.current) await refresh();
+      assertAtomicViewer();
       return result;
     },
     [demo, session, refresh, setData],
@@ -402,6 +447,7 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
     viewerEpochRef.current++;
     setViewerEpoch(viewerEpochRef.current);
     clearPendingRequests();
+    demoRequests.current.clear();
     setDemo(false);
     setSession(null);
     setData(emptyData());
@@ -422,7 +468,9 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
         viewerEpoch,
         act,
         searchDirectory,
+        loadRoutineCalendar,
         startDemo: () => {
+          demoRequests.current.clear();
           epoch.current++;
           viewerEpochRef.current++;
           setViewerEpoch(viewerEpochRef.current);

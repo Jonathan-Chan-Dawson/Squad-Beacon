@@ -1,4 +1,7 @@
-import React, { useEffect, useRef, useState } from "react";
+import { randomUUID } from "expo-crypto";
+import { usesSharedStatusEditor } from "../statusRouteSeed";
+import { LegacyStatusScreen } from "./LegacyStatusScreen";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { CreateHome } from "@/src/features/beacons/CreateHome";
@@ -19,6 +22,8 @@ import { useNow } from "@/src/shared/useNow";
 import { readViewerDeviceDefaults } from "@/src/features/profile/settings/deviceDefaults";
 import { resolveDefaultAudience } from "@/src/features/profile/settings/beaconDefaults";
 import { canOpenSquadProfile } from "@/src/features/people/squadProfile";
+import { canViewProfile } from "@/src/features/profile/privacy";
+import { atomicCreateAndInvite, createAndInvite, creationHandoffParams, creationStatusSeed, mergeCreationStatusSeed, newCreationInviteSession, parseCreationInvitees, validateCreationInvitees, type CreationInviteSession } from "@/src/features/beacons/createHandoff";
 import { canReadSpace, activeSpaceRole } from "@/src/features/spaces/domain";
 import {
   canReadOrganization,
@@ -78,6 +83,7 @@ function moduleDefaultsFromControls(
 }
 export default function CreateActivity() {
   const params = useLocalSearchParams();
+  if (usesSharedStatusEditor(params)) return <LegacyStatusScreen params={params} />;
   return <CreateEditor key={JSON.stringify(params)} />;
 }
 
@@ -102,7 +108,37 @@ function CreateEditor() {
     editTemplate?: string;
     saveTemplate?: string;
     savedChecklist?: string;
+    inviteeIds?: string;
+    statusSourceId?: string;
+    startsAt?: string;
+    fromMap?: string;
+    timezone?: string;
   }>();
+  let creationTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  if (typeof params.timezone === "string" && params.timezone) {
+    try { new Intl.DateTimeFormat("en-US", { timeZone: params.timezone }); creationTimezone = params.timezone; }
+    catch { /* Invalid route zones retain the normal creation default. */ }
+  }
+  const parsedInvitees = parseCreationInvitees(params.inviteeIds);
+  const [inviteeIds, setInviteeIds] = useState(parsedInvitees.ids);
+  const [inviteeError, setInviteeError] = useState(parsedInvitees.error);
+  const [statusSourceDismissed, setStatusSourceDismissed] = useState(false);
+  const statusSourceId = statusSourceDismissed ? undefined : params.statusSourceId;
+  const statusSeed = creationStatusSeed(data, userId, statusSourceId, currentTime);
+  const dataRef = useRef(data);
+  useLayoutEffect(() => { dataRef.current = data; }, [data]);
+  const invitationSession = useRef(newCreationInviteSession());
+  const [createdSession, setCreatedSession] = useState<CreationInviteSession | null>(null);
+  const [retryBusy, setRetryBusy] = useState(false);
+  const retryBusyRef = useRef(false);
+  const [templateNotice, setTemplateNotice] = useState("");
+  const [workflowError, setWorkflowError] = useState("");
+  const sourceError = statusSourceId && !statusSeed ? "This status is no longer available. Clear the status source to continue with a new Beacon." : "";
+  const handoff = creationHandoffParams({ ...params, inviteeIds: inviteeError ? params.inviteeIds : JSON.stringify(inviteeIds), statusSourceId });
+  const inviteeLabel = (id: string) => {
+    const profile = data.profiles.find((person) => person.id === id);
+    return userId && data.viewer_id === userId && (!createdSession || createdSession.viewerId === userId) && profile && canViewProfile(data, profile, userId) ? profile.name : "Unavailable friend";
+  };
   const controlsRouteKey = JSON.stringify([
     params.kind ?? null,
     params.squadId ?? null,
@@ -118,7 +154,7 @@ function CreateEditor() {
   );
   const templateEditor =
     params.editTemplate === "yes" || params.saveTemplate === "yes";
-  const previous = data.activities.find((a) => a.id === params.repeat);
+  const previous = statusSourceId ? undefined : data.activities.find((a) => a.id === params.repeat);
   const associationCandidates =
     userId && data.viewer_id === userId
       ? [
@@ -202,7 +238,7 @@ function CreateEditor() {
             )
             .map((item) => Date.parse(item.ends_at)),
         )
-      : currentTime;
+      : params.startsAt && Number.isFinite(Date.parse(params.startsAt)) ? Date.parse(params.startsAt) : currentTime;
   const aspirations =
     data.profiles.find((p) => p.id === userId)?.aspiration_goals ?? [];
   const currentAspirationIds = new Set(
@@ -259,17 +295,25 @@ function CreateEditor() {
         ? "Squad"
         : "Beacon",
   );
-  const [title, setTitle] = useState(saved?.title ?? previous?.title ?? "");
+  const [title, setTitle] = useState(statusSeed?.title ?? saved?.title ?? previous?.title ?? "");
   const [description, setDescription] = useState(
-    saved?.description ?? previous?.description ?? "",
+    statusSeed?.description ?? saved?.description ?? previous?.description ?? "",
   );
   const [templateName, setTemplateName] = useState(
     saved?.name ?? previous?.title ?? "",
   );
   const [available, setAvailable] = useState(false);
   const [category, setCategory] = useState<Category>(
-    saved?.category ?? previous?.category ?? "Social",
+    statusSeed?.category ?? saved?.category ?? previous?.category ?? "Social",
   );
+  const sourceHydrated = useRef(!!statusSeed);
+  const textEdited = useRef({ title: false, description: false, category: false });
+  useEffect(() => {
+    if (!statusSeed || sourceHydrated.current) return;
+    const seeded = mergeCreationStatusSeed({ title, description, category }, statusSeed, textEdited.current);
+    setTitle(seeded.title); setDescription(seeded.description); setCategory(seeded.category as Category);
+    sourceHydrated.current = true;
+  }, [statusSeed, title, description, category]);
   const audienceEdited = useRef(false);
   const appliedDeviceDefault = useRef<string | null>(null);
   const [defaultNotice, setDefaultNotice] = useState("");
@@ -361,7 +405,7 @@ function CreateEditor() {
     saved?.approval_required ? "Host approval" : "Open joining",
   );
   const [when, setWhen] = useState(
-      params.threadId || params.planId ? "Pick time" : "Now",
+      params.threadId || params.planId || params.startsAt && Number.isFinite(Date.parse(params.startsAt)) ? "Pick time" : "Now",
     ),
     [duration, setDuration] = useState(
       formatDurationLabel(saved?.minutes ?? 60),
@@ -413,9 +457,11 @@ function CreateEditor() {
     ),
   );
   function applyTemplate(t: BeaconTemplate) {
-    setTitle(t.title);
-    setCategory(t.category);
-    setDescription(t.description ?? "");
+    if (!statusSourceId) {
+      setTitle(t.title);
+      setCategory(t.category);
+      setDescription(t.description ?? "");
+    }
     setSelectedRecipe(t);
     setPrepAnswers(t.prepPrompts?.map(() => "") ?? []);
     setDuration(formatDurationLabel(t.minutes));
@@ -477,12 +523,21 @@ function CreateEditor() {
       approval_required: approval === "Host approval",
       module_defaults: moduleDefaultsFromControls(beaconControls),
     });
+    if (inviteeIds.length || inviteeError || statusSourceId) {
+      setTemplateNotice("Template saved. Your Beacon draft and selected friends are still here.");
+      return;
+    }
     router.replace({
       pathname: "/(tabs)/activities",
       params: { filter: "Past" },
     });
   }
   async function publish() {
+    if (invitationSession.current.createdId || invitationSession.current.creationUnverified) throw new Error("This Beacon has already been created. Use Retry invitations or Open Beacon.");
+    if (inviteeError) throw new Error(inviteeError);
+    if (sourceError) throw new Error(sourceError);
+    if (inviteeIds.length && (kind === "Status" || addTo === "Vote / Draw")) throw new Error("Selected friends can be invited to a Beacon. Clear the selected friends before sharing a status or submitting a Vote / Draw proposal.");
+    if (inviteeIds.length) validateCreationInvitees(dataRef.current, userId, inviteeIds);
     const start = effectiveStartAt();
     const finalDescription = descriptionWithPrep();
     const controls =
@@ -506,7 +561,7 @@ function CreateEditor() {
       mode: kind === "Status" ? "solo" : "squad",
       starts_at: new Date(start).toISOString(),
       ends_at: resolveActivityEndAt(start, duration, ends),
-      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      timezone: creationTimezone,
       audience,
       audience_id: audienceId,
       ...(selectedAssociationRow
@@ -593,17 +648,17 @@ function CreateEditor() {
       const count = data.activities.filter(
         (item) => item.plan_id === plan.id,
       ).length;
-      const result = await act("create_plan_beacon", {
-        ...payload,
-        plan_id: plan.id,
-        position: planPosition === "End" ? count : Number(planPosition) - 1,
-      });
+      const create = () => act("create_plan_beacon", { ...payload, plan_id: plan.id, position: planPosition === "End" ? count : Number(planPosition) - 1 });
+      const result = inviteeIds.length ? await publishAtomic("create_plan_beacon_with_invitees", { ...payload, plan_id: plan.id, position: planPosition === "End" ? count : Number(planPosition) - 1 }) : await create();
+      if (invitationSession.current.pendingIds.length) return;
       if (!result.id)
         throw new Error("The Beacon could not be added to this Plan.");
       router.replace({ pathname: "/plan/[id]", params: { id: plan.id } });
       return;
     }
-    const result = await act("create_activity", payload);
+    const create = () => act("create_activity", payload);
+    const result = inviteeIds.length ? await publishAtomic("create_activity_with_invitees", payload) : await create();
+    if (invitationSession.current.pendingIds.length) return;
     router.replace({
       pathname: "/(tabs)",
       params: {
@@ -612,6 +667,65 @@ function CreateEditor() {
       },
     });
   }
+  async function publishAtomic(action: "create_activity_with_invitees" | "create_plan_beacon_with_invitees", payload: Record<string, unknown>) {
+    try {
+      const session=await atomicCreateAndInvite(invitationSession.current,inviteeIds,()=>dataRef.current,userId,action,payload,act,randomUUID);
+      setCreatedSession(session);
+      return {id:session.createdId};
+    } finally {
+      setCreatedSession(invitationSession.current.atomicAttempt || invitationSession.current.createdId || invitationSession.current.creationUnverified ? {...invitationSession.current} : null);
+    }
+  }
+  async function confirmPublication() {
+    const attempt=invitationSession.current.atomicAttempt;
+    if (!attempt || retryBusyRef.current) return;
+    retryBusyRef.current=true; setRetryBusy(true); setWorkflowError("");
+    try {
+      const result=await publishAtomic(attempt.action,attempt.payload);
+      if (result.id) router.replace({pathname:"/activity/[id]",params:{id:result.id}});
+    } catch (failure) { setWorkflowError(failure instanceof Error ? failure.message : "Could not confirm publication. Try again."); }
+    finally { retryBusyRef.current=false; setRetryBusy(false); }
+  }
+  async function publishWithInvitees(create: () => Promise<Record<string, unknown>>) {
+    try {
+      const session = await createAndInvite(invitationSession.current, inviteeIds, () => dataRef.current, userId, create, act);
+      setCreatedSession(session);
+      return { id: session.createdId };
+    } finally {
+      if (invitationSession.current.createdId || invitationSession.current.creationUnverified) setCreatedSession({ ...invitationSession.current });
+    }
+  }
+  async function retryInvitations() {
+    if (retryBusyRef.current) return;
+    retryBusyRef.current = true;
+    setRetryBusy(true);
+    try { await publishWithInvitees(async () => { throw new Error("This Beacon has already been created."); }); }
+    finally { retryBusyRef.current = false; setRetryBusy(false); }
+  }
+  if (createdSession && (createdSession.viewerId !== userId || data.viewer_id !== userId)) return <Screen title={createdSession.createdId ? "Beacon created" : "Your Beacon draft"} eyebrow="MAKE TIME TOGETHER" create={false}><Txt muted>Return to the account that started this Beacon to review or retry publication.</Txt></Screen>;
+  if (createdSession?.atomicAttempt && !createdSession.createdId) return <Screen title="Confirm publication" eyebrow="" create={false}>
+    <Text style={styles.h2}>{String(createdSession.atomicAttempt.payload.title ?? title)}</Text>
+    <Txt muted>The publication response was not confirmed. Your saved draft and selected invitations will be retried with the same request, preventing a second Beacon.</Txt>
+    {!!workflowError && <Text accessibilityRole="alert" style={styles.error}>{workflowError}</Text>}
+    <Txt muted>{(createdSession.atomicAttempt.payload.invitee_ids as string[]).length} selected invitation recipients remain in this saved attempt.</Txt>
+    <Action title="Retry confirmation" disabled={retryBusy} run={confirmPublication} />
+  </Screen>;
+  if (createdSession?.createdId || createdSession?.creationUnverified) return <Screen title="Beacon created" eyebrow="MAKE TIME TOGETHER" create={false}>
+    <Text style={styles.h2}>{title}</Text>
+    <Txt muted>{createdSession.invitedIds.length} invitation{createdSession.invitedIds.length === 1 ? "" : "s"} sent or already active.</Txt>
+    {createdSession.creationUnverified ? <Txt muted>The Beacon was created, but its ID could not be verified. Refresh before continuing.</Txt> : null}
+    {!!createdSession.pendingIds.length && <Text accessibilityRole="alert" style={styles.error}>{createdSession.pendingIds.length} invitation{createdSession.pendingIds.length === 1 ? "" : "s"} still need to be sent.</Text>}
+    {createdSession.pendingIds.map((id) => <View key={id} style={{ gap: 4 }}><Txt>{inviteeLabel(id)}</Txt><Txt muted>{createdSession.errors[id]}</Txt>
+      <Button compact secondary disabled={retryBusy} title={`Remove ${inviteeLabel(id)} from pending invitations`} onPress={() => {
+        if (retryBusyRef.current) return;
+        setInviteeIds((ids) => ids.filter((item) => item !== id));
+        invitationSession.current.pendingIds = invitationSession.current.pendingIds.filter((item) => item !== id);
+        delete invitationSession.current.errors[id];
+        setCreatedSession({ ...invitationSession.current });
+      }} /></View>)}
+    {!!createdSession.pendingIds.length && <Action title="Retry invitations" disabled={retryBusy} run={retryInvitations} />}
+    {createdSession.createdId ? <Button title="Open Beacon" disabled={retryBusy} onPress={() => { if (!retryBusyRef.current) router.replace({ pathname: "/activity/[id]", params: { id: createdSession.createdId! } }); }} /> : null}
+  </Screen>;
   const standardDurations = ["30 min", "1 hour", "2 hours"];
   const durationOptions = [
     ...(standardDurations.includes(duration) || duration === "Custom"
@@ -622,16 +736,17 @@ function CreateEditor() {
   if (home)
     return (
       <CreateHome
+        context={handoff} selectedFriends={inviteeIds.map((id) => ({ id, name: inviteeLabel(id) }))}
+        contextError={inviteeError || sourceError}
+        onRemoveInvitee={(id) => setInviteeIds((ids) => ids.filter((item) => item !== id))}
+        onClearInvitees={() => { setInviteeIds([]); setInviteeError(""); }}
+        onClearStatusSource={() => setStatusSourceDismissed(true)}
         onBlank={() =>
           router.push({
             pathname: "/create",
             params: {
               editor: "yes",
-              ...(params.latitude ? { latitude: params.latitude } : {}),
-              ...(params.longitude ? { longitude: params.longitude } : {}),
-              ...(params.placeLabel ? { placeLabel: params.placeLabel } : {}),
-              ...(params.threadId ? { threadId: params.threadId } : {}),
-              ...(params.planId ? { planId: params.planId } : {}),
+              ...handoff,
             },
           })
         }
@@ -669,6 +784,14 @@ function CreateEditor() {
         />
       }
     >
+      {inviteeError || sourceError ? <Text accessibilityRole="alert" style={styles.error}>{inviteeError || sourceError}</Text> : null}
+      {workflowError ? <Text accessibilityRole="alert" style={styles.error}>{workflowError}</Text> : null}
+      {templateNotice ? <Txt muted>{templateNotice}</Txt> : null}
+      {(inviteeIds.length > 0 || !!inviteeError) && <View style={{ gap: 8 }}><Text style={styles.label}>SELECTED FRIENDS · {inviteeIds.length}</Text>
+        <View style={[styles.row, { flexWrap: "wrap" }]}>{inviteeIds.map((id) => <Button key={id} compact secondary title={`Remove ${inviteeLabel(id)}`} onPress={() => setInviteeIds((ids) => ids.filter((item) => item !== id))} />)}</View>
+        <Button compact secondary title="Clear selected friends" onPress={() => { setInviteeIds([]); setInviteeError(""); }} />
+      </View>}
+      {statusSourceId ? <Button compact secondary title="Clear status source" onPress={() => setStatusSourceDismissed(true)} /> : null}
       {!templateEditor && kind === "Beacon" && (
         <Button
           compact
@@ -696,7 +819,7 @@ function CreateEditor() {
         label="Title / Activity"
         placeholder="A tiny adventure with your people"
         value={title}
-        onChangeText={setTitle}
+        onChangeText={(value) => { textEdited.current.title = true; setTitle(value); }}
         maxLength={120}
       />
       {view === "Advanced" && !!selectedRecipe?.prepPrompts?.length && (
@@ -758,6 +881,7 @@ function CreateEditor() {
             title={
               when === "Pick time"
                 ? new Date(starts).toLocaleString([], {
+                    timeZone: creationTimezone,
                     month: "short",
                     day: "numeric",
                     hour: "numeric",
@@ -772,6 +896,7 @@ function CreateEditor() {
           <Button secondary title={duration} onPress={() => setTiming(true)} />
         </View>
       </View>
+      {params.timezone ? <Txt muted>Time zone: {creationTimezone}</Txt> : null}
       <Sheet
         title="When shall we?"
         visible={timing}
@@ -916,7 +1041,10 @@ function CreateEditor() {
           <Chips
             options={["Standalone", "Vote / Draw", "Plan"]}
             value={addTo}
-            onChange={setAddTo}
+            onChange={(next) => {
+              if (next === "Vote / Draw" && (inviteeIds.length || inviteeError)) { setWorkflowError("Clear selected friends before adding a Vote / Draw proposal. Invitations apply to the created Beacon."); return; }
+              setWorkflowError(""); setAddTo(next);
+            }}
             showSelectedCheckmark={false}
           />
           {addTo === "Vote / Draw" && (
@@ -970,10 +1098,12 @@ function CreateEditor() {
           )}
           {addTo === "Plan" && (
             <>
+              {!!inviteeIds.length && <Txt muted>Choose an existing Plan to invite these friends to the new Beacon. Clear selected friends before creating a new Plan from this draft.</Txt>}
               <Button
                 compact
                 secondary
                 title="+ New Plan with this Beacon"
+                disabled={inviteeIds.length > 0 || !!inviteeError}
                 onPress={() =>
                   router.push({
                     pathname: "/plans",
@@ -1092,6 +1222,8 @@ function CreateEditor() {
             options={["Beacon", "Status", "Squad"]}
             value={kind}
             onChange={(k) => {
+              if (k === "Status" && (inviteeIds.length || inviteeError || statusSourceId)) { setWorkflowError("Clear selected friends and the status source before sharing a separate status."); return; }
+              setWorkflowError("");
               setKind(k);
               setAudience(k === "Squad" ? "squad" : "friends");
               setAudienceId(null);
@@ -1119,7 +1251,7 @@ function CreateEditor() {
               ] as const
             }
             value={category}
-            onChange={setCategory}
+            onChange={(value) => { textEdited.current.category = true; setCategory(value); }}
           />
           {kind !== "Status" && (
             <BeaconSettings
@@ -1181,7 +1313,7 @@ function CreateEditor() {
           <Field
             label="A little more detail (optional)"
             value={description}
-            onChangeText={setDescription}
+            onChangeText={(value) => { textEdited.current.description = true; setDescription(value); }}
             multiline
             maxLength={2000}
           />

@@ -1,5 +1,6 @@
 import { canReadBeaconActivity } from "@/src/features/beacons/beaconModules";
 import { isApprovedGoing } from "@/src/features/beacons/permissions";
+import { visibleSoloActivity } from "@/src/features/maps/soloActivity";
 import { activeOrganizationRole } from "@/src/features/organizations/domain";
 import { activeSpaceRole, canReadSpace } from "@/src/features/spaces/domain";
 import type { SocialEntityType } from "@/src/features/social/types";
@@ -238,13 +239,7 @@ export function selectPersonPreview(
       return left.starts_at.localeCompare(right.starts_at);
     });
   const beacon = accessibleUpcoming[0];
-  const activeAvailability = accessibleUpcoming.find(
-    (activity) =>
-      activity.owner_id === personId &&
-      activity.mode === "solo" &&
-      Date.parse(activity.starts_at) <= now &&
-      Date.parse(activity.ends_at) > now,
-  );
+  const activeAvailability = visibleSoloActivity(data, personId, viewerId, now);
   const location = selectFreshVisiblePersonLocation(
     data,
     personId,

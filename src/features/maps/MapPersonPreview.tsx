@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import { StatusReactionPicker } from "@/src/features/beacons/components/feed/StatusReactionPicker";
+import React from "react";
 import { Pressable, Text, View } from "react-native";
 import { router } from "expo-router";
 import {
@@ -7,7 +8,6 @@ import {
   CircleHelp,
   MinusCircle,
 } from "lucide-react-native";
-import { canReadBeaconActivity } from "@/src/features/beacons/beaconModules";
 import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
 import {
   selectPersonPreview,
@@ -24,7 +24,7 @@ import {
   MapTooltipButton,
 } from "./MapTooltipShell";
 import { mapTooltip } from "./tooltipConstants";
-import { visibleSoloActivity, canReactToSoloActivity } from "./soloActivity";
+import { visibleSoloActivity } from "./soloActivity";
 
 export function MapPersonPreview({
   personId,
@@ -38,8 +38,6 @@ export function MapPersonPreview({
   const { data, userId, act } = useBeacon();
   const { styles, colors } = useTheme();
   const now = useNow();
-  const [reactionBusy, setReactionBusy] = useState(false);
-  const [reactionError, setReactionError] = useState("");
   const selection = selectPersonPreview(data, personId, userId, now);
   // Solo statuses use the existing activity storage, but are not linked Beacon cards.
   const linkedBeacon = selectPersonPreview(
@@ -72,15 +70,7 @@ export function MapPersonPreview({
       ((row.sender_id === userId && row.recipient_id === personId) ||
         (row.sender_id === personId && row.recipient_id === userId)),
   );
-  const availability = data.activities.find(
-    (row) =>
-      row.owner_id === personId &&
-      row.mode === "solo" &&
-      row.status === "scheduled" &&
-      Date.parse(row.starts_at) <= now &&
-      Date.parse(row.ends_at) > now &&
-      canReadBeaconActivity(data, row, userId),
-  );
+  const availability = visibleSoloActivity(data, personId, userId, now);
   const free =
     selection.availability === "available" ||
     selection.availability === "ending-soon";
@@ -248,79 +238,7 @@ export function MapPersonPreview({
               ? "just now"
               : `${Math.floor((now - Date.parse(solo.starts_at)) / 60000)}m ago`}
           </Text>
-          {canReactToSoloActivity(data, solo, userId, now) && (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={
-                data.reactions.some(
-                  (row) =>
-                    row.activity_id === solo.id && row.user_id === userId,
-                )
-                  ? "Remove status reaction"
-                  : "React to status"
-              }
-              accessibilityState={{
-                selected: data.reactions.some(
-                  (row) =>
-                    row.activity_id === solo.id && row.user_id === userId,
-                ),
-                disabled: reactionBusy,
-              }}
-              disabled={reactionBusy}
-              onPress={async () => {
-                setReactionBusy(true);
-                setReactionError("");
-                try {
-                  await act("react", {
-                    id: solo.id,
-                    remove: data.reactions.some(
-                      (row) =>
-                        row.activity_id === solo.id && row.user_id === userId,
-                    ),
-                  });
-                } catch (error) {
-                  setReactionError(
-                    error instanceof Error
-                      ? error.message
-                      : "Could not react. Try again.",
-                  );
-                } finally {
-                  setReactionBusy(false);
-                }
-              }}
-              style={{
-                minHeight: 44,
-                alignSelf: "flex-start",
-                justifyContent: "center",
-                paddingHorizontal: 10,
-                borderRadius: 14,
-                backgroundColor: colors.green + "20",
-              }}
-            >
-              <Text style={{ color: colors.ink, fontSize: 12 }}>
-                🙌{" "}
-                {data.reactions.some(
-                  (row) =>
-                    row.activity_id === solo.id && row.user_id === userId,
-                )
-                  ? "Reacted"
-                  : "React"}{" "}
-                ·{" "}
-                {
-                  data.reactions.filter((row) => row.activity_id === solo.id)
-                    .length
-                }
-              </Text>
-            </Pressable>
-          )}
-          {!!reactionError && (
-            <Text
-              accessibilityRole="alert"
-              style={[styles.muted, { fontSize: 12 }]}
-            >
-              {reactionError}
-            </Text>
-          )}
+          <StatusReactionPicker activityId={solo.id} />
         </View>
       )}
       {linkedBeacon && (

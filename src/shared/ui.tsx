@@ -24,6 +24,7 @@ import {
   BottomSheetFooter,
   BottomSheetModal,
   BottomSheetScrollView,
+  BottomSheetView,
   useBottomSheetSpringConfigs,
   type BottomSheetBackdropProps,
   type BottomSheetFooterProps,
@@ -555,6 +556,7 @@ export function Sheet({
   snapHeight,
   footer,
   centered = false,
+  scrollable = true,
 }: {
   title: string;
   visible: boolean;
@@ -564,6 +566,7 @@ export function Sheet({
   snapHeight?: number;
   footer?: React.ReactNode;
   centered?: boolean;
+  scrollable?: boolean;
 }) {
   const { semanticColors: colors, resolvedAppearance, tokens } = useTheme();
   const insets = useSafeAreaInsets();
@@ -865,6 +868,8 @@ export function Sheet({
     return () => subscription.remove();
   }, [visible, requestDismiss]);
 
+  const SheetContent = scrollable ? BottomSheetScrollView : BottomSheetView;
+
   return (
     <BottomSheetModal
       ref={sheetRef}
@@ -937,14 +942,14 @@ export function Sheet({
         if (visibleRef.current) onClose();
       }}
     >
-      <BottomSheetScrollView
-        keyboardShouldPersistTaps="handled"
-        nestedScrollEnabled
-        enableFooterMarginAdjustment={!!footer}
-        stickyHeaderIndices={[0]}
-        contentContainerStyle={{
-          paddingBottom: tokens.space.xxl,
-        }}
+      <SheetContent
+        {...(scrollable ? {
+          keyboardShouldPersistTaps: "handled" as const,
+          nestedScrollEnabled: true,
+          enableFooterMarginAdjustment: !!footer,
+          stickyHeaderIndices: [0],
+          contentContainerStyle: { paddingBottom: tokens.space.xxl },
+        } : { style: { paddingBottom: tokens.space.xxl } })}
       >
         <View style={{ backgroundColor: colors.bg }}>
           <View
@@ -984,7 +989,7 @@ export function Sheet({
         >
           {children}
         </View>
-      </BottomSheetScrollView>
+      </SheetContent>
     </BottomSheetModal>
   );
 }

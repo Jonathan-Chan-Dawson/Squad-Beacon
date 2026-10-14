@@ -19,6 +19,7 @@ import {
 import { providerMapBounds } from "../mapBounds";
 import { PulseMapOverlay } from "./PulseMapOverlay";
 import type * as Leaflet from "leaflet";
+import Constants from "expo-constants";
 import "@/components/leaflet.web.css";
 import type { MapProps } from "@/src/features/maps/components/BeaconMap";
 import { friendAvailabilityState, locationIsFresh } from "@/src/shared/domain";
@@ -97,6 +98,8 @@ export default function BeaconMap(props: MapProps) {
   const { categories, availability } = useDesignTheme();
   const now = useNow();
   const reducedMotion = useReducedMotion();
+  const configuredCartoKey = Constants.expoConfig?.extra?.cartoBasemapsApiKey;
+  const cartoApiKey = typeof configuredCartoKey === "string" ? configuredCartoKey : undefined;
 
   const element = useRef<HTMLDivElement>(null),
     map = useRef<Leaflet.Map | null>(null),
@@ -327,12 +330,12 @@ export default function BeaconMap(props: MapProps) {
     const currentMap = map.current;
     if (!ready || !L || !currentMap) return;
     tiles.current?.remove();
-    tiles.current = L.tileLayer(cartoTileUrl(resolvedAppearance), {
+    tiles.current = L.tileLayer(cartoTileUrl(resolvedAppearance, cartoApiKey), {
       maxZoom: MAP_MAX_ZOOM,
       maxNativeZoom: 19,
       attribution: cartoAttribution,
     }).addTo(currentMap);
-  }, [ready, resolvedAppearance]);
+  }, [ready, resolvedAppearance, cartoApiKey]);
   useEffect(() => {
     const m = map.current;
     if (!ready || !m || !hasUsableMapViewport(m)) return;
@@ -503,13 +506,6 @@ export default function BeaconMap(props: MapProps) {
       node.title = label;
       node.dataset.availability = availabilityLabel;
       node.style.cssText = `position:relative;border:0;border-radius:0;background:transparent;color:${colors.ink};padding:0;width:${iconWidth}px;height:${iconHeight}px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;font:600 16px system-ui;cursor:pointer;opacity:${dimmed ? 0.7 : 1};transform:scale(${selectedPin ? 1.25 : 1});transform-origin:50% 50%;transition:${reducedMotion ? "none" : "transform 180ms cubic-bezier(.2,.8,.2,1),opacity 180ms ease"};`;
-      if (nowBeacon) {
-        const halo = document.createElement("span");
-        halo.className = "map-now-halo";
-        halo.setAttribute("aria-hidden", "true");
-        halo.style.cssText = `position:absolute;left:50%;top:18px;width:54px;height:54px;margin:-27px 0 0 -27px;border-radius:50%;border:2px solid ${tone};background:${tone}22;`;
-        node.append(halo);
-      }
       if (friend) {
         const frame = document.createElement("span");
         frame.style.cssText = `position:relative;width:${visualSize}px;height:${visualSize}px;border:3px solid ${tone};border-radius:50%;background:${colors.white};display:flex;align-items:center;justify-content:center;box-shadow:0 3px 10px #172c2940;`;
@@ -535,6 +531,15 @@ export default function BeaconMap(props: MapProps) {
           "position:relative;margin-top:2px;padding:0 5px;border:1px solid #d5dedb;border-radius:8px;background:#fff;color:#34434a;font:700 9px system-ui;white-space:nowrap;";
         node.append(age);
       } else {
+        const face = document.createElement("span");
+        face.style.cssText = "position:relative;display:flex;align-items:center;justify-content:center;flex-shrink:0;";
+        if (nowBeacon) {
+          const halo = document.createElement("span");
+          halo.className = "map-now-halo";
+          halo.setAttribute("aria-hidden", "true");
+          halo.style.cssText = `position:absolute;left:50%;top:50%;width:54px;height:54px;margin:-27px 0 0 -27px;box-sizing:border-box;pointer-events:none;border-radius:50%;border:2px solid ${tone};background:${tone}22;`;
+          face.append(halo);
+        }
         const notch = document.createElement("span");
         if (dot) notch.style.display = "none";
         notch.style.cssText = `display:${dot ? "none" : "block"};position:absolute;top:34px;width:12px;height:12px;background:${tone};transform:rotate(45deg);border-radius:2px;z-index:-1;`;
@@ -542,7 +547,8 @@ export default function BeaconMap(props: MapProps) {
         const badge = document.createElement("span");
         badge.textContent = dot ? "" : text;
         badge.style.cssText = `position:relative;width:${visualSize}px;height:${visualSize}px;border:${dot ? 1 : 3}px solid ${dot ? colors.white : tone};border-radius:50%;background:${dot ? tone : colors.white};display:flex;align-items:center;justify-content:center;box-shadow:0 3px 10px #172c2940;font-size:22px;`;
-        node.append(badge);
+        face.append(badge);
+        node.append(face);
         if (timeChip) {
           const chip = document.createElement("span");
           chip.textContent = timeChip;

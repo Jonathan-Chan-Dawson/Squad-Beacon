@@ -1,3 +1,5 @@
+import { validateCreationInvitees } from "@/src/features/beacons/createHandoff";
+import { statusReactionEmoji } from "@/src/features/beacons/statusReactions";
 import { canReactToSoloActivity } from "../features/maps/soloActivity";
 import { isSquadIconKey } from "@/src/features/people/squadIcons";
 import { validatePingAvailability, pingAvailabilityAllowsRsvp } from "@/src/features/planning/availability";
@@ -1680,6 +1682,49 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
   const d = structuredClone(previous),
     id = String(p.id ?? ""),
     uid = DEMO_ID;
+  if (action === "create_activity_with_invitees" || action === "create_plan_beacon_with_invitees") {
+    if (p.expected_actor_id && p.expected_actor_id!==uid) throw new Error("Your account changed before publication. Return to the account that started this Beacon.");
+    const ids=p.invitee_ids;
+    if (!Array.isArray(ids) || ids.length<1 || ids.length>20 || ids.some((item)=>typeof item!=="string") || new Set(ids).size!==ids.length) throw new Error("Choose from 1 to 20 unique friends per Beacon invitation batch.");
+    if (p.mode!=="squad" && p.mode!=="invite") throw new Error("Selected friends can only be invited to a shared Beacon.");
+    validateCreationInvitees(d,uid,ids as string[]);
+    const payload={...p}; delete payload.invitee_ids; delete payload.expected_actor_id;
+    let next=demoAction(d,action==="create_plan_beacon_with_invitees" ? "create_plan_beacon" : "create_activity",payload);
+    const created=next.activities.find((item)=>!d.activities.some((previous)=>previous.id===item.id));
+    if (!created) throw new Error("The Beacon could not be verified.");
+    for (const target of ids) next=demoAction(next,"invite_activity",{id:created.id,user_id:target});
+    return next;
+  }
+  if (action === "save_status_note" || action === "clear_status_notes") {
+    if (d.viewer_id !== uid) throw new Error("Refresh your profile before editing a status.");
+    const now = Date.now();
+    const current = d.activities.filter((item) => item.owner_id === uid && item.mode === "solo" && item.status === "scheduled" && Date.parse(item.starts_at) <= now && Date.parse(item.ends_at) > now);
+    if (action === "clear_status_notes") {
+      current.forEach((item) => { item.status = "cancelled"; });
+      return d;
+    }
+    const source = p.source_id ? d.activities.find((item) => item.id === p.source_id && item.owner_id === uid && item.mode === "solo") : current.sort((a,b) => b.starts_at.localeCompare(a.starts_at))[0];
+    if (p.source_id && !source) throw new Error("Choose your own status note.");
+    const starts = p.starts_at ? Date.parse(String(p.starts_at)) : now;
+    const ending = p.ends_at ? Date.parse(String(p.ends_at)) : starts <= now && source?.status === "scheduled" && Date.parse(source.ends_at) > now ? Date.parse(source.ends_at) : starts + 3600000;
+    if (!Number.isFinite(starts) || !Number.isFinite(ending) || ending <= now || ending <= starts) throw new Error("Choose an end time in the future.");
+    const sourcePlace = source ? d.places.find((item) => item.activity_id === source.id) : undefined;
+    const value: Payload = {
+      title: source?.title ?? "Free to hang", description: source?.description ?? "", category: source?.category ?? "Social",
+      available: source?.available ?? true, timezone: source?.timezone ?? d.profiles.find((item) => item.id === uid)?.timezone ?? "UTC",
+      audience: source?.audience ?? "friends", audience_id: source?.audience_id ?? null, enable_reactions: source?.enable_reactions !== false,
+      aspiration_ids: source?.aspiration_ids ?? [], label: sourcePlace?.label ?? "", latitude: sourcePlace?.latitude ?? null, longitude: sourcePlace?.longitude ?? null, online_url: sourcePlace?.online_url ?? null,
+      ...p, mode: "solo", starts_at: new Date(starts).toISOString(), ends_at: new Date(ending).toISOString(), target_count: null, approval_required: false,
+    };
+    const editable = source && current.some((item) => item.id === source.id) && starts <= now &&
+      value.available === source.available && value.description === (source.description ?? "") && value.category === source.category && value.timezone === source.timezone &&
+      value.audience === source.audience && value.audience_id === source.audience_id && value.enable_reactions === source.enable_reactions &&
+      JSON.stringify(value.aspiration_ids) === JSON.stringify(source.aspiration_ids) && value.label === (sourcePlace?.label ?? "") &&
+      value.latitude === (sourcePlace?.latitude ?? null) && value.longitude === (sourcePlace?.longitude ?? null) && value.online_url === (sourcePlace?.online_url ?? null);
+    let next = editable ? demoAction(d, "edit_activity", { id: source.id, title: value.title, starts_at: source.starts_at, ends_at: value.ends_at }) : demoAction(d, "create_activity", value);
+    if (starts <= now) for (const item of current.filter((item) => !editable || item.id !== source.id)) next = demoAction(next, "activity_status", { id: item.id, status: "cancelled" });
+    return next;
+  }
   if (action === "publish_beacon_discovery" || action === "unpublish_beacon_discovery" || action === "join_public_beacon") {
     const activity = d.activities.find(row => row.id === String(p.activity_id));
     if (!activity || d.viewer_id !== uid) throw new Error("Beacon unavailable.");
@@ -1727,6 +1772,14 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
       p,
       uid,
     );
+    if (action === "skip_routine_next" || action === "run_routine_once") {
+      const previous = d.plan_routines.find((item) => item.id === p.id);
+      if (previous?.next_occurrence_on) {
+        d.demo_routine_occurrences ??= [];
+        d.demo_routine_occurrences.push({ routine_id: previous.id, occurrence_on: previous.next_occurrence_on,
+          status: action === "skip_routine_next" ? "skipped" : "created", occurrence_plan_id: action === "run_routine_once" ? additions.plans[0]?.id ?? null : null });
+      }
+    }
     for (const routine of additions.plan_routines) {
       const index = d.plan_routines.findIndex((row) => row.id === routine.id);
       if (index < 0) d.plan_routines.push(routine);
@@ -3399,14 +3452,16 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
       created_at: new Date().toISOString(),
     });
   }
-  if (action === "react") {
+  if (action === "react" || action === "react_status") {
     const activity = d.activities.find((item) => item.id === id);
+    if (activity && activity.mode !== "solo" && action === "react_status") throw new Error("Choose a current solo status.");
     if (!activity || !(activity.mode === "solo" ? canReactToSoloActivity(d, activity, uid) : canWriteBeaconModule(d, activity, uid, "reactions")))
       throw new Error("Reactions are paused or unavailable for this beacon.");
+    const emoji = activity.mode === "solo" && p.remove !== true ? statusReactionEmoji(p.emoji) : "🙌";
     d.reactions = d.reactions.filter(
       (x) => !(x.activity_id === id && x.user_id === uid),
     );
-    if (activity.mode !== "solo" || p.remove !== true) d.reactions.push({ activity_id: id, user_id: uid, emoji: "🙌" });
+    if (activity.mode !== "solo" || p.remove !== true) d.reactions.push({ activity_id: id, user_id: uid, emoji });
   }
   if (action === "save_goal") {
     if (id)

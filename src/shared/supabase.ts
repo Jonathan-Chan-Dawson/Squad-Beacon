@@ -78,12 +78,15 @@ export function clearPendingRequests() {
 export async function rpc(
   action: string,
   payload: Record<string, unknown> = {},
+  explicitRequestId?: string,
+  expectedViewerId?: string,
 ) {
   if (!supabase) throw new Error("Connect Supabase to use a real account.");
   const {
     data: { session },
   } = await supabase.auth.getSession();
   if (!session) throw new Error("Sign in to continue.");
+  if (expectedViewerId && session.user.id !== expectedViewerId) throw new Error("Your account changed before publication. Return to the account that started this Beacon.");
   const key = session.user.id + ":" + action;
   // Keep only the latest operation of each kind in memory. Coordinates are never retried.
   const retryable = ![
@@ -94,7 +97,7 @@ export async function rpc(
   const fingerprint = JSON.stringify(payload);
   const previous = retryable ? pendingRequests.get(key) : undefined;
   const requestId =
-    previous?.fingerprint === fingerprint ? previous.id : randomUUID();
+    explicitRequestId ?? (previous?.fingerprint === fingerprint ? previous.id : randomUUID());
   if (retryable) pendingRequests.set(key, { fingerprint, id: requestId });
   const discoveryParams =
     action === "join_public_beacon"
@@ -118,6 +121,10 @@ export async function rpc(
     discoveryParams ?? { action, payload, request_id: requestId },
   );
   if (status !== 0) pendingRequests.delete(key);
-  if (error) throw new Error(error.message);
+  if (error) {
+    const failure = new Error(error.message) as Error & { definitive?: boolean };
+    failure.definitive = status >= 400 && status < 500 && (error.code === "P0001" || /^22|^23/.test(error.code ?? ""));
+    throw failure;
+  }
   return data as Record<string, unknown>;
 }

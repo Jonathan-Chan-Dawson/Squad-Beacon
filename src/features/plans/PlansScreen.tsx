@@ -8,7 +8,7 @@ import {
   stepsFromPlan,
   suggestPlanConflicts,
 } from "@/src/features/plans/domain";
-import { addLocalDays } from "@/src/features/plans/routines";
+import { addLocalDays, isLocalDate } from "@/src/features/plans/routines";
 import { RoutineScheduleSheet } from "@/src/features/plans/RoutineScheduleSheet";
 import { beaconTemplateCatalog } from "@/src/shared/templates";
 import { localDate } from "@/src/shared/domain";
@@ -106,7 +106,14 @@ function PlanBuilderScreen() {
     sourcePlan?: string;
     beaconDraft?: string;
     routine?: string;
+    startDate?: string;
+    timezone?: string;
   }>();
+  let routeTimezone: string | undefined;
+  if (typeof params.timezone === "string" && params.timezone) {
+    try { localDate(new Date(), params.timezone); routeTimezone = params.timezone; }
+    catch { /* Invalid route zones retain the existing creation default. */ }
+  }
   const memberships = data.squad_members.filter((m) => m.user_id === userId);
   const allowedSquads = data.squads.filter((s) =>
     memberships.some((m) => m.squad_id === s.id),
@@ -147,13 +154,15 @@ function PlanBuilderScreen() {
   const [timezone, setTimezone] = useState(
     sourcePlan?.timezone ??
       seedTemplate?.timezone ??
+      routeTimezone ??
       (Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"),
   );
   const [startDate, setStartDate] = useState(() =>
-    localDate(
+    typeof params.startDate === "string" && isLocalDate(params.startDate) ? params.startDate : localDate(
       new Date(Date.now() + 86400000),
       sourcePlan?.timezone ??
         seedTemplate?.timezone ??
+        routeTimezone ??
         Intl.DateTimeFormat().resolvedOptions().timeZone ??
         "UTC",
     ),
@@ -224,10 +233,11 @@ function PlanBuilderScreen() {
     setDescription(template?.description ?? "");
     setTimezone(
       template?.timezone ??
+        routeTimezone ??
         Intl.DateTimeFormat().resolvedOptions().timeZone ??
         "UTC",
     );
-    setStartDate(addLocalDays(safeToday(template?.timezone ?? timezone), 1));
+    setStartDate(typeof params.startDate === "string" && isLocalDate(params.startDate) ? params.startDate : addLocalDays(safeToday(template?.timezone ?? timezone), 1));
     const ownAspirationIds = new Set(aspirations.map((goal) => goal.id));
     setSteps(
       template?.steps?.length

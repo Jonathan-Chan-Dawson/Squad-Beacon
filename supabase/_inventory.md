@@ -11,3 +11,5 @@ Supabase database and functions
 - schedules.sql: database scheduler definitions.
 
 No remote deployment is performed by local source changes.
+
+- 202610130001_status_emoji.sql through 202610130004_atomic_creation_invites.sql: local redesign extensions for finite persisted status emoji, atomic status mutation/history, bounded private-ledger Routine calendar projection and transactional selected invitations. Security-definer entry points keep empty search paths and scoped execute grants. Hosted deployment is pending target/authorization setup; no credentials or project link were available locally during audit.

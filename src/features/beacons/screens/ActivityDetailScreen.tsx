@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { resolveActivityToolEntry, type BeaconToolId as ToolId } from "@/src/features/beacons/activityToolEntry";
 import {
   Animated,
   KeyboardAvoidingView,
@@ -109,14 +110,6 @@ const tabIcons = {
   Chat: MessagesSquare,
 } satisfies Record<DetailTab, typeof Info>;
 
-type ToolId =
-  | "checklist"
-  | "journal"
-  | "focus"
-  | "experiences"
-  | "scoreboard"
-  | "music"
-  | "chat";
 const toolLabels: Record<ToolId, string> = {
   checklist: "Checklist",
   journal: "Beacon Sketchboard",
@@ -217,10 +210,12 @@ export default function ActivityDetail() {
   const {
     id,
     tab: initialTab,
+    tool: initialTool,
     from,
   } = useLocalSearchParams<{
     id: string;
     tab?: string;
+    tool?: string;
     from?: string;
   }>();
   const reducedMotion = useReducedMotion();
@@ -229,6 +224,8 @@ export default function ActivityDetail() {
   const { data, userId, demo, loading, error, refresh, act } = useBeacon();
   const activityId = Array.isArray(id) ? id[0] : id;
   const activity = data.activities.find((item) => item.id === activityId);
+  const toolRouteKey = JSON.stringify([activityId, initialTab, initialTool, userId, data.viewer_id]);
+  const entry = resolveActivityToolEntry(data, activity, userId, initialTab, initialTool);
   const now = useNow();
   const [scrollY] = useState(() => new Animated.Value(0));
   const [selectedTab, setSelectedTab] = useState<{
@@ -236,9 +233,10 @@ export default function ActivityDetail() {
     tab: DetailTab;
   }>({
     activityId: activityId ?? "",
-    tab: initialTab === "chat" ? "Chat" : "Overview",
+    tab: entry.tab,
   });
-  const [selectedTool, setSelectedTool] = useState<ToolId | null>(null);
+  const [selectedTool, setSelectedTool] = useState<ToolId | null>(entry.tool);
+  const [appliedToolRoute, setAppliedToolRoute] = useState(activity ? toolRouteKey : null);
   const [comment, setComment] = useState("");
   const [edit, setEdit] = useState(false);
   const [title, setTitle] = useState("");
@@ -271,6 +269,11 @@ export default function ActivityDetail() {
     setInteractionActivityId(activityId);
     setSelectedTool(null);
     setJoinFeedback(false);
+  }
+  if (activity && appliedToolRoute !== toolRouteKey) {
+    setAppliedToolRoute(toolRouteKey);
+    setSelectedTab({ activityId: activity.id, tab: entry.tab });
+    setSelectedTool(entry.tool);
   }
 
   const onRefresh = async () => {
@@ -1528,6 +1531,7 @@ export default function ActivityDetail() {
                   <BeaconTools
                     key={activity.id + ":" + (userId ?? "viewer")}
                     activity={activity}
+                    section={selectedTool as "checklist" | "journal" | "focus"}
                   />
                 ) : null}
                 {canManageSettings ? (

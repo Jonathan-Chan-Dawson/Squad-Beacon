@@ -3,6 +3,7 @@ import { Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useBeacon } from "@/src/shared/store";
 import type { PlanRoutine } from "@/src/features/plans/routines";
+import { isLocalDate } from "@/src/features/plans/routines";
 import { RoutineScheduleSheet } from "@/src/features/plans/RoutineScheduleSheet";
 import {
   Action,
@@ -19,10 +20,13 @@ const dayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 export default function RoutinesScreen() {
   const { styles } = useTheme();
   const { data, userId, act } = useBeacon();
-  const { planId, create } = useLocalSearchParams<{
+  const { planId, create, startDate, timezone } = useLocalSearchParams<{
     planId?: string;
     create?: string;
+    startDate?: string;
+    timezone?: string;
   }>();
+  const calendarContext = typeof startDate === "string" && isLocalDate(startDate) ? { startDate, ...(typeof timezone === "string" && timezone ? { timezone } : {}) } : {};
   const [createOpen, setCreateOpen] = useState(create === "yes");
   const [sourcePlanId, setSourcePlanId] = useState("");
   const [editing, setEditing] = useState("");
@@ -82,7 +86,7 @@ export default function RoutinesScreen() {
             setCreateOpen(false);
             router.push({
               pathname: "/plans",
-              params: { create: "yes", routine: "yes" },
+              params: { create: "yes", routine: "yes", ...calendarContext },
             });
           }}
         />
@@ -123,6 +127,7 @@ export default function RoutinesScreen() {
                       create: "yes",
                       routine: "yes",
                       sourcePlan: plan.id,
+                      ...calendarContext,
                       ...(plan.squad_id ? { squadId: plan.squad_id } : {}),
                     },
                   });

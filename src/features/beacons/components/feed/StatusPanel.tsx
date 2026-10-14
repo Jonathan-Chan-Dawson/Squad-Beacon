@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import { Circle, Clock3, Sparkles, Trash2 } from "lucide-react-native";
-import type { Profile } from "@/src/shared/types";
+import { Circle, Clock3, Pencil, Sparkles, Trash2 } from "lucide-react-native";
+import type { Audience, Category, Profile } from "@/src/shared/types";
 import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
 import { useNow } from "@/src/shared/useNow";
 import {
@@ -12,8 +12,9 @@ import {
   useDesignTheme,
   uiHaptics,
 } from "@/src/shared/design-system";
-import { Action, Field, Sheet } from "@/src/shared/ui";
+import { Action, AudiencePicker, Field, Sheet } from "@/src/shared/ui";
 import { radius, space, type } from "@/src/theme/data";
+import { statusEndAt, type StatusDraft } from "./statusActions";
 
 export type FeedStatus = {
   id: string;
@@ -21,17 +22,21 @@ export type FeedStatus = {
   available: boolean;
   startsAt: string;
   endsAt: string;
+  description?: string;
+  category?: Category;
+  audience?: Audience;
+  audienceId?: string | null;
 };
 
-export type FeedStatusSave = {
-  title: string;
-  available: boolean;
-  endsAt: string;
-};
+export type FeedStatusSave = StatusDraft;
 
 type DurationPreset = "hour" | "tonight" | "busy" | "custom";
 
 export type StatusPanelProps = {
+  initialDraft?: StatusDraft;
+  advanced?: boolean;
+  compact?: boolean;
+  avatarControl?: boolean;
   profile?: Profile;
   status: FeedStatus | null;
   editorVisible: boolean;
@@ -46,6 +51,10 @@ export type StatusPanelProps = {
 };
 
 export function StatusPanel({
+  initialDraft,
+  advanced = false,
+  compact = false,
+  avatarControl = false,
   profile,
   status,
   editorVisible,
@@ -60,13 +69,26 @@ export function StatusPanel({
 }: StatusPanelProps) {
   const { colors, tokens } = useDesignTheme();
   const now = useNow();
-  const [title, setTitle] = useState("");
-  const [available, setAvailable] = useState(true);
+  const [title, setTitle] = useState(initialDraft?.title ?? "");
+  const [description, setDescription] = useState(initialDraft?.description ?? "");
+  const [category, setCategory] = useState<Category>(initialDraft?.category ?? "Social");
+  const [audience, setAudience] = useState<Audience>(initialDraft?.audience ?? "friends");
+  const [audienceId, setAudienceId] = useState<string | null>(initialDraft?.audienceId ?? null);
+  const [noteOpen, setNoteOpen] = useState(advanced);
+  const [available, setAvailable] = useState(initialDraft?.available ?? true);
   const [preset, setPreset] = useState<DurationPreset>("custom");
   const [customMinutes, setCustomMinutes] = useState("60");
-  const [preservedEndsAt, setPreservedEndsAt] = useState<string | null>(null);
-  const [titleTouched, setTitleTouched] = useState(false);
+  const [preservedEndsAt, setPreservedEndsAt] = useState<string | null>(initialDraft?.endsAt ?? null);
+  const [titleTouched, setTitleTouched] = useState(!!initialDraft?.title);
   const [localError, setLocalError] = useState("");
+  const [startsAt, setStartsAt] = useState(initialDraft?.startsAt ?? "");
+  const [timezone, setTimezone] = useState(initialDraft?.timezone ?? "UTC");
+  const [placeLabel, setPlaceLabel] = useState(initialDraft?.label ?? "");
+  const [latitude, setLatitude] = useState(initialDraft?.latitude == null ? "" : String(initialDraft.latitude));
+  const [longitude, setLongitude] = useState(initialDraft?.longitude == null ? "" : String(initialDraft.longitude));
+  const [onlineUrl, setOnlineUrl] = useState(initialDraft?.onlineUrl ?? "");
+  const advancedValues = advanced ? { startsAt, timezone, label: placeLabel, latitude: latitude.trim() ? Number(latitude) : null, longitude: longitude.trim() ? Number(longitude) : null, onlineUrl: onlineUrl || null, sourceId: initialDraft?.sourceId } : {};
+  const expiryBase = () => advanced ? Math.max(Date.now(), Date.parse(startsAt)) : Date.now();
   const availability = status?.available ? "available" : "unavailable";
   const token = tokens.availability[availability];
   const AvailabilityIcon = token.icon;
@@ -92,9 +114,14 @@ export function StatusPanel({
   const initializeEditor = (editingStatus: FeedStatus | null) => {
     const current = Date.now();
     setTitle(editingStatus?.title ?? "");
+    setDescription(editingStatus?.description ?? "");
+    setCategory(editingStatus?.category ?? "Social");
+    setAudience(editingStatus?.audience ?? "friends");
+    setAudienceId(editingStatus?.audienceId ?? null);
+    setNoteOpen(false);
     setAvailable(editingStatus?.available ?? true);
     setPreset("custom");
-    setTitleTouched(false);
+    setTitleTouched(!!editingStatus?.title);
     const endAt = editingStatus ? Date.parse(editingStatus.endsAt) : NaN;
     const duration = Number.isFinite(endAt)
       ? Math.ceil((endAt - current) / 60_000)
@@ -155,22 +182,6 @@ export function StatusPanel({
     setLocalError("");
   };
 
-  const getEndAt = () => {
-    if (preset === "custom" && preservedEndsAt) return preservedEndsAt;
-    if (preset === "tonight") {
-      const evening = new Date(now);
-      evening.setHours(23, 59, 0, 0);
-      if (evening.getTime() <= now) evening.setDate(evening.getDate() + 1);
-      return evening.toISOString();
-    }
-    const minutes =
-      preset === "hour" || preset === "busy" ? 60 : Number(customMinutes);
-    if (!Number.isInteger(minutes) || minutes < 5 || minutes > 1440) {
-      throw new Error("Choose a duration from 5 to 1440 minutes.");
-    }
-    return new Date(now + minutes * 60_000).toISOString();
-  };
-
   const save = async () => {
     setLocalError("");
     try {
@@ -187,7 +198,8 @@ export function StatusPanel({
       await onSave({
         title: title.trim() || presetTitle,
         available,
-        endsAt: getEndAt(),
+        endsAt: statusEndAt(preset, customMinutes, preservedEndsAt, expiryBase()),
+        description, category, audience, audienceId, ...advancedValues,
       });
     } catch (failure) {
       setLocalError(
@@ -195,6 +207,21 @@ export function StatusPanel({
           ? failure.message
           : "Could not save your status. Try again.",
       );
+    }
+  };
+
+  const quickAvailability = async (next: boolean) => {
+    if (saving) return;
+    if (noteOpen) { chooseAvailability(next); return; }
+    setLocalError("");
+    setAvailable(next);
+    const quickTitle = titleTouched ? title.trim() : next ? "Free to hang" : "Busy";
+    setTitle(quickTitle);
+    try {
+      await onSave({ title: quickTitle || (next ? "Free to hang" : "Busy"), available: next,
+        endsAt: statusEndAt(preset, customMinutes, preservedEndsAt, expiryBase()), description, category, audience, audienceId, ...advancedValues });
+    } catch (failure) {
+      setLocalError(failure instanceof Error ? failure.message : "Could not update your availability. Try again.");
     }
   };
 
@@ -213,7 +240,24 @@ export function StatusPanel({
 
   return (
     <>
-      <Card style={{ gap: space.md, padding: space.md }}>
+      {avatarControl ? <Pressable testID="profile-status-control" accessibilityRole="button"
+        accessibilityLabel={status ? "Edit your status" : "Share your status"} accessibilityState={{ disabled: saving }}
+        disabled={saving} onPress={status ? beginEdit : beginCreate}
+        style={{ minWidth: tokens.layout.minTapTarget, minHeight: tokens.layout.minTapTarget, alignItems: "center", justifyContent: "center" }}>
+        <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: colors.surfaceRaised, borderWidth: 2, borderColor: status ? token.color : colors.border, alignItems: "center", justifyContent: "center" }}>
+          <Pencil size={13} color={status ? token.color : colors.textPrimary} />
+        </View>
+      </Pressable> : compact ? <Pressable accessibilityRole="button" disabled={saving}
+        accessibilityLabel={status ? "Edit your status" : "Share your status"}
+        onPress={status ? beginEdit : beginCreate}
+        style={{ minHeight: tokens.layout.minTapTarget, padding: space.sm, flexDirection: "row", alignItems: "center", gap: space.sm, borderWidth: 1, borderColor: colors.border, borderRadius: radius.card }}>
+        <ProfileAvatar profile={profile} size={32} />
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={{ color: colors.textSecondary, ...type.caption }}>Your status{status ? ` · ${status.available ? "Available" : "Busy"}${timeLabel ? ` · ${timeLabel}` : ""}` : ""}</Text>
+          <Text numberOfLines={1} style={{ color: colors.textPrimary, ...type.secondary }}>{status?.title || "Share what you are up to"}</Text>
+        </View>
+        <Sparkles size={16} color={colors.accent} />
+      </Pressable> : <Card style={{ gap: space.md, padding: space.md }}>
         <Pressable
           accessibilityRole="button"
           accessibilityState={{ disabled: saving }}
@@ -343,7 +387,7 @@ export function StatusPanel({
               />
             </View>
             <SecondaryButton
-              title="Turn into a Beacon"
+              title="Create Beacon from Status"
               disabled={saving}
               compact
               onPress={onConvert}
@@ -364,7 +408,7 @@ export function StatusPanel({
             onPress={beginCreate}
           />
         )}
-      </Card>
+      </Card>}
 
       <Sheet
         title={status ? "Edit your status" : "Share your status"}
@@ -375,7 +419,8 @@ export function StatusPanel({
           <Text style={{ color: colors.textSecondary, ...type.secondary }}>
             Share availability only. This will not RSVP you to a Beacon.
           </Text>
-          <Field
+          <SecondaryButton compact disabled={saving} title={noteOpen ? "Hide Activity Note" : status ? "Edit Activity Note" : "Add Activity Note"} onPress={() => setNoteOpen((current) => !current)} />
+          {noteOpen ? <View style={{ gap: space.sm }}><Field
             label="Status note"
             value={title}
             onChangeText={(value) => {
@@ -388,6 +433,17 @@ export function StatusPanel({
             maxLength={120}
             returnKeyType="done"
           />
+          <Field label="Description" value={description} onChangeText={setDescription} placeholder="A little more about what you are up to" multiline />
+          <Text style={{ color: colors.textSecondary, ...type.secondary }}>Category</Text>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.xs }}>
+            {(["Fitness", "Study", "Gaming", "Creative", "Social", "Other"] as const).map((option) => <Chip key={option} label={option} selected={category === option} onPress={() => setCategory(option)} />)}
+          </View>
+          <Text style={{ color: colors.textSecondary, ...type.secondary }}>Share with</Text>
+          {advanced ? <AudiencePicker value={audience} id={audienceId} onChange={(value, id) => { setAudience(value); setAudienceId(id); }} /> : <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.xs }}>
+            <Chip label="Friends" selected={audience === "friends"} onPress={() => { setAudience("friends"); setAudienceId(null); }} />
+            <Chip label="Only me" selected={audience === "private"} onPress={() => { setAudience("private"); setAudienceId(null); }} />
+            {status?.audience && status.audience !== "friends" && status.audience !== "private" ? <Chip label="Existing audience" selected={audience === status.audience} onPress={() => { setAudience(status.audience!); setAudienceId(status.audienceId ?? null); }} /> : null}
+          </View>}</View> : null}
           <View style={{ gap: space.xs }}>
             <Text
               style={{
@@ -402,12 +458,14 @@ export function StatusPanel({
               <Chip
                 label="Free"
                 selected={available}
-                onPress={() => chooseAvailability(true)}
+                disabled={saving}
+                onPress={() => void quickAvailability(true)}
               />
               <Chip
                 label="Busy"
                 selected={!available}
-                onPress={() => chooseAvailability(false)}
+                disabled={saving}
+                onPress={() => void quickAvailability(false)}
               />
             </View>
           </View>
@@ -427,21 +485,25 @@ export function StatusPanel({
               <Chip
                 label="Free for 1 hr"
                 selected={preset === "hour"}
+                disabled={saving}
                 onPress={() => choosePreset("hour")}
               />
               <Chip
                 label="Free tonight"
                 selected={preset === "tonight"}
+                disabled={saving}
                 onPress={() => choosePreset("tonight")}
               />
               <Chip
                 label="Busy"
                 selected={preset === "busy"}
+                disabled={saving}
                 onPress={() => choosePreset("busy")}
               />
               <Chip
                 label="Custom"
                 selected={preset === "custom"}
+                disabled={saving}
                 onPress={() => choosePreset("custom")}
               />
             </View>
@@ -458,6 +520,15 @@ export function StatusPanel({
               maxLength={4}
             />
           ) : null}
+          {advanced ? <View style={{ gap: space.sm }}>
+            <Field label="Starts at (ISO date/time with offset)" value={startsAt} onChangeText={setStartsAt} editable={!saving} />
+            <Field label="Ends at (ISO date/time with offset)" value={preservedEndsAt ?? ""} onChangeText={(value) => { setPreset("custom"); setPreservedEndsAt(value); }} editable={!saving} />
+            <Field label="Timezone" value={timezone} onChangeText={setTimezone} editable={!saving} />
+            <Field label="Place label" value={placeLabel} onChangeText={setPlaceLabel} editable={!saving} />
+            <Field label="Latitude (optional)" value={latitude} onChangeText={setLatitude} editable={!saving} />
+            <Field label="Longitude (optional)" value={longitude} onChangeText={setLongitude} editable={!saving} />
+            <Field label="Online destination (optional)" value={onlineUrl} onChangeText={setOnlineUrl} editable={!saving} />
+          </View> : null}
           {localError || error ? (
             <Text
               accessibilityRole="alert"
@@ -482,6 +553,7 @@ export function StatusPanel({
                 run={clear}
               />
             ) : null}
+            {status ? <SecondaryButton title="Create Beacon from Status" disabled={saving} onPress={onConvert} /> : null}
           </View>
         </View>
       </Sheet>
