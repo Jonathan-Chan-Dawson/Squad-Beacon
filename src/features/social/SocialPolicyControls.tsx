@@ -191,7 +191,7 @@ export function SocialPolicySettings({
   const [value, setValue] = useState(initial);
   const label =
     entityType === "organization"
-      ? "Super-Organization"
+      ? "Network"
       : entityType === "space"
         ? "Organization"
         : "Squad";

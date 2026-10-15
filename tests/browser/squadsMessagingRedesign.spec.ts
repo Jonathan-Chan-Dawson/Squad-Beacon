@@ -4,53 +4,45 @@ async function openSquads(page: Page) {
   await page.goto("/");
   await page.getByRole("button", { name: /Explore the demo/ }).click();
   await page.getByRole("tab", { name: "Squads", exact: true }).click();
+  await expect(
+    page.getByRole("textbox", { name: "Search conversations", exact: true }),
+  ).toBeVisible();
 }
 
 test("Squads keeps chat filters reachable and community pages aligned after resizing", async ({
   page,
 }) => {
   await openSquads(page);
-  await page
-    .getByRole("button", { name: "Search conversations", exact: true })
-    .click();
   await expect(
-    page.getByRole("textbox", { name: "Search chats, people and communities" }),
+    page.getByRole("textbox", { name: "Search conversations" }),
   ).toBeVisible();
-  for (const filter of ["All", "Squads", "Friends", "Unread", "Starred"]) {
+  for (const filter of ["All", "Squads", "Friends", "Unread"]) {
     await expect(
       page.getByRole("button", { name: filter, exact: true }),
     ).toBeVisible();
   }
   await page.getByRole("button", { name: "Communities", exact: true }).click();
   await expect(
-    page.getByText("My communities", { exact: true }),
+    page.getByText("Your Communities", { exact: true }),
   ).toBeInViewport();
   await page.setViewportSize({ width: 375, height: 667 });
   await expect(
-    page.getByText("My communities", { exact: true }),
+    page.getByText("Your Communities", { exact: true }),
   ).toBeInViewport();
   await page.getByRole("button", { name: "Chats", exact: true }).click();
   await expect(
-    page.getByRole("button", { name: "Starred", exact: true }),
+    page.getByRole("button", { name: "Unread", exact: true }),
   ).toBeVisible();
 });
 
-test("Start a chat separates profile and message targets, and openers insert before send", async ({
+test("Start Chat inserts an opener before sending and preserves the canonical message", async ({
   page,
 }) => {
   await openSquads(page);
+  await page.getByRole("button", { name: "Friends", exact: true }).click();
   await page
-    .getByRole("button", { name: "Expand Start a chat", exact: true })
-    .click();
-  await page
-    .getByRole("button", { name: "Open profile Maya Chen", exact: true })
-    .click();
-  await expect(page.getByRole("dialog")).toBeVisible();
-  await expect(page).not.toHaveURL(/\/messages\//);
-  await page
-    .getByRole("dialog")
-    .getByRole("button", { name: "Close", exact: true })
-    .click();
+    .getByRole("textbox", { name: "Search conversations", exact: true })
+    .fill("Maya");
   await page
     .getByRole("button", { name: "Message Maya Chen", exact: true })
     .click();

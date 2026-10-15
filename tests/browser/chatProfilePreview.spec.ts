@@ -5,6 +5,9 @@ async function chats(page: Page) {
   await page.goto("/");
   await page.getByRole("button", { name: /Explore the demo/ }).click();
   await page.getByRole("tab", { name: "Squads", exact: true }).click();
+  await expect(
+    page.getByRole("textbox", { name: "Search conversations", exact: true }),
+  ).toBeVisible();
 }
 
 test("Friend chat header opens the full profile, compact actions and privacy controls", async ({
@@ -13,9 +16,10 @@ test("Friend chat header opens the full profile, compact actions and privacy con
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await chats(page);
+  await page.getByRole("button", { name: "Friends", exact: true }).click();
   await page
-    .getByRole("button", { name: "Expand Start a chat", exact: true })
-    .click();
+    .getByRole("textbox", { name: "Search conversations", exact: true })
+    .fill("Jordan");
   await page
     .getByRole("button", { name: "Message Jordan Ellis", exact: true })
     .click();
@@ -52,10 +56,23 @@ test("Friend chat header opens the full profile, compact actions and privacy con
     }),
   ).toBeEnabled();
   await page.screenshot({ path: "test-results/person-profile-390.png" });
-  await page.getByRole("button", { name: "See all connections", exact: true }).click();
-  await expect(page.getByRole("dialog").getByRole("button", { name: "The training crew", exact: true })).toBeVisible();
-  await expect(page.getByRole("dialog").getByRole("button", { name: "Neighborhood Studio", exact: true })).toBeVisible();
-  await page.getByRole("dialog").getByRole("button", { name: "Close", exact: true }).click();
+  await page
+    .getByRole("button", { name: "See all connections", exact: true })
+    .click();
+  await expect(
+    page
+      .getByRole("dialog")
+      .getByRole("button", { name: "The training crew", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page
+      .getByRole("dialog")
+      .getByRole("button", { name: "Neighborhood Studio", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "Close", exact: true })
+    .click();
   await page.getByRole("button", { name: "Friends", exact: true }).click();
   await page
     .getByRole("dialog")
@@ -130,7 +147,7 @@ test("Squad header opens compact info with member navigation and Back to the dra
   }
   await expect(
     page.getByRole("button", { name: /^(Chat|Squad chat|Open Squad chat)$/ }),
-  ).toHaveCount(0);
+  ).toHaveCount(1);
   const ping = await page
     .getByRole("button", { name: "Ping", exact: true })
     .boundingBox();
@@ -138,7 +155,7 @@ test("Squad header opens compact info with member navigation and Back to the dra
   expect(ping!.width).toBeLessThan(150);
   await page.screenshot({ path: "test-results/squad-info-320.png" });
   await page
-    .getByRole("button", { name: "See all members", exact: true })
+    .getByRole("button", { name: /^(View members|See all members)$/i })
     .click();
   await expect(page).toHaveURL(/tab=Members/);
   await expect(
@@ -173,10 +190,11 @@ test("Squad info retains the related community and scoped Ping creation", async 
     .click();
   await page
     .getByRole("button", {
-      name: "Open super-organization Lakefront Collective",
+      name: "Show related communities in Lakefront Collective",
       exact: true,
     })
     .click();
+  await page.getByRole("button", { name: "View Network", exact: true }).click();
   await expect(page).toHaveURL(/\/organization\/org-lakefront-collective/);
   await page.goBack();
   await page.getByRole("button", { name: "Ping", exact: true }).click();

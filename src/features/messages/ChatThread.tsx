@@ -16,6 +16,8 @@ import { ChatKeyboardFrame } from "./ChatKeyboard";
 import { ChatBubbleList } from "./ChatBubbleList";
 import { ChatComposer } from "./ChatComposer";
 import { useOptimisticChat } from "./useOptimisticChat";
+import { useChatReadPosition } from "./useChatReadPosition";
+import { compareChatMessages } from "./readMarkers";
 
 export function ChatThread({
   activityId,
@@ -32,6 +34,7 @@ export function ChatThread({
   const { data, userId, act } = useBeacon();
   const router = useRouter();
   const [actionsOpen, setActionsOpen] = useState(false);
+  const [sendSignal, setSendSignal] = useState(0);
   const seed = useId();
   const intent = useRef(0);
   const activity = activityId
@@ -104,8 +107,18 @@ export function ChatThread({
       }),
   });
   const events = [...canonical, ...(canRead ? chat.rows : [])]
-    .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+    .sort(compareChatMessages)
     .map((message) => ({ kind: "message" as const, message }));
+  const read = useChatReadPosition({
+    scopeKey: scope,
+    canonical,
+    marker: data.dm_message_reads.find(
+      (row) => row.user_id === userId && row.peer_id === personId,
+    ),
+    action: "mark_dm_chat_read",
+    payload: { peer_id: personId },
+    enabled: canRead && !!personId && !activityId,
+  });
   const readOnlyText = activityId
     ? canRead && activity
       ? activity.status === "cancelled"
@@ -125,6 +138,10 @@ export function ChatThread({
         }}
       >
         <ChatBubbleList
+          presentation={personId ? "direct" : "group"}
+          firstUnreadId={read.firstUnreadId}
+          onLatestVisible={read.onLatestVisible}
+          sendSignal={sendSignal}
           events={events}
           viewerId={userId}
           scopeKey={scope}
@@ -149,6 +166,7 @@ export function ChatThread({
             body={chat.draft}
             onChange={chat.setDraft}
             onSend={() => {
+              setSendSignal((value) => value + 1);
               void chat.submit();
             }}
             onMore={() => setActionsOpen(true)}

@@ -1,5 +1,6 @@
 import type { Data, ID, Profile } from "@/src/shared/types";
 import { friendIds } from "@/src/shared/domain";
+import { chatTimestamp } from "@/src/features/messages/readMarkers";
 import { canViewProfile } from "@/src/features/profile/privacy";
 import { matchesSearch } from "@/src/shared/search";
 import type { PlanningThread } from "@/src/features/planning/types";
@@ -96,27 +97,25 @@ export function squadChatRowSummary(
   latestMessage: { body: string; created_at: string } | undefined,
   fallback: string,
   now = Date.now(),
+  indexed?: { pings: PlanningThread[]; needsResponse: boolean },
 ): SquadChatRowSummary {
   if (!userId || !canOpenSquadProfile(data, squadId, userId)) {
     return { preview: fallback, latest: "", needsResponse: false };
   }
 
-  const pings = selectSquadChatPings(data, squadId, userId);
+  const pings = indexed?.pings ?? selectSquadChatPings(data, squadId, userId);
   const latestPing = pings.at(-1);
-  const messageTime = Date.parse(latestMessage?.created_at ?? "");
-  const pingTime = Date.parse(latestPing?.created_at ?? "");
+  const messageTime = chatTimestamp(latestMessage?.created_at ?? "");
+  const pingTime = chatTimestamp(latestPing?.created_at ?? "");
   const pingIsNewer =
     !!latestPing &&
     Number.isFinite(pingTime) &&
     (!Number.isFinite(messageTime) || pingTime > messageTime);
-  const needsResponse = pendingPlanningThreads(
-    data,
-    normalizePlanningData(data),
-    userId,
-    now,
-  ).some(
-    (thread) => thread.audience === "squad" && thread.audience_id === squadId,
-  );
+  const needsResponse =
+    indexed?.needsResponse ??
+    pendingPlanningThreads(data, normalizePlanningData(data), userId, now).some(
+      (thread) => thread.audience === "squad" && thread.audience_id === squadId,
+    );
 
   if (pingIsNewer && latestPing) {
     const response = visibleSquadPingResponses(data, latestPing, userId).find(

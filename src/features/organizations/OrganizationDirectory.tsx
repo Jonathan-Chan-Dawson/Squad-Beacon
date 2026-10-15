@@ -118,7 +118,7 @@ export function OrganizationDirectory({
       {showHeader && !compact && (
         <View style={styles.between}>
           <View style={{ flex: 1, gap: 4 }}>
-            <Text style={styles.h2}>Super-Organizations</Text>
+            <Text style={styles.h2}>Networks</Text>
             <Txt muted>Shared homes for the Squads you bring together.</Txt>
           </View>
           <Button
@@ -130,7 +130,7 @@ export function OrganizationDirectory({
       )}
       {showHeader && compact && (
         <View style={styles.between}>
-          <Text style={styles.h2}>Super-Organizations</Text>
+          <Text style={styles.h2}>Networks</Text>
           <Button
             compact
             title="+ Create"
@@ -141,7 +141,7 @@ export function OrganizationDirectory({
 
       {showSearch && (
         <Field
-          label="Search your super-organizations"
+          label="Search your networks"
           placeholder="Name or description"
           value={search}
           onChangeText={setSearch}
@@ -164,7 +164,7 @@ export function OrganizationDirectory({
             </View>
             <Txt muted>
               {organization.description ||
-                "An super-organization invited you to join."}
+                "A network invited you to join."}
             </Txt>
             <View style={{ flexDirection: "row", gap: 8, flexWrap: "wrap" }}>
               <Action
@@ -271,24 +271,24 @@ export function OrganizationDirectory({
       {!organizations.length && !pending.length ? (
         <Empty
           title="Your people, gathered together"
-          body="Create an super-organization to connect several Squads and give everyone one shared place to coordinate."
+          body="Create a network to connect several Squads and give everyone one shared place to coordinate."
         />
       ) : !visibleOrganizations.length && !visiblePending.length ? (
         <Empty
           title="No matches"
-          body="Try another super-organization name or description."
+          body="Try another network name or description."
         />
       ) : null}
       {compact && visibleOrganizations.length > 0 && (
         <Button
           secondary
-          title="See all super-organizations"
+          title="See all networks"
           onPress={() => router.push("/organizations")}
         />
       )}
 
       <Sheet
-        title="Create an super-organization"
+        title="Create a network"
         visible={createOpen}
         onClose={() => setCreateOpen(false)}
       >
@@ -297,7 +297,7 @@ export function OrganizationDirectory({
           connect Squads next.
         </Txt>
         <Field
-          label="Super-Organization name"
+          label="Network name"
           placeholder="Lakefront Collective"
           value={name}
           onChangeText={setName}
@@ -313,10 +313,10 @@ export function OrganizationDirectory({
         />
         <SocialPolicyFields value={policy} onChange={setPolicy} collapsible />
         <Action
-          title="Create super-organization"
+          title="Create network"
           run={async () => {
             if (!name.trim())
-              throw new Error("Give your super-organization a name first.");
+              throw new Error("Give your network a name first.");
             const result = await act("create_organization", {
               name: name.trim(),
               description: description.trim(),

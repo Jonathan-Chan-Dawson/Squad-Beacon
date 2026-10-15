@@ -1,4 +1,5 @@
 import { validateCreationInvitees } from "@/src/features/beacons/createHandoff";
+import { applyDemoMessaging } from "@/src/features/messages/demoMessaging";
 import { statusReactionEmoji } from "@/src/features/beacons/statusReactions";
 import { canReactToSoloActivity } from "../features/maps/soloActivity";
 import { isSquadIconKey } from "@/src/features/people/squadIcons";
@@ -1682,6 +1683,7 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
   const d = structuredClone(previous),
     id = String(p.id ?? ""),
     uid = DEMO_ID;
+  if (applyDemoMessaging(d, uid, action, p, () => "demo-" + Math.random().toString(36).slice(2))) return d;
   if (action === "create_activity_with_invitees" || action === "create_plan_beacon_with_invitees") {
     if (p.expected_actor_id && p.expected_actor_id!==uid) throw new Error("Your account changed before publication. Return to the account that started this Beacon.");
     const ids=p.invitee_ids;
@@ -3457,11 +3459,11 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
     if (activity && activity.mode !== "solo" && action === "react_status") throw new Error("Choose a current solo status.");
     if (!activity || !(activity.mode === "solo" ? canReactToSoloActivity(d, activity, uid) : canWriteBeaconModule(d, activity, uid, "reactions")))
       throw new Error("Reactions are paused or unavailable for this beacon.");
-    const emoji = activity.mode === "solo" && p.remove !== true ? statusReactionEmoji(p.emoji) : "🙌";
+    const emoji = p.remove === true ? undefined : statusReactionEmoji(p.emoji);
     d.reactions = d.reactions.filter(
       (x) => !(x.activity_id === id && x.user_id === uid),
     );
-    if (activity.mode !== "solo" || p.remove !== true) d.reactions.push({ activity_id: id, user_id: uid, emoji });
+    if (p.remove !== true) d.reactions.push({ activity_id: id, user_id: uid, emoji: emoji! });
   }
   if (action === "save_goal") {
     if (id)

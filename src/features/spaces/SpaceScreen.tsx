@@ -1,10 +1,13 @@
-import { CommunityAvatar } from "@/src/features/people/components/CommunityAvatar";
-import React, { useState } from "react";
+import { FlashList } from "@shopify/flash-list";
+import React, { useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import { router, useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams, useNavigation } from "expo-router";
+import {
+  usePreventRemove,
+  type NavigationAction,
+} from "expo-router/react-navigation";
 import {
   CalendarDays,
-  ChevronRight,
   Layers3,
   Settings2,
   UserPlus,
@@ -16,18 +19,26 @@ import { canReadBeaconActivity } from "@/src/features/beacons/beaconModules";
 import { matchesSearch } from "@/src/shared/search";
 import { canViewProfile } from "@/src/features/profile/privacy";
 import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
-import { SocialDirectoryResults } from "@/src/features/people/SocialDirectoryResults";
+import { VirtualizedCommunityDirectory } from "@/src/features/people/VirtualizedCommunityDirectory";
 import { activeSquadMembership } from "@/src/features/people/squadProfile";
+import { canReadOrganization } from "@/src/features/organizations/domain";
 import {
   canInviteWithPolicy,
   SOCIAL_ROLE_RANK,
 } from "@/src/features/social/domain";
-import { SocialPolicySettings } from "@/src/features/social/SocialPolicyControls";
+import {
+  SocialPolicyFields,
+  type SocialPolicyValue,
+} from "@/src/features/social/SocialPolicyControls";
+import {
+  RelationshipDisclosure,
+  useCommunitySummary,
+} from "@/src/features/social/CommunityProfileAccess";
 import {
   ProfileActions,
   ProfileLink,
+  ProfileSection,
 } from "@/src/features/people/components/ProfilePrimitives";
-import { MotionPressable } from "@/src/shared/MotionPressable";
 import {
   Action,
   Button,
@@ -48,81 +59,178 @@ import {
   canReadSpace,
   visibleSpaceSquads,
 } from "./domain";
-import type { SpaceMemberRole } from "./types";
+import type { Space, SpaceMemberRole } from "./types";
+import { SpaceSquadPreview } from "./SpaceSquadPreview";
+
+const settingsSections = [
+  "details",
+  "access",
+  "members",
+  "connections",
+  "actions",
+] as const;
+type SpaceSettingsSection = (typeof settingsSections)[number];
+const settingsSectionTitles: Record<SpaceSettingsSection, string> = {
+  details: "Organization details",
+  access: "Privacy & access",
+  members: "Members & roles",
+  connections: "Connections",
+  actions: "Actions",
+};
 
 export default function SpaceScreen() {
-  const params = useLocalSearchParams<{ id?: string; tab?: string }>();
+  const navigation = useNavigation();
+  const params = useLocalSearchParams<{ id?: string; tab?: string; view?: string; section?: string }>();
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
+  const legacyView = params.tab ?? params.view;
   const { data, userId, act } = useBeacon();
+  const { summary: safeSummary, loading: summaryLoading } =
+    useCommunitySummary("space", id);
   const now = useNow();
   const { styles, colors } = useTheme();
   const [menu, setMenu] = useState<"invite" | "squads" | "settings" | null>(
     null,
   );
-  const tab: "overview" | "squads" | "activity" | "members" =
-    params.tab === "squads" ||
-    params.tab === "activity" ||
-    params.tab === "members"
-      ? params.tab
+  const tab: "overview" | "squads" | "activity" | "members" | "settings" =
+    legacyView === "settings"
+      ? "settings"
+      :
+    legacyView === "squads" ||
+    legacyView === "activity" ||
+    legacyView === "members"
+      ? legacyView
       : "overview";
+  const requestedSection = Array.isArray(params.section)
+    ? params.section[0]
+    : params.section;
+  const settingsSection = settingsSections.find(
+    (item) => item === requestedSection,
+  );
   const setSquadId = (id: string) =>
     router.push({ pathname: "/squad/[id]", params: { id } });
   const setOrganizationId = (id: string) =>
     router.push({ pathname: "/organization/[id]", params: { id } });
   const setOtherSpaceId = (id: string) =>
     router.push({ pathname: "/space/[id]", params: { id } });
-  const [editName, setEditName] = useState("");
-  const [editDescription, setEditDescription] = useState("");
   const [squadSearch, setSquadSearch] = useState("");
+  const [memberSearch, setMemberSearch] = useState("");
   const [editingMemberId, setEditingMemberId] = useState<string | null>(null);
   const [editingMemberRole, setEditingMemberRole] =
     useState<SpaceMemberRole>("member");
-  const space =
-    id && canReadSpace(data, id, userId)
-      ? data.spaces.find(
-          (row) =>
-            row.id === id &&
-            !!userId &&
-            !!activeSpaceRole(row, data.space_members, userId),
-        )
-      : undefined;
-  if (!space || !id)
+  const [detailsDraft, setDetailsDraft] = useState<{
+    name: string;
+    description: string;
+  } | null>(null);
+  const [policyDraft, setPolicyDraft] = useState<SocialPolicyValue | null>(null);
+  const [discardOpen, setDiscardOpen] = useState(false);
+  const [pendingDestination, setPendingDestination] = useState<
+    SpaceSettingsSection | null | undefined
+  >(undefined);
+  const pendingRemoveAction = useRef<NavigationAction | null>(null);
+  const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
+  const space = (id ? data.spaces.find((row) => row.id === id) : undefined) ??
+    (safeSummary
+      ?
+      ({
+        id: safeSummary.entity_id,
+        owner_id: "",
+        name: safeSummary.name,
+        description: safeSummary.description,
+        created_at: "",
+        discoverability: safeSummary.discoverability,
+        join_mode: safeSummary.join_mode,
+      } satisfies Space)
+      : undefined);
+  const policyInitial: SocialPolicyValue = {
+    discoverability: space?.discoverability ?? safeSummary?.discoverability ?? "private",
+    join_mode: space?.join_mode ?? safeSummary?.join_mode ?? "invite",
+    invite_policy: space?.invite_policy ?? "admins",
+  };
+  const detailValues = detailsDraft ?? {
+    name: space?.name ?? safeSummary?.name ?? "",
+    description: space?.description ?? safeSummary?.description ?? "",
+  };
+  const detailsDirty = !!detailsDraft && (
+    detailsDraft.name !== (space?.name ?? safeSummary?.name ?? "") ||
+    detailsDraft.description !== (space?.description ?? safeSummary?.description ?? "")
+  );
+  const policyValues = policyDraft ?? policyInitial;
+  const policyDirty = !!policyDraft && (
+    policyDraft.discoverability !== policyInitial.discoverability ||
+    policyDraft.join_mode !== policyInitial.join_mode ||
+    policyDraft.invite_policy !== policyInitial.invite_policy
+  );
+  const settingsDirty = tab === "settings" && (detailsDirty || policyDirty);
+  const currentMemberAccess = summaryLoading || safeSummary?.membership_status === "active";
+  const canManageCurrentSpace = currentMemberAccess && !!id && !!userId && canManageSpace(data, id, userId);
+  usePreventRemove(settingsDirty && canManageCurrentSpace, ({ data: { action } }) => {
+    pendingRemoveAction.current = action;
+    setPendingDestination(undefined);
+    setDiscardOpen(true);
+  });
+  if (summaryLoading && !space)
+    return (
+      <Screen title="Loading Organization" eyebrow="">
+        <Txt muted>Loading the safe Organization profile.</Txt>
+      </Screen>
+    );
+  const profileSummary = safeSummary ?? (
+    space && userId && canReadSpace(data, space.id, userId) && summaryLoading
+      ? {
+          name: space.name,
+          description: space.description,
+          member_count: data.space_members.filter(
+            (member) => member.space_id === space.id && member.status === "active",
+          ).length,
+        }
+      : null
+  );
+  if (!space || !id || !profileSummary)
     return (
       <Screen title="Organization unavailable" eyebrow="">
         <Empty
           title="This Organization isn’t available"
-          body="Only current members can open an Organization. Check Communities for invitations."
+          body="This Organization is unavailable to your account. Check Communities for an invitation or an eligible public profile."
         />
       </Screen>
     );
-  const manageable = canManageSpace(data, id, userId);
-  const viewerRole = activeSpaceRole(space, data.space_members, userId!);
-  const mayInvite = canInviteWithPolicy(viewerRole, space.invite_policy);
-  const members = data.space_members.filter(
-    (member) => member.space_id === id && member.status === "active",
-  );
-  const joinRequests = data.space_members.filter(
-    (member) => member.space_id === id && member.status === "requested",
-  );
+  const viewerRole = userId && currentMemberAccess && canReadSpace(data, id, userId)
+    ? activeSpaceRole(space, data.space_members, userId)
+    : null;
+  const manageable = !!viewerRole && canManageSpace(data, id, userId);
+  const mayInvite = !!viewerRole && canInviteWithPolicy(viewerRole, space.invite_policy);
+  const members = viewerRole
+    ? data.space_members.filter(
+        (member) => member.space_id === id && member.status === "active",
+      )
+    : [];
+  const joinRequests = manageable
+    ? data.space_members.filter(
+        (member) => member.space_id === id && member.status === "requested",
+      )
+    : [];
   const invitees = data.profiles.filter(
     (profile) =>
-      friendIds(data, userId!).includes(profile.id) &&
+      !!userId &&
+      friendIds(data, userId).includes(profile.id) &&
       canInviteSpaceMember(data, id, userId, profile.id) &&
-      canViewProfile(data, profile, userId!) &&
+      !!userId &&
+      canViewProfile(data, profile, userId) &&
       !data.space_members.some(
         (member) => member.space_id === id && member.user_id === profile.id,
       ),
   );
-  const squads = visibleSpaceSquads(data, id, userId);
-  const visibleSquads = squads.filter((squad) =>
-    matchesSearch(squadSearch, squad.name, squad.description),
-  );
+  const squads = visibleSpaceSquads(data, id, userId).sort((first, second) => {
+    const firstJoined = !!activeSquadMembership(data, first.id, userId);
+    const secondJoined = !!activeSquadMembership(data, second.id, userId);
+    return Number(secondJoined) - Number(firstJoined) || first.name.localeCompare(second.name);
+  });
   const searchedMembers = members.flatMap((member) => {
     const profile = data.profiles.find((row) => row.id === member.user_id);
     return profile &&
       userId &&
       canViewProfile(data, profile, userId) &&
-      matchesSearch(squadSearch, profile.name, profile.username)
+      matchesSearch(memberSearch, profile.name, profile.username)
       ? [{ member, profile }]
       : [];
   });
@@ -149,38 +257,99 @@ export default function SpaceScreen() {
       )
     );
   });
+  const parentNetworks = data.organization_spaces
+    .filter((link) => link.space_id === id)
+    .flatMap((link) => {
+      const parent = data.organizations.find(
+        (organization) => organization.id === link.organization_id,
+      );
+      return parent && userId && canReadOrganization(data, parent.id, userId)
+        ? [parent]
+        : [];
+    });
+  if (
+    safeSummary?.parent_type === "organization" &&
+    safeSummary.parent_id &&
+    safeSummary.parent_name &&
+    !parentNetworks.some((parent) => parent.id === safeSummary.parent_id)
+  ) {
+    parentNetworks.push({
+      id: safeSummary.parent_id,
+      name: safeSummary.parent_name,
+    } as (typeof parentNetworks)[number]);
+  }
   const openSettings = () => {
-    setEditName(space.name);
-    setEditDescription(space.description);
-    setMenu("settings");
+    setDetailsDraft(null);
+    setPolicyDraft(null);
+    router.push({ pathname: "/space/[id]", params: { id, tab: "settings" } });
   };
-  const selectTab = (next: "overview" | "squads" | "activity" | "members") => {
+  const selectTab = (next: "overview" | "squads" | "activity" | "members" | "settings") => {
     router.push({
       pathname: "/space/[id]",
       params: { id, ...(next === "overview" ? {} : { tab: next }) },
     });
   };
+  function navigateSettings(section?: SpaceSettingsSection) {
+    router.setParams({ id, tab: "settings", section: section ?? "" });
+  }
+  function requestSettings(section?: SpaceSettingsSection) {
+    if (settingsDirty) {
+      setPendingDestination(section ?? null);
+      setDiscardOpen(true);
+      return;
+    }
+    navigateSettings(section);
+  }
+  function confirmDiscardSettings() {
+    const destination = pendingDestination;
+    const action = pendingRemoveAction.current;
+    setDiscardOpen(false);
+    setDetailsDraft(null);
+    setPolicyDraft(null);
+    setPendingDestination(undefined);
+    pendingRemoveAction.current = null;
+    setTimeout(() => {
+      if (destination !== undefined) navigateSettings(destination ?? undefined);
+      else if (action) navigation.dispatch(action);
+    }, 0);
+  }
   return (
     <Screen
       title={
-        tab === "overview"
-          ? space.name
-          : tab === "activity"
-            ? "Beacons"
-            : tab === "members"
-              ? "Members"
-              : "Squads"
+        tab === "settings"
+          ? settingsSection
+            ? settingsSectionTitles[settingsSection]
+            : "Settings"
+          : tab === "overview"
+            ? "Organization"
+            : tab === "activity"
+              ? "Beacons"
+              : tab === "members"
+                ? "Members"
+                : "Squads"
       }
-      eyebrow={tab === "overview" ? "ORGANIZATION" : space.name}
+      eyebrow={tab === "overview" ? "" : profileSummary.name}
       create={false}
       showDemoNotice={false}
+      scroll={tab !== "members" && tab !== "squads"}
+      compactHeader={
+        tab === "members" || tab === "squads" ||
+        (tab === "settings" && !!settingsSection)
+      }
       headerAction={
-        <IconButton label="Organization settings" onPress={openSettings}>
+        <IconButton
+          label={tab === "settings" && settingsSection ? "Back to Organization settings" : "Organization settings"}
+          onPress={() => {
+            if (tab === "settings" && settingsSection) requestSettings(undefined);
+            else if (tab === "settings") selectTab("overview");
+            else openSettings();
+          }}
+        >
           <Settings2 size={20} color={colors.green} />
         </IconButton>
       }
     >
-      <View style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
+      {tab !== "squads" && tab !== "settings" ? <View style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
         <View
           style={{
             width: 48,
@@ -193,19 +362,19 @@ export default function SpaceScreen() {
         >
           <Layers3 size={23} color={colors.green} />
         </View>
-        <View style={{ flex: 1, gap: 4 }}>
-          <Txt>
-            {space.description ||
-              "A shared home for Squads and the people in them."}
-          </Txt>
+        <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+          <Text style={styles.h2} numberOfLines={2}>{profileSummary.name}</Text>
+          {profileSummary.description.trim() ? (
+            <Text style={styles.muted} numberOfLines={2}>{profileSummary.description}</Text>
+          ) : null}
           <Txt muted>
             {space.space_type
               ? `${space.space_type.replaceAll("_", " ")} · `
               : "Organization · "}
-            {members.length} {members.length === 1 ? "member" : "members"}
+            {profileSummary.member_count} {profileSummary.member_count === 1 ? "member" : "members"}
           </Txt>
         </View>
-      </View>
+      </View> : null}
       {tab === "overview" ? (
         <ProfileActions>
           <Button
@@ -224,196 +393,54 @@ export default function SpaceScreen() {
           ) : null}
         </ProfileActions>
       ) : null}
-      {(tab === "overview" && squads.length > 0) || tab === "squads" ? (
+      {tab === "overview" ? (
         <View style={styles.between}>
-          <Text style={styles.h2}>
-            {tab === "overview" ? "Your Squads" : "Squads"}
-          </Text>
-          {manageable && tab === "squads" ? (
-            <Button
-              compact
-              secondary
-              title="Connect Squad"
-              onPress={() => setMenu("squads")}
-            />
-          ) : null}
+          <Text style={styles.h2}>Squads you can open</Text>
         </View>
       ) : null}
-      {tab === "squads" && (
-        <Field
-          label={`Search ${space.name}`}
-          placeholder="Squads, communities, Beacons, or members"
-          value={squadSearch}
-          onChangeText={setSquadSearch}
-        />
-      )}
-      {tab !== "activity" && tab !== "members" && (
+      {tab === "overview" && (
         <>
-          {tab === "squads" ? (
-            <Txt muted>Squads keep their own members and chats.</Txt>
-          ) : null}
-          {(tab === "overview" ? squads.slice(0, 3) : visibleSquads).map(
-            (squad) => (
-              <View
-                key={squad.id}
-                style={[
-                  styles.card,
-                  {
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 10,
-                    padding: 10,
-                  },
-                ]}
-              >
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Preview Squad ${squad.name}`}
-                  onPress={() =>
-                    router.push({
-                      pathname: "/squad/[id]",
-                      params: { id: squad.id },
-                    })
-                  }
-                  style={{
-                    minWidth: 44,
-                    minHeight: 44,
-                    justifyContent: "center",
-                  }}
-                >
-                  <CommunityAvatar iconKey={squad.icon_key} size={42} />
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Message ${squad.name}`}
-                  onPress={() =>
-                    router.push({
-                      pathname: "/squad-chat/[id]",
-                      params: { id: squad.id },
-                    })
-                  }
-                  style={{
-                    flex: 1,
-                    minHeight: 48,
-                    justifyContent: "center",
-                    gap: 3,
-                  }}
-                >
-                  <Text style={[styles.body, { fontWeight: "700" }]}>
-                    {squad.name}
-                  </Text>
-                  <Text style={styles.muted} numberOfLines={1}>
-                    {squad.description || "Open Squad chat"}
-                  </Text>
-                </Pressable>
-                <ChevronRight size={17} color={colors.muted} />
-              </View>
-            ),
-          )}
-          {!squads.length && tab === "squads" && (
-            <Empty
-              title="Room for your Squads"
-              body={
-                manageable
-                  ? "Connect a Squad you manage. Members only see Squads they can already open."
-                  : "Your Squads will appear here when they’re connected. Other Squads stay private."
-              }
-            />
-          )}
-          {tab === "squads" && squads.length > 0 && !visibleSquads.length && (
-            <Empty
-              title="No matching Squads"
-              body="Try another Squad name or description."
-            />
-          )}
-          {tab === "overview" && squads.length > 3 && (
-            <Button
-              compact
-              secondary
-              title="See all Squads"
-              onPress={() => selectTab("squads")}
-            />
-          )}
+          <SpaceSquadPreview spaceId={id} />
+          <Button compact secondary title="All Squads" onPress={() => selectTab("squads")} />
         </>
       )}
-      {tab === "squads" && squadSearch.trim().length > 0 && (
-        <View style={{ gap: 10 }}>
-          <View style={{ gap: 7 }}>
-            <Text style={styles.label}>LINKED COMMUNITIES</Text>
-            <SocialDirectoryResults
-              query={squadSearch}
-              parentType="space"
-              parentId={id}
-              onOpenSquad={setSquadId}
-              onOpenSpace={setOtherSpaceId}
-              onOpenOrganization={setOrganizationId}
-            />
+      {tab === "squads" && (
+        <View style={{ flex: 1, minHeight: 0, gap: 8 }}>
+          <View style={styles.between}>
+            <Txt muted>Only Squads you can independently open appear here.</Txt>
+            {manageable ? <Button compact secondary title="Connect Squad" onPress={() => setMenu("squads")} /> : null}
           </View>
-          {searchedMembers.length ? (
-            <View style={{ gap: 5 }}>
-              <Text style={styles.label}>VISIBLE MEMBERS</Text>
-              {searchedMembers.map(({ member, profile }) => (
-                <MotionPressable
-                  key={member.user_id}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Preview member ${profile.name}`}
-                  onPress={() =>
-                    router.push({
-                      pathname: "/person/[id]",
-                      params: { id: profile.id },
-                    })
-                  }
-                  style={[styles.row, { minHeight: 48 }]}
-                >
-                  <ProfileAvatar profile={profile} size={34} />
-                  <Text style={[styles.body, { flex: 1 }]}>{profile.name}</Text>
-                </MotionPressable>
-              ))}
-            </View>
-          ) : null}
-          {spaceActivities.filter((activity) =>
-            matchesSearch(
-              squadSearch,
-              activity.title,
-              activity.description,
-              activity.category,
-            ),
-          ).length ? (
-            <View style={{ gap: 5 }}>
-              <Text style={styles.label}>AUTHORIZED BEACONS</Text>
-              {spaceActivities
-                .filter((activity) =>
-                  matchesSearch(
-                    squadSearch,
-                    activity.title,
-                    activity.description,
-                    activity.category,
-                  ),
-                )
-                .map((activity) => (
-                  <MotionPressable
-                    key={activity.id}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Open Beacon ${activity.title}`}
-                    onPress={() =>
-                      router.push({
-                        pathname: "/activity/[id]",
-                        params: { id: activity.id },
-                      })
-                    }
-                    style={[styles.row, { minHeight: 48 }]}
-                  >
-                    <CalendarDays size={17} color={colors.green} />
-                    <Text style={[styles.body, { flex: 1 }]} numberOfLines={1}>
-                      {activity.title}
-                    </Text>
-                    <ChevronRight size={16} color={colors.muted} />
-                  </MotionPressable>
-                ))}
-            </View>
-          ) : null}
+          <Field
+            label={`Search Squads in ${space.name}`}
+            placeholder="Squad name or description"
+            value={squadSearch}
+            onChangeText={setSquadSearch}
+          />
+          <VirtualizedCommunityDirectory
+            query={squadSearch}
+            queryLabel="Squads linked directly to this Organization"
+            entityType="squad"
+            parentType="space"
+            parentId={id}
+            onOpen={(summary) => setSquadId(summary.entity_id)}
+          />
         </View>
       )}
+      {tab === "overview" && parentNetworks.length > 0 ? (
+        <RelationshipDisclosure
+          contexts={parentNetworks.map((parent) => ({
+            parentType: "organization" as const,
+            parentId: parent.id,
+          }))}
+          current={{ type: "space", id }}
+          title="Networks"
+          onOpen={(summary) => {
+            if (summary.entity_type === "squad") setSquadId(summary.entity_id);
+            else if (summary.entity_type === "space") setOtherSpaceId(summary.entity_id);
+            else setOrganizationId(summary.entity_id);
+          }}
+        />
+      ) : null}
       {tab === "overview" &&
         spaceActivities.some(
           (activity) =>
@@ -480,23 +507,115 @@ export default function SpaceScreen() {
       {tab === "overview" ? (
         <View style={{ gap: 4 }}>
           <ProfileLink
-            title="All Squads"
-            detail={
-              squads.length
-                ? `${squads.length} ${squads.length === 1 ? "Squad" : "Squads"} you can access`
-                : "Discover Squads in this Organization"
-            }
-            onPress={() => selectTab("squads")}
-          />
-          <ProfileLink
             title="All Beacons"
             onPress={() => selectTab("activity")}
           />
-          <ProfileLink
+          {viewerRole ? <ProfileLink
             title="Members"
             detail={`${members.length} members`}
             onPress={() => selectTab("members")}
-          />
+          /> : null}
+          {profileSummary.description.trim() ? (
+            <ProfileSection title="About">
+              <Txt>{profileSummary.description}</Txt>
+            </ProfileSection>
+          ) : null}
+        </View>
+      ) : null}
+      {tab === "settings" && !settingsSection ? (
+        <View style={{ gap: 8 }}>
+          <View style={styles.card}>
+            <Text style={styles.h2}>Organization settings</Text>
+            <Txt muted>{viewerRole ? `Your role: ${viewerRole}` : "Public profile settings"}</Txt>
+          </View>
+          {settingsSections.filter((section) =>
+            section === "details" || section === "access" ? manageable :
+              section === "members" ? !!viewerRole || mayInvite :
+                section === "connections" ? manageable :
+                  !!viewerRole && space.owner_id !== userId,
+          ).map((section) => (
+            <ProfileLink
+              key={section}
+              title={settingsSectionTitles[section]}
+              onPress={() => requestSettings(section)}
+            />
+          ))}
+          {!manageable && !viewerRole && !mayInvite ? (
+            <Txt muted>There are no settings available to this account.</Txt>
+          ) : null}
+        </View>
+      ) : null}
+      {tab === "settings" && settingsSection === "details" ? (
+        <View style={{ gap: 10 }}>
+          <Text style={styles.h2}>Organization details</Text>
+          {manageable ? (
+            <>
+              <Field label="Organization name" value={detailValues.name} maxLength={60} onChangeText={(value) => setDetailsDraft({ ...detailValues, name: value })} />
+              <Field label="Description" value={detailValues.description} maxLength={500} multiline onChangeText={(value) => setDetailsDraft({ ...detailValues, description: value })} />
+              <Action
+                title="Save Organization"
+                disabled={!detailsDirty || !detailValues.name.trim()}
+                run={async () => {
+                  if (!detailValues.name.trim()) throw new Error("Give your Organization a name.");
+                  await act("update_space", { space_id: id, name: detailValues.name.trim(), description: detailValues.description.trim() });
+                  setDetailsDraft(null);
+                  navigateSettings();
+                }}
+              />
+            </>
+          ) : <Txt muted>Only Organization admins can edit these details.</Txt>}
+          <Button secondary title="Cancel" onPress={() => { setDetailsDraft(null); navigateSettings(); }} />
+        </View>
+      ) : null}
+      {tab === "settings" && settingsSection === "access" ? (
+        <View style={{ gap: 10 }}>
+          <Text style={styles.h2}>Privacy & access</Text>
+          {manageable ? (
+            <>
+              <SocialPolicyFields value={policyValues} onChange={setPolicyDraft} />
+              <Action
+                title="Save access settings"
+                disabled={!policyDirty}
+                run={async () => {
+                  await act("set_social_policy", { entity_type: "space", entity_id: id, ...policyValues });
+                  setPolicyDraft(null);
+                  navigateSettings();
+                }}
+              />
+            </>
+          ) : <Txt muted>Only Organization admins can edit privacy and access.</Txt>}
+          <Button secondary title="Cancel" onPress={() => { setPolicyDraft(null); navigateSettings(); }} />
+        </View>
+      ) : null}
+      {tab === "settings" && settingsSection === "members" ? (
+        <View style={{ gap: 10 }}>
+          <Text style={styles.h2}>Members & roles</Text>
+          {viewerRole ? <Button title="View members" onPress={() => selectTab("members")} /> : null}
+          {mayInvite ? <Button secondary title="Invite people" onPress={() => setMenu("invite")} /> : null}
+          {manageable ? <Button secondary title="Manage member roles and removals" onPress={() => setMenu("settings")} /> : null}
+          {manageable && joinRequests.length ? <Txt muted>{joinRequests.length} join requests await review in the member directory.</Txt> : null}
+        </View>
+      ) : null}
+      {tab === "settings" && settingsSection === "connections" ? (
+        <View style={{ gap: 10 }}>
+          <Text style={styles.h2}>Connections</Text>
+          <Txt muted>Linked Squads keep their own membership and privacy.</Txt>
+          {manageable ? <Button title="Connect Squad" onPress={() => setMenu("squads")} /> : null}
+          {squads.map((squad) => (
+            <View key={squad.id} style={[styles.row, styles.card]}>
+              <Text style={[styles.body, { flex: 1 }]}>{squad.name}</Text>
+              {manageable ? <Action compact secondary title={`Disconnect ${squad.name}`} run={() => act("detach_space_squad", { space_id: id, squad_id: squad.id })} /> : null}
+            </View>
+          ))}
+          <Button secondary title="Browse all Squads" onPress={() => selectTab("squads")} />
+        </View>
+      ) : null}
+      {tab === "settings" && settingsSection === "actions" ? (
+        <View style={{ gap: 10 }}>
+          <Text style={styles.h2}>Actions</Text>
+          {viewerRole && space.owner_id !== userId ? (
+            <Button secondary title="Leave Organization" onPress={() => setLeaveConfirmOpen(true)} />
+          ) : <Txt muted>{space.owner_id === userId ? "The owner role stays with the Organization owner." : "There are no membership actions available."}</Txt>}
         </View>
       ) : null}
       {tab === "activity" && (
@@ -508,13 +627,15 @@ export default function SpaceScreen() {
                 Only Beacons you are authorized to view appear here.
               </Txt>
             </View>
-            <Button
-              compact
-              title="+ Beacon"
-              onPress={() =>
-                router.push({ pathname: "/create", params: { spaceId: id } })
-              }
-            />
+            {viewerRole ? (
+              <Button
+                compact
+                title="+ Beacon"
+                onPress={() =>
+                  router.push({ pathname: "/create", params: { spaceId: id } })
+                }
+              />
+            ) : null}
           </View>
           {spaceActivities.map((activity) => (
             <Pressable
@@ -552,11 +673,16 @@ export default function SpaceScreen() {
         </View>
       )}
       {tab === "members" && (
-        <>
+        <FlashList
+          style={{ flex: 1, minHeight: 0 }}
+          data={searchedMembers}
+          keyExtractor={({ member }) => member.user_id}
+          ListHeaderComponent={
+            <View style={{ gap: 10, paddingBottom: 10 }}>
           <View style={styles.between}>
             <View style={{ flex: 1 }}>
               <Text style={styles.h2}>Members</Text>
-              <Text style={styles.muted}>{members.length} active members</Text>
+              <Text style={styles.muted}>{profileSummary.member_count} members</Text>
             </View>
             {mayInvite && (
               <Button
@@ -617,54 +743,39 @@ export default function SpaceScreen() {
               })}
             </View>
           ) : null}
-          {members.length > 8 ? (
+          {members.length > 5 ? (
             <Field
               label="Search Organization members"
-              value={squadSearch}
-              onChangeText={setSquadSearch}
+              value={memberSearch}
+              onChangeText={setMemberSearch}
               placeholder="Name or username"
             />
           ) : null}
-          {members
-            .filter(
-              (member) =>
-                !squadSearch.trim() ||
-                searchedMembers.some(
-                  (row) => row.member.user_id === member.user_id,
-                ),
-            )
-            .map((member) => {
-              const profile = data.profiles.find(
-                (row) => row.id === member.user_id,
-              );
-              if (!profile || !canViewProfile(data, profile, userId!))
-                return null;
-              return (
-                <Pressable
-                  key={member.user_id}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Preview ${profile.name}`}
-                  onPress={() =>
-                    router.push({
-                      pathname: "/person/[id]",
-                      params: { id: profile.id },
-                    })
-                  }
-                  style={[styles.row, { minHeight: 54 }]}
-                >
-                  <ProfileAvatar profile={profile} size={38} />
-                  <Text style={[styles.body, { flex: 1 }]}>{profile.name}</Text>
-                  <Text style={styles.muted}>
-                    {member.role === "owner"
-                      ? "Owner"
-                      : member.role === "admin"
-                        ? "Admin"
-                        : ""}
-                  </Text>
-                </Pressable>
-              );
-            })}
-        </>
+            </View>
+          }
+          renderItem={({ item: { member, profile } }) => (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Preview ${profile.name}`}
+              onPress={() =>
+                router.push({ pathname: "/person/[id]", params: { id: profile.id } })
+              }
+              style={[styles.row, { minHeight: 54 }]}
+            >
+              <ProfileAvatar profile={profile} size={38} />
+              <Text style={[styles.body, { flex: 1 }]}>{profile.name}</Text>
+              <Text style={styles.muted}>
+                {member.role === "owner" ? "Owner" : member.role === "admin" ? "Admin" : ""}
+              </Text>
+            </Pressable>
+          )}
+          ListEmptyComponent={
+            <Empty
+              title={memberSearch.trim() ? "No matching members" : "No visible members"}
+              body="Members appear here when their profile is visible to you."
+            />
+          }
+        />
       )}
       <Sheet
         title="Invite to this Organization"
@@ -722,68 +833,13 @@ export default function SpaceScreen() {
         )}
       </Sheet>
       <Sheet
-        title="Organization options"
-        visible={menu === "settings"}
+        title="Member roles and removals"
+        visible={manageable && menu === "settings"}
         onClose={() => setMenu(null)}
       >
+        <Txt muted>Role changes remain below your own authority level.</Txt>
         {manageable && (
           <>
-            <Text style={styles.h2}>Access & membership</Text>
-            <SocialPolicySettings
-              key={`${id}:${space.discoverability ?? "private"}:${space.join_mode ?? "invite"}:${space.invite_policy ?? "admins"}`}
-              entityType="space"
-              initial={{
-                discoverability: space.discoverability ?? "private",
-                join_mode: space.join_mode ?? "invite",
-                invite_policy: space.invite_policy ?? "admins",
-              }}
-              onSave={(policy) =>
-                act("set_social_policy", {
-                  entity_type: "space",
-                  entity_id: id,
-                  ...policy,
-                })
-              }
-            />
-            <Field
-              label="Organization name"
-              value={editName}
-              onChangeText={setEditName}
-              maxLength={60}
-            />
-            <Field
-              label="Description"
-              value={editDescription}
-              onChangeText={setEditDescription}
-              maxLength={500}
-              multiline
-            />
-            <Action
-              title="Save Organization"
-              run={async () => {
-                if (!editName.trim())
-                  throw new Error("Give your Organization a name.");
-                await act("update_space", {
-                  space_id: id,
-                  name: editName.trim(),
-                  description: editDescription.trim(),
-                });
-                setMenu(null);
-              }}
-            />
-            {squads.map((squad) => (
-              <Action
-                key={squad.id}
-                secondary
-                title={`Disconnect ${squad.name}`}
-                run={() =>
-                  act("detach_space_squad", {
-                    space_id: id,
-                    squad_id: squad.id,
-                  })
-                }
-              />
-            ))}
             {members
               .filter((member) =>
                 canManageSpaceMember(data, id, userId, member.user_id),
@@ -871,18 +927,40 @@ export default function SpaceScreen() {
               })}
           </>
         )}
-        {space.owner_id !== userId && (
+        <Button secondary title="Done" onPress={() => setMenu(null)} />
+      </Sheet>
+      <Sheet
+        title="Discard settings changes?"
+        visible={discardOpen}
+        onClose={() => {
+          setDiscardOpen(false);
+          setPendingDestination(undefined);
+          pendingRemoveAction.current = null;
+        }}
+      >
+        <View style={{ gap: 10 }}>
+          <Txt>Your Organization settings have unsaved changes.</Txt>
+          <Button secondary title="Keep editing" onPress={() => setDiscardOpen(false)} />
+          <Button title="Discard changes" onPress={confirmDiscardSettings} />
+        </View>
+      </Sheet>
+      <Sheet
+        title="Leave this Organization?"
+        visible={leaveConfirmOpen}
+        onClose={() => setLeaveConfirmOpen(false)}
+      >
+        <View style={{ gap: 10 }}>
+          <Txt>You will lose access to member-only settings and private activity.</Txt>
+          <Button secondary title="Cancel" onPress={() => setLeaveConfirmOpen(false)} />
           <Action
-            secondary
             title="Leave Organization"
             run={async () => {
               await act("leave_space", { space_id: id });
-              setMenu(null);
+              setLeaveConfirmOpen(false);
               router.back();
             }}
           />
-        )}
-        <Button secondary title="Done" onPress={() => setMenu(null)} />
+        </View>
       </Sheet>
     </Screen>
   );

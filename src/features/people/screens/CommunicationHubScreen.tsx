@@ -1,24 +1,29 @@
-import React, { useCallback, useMemo, useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
-import { FlashList } from "@shopify/flash-list";
-import { type Href, router } from "expo-router";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { FlashList, type FlashListRef } from "@shopify/flash-list";
+import { router } from "expo-router";
 import {
   Bell,
   ChevronRight,
   Building2,
   ChevronDown,
-  ChevronUp,
   Layers3,
   MessageCircle,
   UserPlus,
-  UsersRound,
 } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBeacon } from "@/src/shared/store";
 import { useNow } from "@/src/shared/useNow";
+import { selectListPeople, type PeopleListSelection } from "../privateLists";
 import { matchesSearch } from "@/src/shared/search";
-import { SegmentedControl, Skeleton } from "@/src/shared/design-system";
-import { Action, Button, Field, Sheet, Txt, useTheme } from "@/src/shared/ui";
+import { Skeleton } from "@/src/shared/design-system";
+import { Button, Sheet, Txt, useTheme } from "@/src/shared/ui";
 import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
 import { OrganizationDirectory } from "@/src/features/organizations/OrganizationDirectory";
 import { SpacesDirectory } from "@/src/features/spaces/SpacesDirectory";
@@ -32,7 +37,6 @@ import {
   canReadOrganization,
 } from "@/src/features/organizations/domain";
 import { canOpenSquadProfile } from "../squadProfile";
-import { searchablePeople } from "../communication";
 import { usePlanningResponses } from "../usePlanningResponses";
 import {
   filterHubConversations,
@@ -44,11 +48,7 @@ import {
 import type { SocialEntityType } from "@/src/features/social/types";
 import { ResponsesSheet } from "../components/ResponsesSheet";
 import { communityTypeLabel } from "../components/CommunityCard";
-import {
-  ProfileActions,
-  ProfileLink,
-  ProfileSection,
-} from "../components/ProfilePrimitives";
+import { ProfileActions, ProfileLink } from "../components/ProfilePrimitives";
 import { HubConversationRow } from "../components/HubConversationRow";
 import { HubDirectory } from "../components/HubDirectory";
 
@@ -56,7 +56,7 @@ export type { ChatFilter } from "../hubState";
 type Section = "Chats" | "Communities";
 type InitialSection = Section | "Pings" | "Organizations";
 type CommunityView = "All" | "Spaces" | "Organizations";
-const CHAT_FILTERS = ["All", "Squads", "Friends", "Unread", "Starred"] as const;
+const CHAT_FILTERS = ["All", "Squads", "Friends", "Unread"] as const;
 type CommunityItem = {
   id: string;
   type: "space" | "organization";
@@ -67,6 +67,11 @@ type CommunityItem = {
 };
 type ListItem =
   | { key: string; type: "chat"; chat: HubConversation }
+  | {
+      key: string;
+      type: "person";
+      person: ReturnType<typeof selectStartChatFriends>[number];
+    }
   | { key: string; type: "community"; community: CommunityItem }
   | { key: string; type: "discovery" | "search" | "empty" | "skeleton" };
 
@@ -78,6 +83,10 @@ export function CommunicationHub({
   conversationFilter,
   onConversationFilterChange,
   initialSection = "Chats",
+  section: controlledSection,
+  activeList,
+  onClearList,
+  queries,
   searchOpen,
   query,
   onQueryChange,
@@ -97,9 +106,13 @@ export function CommunicationHub({
   conversationFilter: ChatFilter;
   onConversationFilterChange: (filter: ChatFilter) => void;
   initialSection?: InitialSection;
+  section?: Section;
+  activeList?: PeopleListSelection | null;
+  onClearList?: () => void;
+  queries?: Record<Section, string>;
   searchOpen: boolean;
   query: string;
-  onQueryChange: (value: string) => void;
+  onQueryChange: (value: string, destination?: Section) => void;
   onSearchOpenChange: (open: boolean) => void;
   onSectionChange?: (section: Section) => void;
   newMenuOpen: boolean;
@@ -110,45 +123,70 @@ export function CommunicationHub({
   onCreateOrganizationOpenChange: (open: boolean) => void;
 }) {
   const { data, userId, act, refresh, loading, error } = useBeacon();
-  const { colors, styles, tokens } = useTheme();
+  const { colors, semanticColors, styles, tokens } = useTheme();
   const insets = useSafeAreaInsets();
   const now = useNow();
   const section: Section =
-    initialSection === "Organizations" || initialSection === "Communities"
+    controlledSection ??
+    (initialSection === "Organizations" || initialSection === "Communities"
       ? "Communities"
-      : "Chats";
-  const [communityView, setCommunityView] = useState<CommunityView>(
+      : "Chats");
+  const [communityView] = useState<CommunityView>(
     initialSection === "Organizations" ? "Organizations" : "All",
   );
   const [responsesOpen, setResponsesOpen] = useState(
     initialSection === "Pings",
   );
+  const [exploreOpen, setExploreOpen] = useState(false);
   const [trayOpen, setTrayOpen] = useState(false);
   const setRowGestureActive = useCallback(() => {}, []);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState("");
   const current = !!userId && data.viewer_id === userId;
-  const activeQuery = searchOpen ? query.trim() : "";
+  const activeQuery = (queries?.Chats ?? query).trim();
+  const communityQuery = (queries?.Communities ?? query).trim();
+  const chatList = useRef<FlashListRef<ListItem>>(null);
+  const communityList = useRef<FlashListRef<ListItem>>(null);
+  useEffect(() => {
+    chatList.current?.scrollToOffset({ offset: 0, animated: false });
+  }, [activeQuery, conversationFilter, activeList]);
+  useEffect(() => {
+    communityList.current?.scrollToOffset({ offset: 0, animated: false });
+  }, [communityQuery]);
+  const listPeople = activeList
+    ? selectListPeople(data, userId, activeList)
+    : null;
+  const listName =
+    activeList === "friends"
+      ? "Friends"
+      : activeList === "favorites"
+        ? "Favorites"
+        : (data.lists.find(
+            (row) =>
+              activeList === `custom:${row.id}` && row.owner_id === userId,
+          )?.name ?? "Private list");
   const { cards, invitations, count, summary } = usePlanningResponses(now, () =>
     setResponsesOpen(false),
   );
   const allChats = useMemo(
-    () => selectHubConversations(data, userId, now),
-    [data, now, userId],
+    () => selectHubConversations(data, userId),
+    [data, userId],
   );
   const chats = filterHubConversations(
     allChats,
     conversationFilter,
     activeQuery,
+  ).filter(
+    (row) => !listPeople || (row.kind === "friend" && listPeople.has(row.id)),
   );
-  const startFriends = selectStartChatFriends(data, userId, activeQuery);
-  const people = searchablePeople(data, userId, activeQuery);
+  const startFriends = selectStartChatFriends(
+    data,
+    userId,
+    activeQuery,
+    allChats,
+  ).filter((row) => !listPeople || listPeople.has(row.id));
   function changeSection(next: Section) {
     onSectionChange?.(next);
-    if (next !== section)
-      router.push(
-        (next === "Chats" ? "/(tabs)/squads" : "/communities") as Href,
-      );
   }
   function openCommunity(type: SocialEntityType, id: string) {
     if (!userId || data.viewer_id !== userId) return;
@@ -181,7 +219,7 @@ export function CommunicationHub({
             if (
               !role ||
               !canReadSpace(data, space.id, userId) ||
-              !matchesSearch(activeQuery, space.name, space.description)
+              !matchesSearch(communityQuery, space.name, space.description)
             )
               return [];
             return [
@@ -206,7 +244,7 @@ export function CommunicationHub({
             if (
               !role ||
               !canReadOrganization(data, org.id, userId) ||
-              !matchesSearch(activeQuery, org.name, org.description)
+              !matchesSearch(communityQuery, org.name, org.description)
             )
               return [];
             const ids = new Set(
@@ -284,8 +322,26 @@ export function CommunicationHub({
             type: "chat" as const,
             chat,
           })),
-          ...(!chats.length ? [{ key: "empty", type: "empty" as const }] : []),
-          ...(activeQuery ? [{ key: "search", type: "search" as const }] : []),
+          ...(!chats.length &&
+          !(
+            startFriends.length &&
+            (activeList ||
+              conversationFilter === "Friends" ||
+              (conversationFilter === "All" &&
+                (trayOpen || activeQuery || !allChats.length)))
+          )
+            ? [{ key: "empty", type: "empty" as const }]
+            : []),
+          ...(activeList ||
+          conversationFilter === "Friends" ||
+          (conversationFilter === "All" &&
+            (trayOpen || activeQuery || !allChats.length))
+            ? startFriends.map((person) => ({
+                key: `start:${person.id}`,
+                type: "person" as const,
+                person,
+              }))
+            : []),
         ];
   const communityItems: ListItem[] = communities.map((community) => ({
     key: `${community.type}:${community.id}`,
@@ -293,13 +349,7 @@ export function CommunicationHub({
     community,
   }));
   communityItems.push({ key: "discover", type: "discovery" });
-  const footerPadding =
-    tokens.layout.tabBarHeight + insets.bottom + tokens.layout.scrollClearance;
-  const allFriends = () =>
-    router.push({
-      pathname: "/(tabs)/squads",
-      params: { tab: "Friends", peopleLists: "yes" },
-    });
+  const footerPadding = tokens.layout.scrollClearance + insets.bottom;
 
   function renderItem(item: ListItem) {
     if (item.type === "skeleton") return <Skeleton height={72} />;
@@ -323,7 +373,6 @@ export function CommunicationHub({
                   pathname: "/squad-chat/[id]",
                   params: {
                     id: item.chat.id,
-                    ...(item.chat.pingId ? { ping: item.chat.pingId } : {}),
                   },
                 });
             } else
@@ -345,7 +394,7 @@ export function CommunicationHub({
       return (
         <ProfileLink
           title={item.community.name}
-          detail={`${communityTypeLabel(item.community.type)} · ${item.community.memberCount} members`}
+          detail={`${communityTypeLabel(item.community.type)} · ${item.community.memberCount} members${item.community.squads.length ? ` · ${item.community.squads.length} Squads` : ""}`}
           icon={
             item.community.type === "space" ? (
               <Layers3 size={22} color={colors.green} />
@@ -359,49 +408,68 @@ export function CommunicationHub({
     if (item.type === "discovery")
       return (
         <View style={{ gap: 12 }}>
-          <Text style={styles.h2}>Discover</Text>
-          <HubDirectory
-            query={activeQuery}
-            explore
-            entityType={
-              communityView === "Spaces"
-                ? "space"
-                : communityView === "Organizations"
-                  ? "organization"
-                  : "all"
-            }
-            onOpen={openCommunity}
-          />
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Explore Communities"
+            accessibilityState={{ expanded: exploreOpen }}
+            onPress={() => setExploreOpen((value) => !value)}
+            style={{
+              minHeight: 48,
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
+          >
+            <Text style={styles.h2}>Explore Communities</Text>
+            <ChevronDown size={20} color={colors.green} />
+          </Pressable>
+          {communityQuery.length === 1 ? (
+            <Txt muted>Type at least 2 characters to explore communities.</Txt>
+          ) : exploreOpen || communityQuery ? (
+            <HubDirectory
+              query={communityQuery}
+              explore
+              entityType={
+                communityView === "Spaces"
+                  ? "space"
+                  : communityView === "Organizations"
+                    ? "organization"
+                    : "all"
+              }
+              onOpen={openCommunity}
+            />
+          ) : null}
         </View>
       );
-    if (item.type === "search")
+    if (item.type === "person")
       return (
-        <View style={{ gap: 12 }}>
-          {people.length ? (
-            <View style={{ gap: 7 }}>
-              <Text style={styles.h2}>People</Text>
-              {people.map((person) => (
-                <Pressable
-                  key={person.id}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Open profile ${person.name}`}
-                  onPress={() =>
-                    router.push({
-                      pathname: "/person/[id]",
-                      params: { id: person.id },
-                    })
-                  }
-                  style={[styles.row, { minHeight: 56 }]}
-                >
-                  <ProfileAvatar profile={person} size={44} />
-                  <Text style={styles.body}>{person.name}</Text>
-                </Pressable>
-              ))}
-            </View>
-          ) : null}
-          <Text style={styles.h2}>Communities</Text>
-          <HubDirectory query={activeQuery} onOpen={openCommunity} />
-        </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Message ${item.person.name}`}
+          onPress={() =>
+            router.push({
+              pathname: "/messages/[id]",
+              params: { id: item.person.id },
+            })
+          }
+          style={{
+            minHeight: 64,
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 12,
+            borderBottomWidth: 1,
+            borderBottomColor: colors.line,
+          }}
+        >
+          <ProfileAvatar profile={item.person.profile} size={44} />
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text numberOfLines={1} style={styles.body}>
+              {item.person.name}
+            </Text>
+            <Text style={styles.muted}>Start Chat</Text>
+          </View>
+          <MessageCircle size={19} color={colors.green} />
+        </Pressable>
       );
     const isNew =
       !allChats.length && !startFriends.length && !communities.length;
@@ -421,7 +489,7 @@ export function CommunicationHub({
           {isNew
             ? "Meet people through a public Beacon, or say hello to someone you know."
             : conversationFilter === "Unread"
-              ? "No unread Squad messages."
+              ? "No unread messages."
               : "Send a hello to a friend or bring your Squad together."}
         </Txt>
         <ProfileActions>
@@ -455,179 +523,167 @@ export function CommunicationHub({
     );
   }
 
-  function chatHeader() {
+  function controls(pageName: Section) {
+    const value = queries?.[pageName] ?? query;
     return (
-      <View style={{ gap: 14, paddingBottom: 12 }}>
-        {count > 0 ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Responses & Invitations, ${count} pending`}
-            onPress={() => setResponsesOpen(true)}
-            style={({ pressed }) => ({
-              minHeight: 76,
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 12,
-              padding: 12,
-              borderRadius: 16,
-              backgroundColor: colors.white,
-              opacity: pressed ? 0.75 : 1,
-            })}
-          >
-            <View
+      <View style={{ gap: 8, paddingBottom: 10 }}>
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            borderRadius: 12,
+            backgroundColor: colors.white,
+            paddingHorizontal: 12,
+          }}
+        >
+          <TextInput
+            maxLength={pageName === "Communities" ? 80 : undefined}
+            accessibilityLabel={
+              pageName === "Chats"
+                ? "Search conversations"
+                : "Search communities"
+            }
+            placeholder={
+              pageName === "Chats"
+                ? "Search chats, friends, or squads"
+                : "Search organizations, networks, or squads"
+            }
+            placeholderTextColor={colors.muted}
+            value={value}
+            onChangeText={(value) => onQueryChange(value, pageName)}
+            style={{
+              flex: 1,
+              minWidth: 0,
+              minHeight: 44,
+              fontSize: 14,
+              color: colors.ink,
+            }}
+          />
+          {value ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Clear search"
+              onPress={() => onQueryChange("", pageName)}
               style={{
-                width: 36,
-                height: 36,
-                borderRadius: 12,
-                backgroundColor: colors.bg,
+                minWidth: 44,
+                minHeight: 44,
                 alignItems: "center",
                 justifyContent: "center",
               }}
             >
-              <Bell size={19} color={colors.green} />
-            </View>
-            <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
-              <Text style={[styles.body, { fontWeight: "700" }]}>
-                Responses & Invitations
-              </Text>
-              <Text numberOfLines={2} style={styles.muted}>
-                {summary}
-              </Text>
-            </View>
-            <View
-              style={{
-                minWidth: 24,
-                minHeight: 24,
-                borderRadius: 12,
-                paddingHorizontal: 5,
-                alignItems: "center",
-                justifyContent: "center",
-                backgroundColor: colors.lime,
-              }}
+              <Text style={styles.body}>×</Text>
+            </Pressable>
+          ) : null}
+        </View>
+        {pageName === "Chats" ? (
+          <>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ gap: 6 }}
             >
-              <Text style={[styles.label, { color: colors.ink }]}>{count}</Text>
-            </View>
-            <ChevronRight size={18} color={colors.muted} />
-          </Pressable>
-        ) : (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Responses & Invitations"
-            onPress={() => setResponsesOpen(true)}
-            style={{ minHeight: 44, justifyContent: "center" }}
-          >
-            <Text style={styles.muted}>Responses & Invitations</Text>
-          </Pressable>
-        )}
-        {startFriends.length && (trayOpen || !allChats.length || activeQuery) ? (
-          <View style={{ gap: 8 }}>
-            <View style={styles.between}>
+              {CHAT_FILTERS.map((filter) => (
+                <Pressable
+                  key={filter}
+                  accessibilityRole="button"
+                  accessibilityLabel={filter}
+                  accessibilityState={{
+                    selected: conversationFilter === filter,
+                  }}
+                  onPress={() => onConversationFilterChange(filter)}
+                  style={{
+                    minHeight: 44,
+                    paddingHorizontal: 14,
+                    justifyContent: "center",
+                    borderRadius: 22,
+                    backgroundColor:
+                      conversationFilter === filter
+                        ? semanticColors.accent
+                        : colors.white,
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.label,
+                      {
+                        color:
+                          conversationFilter === filter
+                            ? semanticColors.onAccent
+                            : colors.muted,
+                      },
+                    ]}
+                  >
+                    {filter}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+            {activeList ? (
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel={
-                  trayOpen ? "Collapse Start a chat" : "Expand Start a chat"
-                }
-                onPress={() => setTrayOpen((value) => !value)}
-                style={[styles.row, { minHeight: 44 }]}
+                accessibilityLabel={`Clear ${listName} filter`}
+                onPress={onClearList}
+                style={{
+                  alignSelf: "flex-start",
+                  minHeight: 44,
+                  paddingHorizontal: 12,
+                  justifyContent: "center",
+                  borderRadius: 14,
+                  backgroundColor: colors.white,
+                }}
               >
-                <Text style={styles.h2}>Start a chat</Text>
-                {trayOpen ? (
-                  <ChevronUp size={18} color={colors.muted} />
-                ) : (
-                  <ChevronDown size={18} color={colors.muted} />
-                )}
+                <Text style={styles.body}>{listName} ×</Text>
               </Pressable>
-              <Button
-                compact
-                secondary
-                title="See all friends"
-                onPress={allFriends}
-              />
-            </View>
-            {trayOpen ? (
-              <View style={{ gap: 4 }}>
-                {startFriends.map((person) => (
-                  <Pressable
-                    key={person.id}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Message ${person.name}`}
-                    onPress={() =>
-                      router.push({
-                        pathname: "/messages/[id]",
-                        params: { id: person.id },
-                      })
-                    }
-                    style={({ pressed }) => ({
-                      minHeight: 64,
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: 12,
-                      opacity: pressed ? 0.75 : 1,
-                    })}
-                  >
-                    <ProfileAvatar profile={person} size={44} />
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.body}>{person.name}</Text>
-                      <Text style={styles.muted}>@{person.username}</Text>
-                    </View>
-                    <MessageCircle size={19} color={colors.green} />
-                  </Pressable>
-                ))}
-              </View>
             ) : null}
-          </View>
-        ) : null}
-        {allChats.length ? (
-          <Text style={styles.h2}>Your conversations</Text>
-        ) : null}
+            {count > 0 ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Responses & Invitations, ${count} pending`}
+                onPress={() => setResponsesOpen(true)}
+                style={{
+                  minHeight: 56,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 10,
+                  backgroundColor: colors.white,
+                  borderRadius: 12,
+                  paddingHorizontal: 12,
+                }}
+              >
+                <Bell size={20} color={colors.green} />
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text numberOfLines={1} style={styles.body}>
+                    Responses & Invitations
+                  </Text>
+                  <Text numberOfLines={1} style={styles.muted}>
+                    {summary}
+                  </Text>
+                </View>
+                <Text style={{ color: colors.green, fontWeight: "700" }}>
+                  {count}
+                </Text>
+                <ChevronRight size={18} color={colors.muted} />
+              </Pressable>
+            ) : null}
+          </>
+        ) : (
+          <Text style={styles.h2}>Your Communities</Text>
+        )}
       </View>
     );
   }
   function page(pageName: Section) {
     return (
       <FlashList
+        ref={pageName === "Chats" ? chatList : communityList}
         key={pageName}
         data={pageName === "Chats" ? chatItems : communityItems}
         keyExtractor={(item) => item.key}
         renderItem={({ item }) => renderItem(item)}
         getItemType={(item) => item.type}
-        ListHeaderComponent={
-          pageName === "Chats" ? (
-            chatHeader()
-          ) : communities.length ? (
-            <Text style={[styles.h2, { paddingBottom: 12 }]}>
-              Your communities
-            </Text>
-          ) : null
-        }
-        ListFooterComponent={
-          pageName === "Chats" && communities.length > 0 && !activeQuery ? (
-            <View style={{ paddingTop: 20 }}>
-              <ProfileSection
-                title="Your communities"
-                action={
-                  <Button
-                    compact
-                    secondary
-                    title="See all communities"
-                    onPress={() => router.push("/communities" as Href)}
-                  />
-                }
-              >
-                {communities.slice(0, 2).map((community) => (
-                  <ProfileLink
-                    key={`${community.type}:${community.id}`}
-                    title={community.name}
-                    detail={communityTypeLabel(community.type)}
-                    onPress={() => openCommunity(community.type, community.id)}
-                  />
-                ))}
-              </ProfileSection>
-            </View>
-          ) : null
-        }
+        ListHeaderComponent={controls(pageName)}
         ItemSeparatorComponent={() => (
-          <View style={{ height: pageName === "Chats" ? 4 : 16 }} />
+          <View style={{ height: pageName === "Chats" ? 0 : 8 }} />
         )}
         contentContainerStyle={{
           paddingHorizontal: 16,
@@ -650,73 +706,7 @@ export function CommunicationHub({
   }
   return (
     <View style={{ flex: 1, minHeight: 0, gap: 8 }}>
-      <View style={{ paddingHorizontal: 16, gap: 8 }}>
-        {searchOpen ? (
-          <Field
-            label="Search chats, people and communities"
-            value={query}
-            onChangeText={onQueryChange}
-            placeholder="Name or message"
-          />
-        ) : null}
-        {section === "Chats" && (searchOpen || conversationFilter !== "All") ? (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={{ gap: 6 }}
-          >
-            {CHAT_FILTERS.map((filter) => (
-              <Pressable
-                key={filter}
-                accessibilityRole="button"
-                accessibilityLabel={filter}
-                accessibilityState={{ selected: conversationFilter === filter }}
-                onPress={() => onConversationFilterChange(filter)}
-                style={{
-                  minHeight: 44,
-                  paddingHorizontal: 15,
-                  borderRadius: 22,
-                  justifyContent: "center",
-                  backgroundColor:
-                    conversationFilter === filter ? colors.ink : colors.white,
-                  borderWidth: 1,
-                  borderColor: colors.line,
-                }}
-              >
-                <Text
-                  style={[
-                    styles.label,
-                    {
-                      color:
-                        conversationFilter === filter
-                          ? colors.white
-                          : colors.muted,
-                    },
-                  ]}
-                >
-                  {filter}
-                </Text>
-              </Pressable>
-            ))}
-          </ScrollView>
-        ) : section === "Communities" && searchOpen ? (
-          <SegmentedControl
-            options={(["All", "Spaces", "Organizations"] as const).map(
-              (value) => ({
-                value,
-                label:
-                  value === "Spaces"
-                    ? "Organizations"
-                    : value === "Organizations"
-                      ? "Networks"
-                      : value,
-              }),
-            )}
-            value={communityView}
-            onChange={setCommunityView}
-            accessibilityLabel="Community types"
-          />
-        ) : null}
+      <View style={{ paddingHorizontal: 16 }}>
         {error || refreshError ? (
           <View style={{ gap: 6 }}>
             <Text accessibilityRole="alert" style={styles.error}>
@@ -733,7 +723,18 @@ export function CommunicationHub({
           </View>
         ) : null}
       </View>
-      {page(section)}
+      {(["Chats", "Communities"] as const).map((destination) => (
+        <View
+          key={destination}
+          style={{
+            flex: 1,
+            minHeight: 0,
+            display: section === destination ? "flex" : "none",
+          }}
+        >
+          {page(destination)}
+        </View>
+      ))}
       <ResponsesSheet
         visible={responsesOpen}
         onClose={() => setResponsesOpen(false)}
@@ -761,21 +762,26 @@ export function CommunicationHub({
         />
       </View>
       <Sheet
-        title="Start something together"
+        title={section === "Chats" ? "New conversation" : "Create community"}
         visible={newMenuOpen}
         onClose={() => onNewMenuOpenChange(false)}
       >
-        <Button
-          title="New message"
-          onPress={() => {
-            onNewMenuOpenChange(false);
-            changeSection("Chats");
-            onConversationFilterChange("Friends");
-            setTrayOpen(true);
-            onSearchOpenChange(true);
-            onQueryChange("");
-          }}
-        />
+        {section === "Chats" ? (
+          <>
+            <Button
+              title="New message"
+              onPress={() => {
+                onNewMenuOpenChange(false);
+                changeSection("Chats");
+                onClearList?.();
+                onConversationFilterChange("Friends");
+                setTrayOpen(true);
+                onSearchOpenChange(true);
+                onQueryChange("", "Chats");
+              }}
+            />
+          </>
+        ) : null}
         <Button
           secondary
           title="Create a Squad"
@@ -784,26 +790,18 @@ export function CommunicationHub({
             createSquad();
           }}
         />
-        <Button
-          secondary
-          title="Add friend"
-          onPress={() => {
-            onNewMenuOpenChange(false);
-            findFriends();
-          }}
-        />
-        <Action
-          secondary
-          title="New Ping or Vote"
-          run={async () => {
-            onNewMenuOpenChange(false);
-            router.push("/councils");
-          }}
-        />
-        <View style={styles.row}>
-          <UsersRound size={18} color={colors.green} />
-          <Txt muted>Your groups keep their own membership and privacy.</Txt>
-        </View>
+        {section === "Chats" ? (
+          <>
+            <Button
+              secondary
+              title="Add friend"
+              onPress={() => {
+                onNewMenuOpenChange(false);
+                findFriends();
+              }}
+            />
+          </>
+        ) : null}
         {section === "Communities" ? (
           <>
             <View style={styles.row}>
@@ -821,7 +819,7 @@ export function CommunicationHub({
               <Building2 size={18} color={colors.green} />
               <Button
                 secondary
-                title="Create Super-Organization"
+                title="Create Network"
                 onPress={() => {
                   onNewMenuOpenChange(false);
                   onCreateOrganizationOpenChange(true);

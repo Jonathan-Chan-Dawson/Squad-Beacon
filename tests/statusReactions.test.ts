@@ -11,6 +11,12 @@ test("named catalog exposes supported quick choices and normalized search", () =
   assert.equal(searchStatusReactions("🏀")[0].name, "Basketball");
   assert.equal(statusReactionEmoji(undefined), "🙌");
   assert.throws(() => statusReactionEmoji("unknown"), /supported/);
+  assert.equal(statusReactionEmoji("1️⃣"), "1️⃣");
+  assert.throws(() => statusReactionEmoji("hello 🔥"), /supported/);
+  assert.throws(() => statusReactionEmoji("\n🔥"), /supported/);
+  assert.throws(() => statusReactionEmoji("🔥\n"), /supported/);
+  assert.throws(() => statusReactionEmoji("🔥🔥"), /supported/);
+  assert.throws(() => statusReactionEmoji("\u20e3"), /supported/);
 });
 test("demo status replacement/removal preserves activity and RSVP state", () => {
   let data = makeDemo();
@@ -25,11 +31,11 @@ test("demo status replacement/removal preserves activity and RSVP state", () => 
   assert.equal(data.rsvps.length, count); assert.equal(data.activities.length, 1);
 });
 
-test("demo ordinary Beacon reactions retain the legacy choice and explicit status action rejects them", () => {
+test("demo Beacon reactions preserve arbitrary chosen emojis and explicit status action stays solo-only", () => {
   const data = makeDemo();
   const activity = data.activities.find((item) => item.owner_id === DEMO_ID && item.mode !== "solo")!;
   assert.ok(activity);
   const reacted = demoAction(data, "react", { id: activity.id, emoji: STATUS_REACTIONS[3].emoji });
-  assert.equal(reacted.reactions.find((row) => row.activity_id === activity.id && row.user_id === DEMO_ID)?.emoji, STATUS_REACTIONS[0].emoji);
+  assert.equal(reacted.reactions.find((row) => row.activity_id === activity.id && row.user_id === DEMO_ID)?.emoji, STATUS_REACTIONS[3].emoji);
   assert.throws(() => demoAction(data, "react_status", { id: activity.id, emoji: STATUS_REACTIONS[3].emoji }), /solo status/);
 });

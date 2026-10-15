@@ -64,6 +64,12 @@ export type BeaconFeedLocation = {
 };
 
 export interface BeaconFeedCardProps {
+  /** Use the compact home/list treatment while keeping the same permission and RSVP callbacks. */
+  compact?: boolean;
+  /** Emphasize a confirmed personal Beacon on the home hub. */
+  featured?: boolean;
+  planRelation?: string | null;
+  compactFooter?: React.ReactNode;
   activityId: string;
   title: string;
   category: Category;
@@ -235,6 +241,10 @@ function SwipeReveal({
 }
 
 export function BeaconFeedCard({
+  compact = false,
+  featured = false,
+  planRelation,
+  compactFooter,
   activityId,
   title,
   category,
@@ -462,6 +472,33 @@ export function BeaconFeedCard({
         isSolo ||
         requestPending ||
         (!isGoing && (isClosed || full))));
+  const compactOpensActivity =
+    featured ||
+    isHost ||
+    isCancelled ||
+    isEnded ||
+    isSolo ||
+    requestPending ||
+    isGoing ||
+    full ||
+    isClosed;
+  const compactPrimaryTitle = featured
+    ? isLive
+      ? "Return to Beacon"
+      : "Open Beacon"
+    : isHost
+    ? "Manage"
+    : compactOpensActivity
+      ? isLive && isGoing
+        ? "Return"
+        : "Open"
+      : approvalRequired && !approved
+        ? "Request"
+        : "Join";
+  const onCompactPrimaryPress = () => {
+    if (compactOpensActivity) onOpen();
+    else void runRsvp("going");
+  };
 
   const onPrimaryPress = () => {
     if (isHost) {
@@ -500,14 +537,104 @@ export function BeaconFeedCard({
     <Card
       testID={`beacon-feed-card-${activityId}`}
       style={{
-        padding: tokens.space.md,
-        gap: tokens.space.md,
+        padding: compact ? tokens.space.sm : tokens.space.md,
+        gap: compact ? tokens.space.sm : tokens.space.md,
         borderLeftWidth: 4,
         borderLeftColor: categoryToken.color,
         borderRadius: tokens.radius.card,
         backgroundColor: colors.surface,
       }}
     >
+      {compact ? (
+        <>
+          <View style={{ flexDirection: "row", alignItems: "flex-start", gap: tokens.space.sm }}>
+            <ActivityBadge category={category} size={36} />
+            <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: tokens.space.xs }}>
+                <Text
+                  numberOfLines={1}
+                  style={{
+                    flex: 1,
+                    color: categoryToken.color,
+                    fontSize: tokens.type.caption.fontSize,
+                    lineHeight: tokens.type.caption.lineHeight,
+                    fontWeight: tokens.type.weight.bold,
+                    textTransform: "uppercase",
+                    letterSpacing: 0.45,
+                  }}
+                >
+                  {category}{featured ? (isLive ? " · LIVE" : " · UP NEXT") : ""}
+                </Text>
+                {isLive ? <LiveIndicator reducedMotion={reducedMotion} /> : null}
+                <Text
+                  accessibilityLabel={`${goingCount} ${goingCount === 1 ? "person" : "people"} going`}
+                  numberOfLines={1}
+                  style={{ color: colors.textSecondary, ...tokens.type.caption, fontWeight: tokens.type.weight.semibold }}
+                >
+                  {goingCount} going
+                </Text>
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`View ${title} details`}
+                onPress={onOpen}
+                onLongPress={() => {
+                  setMenuVisible(true);
+                  void uiHaptics.light();
+                }}
+                delayLongPress={450}
+                style={{ minHeight: 44, justifyContent: "center" }}
+              >
+                <Text
+                  accessibilityRole="header"
+                  numberOfLines={2}
+                  maxFontSizeMultiplier={tokens.type.denseMaxMultiplier}
+                  style={{ color: colors.textPrimary, ...tokens.type.titleSmall, fontWeight: tokens.type.weight.bold }}
+                >
+                  {title}
+                </Text>
+              </Pressable>
+            </View>
+            <IconButton label="More Beacon actions" onPress={() => setMenuVisible(true)} disabled={busyAction !== null}>
+              <MoreHorizontal size={20} color={colors.textPrimary} />
+            </IconButton>
+          </View>
+
+          {actionError ? (
+            <Text accessibilityRole="alert" accessibilityLiveRegion="polite" style={{ color: colors.danger, ...tokens.type.caption }}>
+              {actionError}
+            </Text>
+          ) : null}
+
+          <View style={{ flexDirection: "row", alignItems: "center", gap: tokens.space.sm }}>
+            <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+              <Text numberOfLines={1} style={{ color: colors.textSecondary, ...tokens.type.caption }}>
+                {[hostName, location?.label].filter(Boolean).join(" · ")}
+              </Text>
+              <Text numberOfLines={1} style={{ color: isLive ? colors.accent : colors.textSecondary, ...tokens.type.caption }}>
+                {[whenText, isHost ? "Hosting" : isGoing ? "Going" : requestPending ? "Request pending" : rsvpStatus === "interested" ? "Maybe" : "Beacon"]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </Text>
+            </View>
+            <PrimaryButton
+              compact
+              title={busyAction === "rsvp" ? "Updating…" : compactPrimaryTitle}
+              loading={busyAction === "rsvp"}
+              disabled={busyAction !== null}
+              onPress={onCompactPrimaryPress}
+              accessibilityLabel={featured ? compactPrimaryTitle : isHost ? `Manage ${title}` : compactPrimaryTitle}
+            />
+          </View>
+          {planRelation ? (
+            <Text numberOfLines={1} style={{ color: colors.textSecondary, ...tokens.type.caption }}>
+              Plan · {planRelation}
+            </Text>
+          ) : null}
+          {compactFooter}
+        </>
+      ) : (
+      <>
       <View
         style={{
           flexDirection: "row",
@@ -858,12 +985,14 @@ export function BeaconFeedCard({
           {actionError}
         </Text>
       ) : null}
+      </>
+      )}
     </Card>
   );
 
   return (
     <View style={{ gap: tokens.space.xs }}>
-      {canSwipe ? (
+      {!compact && canSwipe ? (
         <Swipeable
           ref={swipeableRef}
           enabled={canSwipe}
@@ -915,6 +1044,65 @@ export function BeaconFeedCard({
         <Text style={{ color: colors.textSecondary, ...tokens.type.secondary }}>
           {title}
         </Text>
+        {compact && !isHost && !isEnded && !isCancelled && !isSolo ? (
+          requestPending ? (
+            <SecondaryButton
+              title="Cancel request"
+              disabled={busyAction !== null}
+              onPress={() => {
+                setMenuVisible(false);
+                void runRsvp("withdraw");
+              }}
+            />
+          ) : isGoing && onChangeRSVP ? (
+            <SecondaryButton
+              title="Change RSVP"
+              disabled={busyAction !== null}
+              onPress={() => {
+                setMenuVisible(false);
+                void runAction("change", onChangeRSVP, "Could not open RSVP options.");
+              }}
+            />
+          ) : isGoing ? (
+            <SecondaryButton
+              title="I'm Out"
+              disabled={busyAction !== null}
+              onPress={() => {
+                setMenuVisible(false);
+                void runRsvp("withdraw");
+              }}
+            />
+          ) : (
+            <SecondaryButton
+              title={rsvpStatus === "interested" ? "Maybe · selected" : "Maybe"}
+              disabled={busyAction !== null || rsvpStatus === "interested"}
+              onPress={() => {
+                setMenuVisible(false);
+                void runRsvp("interested");
+              }}
+            />
+          )
+        ) : null}
+        {compact && onMap ? (
+          <SecondaryButton
+            title="View on map"
+            icon={<MapPin size={18} color={colors.textPrimary} />}
+            onPress={() => {
+              setMenuVisible(false);
+              onMap();
+            }}
+          />
+        ) : null}
+        {compact && onChat ? (
+          <SecondaryButton
+            title="Open chat"
+            icon={<MessageCircle size={18} color={colors.textPrimary} />}
+            onPress={() => {
+              setMenuVisible(false);
+              onChat();
+            }}
+          />
+        ) : null}
         <SecondaryButton
           title={saved ? "Remove from saved Beacons" : "Save Beacon"}
           icon={<Bookmark size={18} color={colors.textPrimary} />}

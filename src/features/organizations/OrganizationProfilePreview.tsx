@@ -170,15 +170,15 @@ export function OrganizationProfilePreview({
       onClose={closePreview}
       title={
         authorized
-          ? "About this Super-Organization"
-          : "Super-Organization preview"
+          ? "About this Network"
+          : "Network preview"
       }
       renderBeaconPreview={(beaconId, onBack) => (
         <BeaconProfilePreview
           beaconId={beaconId}
           onBack={onBack}
           backLabel={
-            selectedCommunity ? "Back to preview" : "Back to super-organization"
+            selectedCommunity ? "Back to preview" : "Back to network"
           }
           onOpenFullBeacon={(id) => {
             closePreview();
@@ -197,14 +197,14 @@ export function OrganizationProfilePreview({
             entityType={selectedCommunity.type}
             entityId={selectedCommunity.id}
             onBack={() => setSelectedCommunity(null)}
-            backLabel="Back to super-organization"
+            backLabel="Back to network"
             onOpenBeacon={openBeacon}
             onOpenFullProfile={openFullProfile}
           />
         ) : !authorized || !organization ? (
           <Empty
-            title="Super-Organization preview unavailable"
-            body="This super-organization is no longer available to your account."
+            title="Network preview unavailable"
+            body="This network is no longer available to your account."
           />
         ) : (
           <View style={{ gap: 14 }}>
@@ -229,7 +229,7 @@ export function OrganizationProfilePreview({
                 <Text style={styles.muted}>
                   {memberCount.toLocaleString()}{" "}
                   {memberCount === 1 ? "member" : "members"} ·
-                  Super-Organization
+                  Network
                 </Text>
                 {role ? (
                   <Text style={[styles.label, { color: colors.green }]}>
@@ -356,7 +356,7 @@ export function OrganizationProfilePreview({
               />
             </View>
             <Button
-              title="View full super-organization profile"
+              title="View full network profile"
               onPress={() => openFullProfile("organization", organizationId)}
             />
           </View>

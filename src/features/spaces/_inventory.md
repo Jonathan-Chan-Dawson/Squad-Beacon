@@ -11,3 +11,5 @@ Lightweight Squad hubs, independent of Organizations. Membership in a Space neve
 - `SpaceScreen` settings use the shared social policy controls; Space membership and each Squad roster/chat remain independent.
 
 - UI terminology: legacy Space records/routes now display as Organizations. One overview replaces permanent navigation tabs; Squads, Beacons and Members open focused routes with Back. Creation/grouping, invitations, affiliations and permission controls reuse existing actions and IDs.
+
+- Prompt 2: Organization profiles use exact safe public identities, independently authorized Squads/activity/members, expandable Network associations, virtualized focused directories, and categorized guarded settings. SpaceSquadPreview combines authorized joined context with safe discovery results.

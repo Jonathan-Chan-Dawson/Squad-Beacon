@@ -212,7 +212,7 @@ export function SocialCommunityInlinePreview({
   const description =
     organization?.description ?? space?.description ?? squad?.description ?? "";
   const type = organization
-    ? "Super-Organization"
+    ? "Network"
     : space
       ? "Organization"
       : "Squad";
@@ -258,7 +258,7 @@ export function SocialCommunityInlinePreview({
       {parentOrganization || parentSpace ? (
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`Preview ${parentOrganization ? "Super-Organization" : "Organization"} ${parentOrganization?.name ?? parentSpace?.name}`}
+          accessibilityLabel={`Preview ${parentOrganization ? "Network" : "Organization"} ${parentOrganization?.name ?? parentSpace?.name}`}
           onPress={() =>
             parentOrganization
               ? openParent({ id: parentOrganization.id, type: "organization" })

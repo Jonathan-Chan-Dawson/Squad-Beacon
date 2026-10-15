@@ -72,8 +72,11 @@ test("status emoji full migration chain preserves permission gates and request i
   await action("react", { id: statusId, emoji: "❤️" }, request);
   await action("react", { id: statusId, emoji: "🔥" }, request);
   assert.equal(await emoji(), "❤️", "same request cannot replace twice");
-  await assert.rejects(action("react_status", { id: statusId, emoji: "💩" }), /supported status reaction/i);
-  assert.equal(await emoji(), "❤️");
+  await action("react_status", { id: statusId, emoji: "💩" });
+  assert.equal(await emoji(), "💩");
+  await assert.rejects(action("react_status", { id: statusId, emoji: "hello 🔥" }), /supported reaction/i);
+  await assert.rejects(action("react_status", { id: statusId, emoji: "x".repeat(17) }), /supported reaction/i);
+  assert.equal(await emoji(), "💩");
   await assert.rejects(db.query("insert into public.reactions(activity_id,user_id,emoji) values($1,$2,'👍')", [statusId, ids.member]), /permission denied/i);
   await action("react", { id: statusId, remove: true });
   assert.equal(await emoji(), undefined);
@@ -94,7 +97,13 @@ test("status emoji full migration chain preserves permission gates and request i
   await actor("member"); await assert.rejects(action("react_status", { id: statusId }), /unavailable/i);
   await root(); await db.query("update public.activities set starts_at=now()-interval '5 minutes',ends_at=now()+interval '1 hour',mode='invite',status='scheduled' where id=$1", [statusId]);
   await actor("owner"); await assert.rejects(action("react_status", { id: statusId }), /solo status/i); await action("react", { id: statusId, emoji: "🔥" });
-  assert.equal((await db.query("select emoji from public.reactions where activity_id=$1 and user_id=$2", [statusId, ids.owner])).rows[0].emoji, "🙌", "ordinary Beacon dispatch ignores emoji");
+  assert.equal((await db.query("select emoji from public.reactions where activity_id=$1 and user_id=$2", [statusId, ids.owner])).rows[0].emoji, "🔥", "ordinary Beacon dispatch stores the selected emoji");
+  const beaconRequest = crypto.randomUUID();
+  await action("react", { id: statusId, emoji: "🫱🏻‍🫲🏿" }, beaconRequest);
+  await action("react", { id: statusId, emoji: "💡" }, beaconRequest);
+  assert.equal((await db.query("select emoji from public.reactions where activity_id=$1 and user_id=$2", [statusId, ids.owner])).rows[0].emoji, "🫱🏻‍🫲🏿", "ordinary Beacon action stores an arbitrary emoji and preserves request idempotency");
+  await action("react", { id: statusId, remove: true });
+  assert.equal((await db.query("select count(*)::int n from public.reactions where activity_id=$1 and user_id=$2", [statusId, ids.owner])).rows[0].n, 0, "ordinary Beacon reactions can be removed");
   assert.equal((await db.query("select count(*)::int n from public.activities")).rows[0].n, before);
   await db.close();
 });

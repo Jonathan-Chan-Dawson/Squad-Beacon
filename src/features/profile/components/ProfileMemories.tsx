@@ -43,6 +43,6 @@ export function ProfileMemories() {
         {memory.media_type === "video" && <Txt muted>Video{memory.duration_seconds ? ` · ${memory.duration_seconds}s` : ""}</Txt>}
       </Pressable>)}
     </ScrollView>
-    <Button title="See past Beacons" secondary onPress={() => router.push({ pathname: "/(tabs)/activities", params: { filter: "Past" } })} />
+    <Button title="See past Beacons" secondary onPress={() => router.push("/your-activity?historyExpanded=yes" as Href)} />
   </View>;
 }

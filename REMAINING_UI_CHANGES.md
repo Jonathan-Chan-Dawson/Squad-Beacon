@@ -4,6 +4,16 @@ Tracks the October 4 major product brief and later follow-ups. Implemented means
 
 Current outstanding work comes first. Completed entries retain their original validation results; older coverage and architecture notes are historical where later entries supersede them.
 
+## October 14 — Your Activity and Beacon browsing
+
+Locally implemented: the Beacons homepage has one compact featured commitment and no permanent History shortcut. Your Activity and Browse Beacons now have separate routes and datasets, compact cards, search, and chronological sections. The obsolete period tabs, pager, and inline weekly calendar were removed; legacy period links redirect to the modern destinations. Calendar scheduling remains available from the homepage header.
+
+Past Experiences collapses inline when current/upcoming commitments exist, otherwise reveals three recent entries. Search finds older history even while collapsed; Show More requests twenty additional records. Canceled, completed, and elapsed commitments have distinct labels. Existing detail, memories, tools, and Repeat flows remain the entry points for Beacon content.
+
+History uses the authenticated, permission-scoped `activity_history_page` RPC and matching demo selector. Apply `supabase/migrations/202610140002_activity_history.sql` after preceding migrations for hosted accounts. No remote migration or deployment was performed. The shared full snapshot is retained for compatibility, so paged history results do not eliminate the global download of older activities.
+
+Validation: TypeScript, zero-warning ESLint, and web export passed. All 378 app/database tests passed, followed by focused history/selector regressions. Fourteen relevant Chrome browser journeys passed across the main run and focused rerun, including 320/390px layouts, completed-history expansion/search, legacy redirects, Back, creation, saved tools, motion preferences, friend selection, Map handoff, and Routine scheduling. Mobile screenshots were inspected. Native-device acceptance is not claimed.
+
 ## Current outstanding work
 
 ### P0 — Deploy backend and Routine scheduler

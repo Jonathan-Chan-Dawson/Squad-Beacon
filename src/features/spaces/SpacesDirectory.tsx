@@ -215,7 +215,7 @@ export function SpacesDirectory({
           body={
             query.trim()
               ? "Try another name."
-              : "A Organization gathers Squads without the setup of an Super-Organization. Start small and add people when you’re ready."
+              : "An Organization gathers Squads without the setup of a Network. Start small and add people when you’re ready."
           }
         />
       )}
@@ -241,7 +241,7 @@ export function SpacesDirectory({
         <Txt muted>
           {groupExistingSquads
             ? "Choose existing Squads you manage. This creates an Organization and links them; memberships, chat, and Beacon access stay separate."
-            : "A lightweight home for Squads. No Super-Organization needed. You can add people and connect Squads later."}
+            : "A lightweight home for Squads. No Network needed. You can add people and connect Squads later."}
         </Txt>
         {groupExistingSquads ? (
           <View style={{ gap: 6 }}>

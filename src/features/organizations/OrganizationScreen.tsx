@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
+import { FlashList } from "@shopify/flash-list";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -6,18 +7,19 @@ import {
   Text,
   View,
 } from "react-native";
-import { router, useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams, useNavigation } from "expo-router";
+import {
+  usePreventRemove,
+  type NavigationAction,
+} from "expo-router/react-navigation";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ArrowUpRight, Building2, Settings2 } from "lucide-react-native";
 import { useBeacon } from "@/src/shared/store";
 import { canReadBeaconActivity } from "@/src/features/beacons/beaconModules";
 import { canOpenSquadProfile } from "@/src/features/people/squadProfile";
-import {
-  activeSpaceRole,
-  canManageSpace,
-  canReadSpace,
-} from "@/src/features/spaces/domain";
-import { SocialDirectoryResults } from "@/src/features/people/SocialDirectoryResults";
+import { canManageSpace, canReadSpace } from "@/src/features/spaces/domain";
+import { VirtualizedCommunityDirectory } from "@/src/features/people/VirtualizedCommunityDirectory";
+import { OrganizationRelatedPreview } from "./OrganizationRelatedPreview";
 import {
   ProfileActions,
   ProfileLink,
@@ -31,7 +33,11 @@ import { useNow } from "@/src/shared/useNow";
 import { matchesSearch } from "@/src/shared/search";
 import { canViewProfile } from "@/src/features/profile/privacy";
 import { SOCIAL_ROLE_RANK } from "@/src/features/social/domain";
-import { SocialPolicySettings } from "@/src/features/social/SocialPolicyControls";
+import {
+  SocialPolicyFields,
+  type SocialPolicyValue,
+} from "@/src/features/social/SocialPolicyControls";
+import { useCommunitySummary } from "@/src/features/social/CommunityProfileAccess";
 import {
   BackButton,
   IconButton,
@@ -58,17 +64,18 @@ import {
   organizationActiveMemberCount,
 } from "./domain";
 import { GroupChatThread } from "./GroupChatThread";
-import type { OrganizationMemberRole } from "./types";
+import type { Organization, OrganizationMemberRole } from "./types";
 
 const tabs = ["overview", "squads", "activity"] as const;
-type OrganizationTab = (typeof tabs)[number] | "members" | "chat" | "manage";
+type OrganizationTab = (typeof tabs)[number] | "members" | "chat" | "manage" | "directSquads";
 const tabTitle: Record<OrganizationTab, string> = {
   overview: "Overview",
   members: "Members",
-  squads: "Communities",
+  squads: "Organizations",
   activity: "Activity",
   chat: "Chat",
-  manage: "Manage",
+  manage: "Settings",
+  directSquads: "Direct Squads",
 };
 const roleOptions: OrganizationMemberRole[] = [
   "coowner",
@@ -76,6 +83,21 @@ const roleOptions: OrganizationMemberRole[] = [
   "elder",
   "member",
 ];
+const settingsSections = [
+  "details",
+  "access",
+  "members",
+  "connections",
+  "actions",
+] as const;
+type OrganizationSettingsSection = (typeof settingsSections)[number];
+const settingsSectionTitles: Record<OrganizationSettingsSection, string> = {
+  details: "Network details",
+  access: "Privacy & access",
+  connections: "Connections",
+  members: "Members & roles",
+  actions: "Actions",
+};
 const shortTime = (value: string) =>
   new Date(value).toLocaleString([], {
     weekday: "short",
@@ -87,30 +109,51 @@ const shortTime = (value: string) =>
 
 export default function OrganizationScreen() {
   const { styles, colors } = useTheme();
-  const { id, tab: queryTab } = useLocalSearchParams<{
+  const navigation = useNavigation();
+  const { id, tab: queryTab, view: queryView, section: sectionParam } = useLocalSearchParams<{
     id: string;
     tab?: string;
+    view?: string;
+    section?: string;
   }>();
   const { data, userId, act } = useBeacon();
+  const { summary: safeSummary, loading: summaryLoading } =
+    useCommunitySummary("organization", id);
   const now = useNow();
-  const organization = data.organizations.find((item) => item.id === id);
+  const organization = (data.organizations.find((item) => item.id === id)) ??
+    (safeSummary
+      ?
+      ({
+        id: safeSummary.entity_id,
+        owner_id: "",
+        name: safeSummary.name,
+        description: safeSummary.description,
+        created_at: "",
+        member_count: safeSummary.member_count,
+        discoverability: safeSummary.discoverability,
+        join_mode: safeSummary.join_mode,
+      } satisfies Organization)
+      : undefined);
+  const legacyTab = queryTab ?? queryView;
   const tab: OrganizationTab =
-    queryTab === "manage" || queryTab === "members" || queryTab === "chat"
-      ? queryTab
-      : queryTab === "home"
+    legacyTab === "manage" || legacyTab === "members" || legacyTab === "chat" || legacyTab === "directSquads" || legacyTab === "direct-squads"
+      ? legacyTab === "direct-squads" ? "directSquads" : legacyTab
+      : legacyTab === "home"
         ? "overview"
-        : queryTab === "beacons"
+        : legacyTab === "beacons"
           ? "activity"
-          : tabs.includes(queryTab as (typeof tabs)[number])
-            ? (queryTab as (typeof tabs)[number])
+          : tabs.includes(legacyTab as (typeof tabs)[number])
+            ? (legacyTab as (typeof tabs)[number])
             : "overview";
-  const [sheet, setSheet] = useState<
-    "edit" | "invite" | "attach" | "attachSpace" | "member" | null
-  >(null);
-  const [name, setName] = useState(organization?.name ?? "");
-  const [description, setDescription] = useState(
-    organization?.description ?? "",
+  const requestedSection = Array.isArray(sectionParam)
+    ? sectionParam[0]
+    : sectionParam;
+  const settingsSection = settingsSections.find(
+    (item) => item === requestedSection,
   );
+  const [sheet, setSheet] = useState<
+    "invite" | "attach" | "attachSpace" | "member" | null
+  >(null);
   const [invitee, setInvitee] = useState("");
   const [inviteRole, setInviteRole] =
     useState<OrganizationMemberRole>("member");
@@ -126,12 +169,24 @@ export default function OrganizationScreen() {
   const [squadSearch, setSquadSearch] = useState("");
   const [memberSearch, setMemberSearch] = useState("");
   const [activitySearch, setActivitySearch] = useState("");
+  const [detailsDraft, setDetailsDraft] = useState<{
+    name: string;
+    description: string;
+  } | null>(null);
+  const [policyDraft, setPolicyDraft] = useState<SocialPolicyValue | null>(null);
+  const [discardOpen, setDiscardOpen] = useState(false);
+  const [pendingDestination, setPendingDestination] = useState<
+    OrganizationSettingsSection | null | undefined
+  >(undefined);
+  const pendingRemoveAction = useRef<NavigationAction | null>(null);
+  const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
 
   const members = data.organization_members.filter(
     (member) => member.organization_id === organization?.id,
   );
+  const currentMemberAccess = summaryLoading || safeSummary?.membership_status === "active";
   const role =
-    organization && userId && canReadOrganization(data, organization.id, userId)
+    organization && userId && currentMemberAccess && canReadOrganization(data, organization.id, userId)
       ? activeOrganizationRole(
           organization,
           data.organization_members,
@@ -139,7 +194,7 @@ export default function OrganizationScreen() {
         )
       : null;
   const count = organization
-    ? (organization.member_count ??
+    ? (safeSummary?.member_count ?? organization.member_count ??
       organizationActiveMemberCount(
         organization.id,
         organization.owner_id,
@@ -150,6 +205,9 @@ export default function OrganizationScreen() {
     .filter((link) => link.organization_id === organization?.id)
     .filter((link) => canOpenSquadProfile(data, link.squad_id, userId))
     .map((link) => link.squad_id);
+  const directSquadIds = [...new Set(data.organization_squads
+    .filter((link) => link.organization_id === organization?.id)
+    .map((link) => link.squad_id))];
   const linkedSquads = data.squads.filter((squad) =>
     linkedSquadIds.includes(squad.id),
   );
@@ -161,7 +219,7 @@ export default function OrganizationScreen() {
         space &&
         userId &&
         canReadSpace(data, space.id, userId) &&
-        activeSpaceRole(space, data.space_members, userId)
+        canReadSpace(data, space.id, userId)
       );
     })
     .map((link) => link.space_id);
@@ -190,7 +248,7 @@ export default function OrganizationScreen() {
         )
     : [];
   const planning = normalizePlanningData(data);
-  const orgThreads = userId
+  const orgThreads = userId && role
     ? pendingPlanningThreads(data, planning, userId, now).filter(
         (thread) =>
           thread.audience === "organization" &&
@@ -218,44 +276,98 @@ export default function OrganizationScreen() {
       activity.title,
       activity.description ?? "",
       activity.category,
-      squadName ?? "Super-Organization",
+      squadName ?? "Network",
     );
   });
   const visibleThreads = orgThreads.filter((thread) =>
     matchesSearch(activitySearch, thread.title, thread.body, thread.kind),
   );
 
-  if (!organization || !role) {
+  const policyInitial: SocialPolicyValue = {
+    discoverability: organization?.discoverability ?? "private",
+    join_mode: organization?.join_mode ?? "invite",
+    invite_policy: organization?.invite_policy ?? "admins",
+  };
+  const detailValues = detailsDraft ?? {
+    name: organization?.name ?? "",
+    description: organization?.description ?? "",
+  };
+  const detailsDirty = !!detailsDraft && (
+    detailsDraft.name !== (organization?.name ?? "") ||
+    detailsDraft.description !== (organization?.description ?? "")
+  );
+  const policyValues = policyDraft ?? policyInitial;
+  const policyDirty = !!policyDraft && (
+    policyDraft.discoverability !== policyInitial.discoverability ||
+    policyDraft.join_mode !== policyInitial.join_mode ||
+    policyDraft.invite_policy !== policyInitial.invite_policy
+  );
+  const settingsDirty = tab === "manage" && (detailsDirty || policyDirty);
+
+  const canManageCurrentNetworkSettings =
+    role === "owner" || role === "coowner" || role === "admin";
+  usePreventRemove(settingsDirty && canManageCurrentNetworkSettings, ({ data: { action } }) => {
+    pendingRemoveAction.current = action;
+    setPendingDestination(undefined);
+    setDiscardOpen(true);
+  });
+
+  if (summaryLoading && !organization)
+    return (
+      <Screen title="Loading Network" eyebrow="">
+        <Txt muted>Loading the safe Network profile.</Txt>
+      </Screen>
+    );
+
+  const profileSummary = safeSummary ?? (
+    organization && userId && canReadOrganization(data, organization.id, userId) && summaryLoading
+      ? {
+          description: organization.description,
+          member_count: organization.member_count ?? organizationActiveMemberCount(
+            organization.id,
+            organization.owner_id,
+            members,
+          ),
+        }
+      : null
+  );
+  if (!organization || !profileSummary) {
     return (
       <Screen
-        title="Super-Organization unavailable"
-        eyebrow="SUPER-ORGANIZATIONS"
+        title="Network unavailable"
+        eyebrow="NETWORKS"
         create={false}
       >
         <Txt>
-          This super-organization is no longer available to your account.
+          This Network is no longer available to your account.
         </Txt>
         <Button
-          title="Back to super-organizations"
+          title="Back to Networks"
           onPress={() => router.replace("/organizations")}
         />
       </Screen>
     );
   }
 
-  const canManage = canManageOrganization(organization, members, userId ?? "");
-  const canManageSquads = canManageOrganizationSquads(
+  const canManage = !!role && canManageOrganization(organization, members, userId ?? "");
+  const canManageSquads = !!role && canManageOrganizationSquads(
     organization,
     members,
     userId ?? "",
   );
+  const canReadMembers = !!currentMemberAccess &&
+    canReadOrganizationMembers(data, organization.id, userId);
+  const canLeaveNetwork = !!currentMemberAccess &&
+    canLeaveOrganization(organization, members, userId ?? "");
   const canAccessManagement =
     canManage ||
     canManageSquads ||
-    canLeaveOrganization(organization, members, userId ?? "");
-  const inviteRoles = roleOptions.filter((candidate) =>
-    canInviteOrganizationRole(organization, members, userId ?? "", candidate),
-  );
+    canLeaveNetwork;
+  const inviteRoles = role
+    ? roleOptions.filter((candidate) =>
+        canInviteOrganizationRole(organization, members, userId ?? "", candidate),
+      )
+    : [];
   const activeMembers = members.filter((member) => member.status === "active");
   const directoryMembers = [
     {
@@ -294,10 +406,10 @@ export default function OrganizationScreen() {
           link.space_id === space.id,
       ) &&
       canManageSpace(data, space.id, userId) &&
-      canManageOrganization(organization, members, userId ?? ""),
+      !!role && canManageOrganization(organization, members, userId ?? ""),
   );
   const canManageLinkedSquad = (squadId: string) =>
-    canManageOrganizationSquads(organization, members, userId ?? "") &&
+    !!role && canManageOrganizationSquads(organization, members, userId ?? "") &&
     !!data.squad_members.find(
       (member) =>
         member.squad_id === squadId &&
@@ -311,6 +423,30 @@ export default function OrganizationScreen() {
       params: { id, ...(nextTab === "overview" ? {} : { tab: nextTab }) },
     });
   }
+  function navigateSettings(section?: OrganizationSettingsSection) {
+    router.setParams({ id, tab: "manage", section: section ?? "" });
+  }
+  function requestSettings(section?: OrganizationSettingsSection) {
+    if (settingsDirty) {
+      setPendingDestination(section ?? null);
+      setDiscardOpen(true);
+      return;
+    }
+    navigateSettings(section);
+  }
+  function confirmDiscardSettings() {
+    const destination = pendingDestination;
+    const action = pendingRemoveAction.current;
+    setDiscardOpen(false);
+    setDetailsDraft(null);
+    setPolicyDraft(null);
+    setPendingDestination(undefined);
+    pendingRemoveAction.current = null;
+    setTimeout(() => {
+      if (destination !== undefined) navigateSettings(destination ?? undefined);
+      else if (action) navigation.dispatch(action);
+    }, 0);
+  }
   function openInvite() {
     setInvitee("");
     setInviteRole(inviteRoles.at(-1) ?? "member");
@@ -322,11 +458,6 @@ export default function OrganizationScreen() {
     setSelectedMember(memberId);
     setMemberRole(member.role);
     setSheet("member");
-  }
-  function openEdit() {
-    setName(organization?.name ?? "");
-    setDescription(organization?.description ?? "");
-    setSheet("edit");
   }
   function viewPerson(personId: string) {
     const profile = data.profiles.find((row) => row.id === personId);
@@ -386,7 +517,7 @@ export default function OrganizationScreen() {
           accessibilityLabel={
             canManage
               ? `Manage ${memberName(member.user_id)}`
-              : `Super-Organization member ${memberName(member.user_id)}`
+              : `Network member ${memberName(member.user_id)}`
           }
           onPress={() => {
             if (canManage) openMember(member.user_id);
@@ -428,7 +559,7 @@ export default function OrganizationScreen() {
           ban.organization_id === organization.id && ban.user_id === profile.id,
       ),
   );
-  const nextRoleOptions = roleOptions.filter((candidate) =>
+  const nextRoleOptions = role ? roleOptions.filter((candidate) =>
     canChangeOrganizationMemberRole(
       organization,
       members,
@@ -436,7 +567,7 @@ export default function OrganizationScreen() {
       selectedMember,
       candidate,
     ),
-  );
+  ) : [];
   const manageableMember = members.find(
     (member) => member.user_id === selectedMember,
   );
@@ -458,43 +589,46 @@ export default function OrganizationScreen() {
   const managementSheets = (
     <>
       <Sheet
-        title="Super-Organization details"
-        visible={sheet === "edit"}
-        onClose={() => setSheet(null)}
+        title="Discard settings changes?"
+        visible={discardOpen}
+        onClose={() => {
+          setDiscardOpen(false);
+          setPendingDestination(undefined);
+          pendingRemoveAction.current = null;
+        }}
       >
-        <Field
-          label="Name"
-          value={name}
-          onChangeText={setName}
-          maxLength={60}
-        />
-        <Field
-          label="Description"
-          value={description}
-          onChangeText={setDescription}
-          maxLength={500}
-          multiline
-        />
-        <Action
-          title="Save details"
-          run={async () => {
-            await act("update_organization", {
-              organization_id: organization.id,
-              name: name.trim(),
-              description: description.trim(),
-            });
-            setSheet(null);
-          }}
-        />
+        <View style={{ gap: 10 }}>
+          <Txt>Your Network settings have unsaved changes.</Txt>
+          <Button secondary title="Keep editing" onPress={() => setDiscardOpen(false)} />
+          <Button title="Discard changes" onPress={confirmDiscardSettings} />
+        </View>
+      </Sheet>
+      <Sheet
+        title="Leave this Network?"
+        visible={leaveConfirmOpen}
+        onClose={() => setLeaveConfirmOpen(false)}
+      >
+        <View style={{ gap: 10 }}>
+          <Txt>You will lose access to member-only settings and private activity.</Txt>
+          <Button secondary title="Cancel" onPress={() => setLeaveConfirmOpen(false)} />
+          <Action
+            title="Leave Network"
+            run={async () => {
+              await act("leave_organization", { organization_id: organization.id });
+              setLeaveConfirmOpen(false);
+              router.replace("/organizations");
+            }}
+          />
+        </View>
       </Sheet>
       <Sheet
         title="Invite someone"
-        visible={sheet === "invite"}
+        visible={sheet === "invite" && inviteRoles.length > 0}
         onClose={() => setSheet(null)}
       >
         {!inviteRoles.length ? (
           <Txt muted>
-            Your current role cannot invite super-organization members.
+            Your current role cannot invite Network members.
           </Txt>
         ) : (
           <>
@@ -538,7 +672,7 @@ export default function OrganizationScreen() {
       </Sheet>
       <Sheet
         title="Link a Squad"
-        visible={sheet === "attach"}
+        visible={sheet === "attach" && canManageSquads}
         onClose={() => setSheet(null)}
       >
         <Txt muted>
@@ -572,7 +706,7 @@ export default function OrganizationScreen() {
       </Sheet>
       <Sheet
         title="Link an Organization"
-        visible={sheet === "attachSpace"}
+        visible={sheet === "attachSpace" && canManage}
         onClose={() => setSheet(null)}
       >
         <Txt muted>
@@ -608,13 +742,13 @@ export default function OrganizationScreen() {
       </Sheet>
       <Sheet
         title={`Manage ${memberName(selectedMember)}`}
-        visible={sheet === "member"}
+        visible={sheet === "member" && !!role && canManageOrganizationMember(organization, members, userId ?? "", selectedMember)}
         onClose={() => setSheet(null)}
       >
         {manageableMember && nextRoleOptions.length > 0 && (
           <>
             <Txt muted>
-              Set a role below your own. The super-organization owner cannot be
+              Set a role below your own. The Network owner cannot be
               changed.
             </Txt>
             <Chips
@@ -644,7 +778,7 @@ export default function OrganizationScreen() {
           <>
             <Action
               secondary
-              title="Remove from super-organization"
+              title="Remove from Network"
               run={async () => {
                 await act("remove_organization_member", {
                   organization_id: organization.id,
@@ -655,7 +789,7 @@ export default function OrganizationScreen() {
             />
             <Action
               secondary
-              title="Ban from super-organization"
+              title="Ban from Network"
               run={async () => {
                 await act("ban_organization_member", {
                   organization_id: organization.id,
@@ -688,18 +822,18 @@ export default function OrganizationScreen() {
               >
                 <Building2 size={25} color={colors.green} />
               </View>
-              <View style={{ flex: 1, gap: 3 }}>
-                <Text style={styles.h2}>{count.toLocaleString()} members</Text>
+              <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
+                <Text style={styles.h2} numberOfLines={2}>{organization.name}</Text>
+                <Text style={styles.body}>{profileSummary.member_count.toLocaleString()} members</Text>
                 <Txt muted>
-                  Joined ·{" "}
-                  {role === "coowner"
-                    ? "Co-owner"
-                    : role[0].toUpperCase() + role.slice(1)}
+                  {role
+                    ? `Joined · ${role === "coowner" ? "Co-owner" : role[0].toUpperCase() + role.slice(1)}`
+                    : "Network profile"}
                 </Txt>
               </View>
             </View>
-            {organization.description ? (
-              <Txt>{organization.description}</Txt>
+            {profileSummary.description.trim() ? (
+              <Text style={styles.muted} numberOfLines={2}>{profileSummary.description}</Text>
             ) : null}
             <ProfileActions>
               <Button
@@ -707,44 +841,41 @@ export default function OrganizationScreen() {
                 title="Browse Organizations"
                 onPress={() => selectTab("squads")}
               />
-              <Button
-                compact
-                secondary
-                title="Chat"
-                onPress={() => selectTab("chat")}
-              />
+              {role ? (
+                <Button
+                  compact
+                  secondary
+                  title="Chat"
+                  onPress={() => selectTab("chat")}
+                />
+              ) : null}
             </ProfileActions>
           </View>
-          {linkedSpaces.length || linkedSquads.length ? (
-            <ProfileSection title="Your communities">
-              {linkedSpaces.slice(0, 3).map((space) => (
+          <ProfileSection title="Organizations in this Network">
+            <OrganizationRelatedPreview
+              organizationId={organization.id}
+              entityType="space"
+            />
+            <ProfileLink
+              title="View All Organizations"
+              detail="Open the full linked Organization directory"
+              onPress={() => selectTab("squads")}
+            />
+          </ProfileSection>
+          {(directSquadIds.length > 0 || canManageSquads) ? (
+            <ProfileSection title="Squads directly linked to this Network">
+              <Txt muted>Direct links create association only. Squad membership and chat remain separate.</Txt>
+              <OrganizationRelatedPreview
+                organizationId={organization.id}
+                entityType="squad"
+              />
+              {directSquadIds.length ? (
                 <ProfileLink
-                  key={space.id}
-                  title={space.name}
-                  detail="Organization"
-                  onPress={() =>
-                    router.push({
-                      pathname: "/space/[id]",
-                      params: { id: space.id },
-                    })
-                  }
+                  title="View direct Squads"
+                  detail="Open the full linked Squad directory"
+                  onPress={() => selectTab("directSquads")}
                 />
-              ))}
-              {linkedSquads
-                .slice(0, Math.max(0, 3 - linkedSpaces.length))
-                .map((squad) => (
-                  <ProfileLink
-                    key={squad.id}
-                    title={squad.name}
-                    detail="Squad"
-                    onPress={() =>
-                      router.push({
-                        pathname: "/squad/[id]",
-                        params: { id: squad.id },
-                      })
-                    }
-                  />
-                ))}
+              ) : null}
             </ProfileSection>
           ) : null}
           {organizationActivities.some(
@@ -808,29 +939,52 @@ export default function OrganizationScreen() {
             detail={`${count.toLocaleString()} members`}
             onPress={() => selectTab("members")}
           />
+          {profileSummary.description.trim() ? (
+            <ProfileSection title="About">
+              <Txt>{profileSummary.description}</Txt>
+            </ProfileSection>
+          ) : null}
         </View>
       )}
 
-      {tab === "members" && (
-        <View style={{ gap: 10 }}>
-          <View style={styles.between}>
-            <View>
-              <Text style={styles.h2}>{count.toLocaleString()} members</Text>
-              <Text style={styles.muted}>Active members</Text>
+      {tab === "members" && !canReadMembers ? (
+        <Empty
+          title="Members are private"
+          body="Join this Network to view its member directory."
+        />
+      ) : tab === "members" && (
+        <FlashList
+          style={{ flex: 1, minHeight: 0 }}
+          data={memberSearch.trim() ? visibleMemberRows : directoryMembers}
+          keyExtractor={(member) => member.user_id}
+          ListHeaderComponent={
+            <View style={{ gap: 10, paddingBottom: 10 }}>
+              <View style={styles.between}>
+                <View>
+                  <Text style={styles.h2}>{count.toLocaleString()} members</Text>
+                  <Text style={styles.muted}>Active members</Text>
+                </View>
+                {inviteRoles.length > 0 && (
+                  <Button compact title="+ Invite" onPress={openInvite} />
+                )}
+              </View>
+              <Field
+                label="Search visible member names"
+                placeholder="Name"
+                value={memberSearch}
+                onChangeText={setMemberSearch}
+              />
             </View>
-            {inviteRoles.length > 0 && (
-              <Button compact title="+ Invite" onPress={openInvite} />
-            )}
-          </View>
-          <Field
-            label="Search visible member names"
-            placeholder="Name"
-            value={memberSearch}
-            onChangeText={setMemberSearch}
-          />
-          {peopleRows(
-            memberSearch.trim() ? visibleMemberRows : directoryMembers,
-          )}
+          }
+          renderItem={({ item }) => peopleRows([item])[0]}
+          ListEmptyComponent={
+            <Empty
+              title={memberSearch.trim() ? "No matching members" : "No visible members"}
+              body="Member profiles are shown here when they are visible to you."
+            />
+          }
+          ListFooterComponent={
+            <View style={{ gap: 10, paddingTop: 10 }}>
           {invitedMembers.length > 0 && (
             <>
               <Text style={styles.label}>INVITATIONS</Text>
@@ -940,137 +1094,48 @@ export default function OrganizationScreen() {
                   ))}
               </>
             )}
-        </View>
+            </View>
+          }
+        />
       )}
 
-      {tab === "squads" && (
-        <View style={{ gap: 10 }}>
+      {(tab === "squads" || tab === "directSquads") && (
+        <View style={{ flex: 1, minHeight: 0, gap: 8 }}>
           <View style={styles.between}>
-            <View style={{ flex: 1, gap: 4 }}>
-              <Text style={styles.h2}>Communities you can access</Text>
+            <View style={{ flex: 1, gap: 3 }}>
+              <Text style={styles.h2}>
+                {tab === "squads" ? "Organizations in this Network" : "Squads directly linked to this Network"}
+              </Text>
               <Txt muted>
-                Search linked Squads you can access. Linking never grants roster
-                or private-chat access.
+                {tab === "squads"
+                  ? "Their members and activity remain independent."
+                  : "These associations do not grant Squad membership or access to private content."}
               </Txt>
             </View>
-            <View style={{ flexDirection: "row", gap: 6 }}>
-              {canManage && (
-                <Button
-                  compact
-                  secondary
-                  title="+ Organization"
-                  onPress={() => {
-                    setSelectedSpace("");
-                    setSheet("attachSpace");
-                  }}
-                />
-              )}
-              {canManageSquads && (
-                <Button
-                  compact
-                  title="+ Squad"
-                  onPress={() => {
-                    setSelectedSquad("");
-                    setSheet("attach");
-                  }}
-                />
-              )}
-            </View>
+            {tab === "squads" && canManage ? (
+              <Button compact secondary title="+ Organization" onPress={() => { setSelectedSpace(""); setSheet("attachSpace"); }} />
+            ) : tab === "directSquads" && canManageSquads ? (
+              <Button compact title="+ Squad" onPress={() => { setSelectedSquad(""); setSheet("attach"); }} />
+            ) : null}
           </View>
           <Field
-            label={`Search ${organization.name}`}
-            placeholder="Organizations, Squads, Beacons, or members"
+            label={tab === "squads" ? "Search Organizations" : "Search direct Squads"}
+            placeholder={tab === "squads" ? "Organization name or description" : "Squad name or description"}
             value={squadSearch}
-            onChangeText={(value) => {
-              setSquadSearch(value);
-              setMemberSearch(value);
-            }}
+            onChangeText={setSquadSearch}
           />
-          <SocialDirectoryResults
+          <VirtualizedCommunityDirectory
             query={squadSearch}
+            queryLabel={tab === "squads" ? "Organizations linked directly to this Network" : "Network-linked Squads are a separate association"}
+            entityType={tab === "squads" ? "space" : "squad"}
             parentType="organization"
             parentId={organization.id}
-            onOpenSquad={setPreviewSquadId}
-            onOpenSpace={setPreviewSpaceId}
-            onOpenOrganization={() => {}}
+            allowedEntityIds={tab === "directSquads" ? directSquadIds : undefined}
+            onOpen={(summary) => {
+              if (summary.entity_type === "space") setPreviewSpaceId(summary.entity_id);
+              else if (summary.entity_type === "squad") setPreviewSquadId(summary.entity_id);
+            }}
           />
-          {!!squadSearch.trim() &&
-            canReadOrganizationMembers(data, organization.id, userId) && (
-              <View style={{ gap: 8 }}>
-                <Text style={styles.label}>MEMBERS</Text>
-                {visibleMemberRows
-                  .filter((member) => {
-                    const profile = data.profiles.find(
-                      (row) => row.id === member.user_id,
-                    );
-                    return !!(
-                      profile &&
-                      userId &&
-                      canViewProfile(data, profile, userId)
-                    );
-                  })
-                  .map((member) => (
-                    <Pressable
-                      key={member.user_id}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Preview member ${memberName(member.user_id)}`}
-                      onPress={() => viewPerson(member.user_id)}
-                      style={[styles.row, { minHeight: 48 }]}
-                    >
-                      <Text style={[styles.body, { flex: 1 }]}>
-                        {memberName(member.user_id)}
-                      </Text>
-                      <Text style={styles.muted}>
-                        {member.user_id === organization.owner_id
-                          ? "Owner"
-                          : member.role}
-                      </Text>
-                    </Pressable>
-                  ))}
-              </View>
-            )}
-          {canManageSquads && (
-            <View style={{ gap: 8 }}>
-              <Text style={styles.label}>YOUR CONNECTED COMMUNITIES</Text>
-              {linkedSpaces.map((space) => (
-                <View key={space.id} style={[styles.card, styles.row]}>
-                  <Text style={[styles.body, { flex: 1 }]}>{space.name}</Text>
-                  {canManageOrganization(organization, members, userId ?? "") &&
-                    canManageSpace(data, space.id, userId) && (
-                      <Action
-                        compact
-                        secondary
-                        title="Unlink"
-                        run={() =>
-                          act("detach_organization_space", {
-                            organization_id: organization.id,
-                            space_id: space.id,
-                          })
-                        }
-                      />
-                    )}
-                </View>
-              ))}
-              {linkedSquads.map((squad) => (
-                <View key={squad.id} style={[styles.card, styles.row]}>
-                  <Text style={[styles.body, { flex: 1 }]}>{squad.name}</Text>
-                  {canManageLinkedSquad(squad.id) && (
-                    <Action
-                      compact
-                      secondary
-                      title="Unlink"
-                      run={() =>
-                        act("detach_organization_squad", {
-                          organization_id: organization.id,
-                          squad_id: squad.id,
-                        })
-                      }
-                    />
-                  )}
-                </View>
-              ))}
-            </View>
-          )}
         </View>
       )}
 
@@ -1078,34 +1143,38 @@ export default function OrganizationScreen() {
         <View style={{ gap: 10 }}>
           <View style={styles.between}>
             <View style={{ flex: 1, gap: 4 }}>
-              <Text style={styles.h2}>Super-Organization activity</Text>
+          <Text style={styles.h2}>Network activity</Text>
               <Txt muted>
-                Super-Organization Beacons and Pings live here. Squad activity
+                Network Beacons and Pings live here. Squad activity
                 stays in each Squad.
               </Txt>
             </View>
+            {role ? (
+              <Button
+                compact
+                title="+ Beacon"
+                onPress={() =>
+                  router.push({
+                    pathname: "/create",
+                    params: { organizationId: organization.id },
+                  })
+                }
+              />
+            ) : null}
+          </View>
+          {role ? (
             <Button
               compact
-              title="+ Beacon"
+              secondary
+              title="+ Ping"
               onPress={() =>
                 router.push({
-                  pathname: "/create",
+                  pathname: "/councils",
                   params: { organizationId: organization.id },
                 })
               }
             />
-          </View>
-          <Button
-            compact
-            secondary
-            title="+ Ping"
-            onPress={() =>
-              router.push({
-                pathname: "/councils",
-                params: { organizationId: organization.id },
-              })
-            }
-          />
+          ) : null}
           <Field
             label="Search activity"
             placeholder="Beacon, Ping, category, or Squad"
@@ -1143,7 +1212,7 @@ export default function OrganizationScreen() {
                 <View style={{ flex: 1, gap: 4 }}>
                   <Text style={styles.h2}>{activity.title}</Text>
                   <Text style={styles.muted}>
-                    Super-Organization Beacon · {shortTime(activity.starts_at)}
+                    Network Beacon · {shortTime(activity.starts_at)}
                   </Text>
                 </View>
                 <ArrowUpRight size={18} color={colors.green} />
@@ -1156,7 +1225,7 @@ export default function OrganizationScreen() {
           {!organizationActivities.length && !orgThreads.length ? (
             <Empty
               title="Nothing planned yet"
-              body="Use the audience picker when creating a Beacon or Ping to share it with this super-organization."
+              body="Use the audience picker when creating a Beacon or Ping to share it with this Network."
             />
           ) : visibleActivities.length === 0 && visibleThreads.length === 0 ? (
             <Empty
@@ -1168,87 +1237,123 @@ export default function OrganizationScreen() {
       )}
 
       {tab === "manage" && (
-        <View style={{ gap: 10 }}>
-          <Text style={styles.h2}>Super-Organization management</Text>
-          <Txt muted>
-            Member administration, details, and membership actions live here.
-            Squad rosters stay private to their members.
-          </Txt>
-          <Button
-            secondary
-            title="Members, invitations &amp; bans"
-            onPress={() => selectTab("members")}
-          />
-          {canManage && (
-            <Button
-              title="Edit super-organization details"
-              onPress={openEdit}
-            />
-          )}
-          {canManage && (
-            <View style={[styles.card, { gap: 10 }]}>
-              <Text style={styles.h2}>Access & membership</Text>
-              <SocialPolicySettings
-                key={`${organization.id}:${organization.discoverability ?? "private"}:${organization.join_mode ?? "invite"}:${organization.invite_policy ?? "admins"}`}
-                entityType="organization"
-                initial={{
-                  discoverability: organization.discoverability ?? "private",
-                  join_mode: organization.join_mode ?? "invite",
-                  invite_policy: organization.invite_policy ?? "admins",
-                }}
-                onSave={(policy) =>
-                  act("set_social_policy", {
-                    entity_type: "organization",
-                    entity_id: organization.id,
-                    ...policy,
-                  })
-                }
-              />
+        settingsSection === "details" ? (
+          <View style={{ gap: 10 }}>
+            <Text style={styles.h2}>Network details</Text>
+            {canManage ? (
+              <>
+                <Field label="Name" value={detailValues.name} maxLength={60} onChangeText={(value) => setDetailsDraft({ ...detailValues, name: value })} />
+                <Field label="Description" value={detailValues.description} maxLength={500} multiline onChangeText={(value) => setDetailsDraft({ ...detailValues, description: value })} />
+                <Action
+                  title="Save details"
+                  disabled={!detailsDirty || !detailValues.name.trim()}
+                  run={async () => {
+                    if (!detailValues.name.trim()) throw new Error("Give this Network a name.");
+                    await act("update_organization", {
+                      organization_id: organization.id,
+                      name: detailValues.name.trim(),
+                      description: detailValues.description.trim(),
+                    });
+                    setDetailsDraft(null);
+                    navigateSettings();
+                  }}
+                />
+              </>
+            ) : <Txt muted>Only Network owners, co-owners, and admins can edit these details.</Txt>}
+            <Button secondary title="Cancel" onPress={() => { setDetailsDraft(null); navigateSettings(); }} />
+          </View>
+        ) : settingsSection === "access" ? (
+          <View style={{ gap: 10 }}>
+            <Text style={styles.h2}>Access & membership</Text>
+            {canManage ? (
+              <>
+                <SocialPolicyFields value={policyValues} onChange={setPolicyDraft} />
+                <Action
+                  title="Save access settings"
+                  disabled={!policyDirty}
+                  run={async () => {
+                    await act("set_social_policy", {
+                      entity_type: "organization",
+                      entity_id: organization.id,
+                      ...policyValues,
+                    });
+                    setPolicyDraft(null);
+                    navigateSettings();
+                  }}
+                />
+              </>
+            ) : <Txt muted>Only Network owners, co-owners, and admins can edit access settings.</Txt>}
+            <Button secondary title="Cancel" onPress={() => { setPolicyDraft(null); navigateSettings(); }} />
+          </View>
+        ) : settingsSection === "connections" ? (
+          <View style={{ gap: 10 }}>
+            <Text style={styles.h2}>Connections</Text>
+            <Txt muted>Linked Organizations and direct Squad associations remain separate from membership and ownership.</Txt>
+            {canManageSquads ? <Button secondary title="Link a Squad" onPress={() => { setSelectedSquad(""); setSheet("attach"); }} /> : null}
+            {canManage ? <Button secondary title="Link an Organization" onPress={() => { setSelectedSpace(""); setSheet("attachSpace"); }} /> : null}
+            {linkedSquads.map((squad) => (
+              <View key={`squad:${squad.id}`} style={styles.card}>
+                <ProfileLink title={squad.name} detail="Direct Squad association" onPress={() => setPreviewSquadId(squad.id)} />
+                {canManageLinkedSquad(squad.id) ? (
+                  <Action compact secondary title={`Unlink ${squad.name}`} run={() => act("detach_organization_squad", { organization_id: organization.id, squad_id: squad.id })} />
+                ) : null}
+              </View>
+            ))}
+            {linkedSpaces.map((space) => (
+              <View key={`space:${space.id}`} style={styles.card}>
+                <ProfileLink title={space.name} detail="Linked Organization" onPress={() => setPreviewSpaceId(space.id)} />
+                {canManage ? (
+                  <Action compact secondary title={`Unlink ${space.name}`} run={() => act("detach_organization_space", { organization_id: organization.id, space_id: space.id })} />
+                ) : null}
+              </View>
+            ))}
+            <Button secondary title="Browse Organizations and direct Squads" onPress={() => selectTab("squads")} />
+          </View>
+        ) : settingsSection === "members" ? (
+          <View style={{ gap: 10 }}>
+            <Text style={styles.h2}>Members & invitations</Text>
+            {canReadMembers ? <Button title="Manage members, requests & bans" onPress={() => selectTab("members")} /> : null}
+            {inviteRoles.length ? <Button secondary title="Invite a member" onPress={openInvite} /> : null}
+            {!canReadMembers && !inviteRoles.length ? <Txt muted>Member administration is only visible to eligible Network members.</Txt> : null}
+          </View>
+        ) : settingsSection === "actions" ? (
+          <View style={{ gap: 10 }}>
+            <Text style={styles.h2}>Actions</Text>
+            {canLeaveNetwork ? (
+              <Button secondary title="Leave Network" onPress={() => setLeaveConfirmOpen(true)} />
+            ) : <Txt muted>{role === "owner" ? "The owner role stays with the Network owner." : "There is no membership action available for this account."}</Txt>}
+          </View>
+        ) : (
+          <View style={{ gap: 10 }}>
+            <View style={styles.card}>
+              <Text style={styles.h2}>Network settings</Text>
+              <Txt muted>{role ? `Your role: ${role === "coowner" ? "Co-owner" : role}` : "Public profile settings"}</Txt>
             </View>
-          )}
-          {inviteRoles.length > 0 && (
-            <Button secondary title="Invite a member" onPress={openInvite} />
-          )}
-          {canManageSquads && (
-            <Button
-              secondary
-              title="Link a Squad"
-              onPress={() => {
-                setSelectedSquad("");
-                setSheet("attach");
-              }}
-            />
-          )}
-          {canManage && (
-            <Button
-              secondary
-              title="Link an Organization"
-              onPress={() => {
-                setSelectedSpace("");
-                setSheet("attachSpace");
-              }}
-            />
-          )}
-          {canLeaveOrganization(organization, members, userId ?? "") && (
-            <Action
-              secondary
-              title="Leave super-organization"
-              run={() =>
-                act("leave_organization", { organization_id: organization.id })
-              }
-            />
-          )}
-          {role === "owner" && (
-            <Txt muted>
-              The owner role is permanent. Transfer support is not available.
-            </Txt>
-          )}
-        </View>
+            {settingsSections.filter((section) =>
+                    section === "details" || section === "access" ? canManage :
+                section === "connections" ? canManage || canManageSquads :
+                  section === "members" ? canReadMembers || inviteRoles.length > 0 :
+                    canLeaveNetwork,
+            ).map((section) => (
+              <ProfileLink key={section} title={settingsSectionTitles[section]} onPress={() => requestSettings(section)} />
+            ))}
+          </View>
+        )
       )}
     </>
   );
 
   if (tab === "chat") {
+    if (!role) {
+      return (
+        <Screen title="Chat unavailable" eyebrow={organization.name} create={false}>
+          <Empty
+            title="Network chat is for active members"
+            body="This profile only shows chat access to current Network members."
+          />
+        </Screen>
+      );
+    }
     return (
       <SafeAreaView edges={["top", "bottom"]} style={styles.screen}>
         <KeyboardAvoidingView
@@ -1259,13 +1364,13 @@ export default function OrganizationScreen() {
             <View style={styles.between}>
               <BackButton />
               <View style={{ flex: 1, gap: 5 }}>
-                <Text style={styles.label}>SUPER-ORGANIZATION CHAT</Text>
+                <Text style={styles.label}>NETWORK CHAT</Text>
                 <Text style={styles.h2}>{organization.name}</Text>
               </View>
               {canAccessManagement && (
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel="More super-organization options"
+                  accessibilityLabel="More Network options"
                   onPress={() => selectTab("manage")}
                   style={{ padding: 10 }}
                 >
@@ -1286,20 +1391,40 @@ export default function OrganizationScreen() {
   return (
     <>
       <Screen
-        title={tab === "overview" ? organization.name : tabTitle[tab]}
-        eyebrow={tab === "overview" ? "SUPER-ORGANIZATION" : organization.name}
+        title={
+          tab === "manage"
+            ? settingsSection
+              ? settingsSectionTitles[settingsSection]
+              : "Settings"
+            : tab === "overview"
+              ? "Network"
+              : tabTitle[tab]
+        }
+        eyebrow={tab === "overview" ? "" : organization.name}
         showDemoNotice={false}
         create={false}
+        scroll={tab !== "members" && tab !== "squads" && tab !== "directSquads"}
+        compactHeader={
+          tab === "members" || tab === "squads" || tab === "directSquads" ||
+          (tab === "manage" && !!settingsSection)
+        }
         headerAction={
           <View style={{ flexDirection: "row", alignItems: "center" }}>
-            {canAccessManagement && (
+            {canAccessManagement && tab === "manage" && settingsSection ? (
               <IconButton
-                label="Community settings"
+                label="Back to Network settings"
+                onPress={() => requestSettings(undefined)}
+              >
+                <Settings2 size={20} color={colors.green} />
+              </IconButton>
+            ) : canAccessManagement ? (
+              <IconButton
+                label="Network settings"
                 onPress={() => selectTab("manage")}
               >
                 <Settings2 size={20} color={colors.green} />
               </IconButton>
-            )}
+            ) : null}
           </View>
         }
       >

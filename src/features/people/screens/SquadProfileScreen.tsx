@@ -1,9 +1,10 @@
 import { CommunityAvatar } from "../components/CommunityAvatar";
 import { SquadIconPicker } from "../components/SquadIconPicker";
-import React, { useEffect, useId, useState } from "react";
-import { Platform, Pressable, Text, View } from "react-native";
-import { router, useLocalSearchParams } from "expo-router";
-import * as SecureStore from "expo-secure-store";
+import React, { useEffect, useId, useRef, useState } from "react";
+import { Pressable, ScrollView, Text, View } from "react-native";
+import { FlashList } from "@shopify/flash-list";
+import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
+import { usePreventRemove } from "expo-router/react-navigation";
 import {
   CalendarClock,
   Check,
@@ -13,6 +14,7 @@ import {
   MessageCircle,
   Settings2,
   Vote,
+  Layers3,
 } from "lucide-react-native";
 import {
   ProfileActions,
@@ -28,9 +30,15 @@ import {
   canInviteWithPolicy,
   SOCIAL_ROLE_RANK,
 } from "@/src/features/social/domain";
-import { SocialPolicySettings } from "@/src/features/social/SocialPolicyControls";
+import {
+  SocialPolicyFields,
+  type SocialPolicyValue,
+} from "@/src/features/social/SocialPolicyControls";
+import {
+  RelationshipDisclosure,
+  useCommunitySummary,
+} from "@/src/features/social/CommunityProfileAccess";
 import type { SocialMemberRole } from "@/src/features/social/types";
-import { visibleSquadSpace } from "@/src/features/spaces/domain";
 import { useBeacon } from "@/src/shared/store";
 import {
   Action,
@@ -45,43 +53,77 @@ import {
   useTheme,
 } from "@/src/shared/ui";
 import {
-  activeSquadDecision,
+  squadProfilePreviews,
+  publicSquadBeaconPreviews,
   canOpenSquadProfile,
-  squadCurrentAndNextActivities,
   squadHistory,
-  squadPlans,
   squadSizeLabel,
   visibleSquadMembers,
-  visibleSquadOrganization,
+  visibleSquadOrganizations,
+  visibleSquadNetworks,
 } from "../squadProfile";
 
 const tabs = ["Overview", "Members", "Activity", "Settings", "Invite"] as const;
 type SquadTab = (typeof tabs)[number];
+const settingsCategories = [
+  "appearance",
+  "details",
+  "policy",
+  "members",
+  "connections",
+  "actions",
+] as const;
+type SettingsCategory = (typeof settingsCategories)[number];
+type PendingMemberAction = {
+  kind: "approve" | "decline" | "remove" | "leave";
+  userId: string;
+  name: string;
+};
+
+const settingsCategoryLabels: Record<SettingsCategory, string> = {
+  appearance: "Appearance",
+  details: "Details",
+  policy: "Access & membership",
+  members: "Members",
+  connections: "Connections",
+  actions: "Actions",
+};
 
 export default function SquadProfileScreen() {
   const pingSeed = useId();
   const { styles, colors } = useTheme();
+  const router = useRouter();
+  const navigation = useNavigation();
   const {
     id,
     tab: tabParam,
+    settings: settingsParam,
     fromChat,
   } = useLocalSearchParams<{
     id?: string;
     tab?: string;
+    settings?: string;
     fromChat?: string;
   }>();
   const squadId = Array.isArray(id) ? id[0] : id;
   const requestedTab = Array.isArray(tabParam) ? tabParam[0] : tabParam;
+  const requestedSettings = Array.isArray(settingsParam)
+    ? settingsParam[0]
+    : settingsParam;
   const { data, userId, act } = useBeacon();
+  const {
+    summary,
+    loading: summaryLoading,
+    error: summaryError,
+    refresh: refreshSummary,
+  } = useCommunitySummary("squad", squadId);
   const routeTab = tabs.find(
     (candidate) => candidate.toLowerCase() === requestedTab?.toLowerCase(),
   );
   const tab = routeTab ?? "Overview";
-  const selectTab = (value: SquadTab) =>
-    router.push({
-      pathname: "/squad/[id]",
-      params: { id: squadId!, tab: value, ...(fromChat ? { fromChat } : {}) },
-    });
+  const settingsCategory = settingsCategories.find(
+    (candidate) => candidate === requestedSettings,
+  );
   const [memberSearch, setMemberSearch] = useState("");
   const [inviteSearch, setInviteSearch] = useState("");
   const [inviteError, setInviteError] = useState("");
@@ -91,18 +133,31 @@ export default function SquadProfileScreen() {
   const [copyMembers, setCopyMembers] = useState(true);
   const [confirmedCopy, setConfirmedCopy] = useState(false);
   const [renameGeneral, setRenameGeneral] = useState(true);
-  const [growthDismissal, setGrowthDismissal] = useState<{
-    key: string;
-    dismissed: boolean;
-  } | null>(null);
   const [memberToManage, setMemberToManage] = useState<string | null>(null);
   const [memberRole, setMemberRole] = useState<SocialMemberRole>("member");
-  const setSpacePreviewId = (id: string) =>
-    router.push({ pathname: "/space/[id]", params: { id } });
-  const squad =
+  const [policyDraftState, setPolicyDraftState] = useState<{
+    key: string;
+    value: SocialPolicyValue;
+  } | null>(null);
+  const [discardOpen, setDiscardOpen] = useState(false);
+  const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
+  const [pendingMemberAction, setPendingMemberAction] = useState<PendingMemberAction | null>(null);
+  const [pendingDestination, setPendingDestination] = useState<{
+    tab: SquadTab;
+    settings?: SettingsCategory;
+  } | null>(null);
+  const pendingRemoveAction = useRef<unknown>(null);
+  const memberSquad =
     squadId && canOpenSquadProfile(data, squadId, userId)
       ? data.squads.find((item) => item.id === squadId)
       : undefined;
+  const isCurrentMember =
+    !!memberSquad &&
+    (summaryLoading || summary?.membership_status === "active");
+  const squad = isCurrentMember ? memberSquad : undefined;
+  const publicBeaconPreviews = squadId && userId
+    ? publicSquadBeaconPreviews(data, squadId, userId, summary)
+    : [];
   const viewerRole = data.squad_members.find(
     (member) => member.squad_id === squadId && member.user_id === userId,
   )?.role;
@@ -123,9 +178,6 @@ export default function SquadProfileScreen() {
   const selectedRoleMember = members.find(
     ({ member }) => member.user_id === memberToManage,
   )?.member;
-  const connectedSpace = squad
-    ? visibleSquadSpace(data, squad.id, userId)
-    : undefined;
   const assignableRoles =
     selectedRoleMember && viewerRole
       ? (["coowner", "admin", "elder", "member"] as const).filter(
@@ -156,22 +208,110 @@ export default function SquadProfileScreen() {
       : [];
   const activities =
     squad && userId ? squadHistory(data, squad.id, userId) : [];
-  const currentNext =
-    squad && userId
-      ? squadCurrentAndNextActivities(data, squad.id, userId)
-      : { current: undefined, next: undefined };
-  const plans = squad && userId ? squadPlans(data, squad.id, userId) : [];
-  const decision =
-    squad && userId ? activeSquadDecision(data, squad.id, userId) : undefined;
-  const organization = squad
-    ? visibleSquadOrganization(data, squad.id, userId)
-    : undefined;
   const memberUserIds = new Set(
     data.squad_members
       .filter((member) => member.squad_id === squad?.id)
       .map((member) => member.user_id),
   );
   const acceptedFriends = userId ? friendIds(data, userId) : [];
+  const policyInitial: SocialPolicyValue = {
+    discoverability: memberSquad?.discoverability ?? "private",
+    join_mode: memberSquad?.join_mode ?? "invite",
+    invite_policy: memberSquad?.invite_policy ?? "admins",
+  };
+  const policyEditorKey =
+    isCurrentMember &&
+    tab === "Settings" &&
+    settingsCategory === "policy" &&
+    squadId
+      ? squadId
+      : null;
+  const policyDraft = policyEditorKey
+    ? policyDraftState && policyDraftState.key === policyEditorKey
+      ? policyDraftState.value
+      : policyInitial
+    : null;
+  const policyDirty =
+    !!policyEditorKey &&
+    !!policyDraft &&
+    (policyDraft.discoverability !== policyInitial.discoverability ||
+      policyDraft.join_mode !== policyInitial.join_mode ||
+      policyDraft.invite_policy !== policyInitial.invite_policy);
+
+  function changePolicyDraft(value: SocialPolicyValue) {
+    if (policyEditorKey)
+      setPolicyDraftState({ key: policyEditorKey, value });
+  }
+
+  usePreventRemove(policyDirty, ({ data: { action } }) => {
+    pendingRemoveAction.current = action;
+    setPendingDestination(null);
+    setDiscardOpen(true);
+  });
+
+  const confirmedMembershipLoss =
+    !memberSquad ||
+    (!summaryLoading &&
+      !summaryError &&
+      summary?.membership_status !== "active");
+  useEffect(() => {
+    if (!confirmedMembershipLoss || !policyDraftState) return;
+    // A settled authorization loss ends the draft session; loading/errors do not.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPolicyDraftState(null);
+  }, [confirmedMembershipLoss, policyDraftState]);
+
+  const navigateTo = (destination: {
+    tab: SquadTab;
+    settings?: SettingsCategory;
+  }) => {
+    if (!squadId) return;
+    const params = {
+      id: squadId,
+      tab: destination.tab,
+      settings: destination.settings ?? "",
+      ...(fromChat ? { fromChat } : {}),
+    };
+    if (tab === "Overview" && destination.tab !== "Overview") {
+      router.push({ pathname: "/squad/[id]", params });
+      return;
+    }
+    router.setParams({
+      tab: destination.tab,
+      settings: destination.settings ?? "",
+      ...(fromChat ? { fromChat } : {}),
+    });
+  };
+  const requestNavigation = (destination: {
+    tab: SquadTab;
+    settings?: SettingsCategory;
+  }) => {
+    if (policyDirty) {
+      setPendingDestination(destination);
+      setDiscardOpen(true);
+      return;
+    }
+    navigateTo(destination);
+  };
+  const selectTab = (value: SquadTab) => requestNavigation({ tab: value });
+  const openSettingsCategory = (category: SettingsCategory) =>
+    requestNavigation({ tab: "Settings", settings: category });
+  const backToSettings = () => requestNavigation({ tab: "Settings" });
+
+  const confirmDiscard = () => {
+    setDiscardOpen(false);
+    setPolicyDraftState(null);
+    if (pendingDestination) {
+      const destination = pendingDestination;
+      setPendingDestination(null);
+      navigateTo(destination);
+      return;
+    }
+    const action = pendingRemoveAction.current;
+    pendingRemoveAction.current = null;
+    if (action) navigation.dispatch(action as never);
+  };
+
   const inviteCandidates = data.profiles
     .filter(
       (profile) =>
@@ -192,43 +332,12 @@ export default function SquadProfileScreen() {
     })
     .sort((first, second) => first.name.localeCompare(second.name));
 
-  const growthDismissalKey =
-    userId && squadId
-      ? `beacon.growth.organize-organization.dismissed.${userId}.${squadId}`.replace(
-          /[^A-Za-z0-9._-]/g,
-          "_",
-        )
-      : "";
-  useEffect(() => {
-    if (!growthDismissalKey) return;
-    let current = true;
-    const read =
-      Platform.OS === "web"
-        ? Promise.resolve().then(() => localStorage.getItem(growthDismissalKey))
-        : SecureStore.getItemAsync(growthDismissalKey);
-    void read
-      .then((value) => {
-        if (current)
-          setGrowthDismissal({
-            key: growthDismissalKey,
-            dismissed: value === "true",
-          });
-      })
-      .catch(() => {
-        if (current)
-          setGrowthDismissal({ key: growthDismissalKey, dismissed: false });
-      });
-    return () => {
-      current = false;
-    };
-  }, [growthDismissalKey]);
-
-  if (!squad || !userId || !squadId) {
+  if (!userId || !squadId) {
     return (
-      <Screen title="Squad unavailable" eyebrow="SQUAD PROFILE" create={false}>
+      <Screen title="Squad unavailable" eyebrow="SQUAD PROFILE" compactHeader create={false}>
         <Empty
           title="This Squad profile is unavailable."
-          body="Only current members can open it. Membership or access may have changed."
+          body="This Squad profile is unavailable or your access has changed."
         />
         <Button
           title="Back to Squads"
@@ -237,7 +346,147 @@ export default function SquadProfileScreen() {
       </Screen>
     );
   }
+  if (!isCurrentMember && summaryLoading) {
+    return (
+      <Screen title="Squad profile" eyebrow="SQUAD PROFILE" compactHeader create={false}>
+        <Txt muted>Loading Squad profile…</Txt>
+      </Screen>
+    );
+  }
+  if (!isCurrentMember && !summary) {
+    return (
+      <Screen title="Squad unavailable" eyebrow="SQUAD PROFILE" compactHeader create={false}>
+        <Empty
+          title="This Squad profile is unavailable."
+          body="This Squad profile is unavailable or your access has changed."
+        />
+        <Button
+          title="Back to Squads"
+          onPress={() => router.replace("/(tabs)/squads")}
+        />
+      </Screen>
+    );
+  }
+  if (!isCurrentMember && summary) {
+    const invite = data.squad_invites.find(
+      (item) => item.squad_id === summary.entity_id && item.recipient_id === userId,
+    );
+    return (
+      <Screen
+        title="Squad"
+        eyebrow="SQUAD PROFILE"
+        compactHeader
+        showDemoNotice={false}
+        create={false}
+      >
+        <View style={{ gap: 12 }}>
+          <View style={[styles.row, { gap: 12 }]}>
+            <CommunityAvatar size={46} />
+            <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
+              <Text style={styles.h2}>{summary.name}</Text>
+              <Txt muted>
+                {summary.member_count} {summary.member_count === 1 ? "member" : "members"} · {summary.discoverability === "public" ? "Public" : summary.discoverability === "community" ? "Community" : "Private"} Squad
+              </Txt>
+            </View>
+          </View>
+          {summary.action === "join" ? (
+            <Action
+              title="Join Squad"
+              run={async () => {
+                await act("join_squad", { squad_id: summary.entity_id });
+                await refreshSummary();
+              }}
+            />
+          ) : summary.action === "request" ? (
+            <Action
+              title="Request to join"
+              run={async () => {
+                await act("request_squad_join", { squad_id: summary.entity_id });
+                await refreshSummary();
+              }}
+            />
+          ) : summary.action === "requested" ? (
+            <Action
+              title="Cancel join request"
+              secondary
+              run={async () => {
+                await act("cancel_squad_join_request", { squad_id: summary.entity_id });
+                await refreshSummary();
+              }}
+            />
+          ) : summary.action === "invited" && invite ? (
+            <Action
+              title="Accept invitation"
+              run={async () => {
+                await act("accept_squad", { id: invite.id });
+                await refreshSummary();
+              }}
+            />
+          ) : summary.action === "invite_required" ? (
+            <Txt muted>An invitation is required to join this Squad.</Txt>
+          ) : null}
+          {summary.parent_name && summary.parent_type ? (
+            <ProfileLink
+              title={summary.parent_name}
+              detail={summary.parent_type === "space" ? "Organization association" : "Network association"}
+              onPress={() =>
+                router.push(
+                  summary.parent_type === "space"
+                    ? { pathname: "/space/[id]", params: { id: summary.parent_id! } }
+                    : { pathname: "/organization/[id]", params: { id: summary.parent_id! } },
+                )
+              }
+            />
+          ) : null}
+          {publicBeaconPreviews.length ? (
+            <ProfileSection title="What's happening">
+              {publicBeaconPreviews.map(({ activity, timing }) => (
+                <Pressable
+                  key={activity.id}
+                  testID="squad-activity-preview"
+                  accessibilityRole="button"
+                  accessibilityLabel={`Open ${activity.title}`}
+                  onPress={() => router.push({ pathname: "/activity/[id]", params: { id: activity.id } })}
+                  style={[styles.row, { minHeight: 48 }]}
+                >
+                  <CalendarClock size={18} color={colors.green} />
+                  <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
+                    <Text style={styles.body} numberOfLines={1}>{activity.title}</Text>
+                    <Txt muted>
+                      {timing === "current" ? "Current Beacon" : "Upcoming Beacon"} · {activityWhen(activity)}
+                    </Txt>
+                  </View>
+                  <ChevronRight size={17} color={colors.muted} />
+                </Pressable>
+              ))}
+            </ProfileSection>
+          ) : null}
+          {summary.description ? (
+            <ProfileSection title="About">
+              <Txt>{summary.description}</Txt>
+            </ProfileSection>
+          ) : null}
+        </View>
+      </Screen>
+    );
+  }
+  if (!squad) return null;
   const activeSquadId = squad.id;
+  const overviewPreviews = squadProfilePreviews(data, activeSquadId, userId);
+  const associatedOrganizations = visibleSquadOrganizations(
+    data,
+    activeSquadId,
+    userId,
+  );
+  const associatedNetworks = visibleSquadNetworks(
+    data,
+    activeSquadId,
+    userId,
+  );
+  const relationshipRows = [
+    ...associatedOrganizations,
+    ...associatedNetworks,
+  ].sort((first, second) => first.name.localeCompare(second.name));
 
   const starred = data.favorites.some(
     (favorite) =>
@@ -275,6 +524,73 @@ export default function SquadProfileScreen() {
     router.push({ pathname: "/plans", params: { squadId: activeSquadId } });
   }
 
+  function relationshipSection(title = "Connections") {
+    return relationshipRows.length ? (
+      <RelationshipDisclosure
+        contexts={relationshipRows.map((relation) => ({
+          parentType: relation.type === "organization" ? "space" as const : "organization" as const,
+          parentId: relation.id,
+        }))}
+        current={{ type: "squad", id: activeSquadId }}
+        maxItems={3}
+        entityType="squad"
+        title={title}
+        onOpen={(related) => {
+          if (related.entity_type === "squad")
+            router.push({ pathname: "/squad/[id]", params: { id: related.entity_id } });
+          else if (related.entity_type === "space")
+            router.push({ pathname: "/space/[id]", params: { id: related.entity_id } });
+          else
+            router.push({ pathname: "/organization/[id]", params: { id: related.entity_id } });
+        }}
+      />
+    ) : null;
+  }
+
+  function previewRow(preview: (typeof overviewPreviews)[number]) {
+    const isDecision = preview.kind === "decision";
+    const isBeacon = preview.kind === "beacon";
+    const title = isDecision
+      ? preview.decision.title
+      : isBeacon
+        ? preview.activity.title
+        : preview.plan.title;
+    const detail = isDecision
+      ? `${preview.decision.kind === "ping" ? "Ping" : "Vote"} · Action needed`
+      : isBeacon
+        ? `${preview.timing === "current" ? "Current Beacon" : "Upcoming Beacon"} · ${activityWhen(preview.activity)}`
+        : preview.routine
+          ? `Plan routine · next ${preview.routine.next_occurrence_on ?? "date to be set"}`
+          : `Plan · starts ${preview.plan.start_date}`;
+    const Icon = isDecision
+      ? preview.decision.kind === "ping" ? CircleHelp : Vote
+      : isBeacon ? CalendarClock : Layers3;
+    const onPress = () => {
+      if (isDecision)
+        router.push({ pathname: "/council/[id]", params: { id: preview.decision.id } });
+      else if (isBeacon)
+        router.push({ pathname: "/activity/[id]", params: { id: preview.activity.id } });
+      else router.push({ pathname: "/plan/[id]", params: { id: preview.plan.id } });
+    };
+    return (
+      <Pressable
+        key={`${preview.kind}:${isDecision ? preview.decision.id : isBeacon ? preview.activity.id : preview.plan.id}`}
+        testID="squad-activity-preview"
+        accessibilityRole="button"
+        accessibilityLabel={`Open ${detail}: ${title}`}
+        onPress={onPress}
+        style={[styles.card, styles.row, { minHeight: 60, paddingVertical: 8 }]}
+      >
+        <Icon size={19} color={colors.green} />
+        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+          <Text style={styles.body} numberOfLines={1}>{title}</Text>
+          <Text style={styles.muted} numberOfLines={1}>{detail}</Text>
+        </View>
+        <Text style={[styles.body, { color: colors.green }]}>Open</Text>
+      </Pressable>
+    );
+  }
+
   function openOrganizeSpace() {
     setSpaceName(`${squad?.name ?? ""} Organization`.trim());
     setSpaceDescription(squad?.description ?? "");
@@ -305,271 +621,114 @@ export default function SquadProfileScreen() {
     if (id) router.push({ pathname: "/space/[id]", params: { id } });
   }
 
-  async function dismissGrowthSuggestion() {
-    if (!growthDismissalKey) return;
-    setGrowthDismissal({ key: growthDismissalKey, dismissed: true });
-    try {
-      if (Platform.OS === "web")
-        localStorage.setItem(growthDismissalKey, "true");
-      else await SecureStore.setItemAsync(growthDismissalKey, "true");
-    } catch {
-      // Keep the suggestion dismissed for this session if device storage is unavailable.
-    }
-  }
-
   return (
     <Screen
+      scroll={tab !== "Members"}
+      compactHeader
       title={
         tab === "Overview"
-          ? squad.name
+          ? "Squad"
           : tab === "Activity"
             ? "Beacons & Plans"
             : tab === "Members"
               ? "Squad members"
               : tab === "Invite"
                 ? "Invite friends"
-                : "Squad settings"
+                : settingsCategory
+                  ? settingsCategoryLabels[settingsCategory]
+                  : "Squad settings"
       }
-      eyebrow={tab === "Overview" ? "SQUAD INFO" : squad.name}
+      eyebrow={tab === "Overview" ? "SQUAD PROFILE" : squad.name}
       showDemoNotice={false}
       create={false}
       headerAction={
         <IconButton
-          label="Squad settings"
-          onPress={() => selectTab("Settings")}
+          label={tab === "Settings" && settingsCategory ? "Back to Squad settings" : "Squad settings"}
+          onPress={() =>
+            tab === "Settings" && settingsCategory
+              ? backToSettings()
+              : selectTab(tab === "Settings" ? "Overview" : "Settings")
+          }
         >
-          <Settings2 size={19} color={colors.green} />
+          {tab === "Settings" && settingsCategory ? (
+            <ChevronRight size={19} color={colors.green} />
+          ) : (
+            <Settings2 size={19} color={colors.green} />
+          )}
         </IconButton>
       }
     >
       {tab === "Overview" ? (
         <>
-          <View style={{ gap: 12 }}>
-            <View style={[styles.row, { gap: 12 }]}>
-              <CommunityAvatar iconKey={squad.icon_key} size={52} />
-              <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
-                <Text style={styles.h2}>
-                  {members.length} {members.length === 1 ? "member" : "members"}
-                </Text>
+          <View style={{ gap: 10, paddingVertical: 8 }}>
+            <View style={[styles.row, { gap: 11 }]}>
+              <CommunityAvatar iconKey={squad.icon_key} size={44} />
+              <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                <Text style={styles.h2} numberOfLines={1}>{squad.name}</Text>
                 <Txt muted>
-                  {squad.discoverability === "public" ? "Public" : "Private"}{" "}
-                  Squad
+                  {members.length} {members.length === 1 ? "member" : "members"} · {squad.discoverability === "public" ? "Public" : squad.discoverability === "community" ? "Community" : "Private"} Squad
                 </Txt>
               </View>
             </View>
             <ProfileActions>
-              {fromChat !== "yes" ? (
-                <Button
-                  compact
-                  title="Chat"
-                  onPress={openChat}
-                  icon={<MessageCircle size={17} color={colors.ink} />}
-                />
-              ) : null}
               <Button
                 compact
-                secondary={fromChat !== "yes"}
-                title="Ping"
-                onPress={openPing}
-                icon={
-                  <Radio
-                    size={17}
-                    color={fromChat === "yes" ? colors.ink : colors.green}
-                  />
-                }
+                title="Chat"
+                onPress={openChat}
+                icon={<MessageCircle size={17} color={colors.ink} />}
               />
               <Button
                 compact
                 secondary
-                title="Beacon"
-                onPress={openBeaconCreate}
+                title="Ping"
+                onPress={openPing}
+                icon={<Radio size={17} color={colors.green} />}
               />
-              {canInviteMembers ? (
-                <Button
-                  compact
-                  secondary
-                  title="Invite"
-                  onPress={() => selectTab("Invite")}
-                />
-              ) : null}
+              <Button compact secondary title="Beacon" onPress={openBeaconCreate} />
             </ProfileActions>
           </View>
 
-          {isOwner &&
-          members.length >= 31 &&
-          growthDismissal?.key === growthDismissalKey &&
-          !growthDismissal.dismissed ? (
-            <View style={[styles.card, { gap: 9 }]}>
-              <Text style={styles.h2}>Your Squad is growing</Text>
-              <Txt>
-                {members.length} members · {squadSizeLabel(members.length)}. An
-                Organization can group related Squads without changing this
-                Squad’s history.
-              </Txt>
-              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-                <Button
-                  compact
-                  title="Organize as an Organization"
-                  onPress={openOrganizeSpace}
-                />
-                <Button
-                  compact
-                  secondary
-                  title="Not now"
-                  onPress={() => void dismissGrowthSuggestion()}
-                />
-              </View>
-            </View>
-          ) : null}
-
-          {connectedSpace ? (
-            <ProfileLink
-              title={connectedSpace.name}
-              detail="Organization"
-              label={`Open Organization ${connectedSpace.name}`}
-              onPress={() => setSpacePreviewId(connectedSpace.id)}
-            />
-          ) : null}
-          {organization ? (
-            <ProfileLink
-              title={organization.name}
-              detail="Super-Organization"
-              label={`Open super-organization ${organization.name}`}
-              onPress={() =>
-                router.push({
-                  pathname: "/organization/[id]",
-                  params: { id: organization.id },
-                })
-              }
-            />
-          ) : null}
-          {currentNext.current || currentNext.next ? (
+          {overviewPreviews.length ? (
             <ProfileSection
-              title={currentNext.current ? "Current Beacon" : "Next Beacon"}
+              title="What's happening"
+              action={<Button compact secondary title="See all" onPress={() => selectTab("Activity")} />}
             >
-              {[currentNext.current, currentNext.next]
-                .filter((activity) => !!activity)
-                .map((activity) => (
-                  <ProfileLink
-                    key={activity.id}
-                    title={activity.title}
-                    detail={`${activity === currentNext.next && currentNext.current ? "Next · " : ""}${activityWhen(activity)}`}
-                    icon={<CalendarClock size={20} color={colors.green} />}
-                    label={`${activity === currentNext.current ? "Current" : "Next"} Beacon: ${activity.title}`}
-                    onPress={() =>
-                      router.push({
-                        pathname: "/activity/[id]",
-                        params: { id: activity.id },
-                      })
-                    }
-                  />
-                ))}
+              {overviewPreviews.map((preview) => previewRow(preview))}
             </ProfileSection>
+          ) : activities.length ? (
+            <ProfileLink
+              title="Activity history"
+              detail="View past Squad Beacons"
+              onPress={() => selectTab("Activity")}
+            />
           ) : null}
 
-          {plans[0] ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Open Beacon Plan ${plans[0].plan.title}`}
-              onPress={() =>
-                router.push({
-                  pathname: "/plan/[id]",
-                  params: { id: plans[0].plan.id },
-                })
-              }
-              style={[styles.card, { gap: 4 }]}
-            >
-              <Text style={styles.h2}>Beacon Plan</Text>
-              <Text style={styles.body}>{plans[0].plan.title}</Text>
-              <Txt muted>
-                {plans[0].routine
-                  ? `Routine · next ${plans[0].routine.next_occurrence_on ?? "date to be set"}`
-                  : `Starts ${plans[0].plan.start_date}`}
-              </Txt>
-              <Text style={[styles.body, { color: colors.green }]}>
-                Open plan
-              </Text>
-            </Pressable>
-          ) : null}
-
-          {decision ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Open ${decision.kind}: ${decision.title}`}
-              onPress={() =>
-                router.push({
-                  pathname: "/council/[id]",
-                  params: { id: decision.id },
-                })
-              }
-              style={[styles.card, styles.row]}
-            >
-              {decision.kind === "ping" ? (
-                <CircleHelp size={19} color={colors.green} />
-              ) : (
-                <Vote size={19} color={colors.green} />
-              )}
-              <View style={{ flex: 1, gap: 3 }}>
-                <Text style={styles.label}>
-                  ACTIVE {decision.kind.toUpperCase()}
-                </Text>
-                <Text style={styles.body}>{decision.title}</Text>
-              </View>
-              <Text style={[styles.body, { color: colors.green }]}>Open</Text>
-            </Pressable>
-          ) : null}
-          <ProfileLink
-            title="Beacons & Plans"
-            detail={
-              activities.length
-                ? `${activities.length} shared Beacons`
-                : "Plan something together"
-            }
-            onPress={() => selectTab("Activity")}
-          />
           <ProfileSection
-            title="Members"
-            action={
-              members.length > 4 || isAdmin || canInviteMembers ? (
-                <Button
-                  compact
-                  secondary
-                  title="See all members"
-                  onPress={() => selectTab("Members")}
-                />
-              ) : undefined
-            }
+            title={`Members · ${members.length}`}
+            action={<Button compact secondary title="View members" onPress={() => selectTab("Members")} />}
           >
-            {members.slice(0, 4).map(({ member, profile }) => (
-              <Pressable
-                key={member.user_id}
-                accessibilityRole={profile ? "button" : undefined}
-                accessibilityLabel={
-                  profile ? `View ${profile.name}'s profile` : undefined
-                }
-                onPress={
-                  profile
-                    ? () =>
-                        router.push({
-                          pathname: "/person/[id]",
-                          params: { id: member.user_id },
-                        })
-                    : undefined
-                }
-                style={[styles.row, { minHeight: 48 }]}
-              >
-                <ProfileAvatar profile={profile} size={36} />
-                <Text style={[styles.body, { flex: 1 }]}>
-                  {member.user_id === userId
-                    ? "You"
-                    : (profile?.name ?? "Squad member")}
-                </Text>
-                {profile ? (
-                  <ChevronRight size={17} color={colors.muted} />
-                ) : null}
-              </Pressable>
-            ))}
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={{ flexDirection: "row", gap: 14, paddingVertical: 4 }}
+            >
+              {members.slice(0, 6).map(({ member, profile }) => (
+                <Pressable
+                  key={member.user_id}
+                  accessibilityRole={profile ? "button" : undefined}
+                  accessibilityLabel={profile ? `View ${profile.name}'s profile` : "Squad member"}
+                  onPress={profile ? () => router.push({ pathname: "/person/[id]", params: { id: member.user_id } }) : undefined}
+                  style={{ width: 62, alignItems: "center", gap: 5 }}
+                >
+                  <ProfileAvatar profile={profile} size={42} />
+                  <Text style={styles.muted} numberOfLines={1}>
+                    {member.user_id === userId ? "You" : profile?.name ?? "Member"}
+                  </Text>
+                </Pressable>
+              ))}
+            </ScrollView>
           </ProfileSection>
+          {relationshipSection()}
           {squad.description ? (
             <ProfileSection title="About">
               <Txt>{squad.description}</Txt>
@@ -579,160 +738,95 @@ export default function SquadProfileScreen() {
       ) : null}
 
       {tab === "Members" ? (
-        <>
-          <View style={styles.card}>
-            <Text style={styles.h2}>Squad members</Text>
-            <Txt muted>
-              {members.length}{" "}
-              {members.length === 1 ? "current member" : "current members"}.
-              Names and photos follow each person’s profile privacy.
-            </Txt>
-          </View>
-          {canInviteMembers ? (
-            <View style={{ alignSelf: "flex-start" }}>
-              <Button
-                compact
-                secondary
-                title="Invite people"
-                onPress={() => selectTab("Invite")}
-              />
+        <FlashList
+          style={{ flex: 1, minHeight: 0 }}
+          data={members.filter(
+            ({ profile }) =>
+              !memberSearch.trim() ||
+              (!!profile && matchesSearch(memberSearch, profile.name, profile.username)),
+          )}
+          keyExtractor={({ member }) => member.user_id}
+          getItemType={() => "member"}
+          extraData={`${userId}:${viewerRole ?? ""}:${memberToManage ?? ""}`}
+          ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
+          ListHeaderComponent={
+            <View style={{ gap: 8, paddingBottom: 8 }}>
+              <View style={styles.card}>
+                <Text style={styles.h2}>Squad members</Text>
+                <Txt muted>
+                  {members.length} {members.length === 1 ? "current member" : "current members"}. Names and photos follow each person’s profile privacy.
+                </Txt>
+              </View>
+              {canInviteMembers ? (
+                <View style={{ alignSelf: "flex-start" }}>
+                  <Button compact secondary title="Invite people" onPress={() => selectTab("Invite")} />
+                </View>
+              ) : null}
+              {canReviewRequests && joinRequests.length ? (
+                <View style={[styles.card, { gap: 9 }]}>
+                  <Text style={styles.h2}>Join requests</Text>
+                  {joinRequests.map((request) => {
+                    const profile = data.profiles.find((item) => item.id === request.user_id);
+                    const visible = !!(profile && canViewProfile(data, profile, userId));
+                    const name = visible && profile ? profile.name : "Community member";
+                    return (
+                      <View key={request.user_id} style={[styles.row, { flexWrap: "wrap", justifyContent: "space-between" }]}>
+                        <Text style={[styles.body, { flex: 1 }]}>{name}</Text>
+                        <Button compact title="Approve" onPress={() => setPendingMemberAction({ kind: "approve", userId: request.user_id, name })} />
+                        <Button compact secondary title="Decline" onPress={() => setPendingMemberAction({ kind: "decline", userId: request.user_id, name })} />
+                      </View>
+                    );
+                  })}
+                </View>
+              ) : null}
+              {members.length > 8 ? (
+                <Field label="Search Squad members" value={memberSearch} onChangeText={setMemberSearch} placeholder="Name or username" />
+              ) : null}
             </View>
-          ) : null}
-          {canReviewRequests && joinRequests.length ? (
-            <View style={[styles.card, { gap: 9 }]}>
-              <Text style={styles.h2}>Join requests</Text>
-              {joinRequests.map((request) => {
-                const profile = data.profiles.find(
-                  (item) => item.id === request.user_id,
-                );
-                const visible = !!(
-                  profile && canViewProfile(data, profile, userId)
-                );
-                return (
-                  <View
-                    key={request.user_id}
-                    style={[
-                      styles.row,
-                      { flexWrap: "wrap", justifyContent: "space-between" },
-                    ]}
-                  >
-                    <Text style={[styles.body, { flex: 1 }]}>
-                      {visible && profile ? profile.name : "Community member"}
+          }
+          ListEmptyComponent={<Empty title="No members match" body="Try another name or username." />}
+          renderItem={({ item: { member, profile } }) => {
+            const isSelf = member.user_id === userId;
+            const memberName = isSelf ? "You" : profile?.name ?? "Squad member";
+            const canRemove =
+              member.role !== "owner" &&
+              (isSelf || isOwner || (viewerRole === "admin" && member.role === "member"));
+            const canManageRole =
+              isAdmin && member.role !== "owner" && !!viewerRole &&
+              SOCIAL_ROLE_RANK[viewerRole] > SOCIAL_ROLE_RANK[member.role] &&
+              ["coowner", "admin", "elder", "member"].some(
+                (candidate) => SOCIAL_ROLE_RANK[viewerRole] > SOCIAL_ROLE_RANK[candidate as SocialMemberRole],
+              );
+            return (
+              <View style={[styles.card, { gap: 9 }]}>
+                <View style={styles.row}>
+                  <ProfileAvatar profile={profile} size={42} />
+                  <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+                    <Text style={styles.body} numberOfLines={1}>{memberName}</Text>
+                    <Text style={styles.muted}>
+                      {member.role === "owner" ? "Owner" : member.role === "admin" ? "Admin" : "Member"}
                     </Text>
-                    <Action
-                      compact
-                      title="Approve"
-                      run={() =>
-                        act("approve_squad_join_request", {
-                          squad_id: squad.id,
-                          user_id: request.user_id,
-                        })
-                      }
-                    />
-                    <Action
-                      compact
-                      secondary
-                      title="Decline"
-                      run={() =>
-                        act("deny_squad_join_request", {
-                          squad_id: squad.id,
-                          user_id: request.user_id,
-                        })
-                      }
-                    />
                   </View>
-                );
-              })}
-            </View>
-          ) : null}
-          {members.length > 8 ? (
-            <Field
-              label="Search Squad members"
-              value={memberSearch}
-              onChangeText={setMemberSearch}
-              placeholder="Name or username"
-            />
-          ) : null}
-          {members
-            .filter(
-              ({ profile }) =>
-                !memberSearch.trim() ||
-                (!!profile &&
-                  matchesSearch(memberSearch, profile.name, profile.username)),
-            )
-            .map(({ member, profile }) => {
-              const isSelf = member.user_id === userId;
-              const canRemove =
-                member.role !== "owner" &&
-                (isSelf ||
-                  isOwner ||
-                  (viewerRole === "admin" && member.role === "member"));
-              return (
-                <View key={member.user_id} style={[styles.card, { gap: 9 }]}>
-                  <View style={styles.row}>
-                    <ProfileAvatar profile={profile} size={42} />
-                    <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                      <Text style={styles.body} numberOfLines={1}>
-                        {isSelf ? "You" : (profile?.name ?? "Squad member")}
-                      </Text>
-                      <Text style={styles.muted}>
-                        {member.role === "owner"
-                          ? "Owner"
-                          : member.role === "admin"
-                            ? "Admin"
-                            : "Member"}
-                      </Text>
-                    </View>
-                    {profile && !isSelf ? (
-                      <Button
-                        compact
-                        secondary
-                        title="Profile"
-                        onPress={() =>
-                          router.push({
-                            pathname: "/person/[id]",
-                            params: { id: member.user_id },
-                          })
-                        }
-                      />
-                    ) : null}
-                  </View>
-                  {isAdmin &&
-                  member.role !== "owner" &&
-                  SOCIAL_ROLE_RANK[viewerRole] >
-                    SOCIAL_ROLE_RANK[member.role] &&
-                  ["coowner", "admin", "elder", "member"].some(
-                    (candidate) =>
-                      SOCIAL_ROLE_RANK[viewerRole] >
-                      SOCIAL_ROLE_RANK[candidate as SocialMemberRole],
-                  ) ? (
-                    <Button
-                      compact
-                      secondary
-                      title="Manage role"
-                      onPress={() => {
-                        setMemberToManage(member.user_id);
-                        setMemberRole(member.role as SocialMemberRole);
-                      }}
-                    />
-                  ) : null}
-                  {canRemove ? (
-                    <Action
-                      compact
-                      secondary
-                      title={isSelf ? "Leave" : "Remove"}
-                      run={() =>
-                        act("remove_member", {
-                          id: squad.id,
-                          user_id: member.user_id,
-                        })
-                      }
-                    />
+                  {profile && !isSelf ? (
+                    <Button compact secondary title="Profile" onPress={() => router.push({ pathname: "/person/[id]", params: { id: member.user_id } })} />
                   ) : null}
                 </View>
-              );
-            })}
-        </>
+                {canManageRole ? (
+                  <Button compact secondary title="Manage role" onPress={() => {
+                    setMemberToManage(member.user_id);
+                    setMemberRole(member.role as SocialMemberRole);
+                  }} />
+                ) : null}
+                {canRemove ? (
+                  <Button compact secondary title={isSelf ? "Leave" : "Remove"} onPress={() => setPendingMemberAction({ kind: isSelf ? "leave" : "remove", userId: member.user_id, name: memberName })} />
+                ) : null}
+              </View>
+            );
+          }}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={{ paddingBottom: 8 }}
+        />
       ) : null}
 
       {tab === "Invite" && canInviteMembers ? (
@@ -823,48 +917,145 @@ export default function SquadProfileScreen() {
         </>
       ) : null}
 
-      {tab === "Settings" ? (
+      {tab === "Settings" && !settingsCategory ? (
         <>
           <View style={styles.card}>
             <Text style={styles.h2}>Squad settings</Text>
-            <Txt>{squad.description || "No description set."}</Txt>
-            <Txt muted>
-              Your role: {isOwner ? "Owner" : (viewerRole ?? "Member")}
-            </Txt>
-            <Txt muted>
-              Squad name and description can’t be edited from this app yet.
-            </Txt>
+            <Txt muted>Your role: {isOwner ? "Owner" : (viewerRole ?? "Member")}</Txt>
           </View>
-          {isAdmin && (
-            <>
-              <SquadIconPicker
-                key={`${squad.id}:${squad.icon_key}`}
-                squad={squad}
-                onSave={(icon_key) =>
-                  act("update_squad_icon", { squad_id: squad.id, icon_key })
-                }
-              />
-              <View style={[styles.card, { gap: 10 }]}>
-                <Text style={styles.h2}>Access & membership</Text>
-                <SocialPolicySettings
-                  key={`${squad.id}:${squad.discoverability ?? "private"}:${squad.join_mode ?? "invite"}:${squad.invite_policy ?? "admins"}`}
-                  entityType="squad"
-                  initial={{
-                    discoverability: squad.discoverability ?? "private",
-                    join_mode: squad.join_mode ?? "invite",
-                    invite_policy: squad.invite_policy ?? "admins",
-                  }}
-                  onSave={(policy) =>
-                    act("set_social_policy", {
+          {settingsCategories.map((category) => (
+            <ProfileLink
+              key={category}
+              title={settingsCategoryLabels[category]}
+              detail={
+                category === "appearance"
+                  ? "Squad icon"
+                  : category === "details"
+                    ? "Name and description"
+                    : category === "policy"
+                      ? "Discovery, joining, and invitations"
+                      : category === "members"
+                        ? `${members.length} current members`
+                        : category === "connections"
+                          ? `${relationshipRows.length} direct associations`
+                          : "Favorites and membership actions"
+              }
+              onPress={() => openSettingsCategory(category)}
+            />
+          ))}
+        </>
+      ) : null}
+
+      {tab === "Settings" && settingsCategory === "appearance" ? (
+        <>
+          <View style={styles.card}>
+            <Text style={styles.h2}>Appearance</Text>
+            <Txt muted>Choose the icon shown for this Squad.</Txt>
+          </View>
+          {isAdmin ? (
+            <SquadIconPicker
+              key={`${squad.id}:${squad.icon_key}`}
+              squad={squad}
+              onSave={(icon_key) =>
+                act("update_squad_icon", { squad_id: squad.id, icon_key })
+              }
+            />
+          ) : (
+            <View style={[styles.card, styles.row]}>
+              <CommunityAvatar iconKey={squad.icon_key} size={40} />
+              <Txt muted>Only Squad admins can change its icon.</Txt>
+            </View>
+          )}
+          <Button secondary title="Back to settings" onPress={backToSettings} />
+        </>
+      ) : null}
+
+      {tab === "Settings" && settingsCategory === "details" ? (
+        <>
+          <View style={styles.card}>
+            <Text style={styles.h2}>Squad details</Text>
+            <Text style={styles.label}>NAME</Text>
+            <Txt>{squad.name}</Txt>
+            <Text style={styles.label}>DESCRIPTION</Text>
+            <Txt>{squad.description || "No description set."}</Txt>
+          </View>
+          <Button secondary title="Back to settings" onPress={backToSettings} />
+        </>
+      ) : null}
+
+      {tab === "Settings" && settingsCategory === "policy" ? (
+        <>
+          <View style={styles.card}>
+            <Text style={styles.h2}>Access & membership</Text>
+            <Txt muted>Your role: {isOwner ? "Owner" : (viewerRole ?? "Member")}</Txt>
+          </View>
+          {isAdmin && policyDraft ? (
+            <View style={[styles.card, { gap: 12 }]}>
+              <SocialPolicyFields value={policyDraft} onChange={changePolicyDraft} />
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+                <Action
+                  title="Save"
+                  disabled={!policyDirty}
+                  run={async () => {
+                    await act("set_social_policy", {
                       entity_type: "squad",
                       entity_id: squad.id,
-                      ...policy,
-                    })
-                  }
+                      ...policyDraft,
+                    });
+                    setPolicyDraftState(null);
+                  }}
                 />
+                <Button secondary title="Cancel" onPress={backToSettings} />
               </View>
-            </>
+            </View>
+          ) : (
+            <View style={styles.card}>
+              <Txt muted>
+                {squad.discoverability === "public" ? "Public" : squad.discoverability === "community" ? "Community" : "Private"} discovery · {squad.join_mode === "open" ? "Anyone can join" : squad.join_mode === "request" ? "Request to join" : "Invite only"}
+              </Txt>
+              <Txt muted>Only Squad admins can change access settings.</Txt>
+            </View>
           )}
+        </>
+      ) : null}
+
+      {tab === "Settings" && settingsCategory === "members" ? (
+        <>
+          <View style={styles.card}>
+            <Text style={styles.h2}>Members</Text>
+            <Txt muted>
+              Current Squad membership is managed separately from Network and Organization connections.
+            </Txt>
+          </View>
+          <ProfileLink
+            title="View members"
+            detail={`${members.length} current members`}
+            onPress={() => selectTab("Members")}
+          />
+          {canInviteMembers ? (
+            <ProfileLink title="Invite people" onPress={() => selectTab("Invite")} />
+          ) : null}
+        </>
+      ) : null}
+
+      {tab === "Settings" && settingsCategory === "connections" ? (
+        <>
+          {relationshipRows.length ? relationshipSection("Direct associations") : <Txt muted>No visible direct connections.</Txt>}
+          {isOwner && members.length >= 31 ? (
+            <View style={{ gap: 8 }}>
+              <Txt muted>{members.length} members · {squadSizeLabel(members.length)}. Group related Squads in an Organization.</Txt>
+              <Button title="Organize as an Organization" onPress={openOrganizeSpace} />
+            </View>
+          ) : null}
+        </>
+      ) : null}
+
+      {tab === "Settings" && settingsCategory === "actions" ? (
+        <>
+          <View style={styles.card}>
+            <Text style={styles.h2}>Actions</Text>
+            <Txt muted>Favorite this Squad or manage your membership.</Txt>
+          </View>
           <Button
             secondary
             title={starred ? "Remove Squad favorite" : "Favorite Squad"}
@@ -876,31 +1067,92 @@ export default function SquadProfileScreen() {
               })
             }
           />
-          {isAdmin ? (
-            <Button
-              secondary
-              title="Manage members and invitations"
-              onPress={() => selectTab("Members")}
-            />
-          ) : null}
           {!isOwner ? (
-            <Action
-              title="Leave Squad"
-              secondary
-              run={() =>
-                act("remove_member", { id: squad.id, user_id: userId })
-              }
-            />
+            <Button secondary title="Leave Squad" onPress={() => setLeaveConfirmOpen(true)} />
           ) : (
             <View style={styles.card}>
-              <Txt muted>
-                The owner role stays with the Squad owner. Transfer or delete
-                controls aren’t available.
-              </Txt>
+              <Txt muted>The owner role stays with the Squad owner.</Txt>
             </View>
           )}
         </>
       ) : null}
+
+      <Sheet
+        title="Discard access changes?"
+        visible={discardOpen}
+        onClose={() => {
+          setDiscardOpen(false);
+          setPendingDestination(null);
+          pendingRemoveAction.current = null;
+        }}
+      >
+        <View style={{ gap: 10 }}>
+          <Txt>Your access policy changes have not been saved.</Txt>
+          <Button
+            secondary
+            title="Keep editing"
+            onPress={() => {
+              setDiscardOpen(false);
+              setPendingDestination(null);
+              pendingRemoveAction.current = null;
+            }}
+          />
+          <Button title="Discard changes" onPress={confirmDiscard} />
+        </View>
+      </Sheet>
+      <Sheet
+        title="Leave this Squad?"
+        visible={leaveConfirmOpen}
+        onClose={() => setLeaveConfirmOpen(false)}
+      >
+        <View style={{ gap: 10 }}>
+          <Txt>You will lose access to this Squad’s chat, roster, and shared activity.</Txt>
+          <Button secondary title="Cancel" onPress={() => setLeaveConfirmOpen(false)} />
+          <Action
+            title="Leave Squad"
+            run={async () => {
+              await act("remove_member", { id: squad.id, user_id: userId });
+              setLeaveConfirmOpen(false);
+              router.replace("/(tabs)/squads");
+            }}
+          />
+        </View>
+      </Sheet>
+      <Sheet
+        title={pendingMemberAction?.kind === "approve" ? "Approve join request?" : pendingMemberAction?.kind === "decline" ? "Decline join request?" : pendingMemberAction?.kind === "leave" ? "Leave this Squad?" : "Remove member?"}
+        visible={!!pendingMemberAction}
+        onClose={() => setPendingMemberAction(null)}
+      >
+        {pendingMemberAction ? (
+          <View style={{ gap: 10 }}>
+            <Txt>
+              {pendingMemberAction.kind === "approve"
+                ? `${pendingMemberAction.name} will become a Squad member.`
+                : pendingMemberAction.kind === "decline"
+                  ? `The join request from ${pendingMemberAction.name} will be declined.`
+                  : pendingMemberAction.kind === "leave"
+                    ? "You will lose access to this Squad."
+                    : `${pendingMemberAction.name} will lose access to this Squad.`}
+            </Txt>
+            <Button secondary title="Cancel" onPress={() => setPendingMemberAction(null)} />
+            <Action
+              title={pendingMemberAction.kind === "approve" ? "Approve" : pendingMemberAction.kind === "decline" ? "Decline" : pendingMemberAction.kind === "leave" ? "Leave Squad" : "Remove member"}
+              run={async () => {
+                const pending = pendingMemberAction;
+                if (!pending) return;
+                if (pending.kind === "approve")
+                  await act("approve_squad_join_request", { squad_id: squad.id, user_id: pending.userId });
+                else if (pending.kind === "decline")
+                  await act("deny_squad_join_request", { squad_id: squad.id, user_id: pending.userId });
+                else
+                  await act("remove_member", { id: squad.id, user_id: pending.userId });
+                setPendingMemberAction(null);
+                if (pending.kind === "leave") router.replace("/(tabs)/squads");
+              }}
+            />
+          </View>
+        ) : null}
+      </Sheet>
 
       <Sheet
         title="Organize this Squad as an Organization"

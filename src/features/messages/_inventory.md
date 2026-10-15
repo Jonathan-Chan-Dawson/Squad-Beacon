@@ -1,5 +1,8 @@
 Messages feature
 
+- readMarkers.ts, useChatReadPosition.ts and demoMessaging.ts: private canonical read boundaries, focused/visible-latest updates, unread positioning, and matching demo actions.
+- beaconLinks.ts / BeaconMessagePreview.tsx: compact app-link previews that only reveal authorized Beacon metadata.
+
 - ChatThread.tsx: reusable person/activity chat thread component.
 - ChatComposer.tsx, ChatBubbleList.tsx and useOptimisticChat.ts: shared DM/Beacon/Squad message UI and sending/retry state. The compact emoji picker inserts real Unicode text; the + menu retains supported planning actions. Readable author avatars/names open the existing compact profile preview. Beacon sheets provide an inline preview callback to avoid another modal.
 - `app/messages/[id].tsx`: guarded friend DM route with a safe tappable identity header.

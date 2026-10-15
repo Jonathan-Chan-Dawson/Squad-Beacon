@@ -50,6 +50,7 @@ import {
   ActivityDetailTools,
   type ActivityDetailToolDescriptor,
 } from "@/src/features/beacons/components/activity-detail/ActivityDetailTools";
+import { ReactionPicker } from "@/src/features/beacons/components/feed/ReactionPicker";
 import {
   canReadBeaconActivity,
   canReadBeaconModuleEntry,
@@ -251,8 +252,8 @@ export default function ActivityDetail() {
   const [denyTarget, setDenyTarget] = useState<SafeRsvpRow | null>(null);
   const [removeTarget, setRemoveTarget] = useState<SafeRsvpRow | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [reactionTray, setReactionTray] = useState(false);
   const [floatingReaction, setFloatingReaction] = useState(false);
+  const [floatingReactionEmoji, setFloatingReactionEmoji] = useState("🙌");
   const [joining, setJoining] = useState(false);
   const [rsvpBusy, setRsvpBusy] = useState(false);
   const [reactionBusy, setReactionBusy] = useState(false);
@@ -537,7 +538,7 @@ export default function ActivityDetail() {
     (favorite) =>
       favorite.owner_id === userId && favorite.activity_id === activity.id,
   );
-  const hasReaction = data.reactions.some(
+  const selectedReaction = data.reactions.find(
     (reaction) =>
       reaction.activity_id === activity.id && reaction.user_id === userId,
   );
@@ -708,7 +709,8 @@ export default function ActivityDetail() {
       setSaveBusy(false);
     }
   };
-  const showFloatingReaction = () => {
+  const showFloatingReaction = (emoji: string) => {
+    setFloatingReactionEmoji(emoji);
     setFloatingReaction(true);
     floatingReactionProgress.setValue(0);
     if (reducedMotion) {
@@ -722,24 +724,23 @@ export default function ActivityDetail() {
     }
     setTimeout(() => setFloatingReaction(false), 900);
   };
-  const sendReaction = async () => {
-    if (reactionBusy || hasReaction) return false;
+  const sendReaction = async (emoji: string): Promise<boolean> => {
+    if (reactionBusy) return false;
+    const remove = selectedReaction?.emoji === emoji;
     setReactionBusy(true);
     setInteractionError("");
     setRetryAction(null);
     try {
-      await act("react", { id: activity.id });
+      await act("react", { id: activity.id, emoji, remove });
       await uiHaptics.success();
-      setReactionTray(true);
-      showFloatingReaction();
-      setTimeout(() => setReactionTray(false), 1100);
+      if (!remove) showFloatingReaction(emoji);
       return true;
     } catch (failure) {
       setInteractionError(
         feedbackMessage(failure, "Could not send your reaction. Try again."),
       );
       setRetryAction(() => () => {
-        void sendReaction();
+        void sendReaction(emoji);
       });
       return false;
     } finally {
@@ -1169,79 +1170,56 @@ export default function ActivityDetail() {
             ) : null}
 
             {activity.enable_reactions !== false && canAccess ? (
-              <View style={{ gap: 8 }}>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={
-                    hasReaction
-                      ? "Reacted with raised hands. " +
-                        reactionCount +
-                        " reactions"
-                      : "React with raised hands. " +
-                        reactionCount +
-                        " reactions"
-                  }
-                  disabled={
-                    hasReaction ||
-                    reactionBusy ||
-                    activity.status === "cancelled"
-                  }
-                  onLongPress={() => setReactionTray(true)}
-                  onPress={() => void sendReaction()}
-                  style={[
-                    styles.card,
-                    styles.row,
-                    { minHeight: 48, padding: 12 },
-                  ]}
-                >
-                  <Text style={styles.body}>
-                    {hasReaction ? "🙌 Reacted" : "🙌 React"}
-                  </Text>
-                  <Text style={styles.muted}>{reactionCount}</Text>
-                  {reactionTray ? (
-                    <Check size={17} color={colors.green} />
-                  ) : null}
-                  {floatingReaction ? (
-                    <Animated.Text
-                      pointerEvents="none"
-                      accessibilityLabel="Reaction sent"
-                      style={{
-                        position: "absolute",
-                        top: -20,
-                        right: 24,
-                        fontSize: 25,
-                        opacity: floatingReactionProgress.interpolate({
-                          inputRange: [0, 1],
-                          outputRange: [1, 0],
-                        }),
-                        transform: [
-                          {
-                            translateY: floatingReactionProgress.interpolate({
-                              inputRange: [0, 1],
-                              outputRange: [0, -24],
-                            }),
-                          },
-                        ],
-                      }}
-                    >
-                      🙌
-                    </Animated.Text>
-                  ) : null}
-                </Pressable>
-                {reactionTray ? (
-                  <View
-                    style={[styles.row, { gap: 8, justifyContent: "center" }]}
+              <ReactionPicker
+                selectedEmoji={selectedReaction?.emoji}
+                disabled={reactionBusy || activity.status === "cancelled"}
+                error={interactionError}
+                onSelect={sendReaction}
+                onOpen={() => setInteractionError("")}
+                trigger={
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={
+                      selectedReaction?.emoji
+                        ? `Reacted with ${selectedReaction.emoji}. ${reactionCount} reactions. Choose another reaction or remove it.`
+                        : `Choose a reaction. ${reactionCount} reactions.`
+                    }
+                    accessibilityState={{ selected: !!selectedReaction?.emoji, disabled: reactionBusy || activity.status === "cancelled" }}
+                    style={[styles.card, styles.row, { minHeight: 48, padding: 12 }]}
                   >
-                    <Button
-                      compact
-                      secondary
-                      title="🙌"
-                      disabled={reactionBusy || hasReaction}
-                      onPress={() => void sendReaction()}
-                    />
-                  </View>
-                ) : null}
-              </View>
+                    <Text style={styles.body}>
+                      {selectedReaction?.emoji ? `${selectedReaction.emoji} Reacted` : "🙌 React"}
+                    </Text>
+                    <Text style={styles.muted}>{reactionCount}</Text>
+                    {floatingReaction ? (
+                      <Animated.Text
+                        pointerEvents="none"
+                        accessibilityLabel="Reaction sent"
+                        style={{
+                          position: "absolute",
+                          top: -20,
+                          right: 24,
+                          fontSize: 25,
+                          opacity: floatingReactionProgress.interpolate({
+                            inputRange: [0, 1],
+                            outputRange: [1, 0],
+                          }),
+                          transform: [
+                            {
+                              translateY: floatingReactionProgress.interpolate({
+                                inputRange: [0, 1],
+                                outputRange: [0, -24],
+                              }),
+                            },
+                          ],
+                        }}
+                      >
+                        {floatingReactionEmoji}
+                      </Animated.Text>
+                    ) : null}
+                  </Pressable>
+                }
+              />
             ) : null}
 
             <SlidingTabBar

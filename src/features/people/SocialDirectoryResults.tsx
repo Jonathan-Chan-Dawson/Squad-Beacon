@@ -19,12 +19,12 @@ type ResultSet = {
 };
 
 const entityTitle: Record<SocialEntityType, string> = {
-  organization: "Super-Organizations",
+  organization: "Networks",
   space: "Organizations",
   squad: "Squads",
 };
 const entitySingular: Record<SocialEntityType, string> = {
-  organization: "Super-Organization",
+  organization: "Network",
   space: "Organization",
   squad: "Squad",
 };

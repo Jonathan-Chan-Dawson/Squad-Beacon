@@ -20,8 +20,11 @@ export default function Messages() {
       ? "Friend"
       : "Conversation";
   return (
-    <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }}>
-      <View style={[styles.content, { flex: 1 }]}>
+    <SafeAreaView
+      edges={["top", "left", "right"]}
+      style={{ flex: 1, backgroundColor: colors.bg }}
+    >
+      <View style={[styles.content, { flex: 1, minHeight: 0, gap: 8 }]}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
           <BackButton />
           <View style={{ flex: 1, minWidth: 0 }}>

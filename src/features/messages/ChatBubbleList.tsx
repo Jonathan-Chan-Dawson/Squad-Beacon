@@ -1,5 +1,12 @@
-import React, { useEffect, useRef, useState, type ReactNode } from "react";
-import { Keyboard, Text, View } from "react-native";
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { Keyboard, Text, View, type ViewToken } from "react-native";
 import { FlashList, type FlashListRef } from "@shopify/flash-list";
 import Animated, { FadeInDown } from "react-native-reanimated";
 import { MotionPressable } from "@/src/shared/MotionPressable";
@@ -7,6 +14,8 @@ import { useDesignTheme, useReducedMotion } from "@/src/shared/design-system";
 import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
 import { radius, space } from "@/src/theme/data";
 import type { Profile } from "@/src/shared/types";
+import { messagesAreGrouped } from "./readMarkers";
+import { BeaconMessagePreview } from "./BeaconMessagePreview";
 import type {
   CanonicalChatMessage,
   QueuedChatMessage,
@@ -25,6 +34,7 @@ function Bubble({
   message,
   own,
   grouped,
+  groupMode,
   profile,
   onRetry,
   retryDisabled,
@@ -33,6 +43,7 @@ function Bubble({
   message: CanonicalChatMessage | QueuedChatMessage;
   own: boolean;
   grouped: boolean;
+  groupMode: boolean;
   profile?: Profile;
   onRetry: (id: string) => void;
   retryDisabled: boolean;
@@ -54,7 +65,7 @@ function Bubble({
         paddingBottom: 2,
       }}
     >
-      {!own ? (
+      {!own && groupMode ? (
         <View style={{ width: 44 }}>
           {!grouped && profile && onAuthorPress ? (
             <MotionPressable
@@ -106,7 +117,7 @@ function Bubble({
             borderColor: colors.border,
           }}
         >
-          {!own && !grouped ? (
+          {!own && !grouped && groupMode ? (
             <Text
               accessibilityRole={
                 profile && onAuthorPress ? "button" : undefined
@@ -144,7 +155,8 @@ function Bubble({
             {message.body}
           </Text>
         </MotionPressable>
-        {revealedId === message.id ? (
+        <BeaconMessagePreview body={message.body} />
+        {!grouped || revealedId === message.id ? (
           <Text
             style={{
               color: colors.textSecondary,
@@ -189,6 +201,10 @@ export function ChatBubbleList({
   focusedId,
   scopeKey,
   onAuthorPress,
+  presentation = "group",
+  firstUnreadId,
+  onLatestVisible,
+  sendSignal = 0,
 }: {
   events: ChatListEvent[];
   viewerId: string | null;
@@ -199,17 +215,64 @@ export function ChatBubbleList({
   focusedId?: string;
   scopeKey: string;
   onAuthorPress?: (id: string) => void;
+  presentation?: "direct" | "group";
+  firstUnreadId?: string;
+  onLatestVisible?: (id: string | null) => void;
+  sendSignal?: number;
 }) {
   const { colors } = useDesignTheme();
   const reducedMotion = useReducedMotion();
   const list = useRef<FlashListRef<ChatListEvent>>(null);
   const focused = useRef("");
   const focusAttempt = useRef({ count: 0, pending: false });
-  const focusedIndex = focusedId
-    ? events.findIndex((event) => eventId(event) === focusedId)
+  const [initialUnread] = useState(firstUnreadId);
+  const targetId =
+    (focusedId && events.some((event) => eventId(event) === focusedId)
+      ? focusedId
+      : undefined) ?? initialUnread;
+  const nearBottom = useRef(!targetId);
+  const [showJump, setShowJump] = useState(false);
+  const latestCanonical = events
+    .filter((event) => event.kind === "message" && !("state" in event.message))
+    .at(-1);
+  const latestId =
+    latestCanonical?.kind === "message"
+      ? latestCanonical.message.id
+      : undefined;
+  const viewableIds = useRef(new Set<string>());
+  const visibleCallback = useRef({ latestId, onLatestVisible });
+  useLayoutEffect(() => {
+    visibleCallback.current = { latestId, onLatestVisible };
+  }, [latestId, onLatestVisible]);
+  const visibility = useCallback(
+    ({ viewableItems }: { viewableItems: ViewToken<ChatListEvent>[] }) => {
+      viewableIds.current = new Set(
+        viewableItems
+          .filter((token) => token.isViewable)
+          .map((token) => eventId(token.item)),
+      );
+      const { latestId: latest, onLatestVisible: callback } =
+        visibleCallback.current;
+      callback?.(latest && viewableIds.current.has(latest) ? latest : null);
+    },
+    [],
+  );
+  useEffect(() => {
+    onLatestVisible?.(
+      latestId && viewableIds.current.has(latestId) ? latestId : null,
+    );
+  }, [latestId, onLatestVisible]);
+  useEffect(() => {
+    if (sendSignal > 0) {
+      nearBottom.current = true;
+      void list.current?.scrollToEnd({ animated: !reducedMotion });
+    }
+  }, [sendSignal, reducedMotion]);
+  const focusedIndex = targetId
+    ? events.findIndex((event) => eventId(event) === targetId)
     : -1;
   const focus = () => {
-    const identity = `${scopeKey}:${focusedId ?? ""}`;
+    const identity = `${scopeKey}:${targetId ?? ""}`;
     if (
       focusedIndex >= 0 &&
       focused.current !== identity &&
@@ -242,99 +305,163 @@ export function ChatBubbleList({
     focus();
   }, [focusedId, scopeKey]); // eslint-disable-line react-hooks/exhaustive-deps
   return (
-    <FlashList
-      key={scopeKey}
-      ref={list}
-      data={events}
-      keyExtractor={eventId}
-      onLoad={focus}
-      onCommitLayoutEffect={focus}
-      style={{ flex: 1, minHeight: 160 }}
-      keyboardShouldPersistTaps="handled"
-      keyboardDismissMode="on-drag"
-      // FlashList 2 removed inverted: use its supported bottom anchoring with chronological data.
-      maintainVisibleContentPosition={{
-        startRenderingFromBottom: true,
-        autoscrollToBottomThreshold: 0.2,
-        animateAutoScrollToBottom: !reducedMotion,
-      }}
-      contentContainerStyle={{ paddingVertical: space.sm }}
-      ListEmptyComponent={
-        <View style={{ padding: space.lg, gap: space.sm }}>
-          <Text
-            style={{
-              color: colors.textPrimary,
-              fontSize: 21,
-              fontWeight: "700",
-            }}
-          >
-            Start with a hello
-          </Text>
-          <Text style={{ color: colors.textSecondary }}>
-            A little conversation can turn into a great plan.
-          </Text>
-          {[
-            "Hey! How’s your day?",
-            "Want to make a plan?",
-            "What are you up to?",
-          ].map((opener) => (
-            <MotionPressable
-              key={opener}
-              accessibilityRole="button"
-              accessibilityLabel={`Insert: ${opener}`}
-              onPress={() => onOpener(opener)}
+    <View style={{ flex: 1, minHeight: 0 }}>
+      <FlashList
+        testID="chat-history"
+        key={scopeKey}
+        ref={list}
+        data={events}
+        keyExtractor={eventId}
+        onLoad={focus}
+        onCommitLayoutEffect={focus}
+        style={{ flex: 1, minHeight: 0 }}
+        onViewableItemsChanged={visibility}
+        viewabilityConfig={{
+          itemVisiblePercentThreshold: 20,
+          minimumViewTime: 150,
+        }}
+        onScroll={(event) => {
+          const { contentOffset, contentSize, layoutMeasurement } =
+            event.nativeEvent;
+          const bottom =
+            contentSize.height - contentOffset.y - layoutMeasurement.height <
+            layoutMeasurement.height * 0.2;
+          nearBottom.current = bottom;
+          setShowJump(!bottom);
+        }}
+        onLayout={() => {
+          if (nearBottom.current)
+            void list.current?.scrollToEnd({ animated: false });
+        }}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        // FlashList 2 removed inverted: use its supported bottom anchoring with chronological data.
+        maintainVisibleContentPosition={{
+          startRenderingFromBottom: !targetId,
+          autoscrollToBottomThreshold: 0.2,
+          animateAutoScrollToBottom: !reducedMotion,
+        }}
+        contentContainerStyle={{ paddingVertical: space.sm }}
+        ListEmptyComponent={
+          <View style={{ padding: space.lg, gap: space.sm }}>
+            <Text
               style={{
-                padding: space.sm,
-                borderRadius: radius.md,
-                backgroundColor: colors.surface,
-                borderWidth: 1,
-                borderColor: colors.border,
+                color: colors.textPrimary,
+                fontSize: 21,
+                fontWeight: "700",
               }}
             >
-              <Text style={{ color: colors.accent }}>{opener}</Text>
-            </MotionPressable>
-          ))}
-        </View>
-      }
-      renderItem={({ item, index }) => {
-        const previous = events[index - 1];
-        const newDay =
-          !previous || day(eventDate(previous)) !== day(eventDate(item));
-        const grouped =
-          !newDay &&
-          previous?.kind === "message" &&
-          item.kind === "message" &&
-          previous.message.authorId === item.message.authorId;
-        return (
-          <View>
-            {newDay ? (
-              <Text
+              Start with a hello
+            </Text>
+            <Text style={{ color: colors.textSecondary }}>
+              A little conversation can turn into a great plan.
+            </Text>
+            {[
+              "Hey! How’s your day?",
+              "Want to make a plan?",
+              "What are you up to?",
+            ].map((opener) => (
+              <MotionPressable
+                key={opener}
+                accessibilityRole="button"
+                accessibilityLabel={`Insert: ${opener}`}
+                onPress={() => onOpener(opener)}
                 style={{
-                  color: colors.textSecondary,
-                  fontSize: 11,
-                  textAlign: "center",
-                  paddingVertical: 12,
+                  padding: space.sm,
+                  borderRadius: radius.md,
+                  backgroundColor: colors.surface,
+                  borderWidth: 1,
+                  borderColor: colors.border,
                 }}
               >
-                {day(eventDate(item))}
-              </Text>
-            ) : null}
-            {item.kind === "card" ? (
-              <View style={{ paddingVertical: space.sm }}>{item.content}</View>
-            ) : (
-              <Bubble
-                message={item.message}
-                own={item.message.authorId === viewerId}
-                grouped={grouped}
-                profile={profileForAuthor(item.message.authorId)}
-                onRetry={onRetry}
-                retryDisabled={retryDisabled}
-                onAuthorPress={onAuthorPress}
-              />
-            )}
+                <Text style={{ color: colors.accent }}>{opener}</Text>
+              </MotionPressable>
+            ))}
           </View>
-        );
-      }}
-    />
+        }
+        renderItem={({ item, index }) => {
+          const previous = events[index - 1];
+          const newDay =
+            !previous || day(eventDate(previous)) !== day(eventDate(item));
+          const grouped =
+            !newDay &&
+            previous?.kind === "message" &&
+            item.kind === "message" &&
+            messagesAreGrouped(previous.message, item.message);
+          return (
+            <View>
+              {newDay ? (
+                <Text
+                  style={{
+                    color: colors.textSecondary,
+                    fontSize: 11,
+                    textAlign: "center",
+                    paddingVertical: 12,
+                  }}
+                >
+                  {day(eventDate(item))}
+                </Text>
+              ) : null}
+              {eventId(item) === initialUnread ? (
+                <Text
+                  style={{
+                    color: colors.textSecondary,
+                    textAlign: "center",
+                    fontSize: 11,
+                    paddingVertical: 8,
+                  }}
+                >
+                  Unread messages
+                </Text>
+              ) : null}
+              {item.kind === "card" ? (
+                <View style={{ paddingVertical: space.sm }}>
+                  {item.content}
+                </View>
+              ) : (
+                <Bubble
+                  message={item.message}
+                  own={item.message.authorId === viewerId}
+                  grouped={grouped}
+                  groupMode={presentation === "group"}
+                  profile={profileForAuthor(item.message.authorId)}
+                  onRetry={onRetry}
+                  retryDisabled={retryDisabled}
+                  onAuthorPress={onAuthorPress}
+                />
+              )}
+            </View>
+          );
+        }}
+      />
+      {showJump ? (
+        <MotionPressable
+          accessibilityRole="button"
+          accessibilityLabel="Jump to latest messages"
+          onPress={() => {
+            nearBottom.current = true;
+            setShowJump(false);
+            void list.current?.scrollToEnd({ animated: !reducedMotion });
+          }}
+          style={{
+            position: "absolute",
+            maxWidth: "90%",
+            right: 8,
+            bottom: 8,
+            minHeight: 44,
+            paddingHorizontal: 14,
+            borderRadius: 22,
+            backgroundColor: colors.surface,
+            borderWidth: 1,
+            borderColor: colors.border,
+            justifyContent: "center",
+          }}
+        >
+          <Text numberOfLines={1} style={{ color: colors.accent }}>
+            Jump to latest ↓
+          </Text>
+        </MotionPressable>
+      ) : null}
+    </View>
   );
 }

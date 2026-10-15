@@ -3,7 +3,7 @@ import { usesSharedStatusEditor } from "../statusRouteSeed";
 import { LegacyStatusScreen } from "./LegacyStatusScreen";
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
-import { router, useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams, type Href } from "expo-router";
 import { CreateHome } from "@/src/features/beacons/CreateHome";
 import { canReadPlanningThread } from "@/src/features/planning/domain";
 import type { BeaconDraft } from "@/src/features/planning/types";
@@ -527,10 +527,7 @@ function CreateEditor() {
       setTemplateNotice("Template saved. Your Beacon draft and selected friends are still here.");
       return;
     }
-    router.replace({
-      pathname: "/(tabs)/activities",
-      params: { filter: "Past" },
-    });
+    router.replace("/your-activity?historyExpanded=yes" as Href);
   }
   async function publish() {
     if (invitationSession.current.createdId || invitationSession.current.creationUnverified) throw new Error("This Beacon has already been created. Use Retry invitations or Open Beacon.");
@@ -988,7 +985,7 @@ function CreateEditor() {
               key={`${row.entity_type}:${row.entity_id}`}
               compact
               secondary
-              title={`${row.entity_type === "organization" ? "Super-Organization" : row.entity_type === "space" ? "Organization" : "Squad"} · ${row.name}`}
+              title={`${row.entity_type === "organization" ? "Network" : row.entity_type === "space" ? "Organization" : "Squad"} · ${row.name}`}
               onPress={() => {
                 setAssociationDraft({
                   routeKey: associationRouteKey,

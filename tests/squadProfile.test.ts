@@ -2,14 +2,19 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   activeSquadDecision,
+  activeSquadDecisions,
   activeSquadMembership,
   canOpenSquadProfile,
+  publicSquadBeaconPreviews,
   squadActivities,
   squadCurrentAndNextActivities,
   squadPlans,
+  squadProfilePreviews,
   squadSizeLabel,
+  visibleSquadNetworks,
   visibleSquadMembers,
   visibleSquadOrganization,
+  visibleSquadOrganizations,
 } from "../src/features/people/squadProfile";
 import { visibleSquadSpace } from "../src/features/spaces/domain";
 import { makeDemo, DEMO_ID } from "../src/shared/demo";
@@ -207,6 +212,140 @@ test("Squad preview decision is a pending scoped Ping/Vote, including owner reso
   data.planning_threads = [expiredOwnerPing];
   data.planning_ping_responses = [];
   assert.equal(activeSquadDecision(data, "boxing", DEMO_ID)?.id, "owner-needs-resolution");
+});
+
+test("Squad overview bounds the combined preview and puts every actionable decision first", () => {
+  const data = makeDemo();
+  const now = Date.now();
+  data.planning_threads = [
+    thread({ id: "later-decision", deadline_at: new Date(now + 3 * 60_000).toISOString() }),
+    thread({ id: "first-decision", deadline_at: new Date(now + 60_000).toISOString() }),
+    thread({ id: "middle-decision", deadline_at: new Date(now + 2 * 60_000).toISOString() }),
+    thread({ id: "fourth-decision", deadline_at: new Date(now + 4 * 60_000).toISOString() }),
+  ];
+
+  const decisionRows = activeSquadDecisions(data, "boxing", DEMO_ID, now);
+  assert.deepEqual(
+    decisionRows.map((item) => item.id),
+    ["first-decision", "middle-decision", "later-decision", "fourth-decision"],
+  );
+  const full = squadProfilePreviews(data, "boxing", DEMO_ID, now);
+  assert.equal(full.length, 3);
+  assert.deepEqual(full.map((item) => item.kind), ["decision", "decision", "decision"]);
+
+  data.planning_threads = [thread({ deadline_at: new Date(now + 60_000).toISOString() })];
+  const mixed = squadProfilePreviews(data, "boxing", DEMO_ID, now);
+  assert.equal(mixed.length, 3);
+  assert.equal(mixed[0]?.kind, "decision");
+  assert.equal(mixed[1]?.kind, "beacon");
+  if (mixed[1]?.kind === "beacon") assert.equal(mixed[1].timing, "current");
+});
+
+test("Squad previews label every ongoing Beacon as current and allow independently readable linked Beacons", () => {
+  const data = makeDemo();
+  const now = Date.now();
+  const current = data.activities.find((item) => item.id === "a1")!;
+  const otherCurrent = {
+    ...current,
+    id: "second-current-beacon",
+    starts_at: new Date(now - 20 * 60_000).toISOString(),
+    ends_at: new Date(now + 20 * 60_000).toISOString(),
+  };
+  current.starts_at = new Date(now - 60 * 60_000).toISOString();
+  current.ends_at = new Date(now + 60 * 60_000).toISOString();
+  data.activities.push(otherCurrent);
+  data.planning_threads = [];
+
+  const active = squadProfilePreviews(data, "boxing", DEMO_ID, now)
+    .filter((item) => item.kind === "beacon");
+  assert.equal(active[0]?.kind, "beacon");
+  assert.equal(active[1]?.kind, "beacon");
+  if (active[0]?.kind === "beacon") assert.equal(active[0].timing, "current");
+  if (active[1]?.kind === "beacon") assert.equal(active[1].timing, "current");
+
+  data.squad_members = data.squad_members.filter(
+    (member) => !(member.squad_id === "boxing" && member.user_id === DEMO_ID),
+  );
+  const linked = {
+    ...current,
+    id: "independently-readable-beacon",
+    owner_id: DEMO_ID,
+    audience: "private" as const,
+    audience_id: null,
+    starts_at: new Date(now + 30 * 60_000).toISOString(),
+    ends_at: new Date(now + 90 * 60_000).toISOString(),
+  };
+  data.activities = [linked];
+  data.activity_social_links = [{
+    activity_id: linked.id,
+    entity_type: "squad",
+    entity_id: "boxing",
+    created_by: DEMO_ID,
+    created_at: new Date(now).toISOString(),
+  }];
+  const exactSummary = { entity_type: "squad" as const, entity_id: "boxing" };
+  const publicPreviews = publicSquadBeaconPreviews(
+    data,
+    "boxing",
+    DEMO_ID,
+    exactSummary,
+    now,
+  );
+  assert.equal(publicPreviews.length, 1);
+  assert.equal(publicPreviews[0]?.activity.id, linked.id);
+  assert.deepEqual(
+    publicSquadBeaconPreviews(data, "boxing", "jordan", exactSummary, now),
+    [],
+  );
+  assert.deepEqual(
+    publicSquadBeaconPreviews(data, "boxing", DEMO_ID, null, now),
+    [],
+  );
+});
+
+test("Squad relationship selectors retain every authorized direct Organization and Network association", () => {
+  const data = makeDemo();
+  const now = new Date().toISOString();
+  const baseSpace = data.spaces.find((item) => item.id === "space-neighborhood-studio")!;
+  data.spaces.push({ ...baseSpace, id: "space-second-organization", name: "Second Organization", owner_id: DEMO_ID });
+  data.space_members.push({
+    space_id: "space-second-organization",
+    user_id: DEMO_ID,
+    role: "owner",
+    status: "active",
+    invited_by: null,
+    created_at: now,
+  });
+  data.space_squads.push({
+    space_id: "space-second-organization",
+    squad_id: "boxing",
+    added_by: DEMO_ID,
+    created_at: now,
+  });
+
+  const baseNetwork = data.organizations.find((item) => item.id === "org-lakefront-collective")!;
+  data.organizations.push({ ...baseNetwork, id: "network-second", name: "Second Network", owner_id: DEMO_ID });
+  data.organization_squads.push({
+    organization_id: "network-second",
+    squad_id: "boxing",
+    added_by: DEMO_ID,
+    created_at: now,
+  });
+
+  assert.deepEqual(
+    visibleSquadOrganizations(data, "boxing", DEMO_ID).map((item) => item.name),
+    ["Neighborhood Studio", "Second Organization"],
+  );
+  assert.deepEqual(
+    visibleSquadNetworks(data, "boxing", DEMO_ID).map((item) => item.name),
+    ["Lakefront Collective", "Second Network"],
+  );
+
+  data.squad_members = data.squad_members.filter(
+    (member) => !(member.squad_id === "boxing" && member.user_id === DEMO_ID),
+  );
+  assert.deepEqual(visibleSquadOrganizations(data, "boxing", DEMO_ID), []);
+  assert.deepEqual(visibleSquadNetworks(data, "boxing", DEMO_ID), []);
 });
 
 test("Squad chat shows only readable canonical Pings for the current Squad", () => {

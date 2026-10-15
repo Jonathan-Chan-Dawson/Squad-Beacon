@@ -60,7 +60,7 @@ async function transformScale(locator: Locator) {
   });
 }
 
-test("Current, Upcoming, Past utilities, and Squads stay compact at 390px", async ({
+test("Beacons home and dedicated activity screens, and Squads stay compact at 390px", async ({
   page,
 }) => {
   page.setDefaultTimeout(8000);
@@ -69,111 +69,34 @@ test("Current, Upcoming, Past utilities, and Squads stay compact at 390px", asyn
   await enterDemo(page);
 
   await page.getByRole("tab", { name: "Beacons", exact: true }).click();
-  await expect(page.getByText("Friends Now", { exact: true })).toBeVisible();
-  const currentTab = page.getByRole("button", { name: "Current", exact: true });
-  const upcomingTab = page.getByRole("button", {
-    name: "Upcoming",
-    exact: true,
-  });
-  await expect(currentTab).toBeVisible();
-  await expect(currentTab).toHaveAttribute("aria-selected", "true");
-  await expect(page.getByText("\u2713 Current", { exact: true })).toHaveCount(
-    0,
-  );
-  const everyoneChip = page.getByRole("button", {
-    name: "Everyone",
-    exact: true,
-  });
-  const freeToHangChip = page.getByRole("button", {
-    name: "Free to hang",
-    exact: true,
-  });
-  await expect(everyoneChip).toBeVisible();
-  await expect(everyoneChip).toHaveAttribute("aria-selected", "true");
-  await expect(page.getByText("\u2713 Everyone", { exact: true })).toHaveCount(
-    0,
-  );
-  await expect(freeToHangChip).toHaveAttribute("aria-selected", "false");
-  await freeToHangChip.click();
-  await expect(freeToHangChip).toHaveAttribute("aria-selected", "true");
-  await expect(everyoneChip).toHaveAttribute("aria-selected", "false");
-  await expect(
-    page.getByText("\u2713 Free to hang", { exact: true }),
-  ).toHaveCount(0);
-  await everyoneChip.click();
-  await expect(everyoneChip).toHaveAttribute("aria-selected", "true");
-  for (const utility of [
-    "Beacon Plans",
-    "Favorites",
-    "My templates",
-    "Library",
-  ]) {
-    await expect(
-      page.getByRole("button", { name: utility, exact: true }),
-    ).toHaveCount(0);
-  }
+  await expect(page.getByText("Friends Right Now", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Your Activity", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Browse", exact: true })).toBeVisible();
+  await expect(page.getByRole("tablist", { name: "Beacon time period" })).toHaveCount(0);
+  const titleTarget = page.getByRole("button", { name: /^View .* details$/ }).first();
+  await expect(titleTarget).toBeVisible();
+  expect((await titleTarget.boundingBox())?.height).toBeGreaterThanOrEqual(44);
   await expectNoHorizontalOverflow(page);
-  await page.screenshot({ path: "test-results/ui-polish-activities.png" });
+  await page.screenshot({ path: "test-results/ui-polish-beacons-home.png" });
 
-  await page.getByRole("button", { name: "Filter", exact: true }).click();
-  await page.getByRole("button", { name: "Fitness", exact: true }).click();
-  await expect(page.getByText("\u2713 Fitness", { exact: true })).toHaveCount(
-    0,
-  );
-  await page.getByRole("button", { name: "Done", exact: true }).click();
-  await expect(page.getByTestId("activity-filter-count")).toHaveText("1");
-  await page.getByRole("button", { name: "Filter", exact: true }).click();
-  await expect(
-    page.getByRole("button", { name: "Fitness", exact: true }),
-  ).toBeVisible();
-  await page
-    .getByRole("button", { name: "Reset filters", exact: true })
-    .click();
-  await page.getByRole("button", { name: "Done", exact: true }).click();
-  await expect(page.getByTestId("activity-filter-count")).toHaveCount(0);
-
-  await upcomingTab.click();
-  await expect(page.getByText("Coming up", { exact: true })).toBeVisible();
-  await expect(upcomingTab).toHaveAttribute("aria-selected", "true");
-  await expect(currentTab).toHaveAttribute("aria-selected", "false");
-  await expect(page.getByText("\u2713 Upcoming", { exact: true })).toHaveCount(
-    0,
-  );
-  for (const utility of [
-    "Beacon Plans",
-    "Favorites",
-    "My templates",
-    "Library",
-  ]) {
-    await expect(
-      page.getByRole("button", { name: utility, exact: true }),
-    ).toHaveCount(0);
-  }
+  await page.getByRole("button", { name: "Browse", exact: true }).click();
+  await expect(page.getByTestId("browse-beacons-screen")).toBeVisible();
+  await expect(page.getByTestId("browse-beacons-now")).toBeVisible();
+  await expect(page.getByTestId("browse-beacons-upcoming")).toBeVisible();
   await expectNoHorizontalOverflow(page);
+  await page.screenshot({ path: "test-results/ui-polish-browse-beacons.png" });
+  await page.getByRole("button", { name: "Back to Beacons", exact: true }).click();
 
-  await page.getByRole("button", { name: "Past", exact: true }).click();
-  await expect(page.getByText("Beacon history", { exact: true })).toBeVisible();
-  await expect(page.getByText("\u2713 Past", { exact: true })).toHaveCount(0);
-  for (const utility of [
-    "Beacon Plans",
-    "Favorites",
-    "My templates",
-    "Library",
-  ]) {
-    await expect(
-      page.getByRole("button", { name: utility, exact: true }),
-    ).toBeVisible();
-  }
+  await page.getByText("Coming Up", { exact: true }).filter({ visible: true }).locator("..").getByRole("button", { name: "See all", exact: true }).click();
+  await expect(page).toHaveURL(/\/browse-beacons(?:\?.*section=upcoming)?/);
+  await expect(page.getByTestId("browse-beacons-upcoming")).toBeVisible();
+  await page.getByRole("button", { name: "Back to Beacons", exact: true }).click();
+  await page.getByText("Your Activity", { exact: true }).filter({ visible: true }).locator("..").getByRole("button", { name: "See all", exact: true }).click();
+  await expect(page.getByTestId("your-activity-screen")).toBeVisible();
+  await expect(page.getByTestId("your-activity-header")).toHaveText("Your Activity");
   await expectNoHorizontalOverflow(page);
-
-  await page.getByRole("button", { name: "Current", exact: true }).click();
-  const viewBeacon = page.getByRole("button", {
-    name: "View A few rounds. Good company. details",
-    exact: true,
-  });
-  await expect(viewBeacon).toBeVisible();
-  await viewBeacon.click();
-  await expect(page.getByTestId("map-tooltip")).toBeVisible();
+  await page.screenshot({ path: "test-results/ui-polish-your-activity.png" });
+  await page.getByRole("button", { name: "Back to Beacons", exact: true }).click();
 
   await page.getByRole("tab", { name: "Profile", exact: true }).click();
   await page.getByRole("button", { name: "Open Friends & Lists", exact: true }).click();
@@ -235,7 +158,7 @@ test("reduced motion keeps a shared Button at identity while hovering, pressing,
     await enterDemo(page);
     await page.getByRole("tab", { name: "Beacons", exact: true }).click();
     const findFriends = page.getByRole("button", {
-      name: "Find friends",
+      name: "Browse",
       exact: true,
     });
     await expect(findFriends).toBeVisible();
@@ -255,10 +178,10 @@ test("reduced motion keeps a shared Button at identity while hovering, pressing,
     await expectIdentityTransform(findFriends);
     await page.mouse.up();
 
-    await expect(page).toHaveURL(/\/find-friends\/?$/);
-    await page.goBack();
+    await expect(page).toHaveURL(/\/browse-beacons\/?$/);
+    await page.getByRole("button", { name: "Back to Beacons", exact: true }).click();
     const returnedButton = page.getByRole("button", {
-      name: "Find friends",
+      name: "Browse",
       exact: true,
     });
     await expect(returnedButton).toBeVisible();
@@ -284,12 +207,12 @@ test("normal press animates, then a live reduced-motion change resets scale", as
   try {
     await enterDemo(page);
     await page.getByRole("tab", { name: "Beacons", exact: true }).click();
-    const control = page.getByRole("button", { name: "Current", exact: true });
+    const control = page.getByRole("button", { name: "Browse", exact: true });
     await expect(control).toBeVisible();
     await control.scrollIntoViewIfNeeded();
     const bounds = await control.boundingBox();
     expect(bounds).not.toBeNull();
-    if (!bounds) throw new Error("Current tab button has no clickable bounds.");
+    if (!bounds) throw new Error("Create Beacon button has no clickable bounds.");
     await page.mouse.move(
       bounds.x + bounds.width / 2,
       bounds.y + bounds.height / 2,
@@ -299,8 +222,9 @@ test("normal press animates, then a live reduced-motion change resets scale", as
       .poll(() => transformScale(control), { timeout: 2000 })
       .toBeLessThan(0.999);
 
-    // A normal release returns the control to identity before checking a live
-    // preference change. Current remains mounted for this interaction.
+    // Cancel the navigation press outside the target so the same shared
+    // button remains mounted for the live preference change.
+    await page.mouse.move(1, 1);
     await page.mouse.up();
     await expect(control).toBeVisible();
     await expectIdentityTransform(control);
@@ -309,7 +233,7 @@ test("normal press animates, then a live reduced-motion change resets scale", as
     const nextBounds = await control.boundingBox();
     expect(nextBounds).not.toBeNull();
     if (!nextBounds)
-      throw new Error("Current tab button has no clickable bounds.");
+      throw new Error("Create Beacon button has no clickable bounds.");
     await page.mouse.move(
       nextBounds.x + nextBounds.width / 2,
       nextBounds.y + nextBounds.height / 2,

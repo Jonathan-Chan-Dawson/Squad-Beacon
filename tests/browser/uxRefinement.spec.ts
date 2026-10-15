@@ -33,52 +33,25 @@ async function demo(page: Page) {
   await page.getByRole("button", { name: /Explore the demo/ }).click();
 }
 
-test("saved-place exploration carries into Upcoming without adding Past shortcuts", async ({
+test("discovery search stays separate from personal activity and Map remains accessible", async ({
   page,
 }) => {
   await demo(page);
-  await page
-    .getByRole("textbox", {
-      name: "Search Beacons, People, and places",
-      exact: true,
-    })
-    .click();
-  await page
-    .getByRole("textbox", {
-      name: "Search Beacons, People, and places",
-      exact: true,
-    })
-    .fill("game room");
-  await page
-    .getByRole("button", { name: /^Explore The game room$/i })
-    .first()
-    .click();
   await page.getByRole("tab", { name: "Beacons", exact: true }).click();
-  await page.getByRole("button", { name: "Upcoming", exact: true }).click();
-  await expect(
-    page.getByRole("button", { name: "Choose exploration area", exact: true }),
-  ).toContainText("The game room");
-  for (const name of ["Beacon Plans", "Favorites", "My templates", "Library"]) {
-    await expect(page.getByRole("button", { name, exact: true })).toHaveCount(
-      0,
-    );
-  }
-  await page.getByRole("button", { name: "Past", exact: true }).click();
-  await expect(
-    page.getByRole("button", { name: "Beacon Plans", exact: true }),
-  ).toBeVisible();
-  await page.getByRole("button", { name: "Upcoming", exact: true }).click();
-  await page
-    .getByRole("button", { name: "Choose exploration area", exact: true })
-    .click();
-  await expect(
-    page.getByRole("textbox", {
-      name: "Search Beacons, People, and places",
-      exact: true,
-    }),
-  ).toBeVisible();
+  await page.getByRole("button", { name: "Browse", exact: true }).click();
+  await expect(page.getByTestId("browse-beacons-screen")).toBeVisible();
+  await page.getByRole("textbox", { name: "Search Beacons", exact: true }).fill("no matching discovery activity");
+  await expect(page.getByTestId("browse-beacons-empty")).toBeVisible();
+  await expect(page.getByRole("tablist", { name: "Beacon time period" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Back to Beacons", exact: true }).click();
+  await page.getByText("Your Activity", { exact: true }).filter({ visible: true }).locator("..").getByRole("button", { name: "See all", exact: true }).click();
+  await expect(page.getByTestId("your-activity-screen")).toBeVisible();
+  await expect(page.getByTestId("your-activity-header")).toHaveText("Your Activity");
+  await expect(page.getByTestId("your-activity-upcoming-section")).toBeVisible();
+  await page.getByRole("button", { name: "Browse Beacons", exact: true }).click();
+  await page.getByRole("button", { name: "Open map", exact: true }).click();
+  await expect(page.getByLabel("Beacon map", { exact: true }).filter({ visible: true })).toBeVisible();
 });
-
 test("worldwide search is explicit and demo results are clearly local examples", async ({
   page,
 }) => {
@@ -130,15 +103,15 @@ test("a Routine pauses, resumes and creates a fresh ordered Plan", async ({
 }) => {
   await demo(page);
   await page.getByRole("tab", { name: "Beacons", exact: true }).click();
-  await page.getByRole("button", { name: "Past", exact: true }).click();
-  await page.getByRole("button", { name: "Beacon Plans", exact: true }).click();
+  await page.getByRole("button", { name: "Saved & Tools", exact: true }).click();
+  await page.getByRole("button", { name: /^Plans · \d+$/ }).click();
   await page.getByRole("button", { name: "Routines", exact: true }).click();
   await page.getByRole("button", { name: "Pause", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "Resume", exact: true }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Resume", exact: true }).click();
-  await page.getByRole("button", { name: "Run once", exact: true }).click();
+  await page.getByRole("button", { name: "Run Now", exact: true }).click();
   await expect(page).toHaveURL(/\/plan\//);
   await expect(
     page.getByRole("button", { name: "Open Beacon", exact: true }),
@@ -153,32 +126,28 @@ test("a Routine pauses, resumes and creates a fresh ordered Plan", async ({
     await expect(steps.nth(index).locator("xpath=..")).toContainText(title);
 });
 
-test("Now keeps the useful actions close: status, friend star, message and profile", async ({
+test("Beacons home keeps status, friend selection, messages and profiles accessible", async ({
   page,
 }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await demo(page);
   await page.getByRole("tab", { name: "Beacons", exact: true }).click();
-  await expect(page.getByText("YOUR STATUS", { exact: true })).toBeVisible();
+  await expect(page.getByText("Your status", { exact: true })).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Share your status", exact: true }),
   ).toBeVisible();
-  const star = page.getByRole("button", {
-    name: "Star Sam Rivera",
-    exact: true,
-  });
-  await star.click();
-  await expect(
-    page.getByRole("button", { name: "Unstar Sam Rivera", exact: true }),
-  ).toBeEnabled();
-  await page.getByRole("button", { name: /^Message Sam Rivera\./ }).click();
-  await expect(page).toHaveURL(/\/messages\/sam\/?$/);
+  const friend = page.getByRole("checkbox", { name: /^Select .* to plan with$/ }).first();
+  const name = (await friend.getAttribute("aria-label"))!.replace(/^Select /, "").replace(/ to plan with$/, "");
+  await friend.click();
+  await expect(page.getByRole("button", { name: "Plan with 1 Selected", exact: true })).toBeEnabled();
+  await page.getByRole("button", { name: `Message ${name}`, exact: true }).click();
+  await expect(page).toHaveURL(/\/messages\//);
   await page.goBack();
   await page
-    .getByRole("button", { name: "Open profile Sam Rivera", exact: true })
+    .getByRole("button", { name: `View ${name}'s profile`, exact: true }).first()
     .click();
-  await expect(page).toHaveURL(/\/person\/sam\/?$/);
+  await expect(page).toHaveURL(/\/person\//);
   expect(errors).toEqual([]);
 });
 

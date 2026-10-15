@@ -1,0 +1,33 @@
+import { expect, test } from "@playwright/test";
+
+test("completed history expands inline and search finds it while collapsed", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: /Explore the demo/ }).click();
+  await page.getByRole("tab", { name: "Beacons", exact: true }).click();
+  await page.getByRole("button", { name: "Open Beacon", exact: true }).click();
+  await expect(page).toHaveURL(/\/activity\//);
+  await page.getByRole("tab", { name: "Tools", exact: true }).click();
+  await page.getByRole("button", { name: "Mark completed", exact: true }).click();
+  await page.goBack();
+  await page.getByText("Your Activity", { exact: true }).filter({ visible: true }).locator("..").getByRole("button", { name: "See all", exact: true }).click();
+  const screen = page.getByTestId("your-activity-screen");
+  await expect(screen).toBeVisible();
+  const disclosure = screen.getByTestId("your-activity-history-disclosure");
+  await expect(disclosure).toHaveAttribute("aria-label", "Expand past experiences");
+  await disclosure.click();
+  const record = screen.getByRole("button", { name: /^Open Plan stop 1: Coffee together, Completed,/ });
+  await expect(record).toBeVisible();
+  await disclosure.click();
+  await expect(record).toHaveCount(0);
+  const search = screen.getByRole("textbox", { name: "Search your activities" });
+  await search.fill("Coffee together");
+  await expect(record).toBeVisible();
+  await search.fill("Coffee together ");
+  await expect(record).toBeVisible();
+  await search.fill("no match");
+  await search.fill("Coffee together");
+  await expect(record).toBeVisible();
+  await expect(screen.getByText("You went", { exact: false })).toHaveCount(0);
+  await record.click();
+  await expect(page).toHaveURL(/\/activity\//);
+});

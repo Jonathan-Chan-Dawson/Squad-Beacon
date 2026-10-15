@@ -3,6 +3,7 @@ import {
   canReadOrganization,
   canReadOrganizationMembers,
 } from "@/src/features/organizations/domain";
+import { canReadSpace } from "@/src/features/spaces/domain";
 import {
   normalizePlanningData,
   pendingPlanningThreads,
@@ -10,6 +11,7 @@ import {
 import { canViewProfile } from "@/src/features/profile/privacy";
 import type { Data, ID, Plan, SquadMember } from "@/src/shared/types";
 import type { PlanningThread } from "@/src/features/planning/types";
+import type { SocialDirectorySummary } from "@/src/features/social/types";
 
 function isBlocked(data: Data, left: ID, right: ID) {
   return data.blocks.some(
@@ -175,7 +177,17 @@ export function activeSquadDecision(
   userId: ID,
   now = Date.now(),
 ): PlanningThread | undefined {
-  if (!canOpenSquadProfile(data, squadId, userId)) return undefined;
+  return activeSquadDecisions(data, squadId, userId, now)[0];
+}
+
+/** All open decisions that are directly addressed to this Squad and readable by the viewer. */
+export function activeSquadDecisions(
+  data: Data,
+  squadId: ID,
+  userId: ID,
+  now = Date.now(),
+): PlanningThread[] {
+  if (!canOpenSquadProfile(data, squadId, userId)) return [];
   const planning = normalizePlanningData(data);
   return pendingPlanningThreads(data, planning, userId, now)
     .filter(
@@ -184,7 +196,147 @@ export function activeSquadDecision(
         thread.audience === "squad" &&
         thread.audience_id === squadId,
     )
-    .sort((first, second) => first.deadline_at.localeCompare(second.deadline_at))[0];
+    .sort(
+      (first, second) =>
+        first.deadline_at.localeCompare(second.deadline_at) ||
+        first.created_at.localeCompare(second.created_at) ||
+        first.id.localeCompare(second.id),
+    );
+}
+
+export type SquadOverviewPreview =
+  | { kind: "decision"; decision: PlanningThread }
+  | { kind: "beacon"; activity: Data["activities"][number]; timing: "current" | "upcoming" }
+  | { kind: "plan"; plan: Plan; routine?: Data["plan_routines"][number] };
+
+/**
+ * Keeps the compact overview to three total current/upcoming previews. Pending
+ * decisions take priority, followed by a current Beacon and then the nearest
+ * Beacon or Plan. Ties are stable by type and id.
+ */
+export function squadProfilePreviews(
+  data: Data,
+  squadId: ID,
+  userId: ID,
+  now = Date.now(),
+  limit = 3,
+): SquadOverviewPreview[] {
+  if (!canOpenSquadProfile(data, squadId, userId) || limit <= 0) return [];
+  const previews: SquadOverviewPreview[] = activeSquadDecisions(
+    data,
+    squadId,
+    userId,
+    now,
+  )
+    .slice(0, limit)
+    .map((decision) => ({ kind: "decision", decision }));
+  if (previews.length >= limit) return previews;
+
+  const activities = squadActivities(data, squadId, userId, now).filter(
+    (activity) =>
+      activity.status === "scheduled" && Date.parse(activity.ends_at) > now,
+  );
+  const current = activities.find(
+    (activity) => Date.parse(activity.starts_at) <= now,
+  );
+  const beaconCandidates: SquadOverviewPreview[] = activities
+    .filter((activity) => activity.id !== current?.id)
+    .map((activity) => ({
+      kind: "beacon",
+      activity,
+      timing: Date.parse(activity.starts_at) <= now ? "current" : "upcoming",
+    }));
+  if (current) {
+    previews.push({ kind: "beacon", activity: current, timing: "current" });
+  }
+
+  const readablePlans = squadPlans(data, squadId, userId, now).filter(
+    ({ plan }) =>
+      !activities.some((activity) => activity.plan_id === plan.id),
+  );
+  const planCandidates: SquadOverviewPreview[] = readablePlans.map(
+    ({ plan, routine }) => ({ kind: "plan", plan, routine }),
+  );
+  const startsAt = (preview: SquadOverviewPreview) => {
+    if (preview.kind === "beacon") return Date.parse(preview.activity.starts_at);
+    if (preview.kind === "plan") {
+      const startDate = preview.routine?.next_occurrence_on ?? preview.plan.start_date;
+      return Date.parse(`${startDate}T00:00:00.000Z`);
+    }
+    return Date.parse(preview.decision.deadline_at);
+  };
+  const priority = (preview: SquadOverviewPreview) =>
+    preview.kind === "beacon" ? 0 : preview.kind === "plan" ? 1 : 2;
+  const upcoming = [...beaconCandidates, ...planCandidates].sort(
+    (first, second) =>
+      startsAt(first) - startsAt(second) ||
+      priority(first) - priority(second) ||
+      (first.kind === "decision"
+        ? first.decision.id
+        : first.kind === "beacon"
+          ? first.activity.id
+          : first.plan.id
+      ).localeCompare(
+        second.kind === "decision"
+          ? second.decision.id
+          : second.kind === "beacon"
+            ? second.activity.id
+            : second.plan.id,
+      ),
+  );
+  previews.push(...upcoming.slice(0, Math.max(0, limit - previews.length)));
+  return previews;
+}
+
+/**
+ * Readable Beacons associated with a publicly accessible Squad can be shown
+ * without treating the viewer as a Squad member. The exact summary is the
+ * route authorization proof; each Beacon still passes its own access check.
+ */
+export function publicSquadBeaconPreviews(
+  data: Data,
+  squadId: ID,
+  userId: ID,
+  exactSummary: Pick<SocialDirectorySummary, "entity_type" | "entity_id"> | null,
+  now = Date.now(),
+  limit = 3,
+): Extract<SquadOverviewPreview, { kind: "beacon" }>[] {
+  const boundedLimit = Math.min(3, Math.max(0, Math.trunc(limit)));
+  if (
+    !boundedLimit ||
+    !exactSummary ||
+    exactSummary.entity_type !== "squad" ||
+    exactSummary.entity_id !== squadId ||
+    data.viewer_id !== userId
+  ) return [];
+
+  return data.activities
+    .filter((activity) =>
+      activity.status === "scheduled" &&
+      Date.parse(activity.ends_at) > now &&
+      data.activity_social_links.some((link) =>
+        link.activity_id === activity.id &&
+        link.entity_type === "squad" &&
+        link.entity_id === squadId,
+      ) &&
+      canReadBeaconActivity(data, activity, userId),
+    )
+    .sort((first, second) => {
+      const firstCurrent = Date.parse(first.starts_at) <= now;
+      const secondCurrent = Date.parse(second.starts_at) <= now;
+      return Number(!firstCurrent) - Number(!secondCurrent) ||
+        (firstCurrent && secondCurrent
+          ? Date.parse(first.ends_at) - Date.parse(second.ends_at) ||
+            Date.parse(second.starts_at) - Date.parse(first.starts_at)
+          : Date.parse(first.starts_at) - Date.parse(second.starts_at)) ||
+        first.id.localeCompare(second.id);
+    })
+    .slice(0, boundedLimit)
+    .map((activity) => ({
+      kind: "beacon",
+      activity,
+      timing: Date.parse(activity.starts_at) <= now ? "current" : "upcoming",
+    }));
 }
 
 export function visibleSquadOrganization(
@@ -200,4 +352,55 @@ export function visibleSquadOrganization(
       return !!organization && canReadOrganization(data, organization.id, userId) &&
         canReadOrganizationMembers(data, organization.id, userId);
     });
+}
+
+export type SquadRelationshipPreview = {
+  id: ID;
+  name: string;
+  type: "organization" | "network";
+};
+
+/** Returns every directly associated user-facing Organization (Space) the viewer can read. */
+export function visibleSquadOrganizations(
+  data: Data,
+  squadId: ID,
+  userId: ID | null,
+): SquadRelationshipPreview[] {
+  if (!userId || !canOpenSquadProfile(data, squadId, userId)) return [];
+  return data.space_squads
+    .filter((link) => link.squad_id === squadId)
+    .flatMap((link) => {
+      const organization = data.spaces.find(
+        (item) => item.id === link.space_id,
+      );
+      if (!organization || !canReadSpace(data, organization.id, userId))
+        return [];
+      return [{
+        id: organization.id,
+        name: organization.name,
+        type: "organization" as const,
+      }];
+    })
+    .sort((first, second) => first.name.localeCompare(second.name) || first.id.localeCompare(second.id));
+}
+
+/** Returns every directly associated user-facing Network (Organization) the viewer can read. */
+export function visibleSquadNetworks(
+  data: Data,
+  squadId: ID,
+  userId: ID | null,
+): SquadRelationshipPreview[] {
+  if (!userId || !canOpenSquadProfile(data, squadId, userId)) return [];
+  return data.organization_squads
+    .filter((link) => link.squad_id === squadId)
+    .flatMap((link) => {
+      const network = data.organizations.find((item) => item.id === link.organization_id);
+      if (!network || !canReadOrganization(data, network.id, userId)) return [];
+      return [{
+        id: network.id,
+        name: network.name,
+        type: "network" as const,
+      }];
+    })
+    .sort((first, second) => first.name.localeCompare(second.name) || first.id.localeCompare(second.id));
 }

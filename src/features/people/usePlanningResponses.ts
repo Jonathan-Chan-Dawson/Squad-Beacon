@@ -256,7 +256,7 @@ export function usePlanningResponses(now: number, onBeforeOpen?: () => void) {
           .filter((row) => row.user_id === userId && row.status === "invited")
           .map((row) => ({
             id: `org:${row.organization_id}`,
-            title: "Super-Organization invitation",
+            title: "Network invitation",
             sourceLabel: data.organizations.find(
               (item) => item.id === row.organization_id,
             )?.name,

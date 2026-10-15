@@ -5,6 +5,7 @@ import type {
   SocialEntityType,
   SocialMembershipStatus,
 } from "./types";
+import { parseSocialDirectoryRows } from "./types";
 
 export interface SocialDirectoryQuery {
   query: string;
@@ -95,7 +96,8 @@ function entityVisible(data: Data, type: SocialEntityType, id: ID, userId: ID) {
   if (type === "organization" && data.organization_bans.some((row) => row.organization_id === id && row.user_id === userId)) return false;
   if (type === "space" && data.space_bans.some((row) => row.space_id === id && row.user_id === userId)) return false;
   if (type === "squad" && data.squad_bans.some((row) => row.squad_id === id && row.user_id === userId)) return false;
-  if (memberStatus(data, type, id, userId) === "active" || memberStatus(data, type, id, userId) === "invited") return true;
+  const status = memberStatus(data, type, id, userId);
+  if (status === "active" || status === "invited" || status === "requested") return true;
   return isSocialDirectoryVisible(entity.discoverability ?? "private", parentEligible(data, type, id, userId));
 }
 
@@ -167,28 +169,11 @@ export function searchSocialDirectoryInData(
     : ["organization", "space", "squad"];
   const rows: SocialDirectorySummary[] = [];
   const add = (type: SocialEntityType, entity: { id: ID; owner_id: ID; name: string; description: string; discoverability?: "public" | "community" | "private"; join_mode?: "open" | "request" | "invite" }) => {
-    if (!entityVisible(data, type, entity.id, viewerId)) return;
+    const summary = getCommunitySummary(type, entity.id, data, viewerId);
+    if (!summary) return;
     if (!selectedByParent(data, type, entity.id, input.parentType, input.parentId, viewerId)) return;
     if (!(entity.name.toLocaleLowerCase().includes(query) || entity.description.toLocaleLowerCase().includes(query))) return;
-    const joinMode = entity.join_mode ?? "invite";
-    const membershipStatus = memberStatus(data, type, entity.id, viewerId);
-    const parent = safeParent(data, type, entity.id, viewerId);
-    const { memberCount, childCount } = counts(data, type, entity.id, entity.owner_id, viewerId);
-    rows.push({
-      entity_type: type,
-      entity_id: entity.id,
-      name: entity.name,
-      description: entity.description,
-      discoverability: entity.discoverability ?? "private",
-      join_mode: joinMode,
-      member_count: memberCount,
-      child_count: childCount,
-      membership_status: membershipStatus,
-      action: socialDirectoryAction(membershipStatus, joinMode),
-      parent_type: parent?.parent_type ?? null,
-      parent_id: parent?.parent_id ?? null,
-      parent_name: parent?.parent_name ?? null,
-    });
+    rows.push(summary);
   };
   if (entityTypes.includes("organization"))
     data.organizations.forEach((row) => add("organization", row));
@@ -200,6 +185,67 @@ export function searchSocialDirectoryInData(
     const prefixOrder = Number(!a.name.toLocaleLowerCase().startsWith(query)) - Number(!b.name.toLocaleLowerCase().startsWith(query));
     return prefixOrder || a.name.localeCompare(b.name) || a.entity_type.localeCompare(b.entity_type) || a.entity_id.localeCompare(b.entity_id);
   }).slice(pageOffset, pageOffset + pageSize);
+}
+
+/**
+ * Exact-ID equivalent of one safe directory row. A missing, blocked, banned,
+ * archived, private, or otherwise ineligible entity has the same null result.
+ */
+export function getCommunitySummary(
+  type: SocialEntityType,
+  id: ID,
+  data: Data,
+  viewerId: ID | null,
+): SocialDirectorySummary | null {
+  if (
+    !viewerId ||
+    data.viewer_id !== viewerId ||
+    typeof id !== "string" ||
+    !id ||
+    id.length > 100 ||
+    (type !== "squad" && type !== "space" && type !== "organization")
+  )
+    return null;
+
+  const entity = type === "organization"
+    ? data.organizations.find((row) => row.id === id)
+    : type === "space"
+      ? data.spaces.find((row) => row.id === id)
+      : data.squads.find((row) => row.id === id);
+  if (!entity || !entityVisible(data, type, id, viewerId)) return null;
+
+  const joinMode = entity.join_mode ?? "invite";
+  const membershipStatus = memberStatus(data, type, id, viewerId);
+  const parent = safeParent(data, type, id, viewerId);
+  const { memberCount, childCount } = counts(data, type, id, entity.owner_id, viewerId);
+  return {
+    entity_type: type,
+    entity_id: id,
+    name: entity.name,
+    description: entity.description,
+    discoverability: entity.discoverability ?? "private",
+    join_mode: joinMode,
+    member_count: memberCount,
+    child_count: childCount,
+    membership_status: membershipStatus,
+    action: socialDirectoryAction(membershipStatus, joinMode),
+    parent_type: parent?.parent_type ?? null,
+    parent_id: parent?.parent_id ?? null,
+    parent_name: parent?.parent_name ?? null,
+  };
+}
+
+/** Parses the one-row-or-empty response from community_profile_summary. */
+export function parseCommunityProfileSummary(
+  value: unknown,
+  type: SocialEntityType,
+  id: ID,
+): SocialDirectorySummary | null {
+  if (!Array.isArray(value) || value.length !== 1) return null;
+  const [summary] = parseSocialDirectoryRows(value);
+  return summary?.entity_type === type && summary.entity_id === id
+    ? summary
+    : null;
 }
 
 export function canReadUnjoinedSquadSummary(

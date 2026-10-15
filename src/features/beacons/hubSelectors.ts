@@ -15,9 +15,15 @@ export function confirmedHubActivities(data: Data, userId: string | null) {
 
 export function nearestHubActivity(activities: Activity[], now: number) {
   return activities.filter((activity) => activity.status === "scheduled" &&
-    Number.isFinite(Date.parse(activity.starts_at)) && Date.parse(activity.ends_at) > now)
+    Number.isFinite(Date.parse(activity.starts_at)) && Date.parse(activity.ends_at) > now &&
+    isHubActivityStarted(activity))
     .sort((left, right) => Number(Date.parse(left.starts_at) > now) - Number(Date.parse(right.starts_at) > now) ||
       Date.parse(left.starts_at) - Date.parse(right.starts_at) || left.id.localeCompare(right.id))[0];
+}
+
+/** Plan children waiting for a manual start or a prior step have placeholder dates. */
+export function isHubActivityStarted(activity: Activity) {
+  return !(activity.plan_id && activity.plan_step && activity.plan_started_at == null);
 }
 
 export function toggleHubFriend(selected: string[], id: string) {

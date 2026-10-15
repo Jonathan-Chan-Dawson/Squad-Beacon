@@ -507,6 +507,7 @@ export interface Data {
   plans: Plan[];
   plan_templates: PlanTemplate[];
   messages: Message[];
+  dm_message_reads: import("@/src/features/messages/readMarkers").DirectMessageRead[];
   beacon_checklist_items: BeaconChecklistItem[];
   beacon_checklist_sections: BeaconChecklistSection[];
   beacon_notes: BeaconNote[];
@@ -578,6 +579,7 @@ export const emptyData = (): Data => ({
   plans: [],
   plan_templates: [],
   messages: [],
+  dm_message_reads: [],
   beacon_checklist_items: [],
   beacon_checklist_sections: [],
   beacon_notes: [],
@@ -623,6 +625,7 @@ export const emptyData = (): Data => ({
 export function normalizeData(value: Partial<Data> | null | undefined): Data {
   const hasInvitationGrantRows = Array.isArray(value?.beacon_invitation_grants);
   const data = { ...emptyData(), ...(value ?? {}) } as Data;
+  data.dm_message_reads = Array.isArray(data.dm_message_reads) ? data.dm_message_reads : [];
   data.plan_members = Array.isArray(data.plan_members) ? data.plan_members : [];
   data.plan_routines = Array.isArray(data.plan_routines)
     ? data.plan_routines

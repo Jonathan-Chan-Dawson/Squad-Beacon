@@ -15,7 +15,7 @@ test("Organization opens directly with compact content and focused directories",
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await communities(page);
-  await expect(page).toHaveURL(/\/communities/);
+  await expect(page).toHaveURL(/\/squads/);
   await page
     .getByRole("button", { name: "Neighborhood Studio", exact: true })
     .click();
@@ -46,7 +46,7 @@ test("Organization opens directly with compact content and focused directories",
   expect(errors).toEqual([]);
 });
 
-test("Super-Organization overview keeps directories and settings secondary", async ({
+test("Network overview keeps directories and settings secondary", async ({
   page,
 }) => {
   await communities(page);
@@ -87,7 +87,10 @@ test("a growing Squad requires explicit member-copy confirmation and preserves i
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await communities(page);
-  await page.goBack();
+  await page.getByRole("button", { name: "Chats", exact: true }).click();
+  await page
+    .getByRole("textbox", { name: "Search conversations", exact: true })
+    .fill("Pickup");
   await openConversation(page, "Pickup Basketball");
   await page
     .getByLabel("Message", { exact: true })
@@ -104,9 +107,11 @@ test("a growing Squad requires explicit member-copy confirmation and preserves i
       exact: true,
     })
     .click();
-  await expect(
-    page.getByText(/^35 members · Huge Squad/).first(),
-  ).toBeVisible();
+  await expect(page.getByText(/^35 members/).filter({ visible: true }).first()).toBeVisible();
+  await page
+    .getByRole("button", { name: "Squad settings", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Connections", exact: true }).click();
   await page
     .getByRole("button", { name: "Organize as an Organization", exact: true })
     .click();
@@ -155,7 +160,7 @@ test("grouping managed Squads creates a lightweight Space without copying their 
 }) => {
   await communities(page);
   await page
-    .getByRole("button", { name: "New conversation", exact: true })
+    .getByRole("button", { name: "Create community", exact: true })
     .click();
   await page
     .getByRole("dialog")
@@ -205,7 +210,9 @@ test("public discovery joins a Space without enrolling the viewer in its Squad",
   page,
 }) => {
   await communities(page);
-  await expect(page.getByText("Discover", { exact: true })).toBeVisible();
+  await page
+    .getByRole("button", { name: "Explore Communities", exact: true })
+    .click();
   await page
     .getByRole("button", { name: "Preview Lakefront Runs", exact: true })
     .click();
@@ -236,7 +243,9 @@ test("request-to-join communities offer a cancellable request, not automatic mem
   page,
 }) => {
   await communities(page);
-  await expect(page.getByText("Discover", { exact: true })).toBeVisible();
+  await page
+    .getByRole("button", { name: "Explore Communities", exact: true })
+    .click();
   await page
     .getByRole("button", { name: "Preview Park Care Crew", exact: true })
     .click();
@@ -245,11 +254,8 @@ test("request-to-join communities offer a cancellable request, not automatic mem
     .getByRole("button", { name: "Request", exact: true })
     .click();
   await page
-    .getByRole("button", { name: "Search communities", exact: true })
-    .click();
-  await page
     .getByRole("textbox", {
-      name: "Search chats, people and communities",
+      name: "Search communities",
       exact: true,
     })
     .fill("Park Care Crew");
@@ -286,11 +292,13 @@ test("related community navigation keeps full pages and a working Back path", as
   await page
     .getByRole("button", { name: "Organization settings", exact: true })
     .click();
-  const settings = page.getByRole("dialog");
-  await expect(settings).toHaveCount(1);
-  await settings.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Organization details", exact: true }),
+  ).toBeVisible();
   await page.goBack();
-  await expect(page).toHaveURL(/\/communities/);
+  await page.goBack();
+  await expect(page).toHaveURL(/\/squads/);
   await expect(
     page.getByRole("button", { name: "Neighborhood Studio", exact: true }),
   ).toBeVisible();
@@ -307,7 +315,7 @@ test("Profile opens the existing friend and private-list manager without adding 
     .click();
   const manager = page.getByRole("dialog");
   await expect(
-    manager.getByRole("button", { name: "Private lists", exact: true }),
+    manager.getByRole("heading", { name: "Private Lists", exact: true }),
   ).toBeVisible();
   await manager.getByRole("button", { name: "Close", exact: true }).click();
   await page.getByRole("button", { name: "Communities", exact: true }).click();

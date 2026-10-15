@@ -35,8 +35,8 @@ export default function SquadChatRoute() {
   }
 
   return (
-    <SafeAreaView edges={["top", "bottom"]} style={styles.screen}>
-      <View style={[styles.content, { flex: 1, paddingBottom: 12 }]}>
+    <SafeAreaView edges={["top", "left", "right"]} style={styles.screen}>
+      <View style={[styles.content, { flex: 1, minHeight: 0, gap: 8 }]}>
         {squad && squadId ? (
           <>
             <View

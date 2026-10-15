@@ -62,6 +62,7 @@ test("an owner can choose a Squad icon once and it follows the profile, conversa
   await page
     .getByRole("button", { name: "Squad settings", exact: true })
     .click();
+  await page.getByRole("button", { name: "Appearance", exact: true }).click();
   const choice = page.getByRole("button", {
     name: "Choose Coffee Squad icon",
     exact: true,

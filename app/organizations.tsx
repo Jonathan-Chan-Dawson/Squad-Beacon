@@ -5,7 +5,7 @@ import { Screen } from "@/src/shared/ui";
 export default function OrganizationsRoute() {
   return (
     <Screen
-      title="Super-Organizations"
+      title="Networks"
       eyebrow="CONNECTED COMMUNITIES"
       create={false}
     >

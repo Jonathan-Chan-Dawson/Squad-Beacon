@@ -1,5 +1,8 @@
 People feature
 
+- screens/MessagingHubScreen.tsx: same-tab Chats/Communities hub, independent search state, compact controls and legacy entry parameters; screens/SquadsScreen.tsx preserves the public entry point.
+- privateLists.ts / components/PrivateListsSheet.tsx: eligible personal people filters, automatic Friends/Favorites and persisted owner-private list editing.
+
 - components/CommunityAvatar.tsx, SquadIconPicker.tsx and squadIcons.ts: shared group/list symbols and an admin-only persisted Squad icon choice. People keep the existing privacy-aware ProfileAvatar minis/photos.
 
 - screens/ResponsesScreen.tsx: full-screen live decision/invitation/join-request inbox; compact filters/rows and existing canonical actions. components/ResponsesSheet.tsx retains compatibility for existing launchers.
@@ -19,3 +22,5 @@ People feature
 - screens/PersonProfileScreen.tsx: direct full profile, compact relationship actions, permission-gated Beacon/shared-context previews and contextual Safety & Privacy with confirmed friendship removal.
 - components/ProfilePrimitives.tsx: accessible compact action rows, quiet navigation rows and short populated sections.
 - app/communities.tsx: focused community directory route; legacy links and entity identifiers remain stable.
+
+- Prompt 2: SquadProfileScreen uses compact profiles, a combined three-item activity preview, horizontal member previews, virtualized focused Members, multiple authorized community disclosures and categorized guarded settings. VirtualizedCommunityDirectory owns full safe community lists and existing membership actions.

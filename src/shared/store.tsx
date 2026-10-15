@@ -13,6 +13,13 @@ import type { Session } from "@supabase/supabase-js";
 import { supabase, rpc, clearPendingRequests } from "@/src/shared/supabase";
 import { DEMO_ID, demoAction, makeDemo } from "@/src/shared/demo";
 import {
+  normalizeActivityHistoryQuery,
+  parseActivityHistoryPage,
+  searchActivityHistoryInData,
+  type ActivityHistoryPage,
+  type ActivityHistoryQuery,
+} from "@/src/features/beacons/activityHistory";
+import {
   Data,
   Payload,
   emptyData,
@@ -22,12 +29,15 @@ import {
 import { clearPush, stopDeviceLocation } from "@/src/platform/device";
 import {
   normalizeSocialDirectoryQuery,
+  getCommunitySummary,
+  parseCommunityProfileSummary,
   searchSocialDirectoryInData,
   type SocialDirectoryQuery,
 } from "@/src/features/social/directory";
 import {
   parseSocialDirectoryRows,
   type SocialDirectorySummary,
+  type SocialEntityType,
 } from "@/src/features/social/types";
 type Store = {
   data: Data;
@@ -45,6 +55,11 @@ type Store = {
   searchDirectory: (
     input: SocialDirectoryQuery,
   ) => Promise<SocialDirectorySummary[]>;
+  loadCommunitySummary: (
+    type: SocialEntityType,
+    id: string,
+  ) => Promise<SocialDirectorySummary | null>;
+  loadActivityHistory: (input?: ActivityHistoryQuery) => Promise<ActivityHistoryPage>;
   startDemo: () => void;
   signOut: () => Promise<void>;
 };
@@ -164,6 +179,57 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
     },
     [data, demo, session],
   );
+  const loadCommunitySummary = useCallback(
+    async (type: SocialEntityType, id: string) => {
+      if (demo) return getCommunitySummary(type, id, dataRef.current, DEMO_ID);
+      const snapshot = dataRef.current;
+      if (!id || id.length > 100 || !session || !supabase || snapshot.viewer_id !== session.user.id)
+        return null;
+      const viewerId = session.user.id;
+      const generation = epoch.current;
+      const { data: rows, error: failure } = await supabase.rpc(
+        "community_profile_summary",
+        { p_entity_type: type, p_entity_id: id },
+      );
+      const { data: currentAuth } = await supabase.auth.getSession();
+      if (
+        generation !== epoch.current ||
+        currentAuth.session?.user.id !== viewerId ||
+        !session ||
+        session.user.id !== viewerId ||
+        dataRef.current.viewer_id !== viewerId ||
+        dataRef.current !== snapshot
+      )
+        return null;
+      if (failure) throw new Error(failure.message);
+      return parseCommunityProfileSummary(rows, type, id);
+    },
+    [demo, session],
+  );
+  const loadActivityHistory = useCallback(async (input: ActivityHistoryQuery = {}) => {
+    const query = normalizeActivityHistoryQuery(input);
+    if (demo) return searchActivityHistoryInData(dataRef.current, DEMO_ID, query);
+    if (!session || !supabase || dataRef.current.viewer_id !== session.user.id)
+      throw new Error("Refresh your profile before loading activity history.");
+    const viewer = session.user.id;
+    const generation = epoch.current;
+    const { data: result, error: failure } = await supabase.rpc("activity_history_page", {
+      p_query: query.query || null,
+      p_cursor: query.cursor,
+      p_page_size: query.pageSize,
+    });
+    const { data: currentAuth } = await supabase.auth.getSession();
+    if (
+      generation !== epoch.current ||
+      currentAuth.session?.user.id !== viewer ||
+      !session ||
+      session.user.id !== viewer ||
+      dataRef.current.viewer_id !== viewer
+    )
+      throw new Error("Your activity history session changed. Refresh to continue.");
+    if (failure) throw new Error(failure.message);
+    return parseActivityHistoryPage(result);
+  }, [demo, session]);
   useEffect(() => {
     if (demo || !session || !supabase) return;
     // Refresh crosses an async database boundary; state changes happen after the response.
@@ -468,6 +534,8 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
         viewerEpoch,
         act,
         searchDirectory,
+        loadCommunitySummary,
+        loadActivityHistory,
         loadRoutineCalendar,
         startDemo: () => {
           demoRequests.current.clear();

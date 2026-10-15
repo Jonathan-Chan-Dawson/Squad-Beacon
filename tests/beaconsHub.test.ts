@@ -34,6 +34,17 @@ test("nearest confirmed activity prefers active, then nearest future, omitting e
   assert.equal(nearestHubActivity(activities.filter((activity) => activity.id !== "active"), now)?.id, "later");
 });
 
+test("featured personal activity skips Plan children waiting to start", () => {
+  const data = makeDemo();
+  const base = data.activities[0];
+  const now = Date.parse("2026-10-13T16:00:00Z");
+  const activities = [
+    { ...base, id: "unresolved", plan_id: "plan", plan_step: { title: "Wait", start_mode: "after_previous" as const, category: "Social" as const, description: "", location_name: "", lat: null, lng: null, day_offset: 0, start_time: "17:00", duration_minutes: 60 }, plan_started_at: null, status: "scheduled" as const, starts_at: "2026-10-13T17:00:00Z", ends_at: "2026-10-13T18:00:00Z" },
+    { ...base, id: "resolved", plan_id: "plan", plan_step: { title: "Ready", start_mode: "specific" as const, category: "Social" as const, description: "", location_name: "", lat: null, lng: null, day_offset: 0, start_time: "18:00", duration_minutes: 60 }, plan_started_at: "2026-10-13T18:00:00Z", status: "scheduled" as const, starts_at: "2026-10-13T18:00:00Z", ends_at: "2026-10-13T19:00:00Z" },
+  ];
+  assert.equal(nearestHubActivity(activities, now)?.id, "resolved");
+});
+
 test("selection survives search and invalid eligibility; deselection is explicit", () => {
   const selected = toggleHubFriend(toggleHubFriend([], "jordan"), "sam");
   const original = [...selected];

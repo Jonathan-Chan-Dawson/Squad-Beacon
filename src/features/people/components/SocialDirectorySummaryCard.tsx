@@ -3,6 +3,7 @@ import { Pressable, Text, View } from "react-native";
 import { Action, Empty, Sheet, useTheme } from "@/src/shared/ui";
 import type { SocialDirectorySummary } from "@/src/features/social/types";
 import { CommunityCover, communityTypeLabel } from "./CommunityCard";
+import { CommunityAvatar } from "./CommunityAvatar";
 
 export function directoryActionLabel(action: SocialDirectorySummary["action"]) {
   return {
@@ -70,10 +71,74 @@ function SummaryContent({ summary, onAction, pending }: SummaryContentProps) {
 
 /** Summary-only presentation: never accepts a roster, message, or child-entity fallback. */
 export function SocialDirectorySummaryCard(
-  props: SummaryContentProps & { onPreview: () => void },
+  props: SummaryContentProps & {
+    onPreview: () => void;
+    compact?: boolean;
+    previewLabel?: string;
+    showJoinedStatus?: boolean;
+    actionDisabled?: boolean;
+  },
 ) {
   const { styles, colors } = useTheme();
   const { summary } = props;
+
+  if (props.compact) {
+    return (
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 8,
+          paddingVertical: 8,
+          borderBottomWidth: 1,
+          borderBottomColor: colors.line,
+        }}
+      >
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${props.previewLabel ?? "Preview"} ${summary.name}`}
+          onPress={props.onPreview}
+          style={{ flex: 1, minWidth: 0, minHeight: 44, justifyContent: "center" }}
+        >
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <CommunityAvatar type={summary.entity_type} size={36} />
+            <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+              <Text numberOfLines={1} style={[styles.body, { fontWeight: "700" }]}>
+                {summary.name}
+              </Text>
+              <Text numberOfLines={1} style={styles.muted}>
+                {communityTypeLabel(summary.entity_type)} · {summary.member_count}{" "}
+                {summary.member_count === 1 ? "member" : "members"}
+              </Text>
+              {summary.description ? (
+                <Text numberOfLines={1} style={styles.muted}>
+                  {summary.description}
+                </Text>
+              ) : null}
+            </View>
+          </View>
+        </Pressable>
+        {summary.action !== "joined" || props.showJoinedStatus ? (
+          <View style={{ width: 100, maxWidth: "40%", flexShrink: 0 }}>
+            <Action
+              compact
+              title={directoryActionLabel(summary.action)}
+              secondary={
+                summary.action === "invite_required" ||
+                summary.action === "requested"
+              }
+              disabled={props.pending || props.actionDisabled || summary.action === "invite_required" || (props.showJoinedStatus && summary.action === "joined")}
+              run={async () => {
+                if ((await props.onAction()) === false)
+                  throw new Error("Community action was not completed.");
+              }}
+            />
+          </View>
+        ) : null}
+      </View>
+    );
+  }
+
   return (
     <View
       style={{
@@ -85,10 +150,28 @@ export function SocialDirectorySummaryCard(
     >
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`Preview ${props.summary.name}`}
+        accessibilityLabel={`${props.previewLabel ?? "Preview"} ${props.summary.name}`}
         onPress={props.onPreview}
         style={{ minHeight: 44, justifyContent: "center", gap: 4 }}
       >
+        {props.compact ? (
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 9 }}>
+            <CommunityAvatar type={summary.entity_type} size={36} />
+            <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+              <Text numberOfLines={1} style={styles.h2}>{summary.name}</Text>
+              <Text numberOfLines={1} style={styles.muted}>
+                {communityTypeLabel(summary.entity_type)} · {summary.member_count}{" "}
+                {summary.member_count === 1 ? "member" : "members"}
+              </Text>
+              {summary.description ? (
+                <Text numberOfLines={2} style={styles.muted}>
+                  {summary.description}
+                </Text>
+              ) : null}
+            </View>
+          </View>
+        ) : (
+          <>
         <Text style={styles.h2}>{summary.name}</Text>
         <Text style={styles.muted}>
           {communityTypeLabel(summary.entity_type)} · {summary.member_count}{" "}
@@ -99,8 +182,10 @@ export function SocialDirectorySummaryCard(
             {summary.description}
           </Text>
         ) : null}
+          </>
+        )}
       </Pressable>
-      {summary.action !== "joined" ? (
+      {summary.action !== "joined" || props.showJoinedStatus ? (
         <View style={{ alignSelf: "flex-start" }}>
           <Action
             compact
@@ -109,7 +194,7 @@ export function SocialDirectorySummaryCard(
               summary.action === "invite_required" ||
               summary.action === "requested"
             }
-            disabled={props.pending || summary.action === "invite_required"}
+            disabled={props.pending || props.actionDisabled || summary.action === "invite_required" || (props.showJoinedStatus && summary.action === "joined")}
             run={async () => {
               if ((await props.onAction()) === false)
                 throw new Error("Community action was not completed.");

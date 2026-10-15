@@ -97,10 +97,20 @@ export const STATUS_REACTIONS = [
   }
 ] as const;
 export const QUICK_STATUS_REACTIONS = STATUS_REACTIONS.slice(0, 5);
+const emojiBase = String.raw`\p{Extended_Pictographic}\uFE0F?\p{Emoji_Modifier}?`;
+const emojiSequence = new RegExp(
+  `^(?:\\p{Regional_Indicator}{2}|[#*0-9]\\uFE0F?\\u20E3|${emojiBase}(?:\\u200D${emojiBase})*(?:[\\u{E0020}-\\u{E007E}]+\\u{E007F})?)(?![\\s\\S])`,
+  "u",
+);
 export function statusReactionEmoji(value: unknown): string {
   const emoji = value === undefined ? "🙌" : value;
-  if (!STATUS_REACTIONS.some((item) => item.emoji === emoji)) throw new Error("Choose a supported status reaction.");
-  return emoji as string;
+  if (
+    typeof emoji !== "string" ||
+    Array.from(emoji).length > 16 ||
+    !emojiSequence.test(emoji)
+  )
+    throw new Error("Choose a supported status reaction.");
+  return emoji;
 }
 export function searchStatusReactions(query: string) {
   const text = query.trim().toLocaleLowerCase();

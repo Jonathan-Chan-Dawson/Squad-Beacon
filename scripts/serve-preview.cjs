@@ -15,6 +15,13 @@ http
     if (fs.existsSync(file) && fs.statSync(file).isDirectory())
       file = path.join(file, "index.html");
     if (!fs.existsSync(file) && fs.existsSync(file + ".html")) file += ".html";
+    if (!fs.existsSync(file)) {
+      const directory = path.dirname(file);
+      if (fs.existsSync(directory) && fs.statSync(directory).isDirectory()) {
+        const templates = fs.readdirSync(directory).filter((name) => /^\[[^\]]+\]\.html$/.test(name));
+        if (templates.length === 1) file = path.join(directory, templates[0]);
+      }
+    }
     if (!fs.existsSync(file)) file = path.join(root, "index.html");
     response.setHeader(
       "Content-Type",
@@ -29,4 +36,4 @@ http
     );
     fs.createReadStream(file).pipe(response);
   })
-  .listen(4173, "127.0.0.1");
+  .listen(Number(process.env.PORT ?? 4173), "127.0.0.1");

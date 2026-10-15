@@ -19,6 +19,7 @@ import { BottomSheetScrollView } from "@gorhom/bottom-sheet";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { MapBeaconRsvp } from "./MapBeaconRsvp";
 import { MapPersonPreview } from "./MapPersonPreview";
+import { ReactionPicker } from "@/src/features/beacons/components/feed/ReactionPicker";
 import { physicalDirectionsUrl } from "./directions";
 import { MoreHorizontal } from "lucide-react-native";
 import {
@@ -234,6 +235,9 @@ export function MapPanel({
   const PanelScroll =
     Platform.OS === "web" ? ScrollView : BottomSheetScrollView;
   const [comment, setComment] = useState("");
+  const [reactionBusy, setReactionBusy] = useState(false);
+  const reactionBusyRef = useRef(false);
+  const [reactionError, setReactionError] = useState("");
   const readable =
     !!activity &&
     !!userId &&
@@ -323,6 +327,33 @@ export function MapPanel({
   const past =
     activity.status !== "scheduled" || Date.parse(activity.ends_at) <= now;
   const live = !past && Date.parse(activity.starts_at) <= now;
+  const selectedReaction = data.reactions.find(
+    (row) => row.activity_id === activity.id && row.user_id === userId,
+  );
+  const reactionRows = data.reactions.filter(
+    (row) => row.activity_id === activity.id,
+  );
+  const canReact = canWriteBeaconModule(data, activity, userId, "reactions");
+  const sendReaction = async (emoji: string): Promise<boolean> => {
+    if (reactionBusyRef.current || !canReact) return false;
+    reactionBusyRef.current = true;
+    setReactionBusy(true);
+    setReactionError("");
+    const remove = selectedReaction?.emoji === emoji;
+    try {
+      await act("react", { id: activity.id, emoji, remove });
+      await uiHaptics.success();
+      return true;
+    } catch (failure) {
+      setReactionError(
+        failure instanceof Error ? failure.message : "Could not send your reaction. Try again.",
+      );
+      return false;
+    } finally {
+      reactionBusyRef.current = false;
+      setReactionBusy(false);
+    }
+  };
   const checklist = allowed
     ? data.beacon_checklist_items.filter(
         (row) =>
@@ -716,48 +747,31 @@ export function MapPanel({
               )}
               {allowed && activeFeature === "reactions" && (
                 <View style={{ gap: tokens.space.sm }}>
-                  <Txt muted>
-                    {
-                      data.reactions.filter(
-                        (row) => row.activity_id === activity.id,
-                      ).length
-                    }{" "}
-                    reactions
-                  </Txt>
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      flexWrap: "wrap",
-                      gap: tokens.space.sm,
-                    }}
-                  >
-                    {["\u{1F64C}"].map((emoji) => (
-                      <Action
-                        key={emoji}
-                        title={emoji}
-                        secondary
-                        compact
-                        disabled={
-                          !canWriteBeaconModule(
-                            data,
-                            activity,
-                            userId,
-                            "reactions",
-                          ) ||
-                          data.reactions.some(
-                            (row) =>
-                              row.activity_id === activity.id &&
-                              row.user_id === userId &&
-                              row.emoji === emoji,
-                          )
+                  <Txt muted>{reactionRows.length} reactions</Txt>
+                  <ReactionPicker
+                    selectedEmoji={selectedReaction?.emoji}
+                    disabled={!canReact || reactionBusy}
+                    error={reactionError}
+                    onSelect={sendReaction}
+                    onOpen={() => setReactionError("")}
+                    trigger={
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={
+                          selectedReaction?.emoji
+                            ? `Reacted with ${selectedReaction.emoji}. ${reactionRows.length} reactions. Choose another reaction or remove it.`
+                            : `Choose a reaction. ${reactionRows.length} reactions.`
                         }
-                        run={async () => {
-                          await act("react", { id: activity.id });
-                          void uiHaptics.success();
-                        }}
-                      />
-                    ))}
-                  </View>
+                        accessibilityState={{ selected: !!selectedReaction?.emoji, disabled: !canReact || reactionBusy }}
+                        style={[styles.card, styles.row, { minHeight: 48, padding: 12, alignSelf: "flex-start" }]}
+                      >
+                        <Text style={styles.body}>
+                          {selectedReaction?.emoji ? `${selectedReaction.emoji} Reacted` : "🙌 React"}
+                        </Text>
+                        <Text style={styles.muted}>{reactionRows.length}</Text>
+                      </Pressable>
+                    }
+                  />
                 </View>
               )}
               {decision &&

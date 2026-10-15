@@ -65,6 +65,7 @@ test("social directory and canonical actions preserve membership boundaries and 
     "202610040003_plan_routines.sql", "202610040005_places_search_budget.sql", "202610040006_spaces.sql",
     "202610040007_social_architecture.sql",
     "202610090001_profile_settings_unblock.sql",
+    "202610140004_community_profiles.sql",
   ]) await migration(file);
 
   await root();
@@ -305,4 +306,93 @@ test("social directory and canonical actions preserve membership boundaries and 
   await actor("owner");
   await assert.rejects(action("unblock", { id: ids.owner }), /blocked person/i);
   await assert.rejects(action("unblock", {}), /blocked person/i);
+
+  // Exact-ID summaries match one safe directory row and collapse denied/missing IDs.
+  await actor("owner");
+  const publicSummarySquad = await createSquad("Public Summary", "public", "request");
+  const privateSummarySquad = await createSquad("Private Summary");
+  await actor("stranger");
+  const directSummary = await db.query(
+    "select * from public.community_profile_summary('squad',$1)",
+    [publicSummarySquad],
+  );
+  const directorySummary = await db.query(
+    "select * from public.social_directory_search('', 'squad', 50, 0, null, null) where entity_id=$1",
+    [publicSummarySquad],
+  );
+  assert.deepEqual(directSummary.rows, directorySummary.rows,
+    "the exact lookup uses the same bounded projection as discovery");
+  assert.equal(directSummary.rows[0].membership_status, null,
+    "public summary access does not imply membership");
+  const deniedSummary = await db.query(
+    "select * from public.community_profile_summary('squad',$1)",
+    [privateSummarySquad],
+  );
+  const missingSummary = await db.query(
+    "select * from public.community_profile_summary('squad',$1)",
+    ["f8888888-8888-4888-8888-888888888888"],
+  );
+  assert.deepEqual(deniedSummary.rows, missingSummary.rows,
+    "private and absent IDs have indistinguishable empty results");
+  assert.deepEqual((await db.query(
+    "select * from public.community_profile_summary('invalid',$1)",
+    [publicSummarySquad],
+  )).rows, []);
+
+  await root();
+  await db.query("insert into public.squad_join_requests(squad_id,user_id) values($1,$2)", [privateSummarySquad, ids.stranger]);
+  await actor("stranger");
+  const requestedSummary = await db.query(
+    "select membership_status,action from public.community_profile_summary('squad',$1)",
+    [privateSummarySquad],
+  );
+  assert.deepEqual(requestedSummary.rows, [{ membership_status: "requested", action: "requested" }],
+    "an authorized request status is available without exposing the roster");
+  await root();
+  await db.query("delete from public.squad_join_requests where squad_id=$1 and user_id=$2", [privateSummarySquad, ids.stranger]);
+  await db.query("insert into public.squad_invites(squad_id,sender_id,recipient_id) values($1,$2,$3)", [privateSummarySquad, ids.owner, ids.stranger]);
+  await actor("stranger");
+  assert.deepEqual((await db.query(
+    "select membership_status,action from public.community_profile_summary('squad',$1)",
+    [privateSummarySquad],
+  )).rows, [{ membership_status: "invited", action: "invited" }],
+    "an authorized invite status is available without exposing the roster");
+  await root();
+  await db.query("delete from public.squad_invites where squad_id=$1 and recipient_id=$2", [privateSummarySquad, ids.stranger]);
+  await actor("stranger");
+  assert.deepEqual((await db.query(
+    "select * from public.community_profile_summary('squad',$1)",
+    [privateSummarySquad],
+  )).rows, [], "revoking an invitation removes access to a private summary");
+
+  await root();
+  await db.query("insert into public.squad_bans(squad_id,user_id,former_role) values($1,$2,'member')", [publicSummarySquad, ids.stranger]);
+  await actor("stranger");
+  assert.deepEqual((await db.query(
+    "select * from public.community_profile_summary('squad',$1)",
+    [publicSummarySquad],
+  )).rows, [], "a newly banned viewer cannot keep a previously public summary");
+
+  // Exercise the other exact-ID SQL branches, including public identities absent
+  // from a nonmember's canonical snapshot. They must match discovery as well.
+  await actor("owner");
+  const summarySpace = await action("create_space", {
+    name: "Exact Public Organization", discoverability: "public", join_mode: "request",
+  });
+  const summaryNetwork = await action("create_organization", { name: "Exact Public Network" });
+  await action("set_social_policy", {
+    entity_type: "organization", entity_id: summaryNetwork.organization_id,
+    discoverability: "public", join_mode: "request", invite_policy: "admins",
+  });
+  await actor("stranger");
+  for (const [type, entityId] of [["space", summarySpace.space_id], ["organization", summaryNetwork.organization_id]]) {
+    const exact = await db.query("select * from public.community_profile_summary($1,$2)", [type, entityId]);
+    const discovered = await db.query(
+      "select * from public.social_directory_search('', $1, 50, 0, null, null) where entity_id=$2",
+      [type, entityId],
+    );
+    assert.equal(exact.rows.length, 1, `${type} public identity is independently readable`);
+    assert.deepEqual(exact.rows, discovered.rows, `${type} exact lookup matches the safe directory projection`);
+    assert.equal(exact.rows[0].membership_status, null);
+  }
 });

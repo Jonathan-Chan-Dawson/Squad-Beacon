@@ -997,6 +997,8 @@ export function Screen({
   title,
   eyebrow,
   children,
+  scroll = true,
+  compactHeader = false,
   create: _create = true,
   footer,
   headerAction,
@@ -1004,6 +1006,10 @@ export function Screen({
   title: string;
   eyebrow: string;
   children: React.ReactNode;
+  /** Set false when children own their scrolling, such as a virtualized list. */
+  scroll?: boolean;
+  /** Use a compact single-row back/title/action header on focused screens. */
+  compactHeader?: boolean;
   create?: boolean;
   footer?: React.ReactNode;
   headerAction?: React.ReactNode;
@@ -1042,6 +1048,14 @@ export function Screen({
           Math.min(fontScale, tokens.type.denseMaxMultiplier) +
         tokens.space.xxs
       : 0);
+  const compactHeaderHeight =
+    tokens.space.xs +
+    Math.max(
+      tokens.layout.minTapTarget,
+      tokens.type.title.lineHeight *
+        Math.min(fontScale, tokens.type.denseMaxMultiplier),
+    ) +
+    tokens.space.xs;
   const expandedHeight = back
     ? tokens.space.xs +
       tokens.layout.minTapTarget +
@@ -1064,6 +1078,7 @@ export function Screen({
         inputRange: [0, 1],
         outputRange: [expandedHeight, collapsedHeight],
       });
+  const visibleHeaderHeight = compactHeader ? compactHeaderHeight : headerHeight;
   const titleFontSize = reducedMotion
     ? tokens.type.display.fontSize
     : collapse.interpolate({
@@ -1091,34 +1106,67 @@ export function Screen({
   return (
     <SafeAreaView edges={["top"]} style={styles.screen}>
       <View style={{ flex: 1 }}>
-        <Animated.ScrollView
-          style={{ flex: 1 }}
-          keyboardShouldPersistTaps="handled"
-          onScroll={handleScreenScroll}
-          scrollEventThrottle={16}
-          contentContainerStyle={[
-            styles.content,
-            {
-              maxWidth: maxContentWidth,
-              paddingTop: expandedHeight + tokens.space.sm,
-              paddingBottom: bottomContentPadding,
-              gap: footer ? tokens.space.sm : tokens.space.md,
-            },
-          ]}
-        >
-          {!!error && (
-            <Card>
-              <Text
-                style={styles.error}
-                maxFontSizeMultiplier={tokens.type.denseMaxMultiplier}
-              >
-                Could not refresh. Protected data has been cleared. {error}
-              </Text>
-              <Action title="Try again" run={refresh} />
-            </Card>
-          )}
-          {children}
-        </Animated.ScrollView>
+        {scroll ? (
+          <Animated.ScrollView
+            style={{ flex: 1 }}
+            keyboardShouldPersistTaps="handled"
+            onScroll={handleScreenScroll}
+            scrollEventThrottle={16}
+            contentContainerStyle={[
+              styles.content,
+              {
+                maxWidth: maxContentWidth,
+                paddingTop:
+                  (compactHeader ? compactHeaderHeight : expandedHeight) +
+                  tokens.space.sm,
+                paddingBottom: bottomContentPadding,
+                gap: footer ? tokens.space.sm : tokens.space.md,
+              },
+            ]}
+          >
+            {!!error && (
+              <Card>
+                <Text
+                  style={styles.error}
+                  maxFontSizeMultiplier={tokens.type.denseMaxMultiplier}
+                >
+                  Could not refresh. Protected data has been cleared. {error}
+                </Text>
+                <Action title="Try again" run={refresh} />
+              </Card>
+            )}
+            {children}
+          </Animated.ScrollView>
+        ) : (
+          <View
+            style={[
+              styles.content,
+              {
+                flex: 1,
+                minHeight: 0,
+                maxWidth: maxContentWidth,
+                paddingTop:
+                  (compactHeader ? compactHeaderHeight : expandedHeight) +
+                  tokens.space.sm,
+                paddingBottom: bottomContentPadding,
+                gap: footer ? tokens.space.sm : tokens.space.md,
+              },
+            ]}
+          >
+            {!!error && (
+              <Card>
+                <Text
+                  style={styles.error}
+                  maxFontSizeMultiplier={tokens.type.denseMaxMultiplier}
+                >
+                  Could not refresh. Protected data has been cleared. {error}
+                </Text>
+                <Action title="Try again" run={refresh} />
+              </Card>
+            )}
+            {children}
+          </View>
+        )}
         <GlassBar
           style={{
             position: "absolute",
@@ -1134,18 +1182,47 @@ export function Screen({
         >
           <Animated.View
             style={{
-              height: headerHeight,
+              height: visibleHeaderHeight,
               width: "100%",
               maxWidth: maxContentWidth,
               alignSelf: "center",
               paddingHorizontal: tokens.layout.screenGutter,
-              paddingTop: back ? tokens.space.sm : tokens.space.md,
+              paddingTop: compactHeader
+                ? tokens.space.xs
+                : back
+                  ? tokens.space.sm
+                  : tokens.space.md,
               paddingBottom: tokens.space.sm,
               overflow: "hidden",
-              justifyContent: "flex-end",
+              justifyContent: compactHeader ? "center" : "flex-end",
             }}
           >
-            {back ? (
+            {compactHeader ? (
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: tokens.space.sm,
+                  minHeight: tokens.layout.minTapTarget,
+                }}
+              >
+                {back ? <BackButton /> : null}
+                <Text
+                  accessibilityRole="header"
+                  numberOfLines={1}
+                  maxFontSizeMultiplier={tokens.type.denseMaxMultiplier}
+                  style={[styles.title, {
+                    flex: 1,
+                    minWidth: 0,
+                    fontSize: tokens.type.title.fontSize,
+                    lineHeight: tokens.type.title.lineHeight * Math.min(fontScale, tokens.type.denseMaxMultiplier),
+                  }]}
+                >
+                  {title}
+                </Text>
+                {action}
+              </View>
+            ) : back ? (
               <View
                 style={{
                   position: "absolute",
@@ -1161,7 +1238,7 @@ export function Screen({
                 {action}
               </View>
             ) : null}
-            <View
+            {!compactHeader ? <View
               style={{
                 flexDirection: "row",
                 alignItems: "flex-end",
@@ -1222,7 +1299,7 @@ export function Screen({
                 </Animated.Text>
               </Animated.View>
               {!back ? action : null}
-            </View>
+            </View> : null}
           </Animated.View>
         </GlassBar>
         {footer ? (

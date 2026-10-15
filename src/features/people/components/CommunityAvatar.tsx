@@ -56,7 +56,7 @@ export function CommunityAvatar({
         ? "Private list icon"
         : type === "space"
           ? "Organization icon"
-          : "Super-Organization icon";
+          : "Network icon";
   return (
     <View
       testID={`community-avatar-${type}-${type === "squad" ? key : "default"}`}

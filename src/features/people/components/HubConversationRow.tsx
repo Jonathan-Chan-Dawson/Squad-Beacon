@@ -108,11 +108,11 @@ export function HubConversationRow({
         >
           <View
             style={{
-              height: 72,
+              minHeight: 72,
               flexDirection: "row",
               alignItems: "center",
               gap: 12,
-              backgroundColor: colors.white,
+              backgroundColor: colors.bg,
               paddingHorizontal: 2,
               borderBottomWidth: 1,
               borderBottomColor: colors.line,

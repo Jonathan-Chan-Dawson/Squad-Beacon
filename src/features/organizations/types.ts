@@ -67,6 +67,7 @@ export interface GroupMessageRead {
   squad_id: ID | null;
   user_id: ID;
   last_read_at: string;
+  last_read_message_id?: ID | null;
 }
 
 export interface OrganizationData {

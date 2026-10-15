@@ -1,7 +1,7 @@
 Feature map
 
 - auth/: Auth.tsx — authentication and account entry UI.
-- beacons/: activity feed, cards, response/tools, timing, checklist/note module helpers, controls, permissions, and the Activities screen. PeriodTabs is local to this feature.
+- beacons/: activity browsing, compact homepage and feed cards, response/tools, timing, checklist/note module helpers, controls, and permissions.
 - help/: help and tutorial screen.
 - library/: LibraryScreen, helpers, and Past-only LibraryToolkit.
 - maps/: map screen, panel/tooltip, and BeaconMap platform variants. BeaconMap.tsx, BeaconMap.native.tsx, and BeaconMap.web.tsx are a single sibling set.

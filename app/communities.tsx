@@ -1,6 +1,10 @@
 import React from "react";
-import SquadsScreen from "@/src/features/people/screens/SquadsScreen";
+import { Redirect } from "expo-router";
 
 export default function Communities() {
-  return <SquadsScreen communities />;
+  return (
+    <Redirect
+      href={{ pathname: "/(tabs)/squads", params: { section: "Communities" } }}
+    />
+  );
 }

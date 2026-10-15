@@ -1,12 +1,18 @@
-import React, { useEffect, useRef } from "react";
-import { Text, View } from "react-native";
+import React, { useState } from "react";
+import { Pressable, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import { canRespondToPlanningThread } from "@/src/features/planning/domain";
-import { selectSquadChatPings, visibleSquadPingResponses } from "./squadChat";
+import {
+  canReadPlanningThread,
+  normalizePlanningData,
+  canRespondToPlanningThread,
+} from "@/src/features/planning/domain";
 import { canReadOrganizationMembers } from "./domain";
 import { activeSquadMembership } from "@/src/features/people/squadProfile";
 import { canViewProfile } from "@/src/features/profile/privacy";
-import { PlanningResponseCard } from "@/src/features/people/components/PlanningResponseCard";
+import { Button, Sheet } from "@/src/shared/ui";
+import { useNow } from "@/src/shared/useNow";
+import { useChatReadPosition } from "@/src/features/messages/useChatReadPosition";
+import { compareChatMessages } from "@/src/features/messages/readMarkers";
 import { useBeacon } from "@/src/shared/store";
 import { useDesignTheme } from "@/src/shared/design-system";
 import { ChatKeyboardFrame } from "@/src/features/messages/ChatKeyboard";
@@ -34,6 +40,9 @@ export function GroupChatThread({
   const { colors } = useDesignTheme();
   const { data, userId, act } = useBeacon();
   const router = useRouter();
+  const now = useNow();
+  const [itemsOpen, setItemsOpen] = useState(false);
+  const [sendSignal, setSendSignal] = useState(0);
   const scopeId = scope === "organization" ? organizationId : squadId;
   const canWrite =
     !!scopeId &&
@@ -79,104 +88,149 @@ export function GroupChatThread({
         body,
       }),
   });
-  const pings =
-    canWrite && scope === "squad" && scopeId && userId
-      ? selectSquadChatPings(data, scopeId, userId)
+  const planning =
+    canWrite && scope === "squad" && userId
+      ? normalizePlanningData(data).planning_threads.filter(
+          (thread) =>
+            thread.audience === "squad" &&
+            thread.audience_id === scopeId &&
+            thread.status !== "cancelled" &&
+            canReadPlanningThread(data, thread, userId),
+        )
       : [];
-  const sourceLabel =
-    scope === "squad"
-      ? (data.squads.find((item) => item.id === scopeId)?.name ?? "Squad")
-      : (data.organizations.find((item) => item.id === scopeId)?.name ??
-        "Organization");
+  const activeItems = planning.filter(
+    (thread) =>
+      thread.status === "open" && Date.parse(thread.deadline_at) > now,
+  );
+  const read = useChatReadPosition({
+    scopeKey: conversationKey,
+    canonical,
+    marker: data.group_message_reads.find(
+      (row) =>
+        row.user_id === userId &&
+        row.scope === scope &&
+        row.scope_id === scopeId,
+    ),
+    action: "mark_group_chat_read",
+    payload: { scope, squad_id: squadId, organization_id: organizationId },
+    enabled: canWrite,
+  });
+  function openItem(id: string) {
+    if (!planning.some((thread) => thread.id === id)) return;
+    setItemsOpen(false);
+    router.push({ pathname: "/council/[id]", params: { id } });
+  }
   const events: ChatListEvent[] = [
     ...canonical,
     ...(canWrite ? chat.rows : []),
   ].map((message) => ({ kind: "message", message }));
-  for (const thread of pings) {
-    const responses = userId
-      ? visibleSquadPingResponses(data, thread, userId)
-      : [];
-    const selected = responses.find(
-      (response) => response.user_id === userId,
-    )?.response;
+  for (const thread of planning) {
     const canReply =
       !!userId &&
-      canWrite &&
       thread.owner_id !== userId &&
       canRespondToPlanningThread(data, thread, userId);
+    const status =
+      thread.status === "open" && Date.parse(thread.deadline_at) <= now
+        ? "expired"
+        : thread.status;
     events.push({
       kind: "card",
       id: thread.id,
       createdAt: thread.created_at,
       content: (
-        <PlanningResponseCard
-          key={thread.id}
-          id={thread.id}
-          kind="ping"
-          title={thread.title}
-          sourceLabel={sourceLabel}
-          deadline={thread.deadline_at}
-          selected={selected}
-          disabled={!canReply}
-          counts={(["interested", "maybe", "pass"] as const).map(
-            (response) => ({
-              label: response[0].toUpperCase() + response.slice(1),
-              value: responses.filter((item) => item.response === response)
-                .length,
-            }),
-          )}
-          onOpen={() =>
-            router.push({
-              pathname: "/council/[id]",
-              params: { id: thread.id },
-            })
-          }
-          onRespond={async (response) => {
-            if (
-              !userId ||
-              data.viewer_id !== userId ||
-              !activeSquadMembership(data, scopeId!, userId) ||
-              !canRespondToPlanningThread(data, thread, userId)
-            )
-              throw new Error("This Ping is unavailable.");
-            await act("respond_planning_ping", {
-              thread_id: thread.id,
-              response,
-            });
-            return true;
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Open ${thread.kind} ${thread.title}`}
+          onPress={() => openItem(thread.id)}
+          style={{
+            minHeight: 64,
+            padding: 12,
+            borderRadius: 12,
+            backgroundColor: colors.surface,
+            borderWidth: 1,
+            borderColor: colors.border,
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 10,
           }}
-        />
+        >
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={{ color: colors.accent, fontSize: 11 }}>
+              {thread.kind.toUpperCase()} · {status}
+            </Text>
+            <Text
+              numberOfLines={1}
+              style={{
+                color: colors.textPrimary,
+                fontWeight: "600",
+                marginTop: 3,
+              }}
+            >
+              {thread.title}
+            </Text>
+          </View>
+          <Text style={{ color: colors.accent, fontSize: 12 }}>
+            {canReply ? "Respond" : "Open"} ›
+          </Text>
+        </Pressable>
       ),
     });
   }
   const eventDate = (event: ChatListEvent) =>
     event.kind === "message" ? event.message.createdAt : event.createdAt;
-  events.sort((a, b) => eventDate(a).localeCompare(eventDate(b)));
-  const latestCanonicalAt =
-    [
-      ...group.map((message) => message.created_at),
-      ...pings.map((thread) => thread.created_at),
-    ]
-      .sort()
-      .at(-1) ?? "";
-  const actRef = useRef(act);
-  useEffect(() => {
-    actRef.current = act;
-  }, [act]);
-  useEffect(() => {
-    if (!canWrite || !scopeId) return;
-    void actRef
-      .current("mark_group_chat_read", {
-        scope,
-        ...(scope === "organization"
-          ? { organization_id: scopeId }
-          : { squad_id: scopeId }),
-      })
-      .catch(() => undefined);
-  }, [scope, scopeId, userId, canWrite, latestCanonicalAt]);
+  events.sort((a, b) =>
+    compareChatMessages(
+      {
+        id: a.kind === "message" ? a.message.id : a.id,
+        createdAt: eventDate(a),
+      },
+      {
+        id: b.kind === "message" ? b.message.id : b.id,
+        createdAt: eventDate(b),
+      },
+    ),
+  );
   return (
-    <ChatKeyboardFrame>
+    <ChatKeyboardFrame
+      compact={scope === "organization"}
+      avoidKeyboard={scope !== "organization"}
+    >
+      {activeItems.length ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${activeItems.length} active planning items`}
+          onPress={() =>
+            activeItems.length === 1
+              ? openItem(activeItems[0].id)
+              : setItemsOpen(true)
+          }
+          style={{
+            minHeight: 44,
+            paddingHorizontal: 12,
+            borderRadius: 10,
+            backgroundColor: colors.surface,
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 8,
+          }}
+        >
+          <Text
+            numberOfLines={1}
+            style={{ flex: 1, color: colors.textSecondary, fontSize: 12 }}
+          >
+            {activeItems.length === 1
+              ? `${activeItems[0].kind.toUpperCase()} · ${activeItems[0].title}`
+              : `${activeItems.length} active Pings, Votes & Draws`}
+          </Text>
+          <Text style={{ color: colors.accent }}>View ›</Text>
+        </Pressable>
+      ) : null}
       <ChatBubbleList
+        presentation="group"
+        firstUnreadId={read.firstUnreadId}
+        onLatestVisible={read.onLatestVisible}
+        sendSignal={sendSignal}
         onAuthorPress={(id) =>
           router.push({ pathname: "/person/[id]", params: { id } })
         }
@@ -201,6 +255,7 @@ export function GroupChatThread({
           body={chat.draft}
           onChange={chat.setDraft}
           onSend={() => {
+            setSendSignal((value) => value + 1);
             void chat.submit();
           }}
           onMore={onMoreActions}
@@ -217,6 +272,20 @@ export function GroupChatThread({
           </Text>
         </View>
       )}
+      <Sheet
+        title="Active Pings, Votes & Draws"
+        visible={itemsOpen && canWrite}
+        onClose={() => setItemsOpen(false)}
+      >
+        {activeItems.map((thread) => (
+          <Button
+            secondary
+            key={thread.id}
+            title={`${thread.kind.toUpperCase()} · ${thread.title}`}
+            onPress={() => openItem(thread.id)}
+          />
+        ))}
+      </Sheet>
     </ChatKeyboardFrame>
   );
 }
