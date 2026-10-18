@@ -10,6 +10,7 @@ export type ViewerDeviceDefaults = {
   beaconAudience?: Audience;
   beaconAudienceId?: string | null;
   sonarDurationMinutes?: SonarDurationMinutes;
+  quickStatus?: { audience: Audience; audienceId: string | null; minutes: number };
 };
 export const defaultAudienceOptions = [
   "private",
@@ -31,6 +32,7 @@ export function parseViewerDeviceDefaults(
     (option) => option === row.sonarDurationMinutes,
   ) as SonarDurationMinutes | undefined;
   return {
+    ...(parseQuickStatus(row.quickStatus) ? { quickStatus: parseQuickStatus(row.quickStatus)! } : {}),
     ...(audience
       ? {
           beaconAudience: audience,
@@ -42,6 +44,16 @@ export function parseViewerDeviceDefaults(
       : {}),
     ...(duration ? { sonarDurationMinutes: duration } : {}),
   };
+}
+
+function parseQuickStatus(value: unknown): ViewerDeviceDefaults["quickStatus"] {
+  if (!value || typeof value !== "object") return undefined;
+  const row = value as Record<string, unknown>;
+  const audience = defaultAudienceOptions.find((option) => option === row.audience);
+  const id = typeof row.audienceId === "string" ? row.audienceId : null;
+  if (!audience || !Number.isInteger(row.minutes) || Number(row.minutes) < 5 || Number(row.minutes) > 1440) return undefined;
+  if (["list", "squad", "organization"].includes(audience) && !id) return undefined;
+  return { audience, audienceId: audience === "friends" || audience === "private" ? null : id, minutes: Number(row.minutes) };
 }
 
 export function eligibleDefaultTargets(

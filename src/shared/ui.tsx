@@ -123,6 +123,25 @@ function setSheetLabel(sheetId: string, title: string) {
   notifySheetStackChanged();
 }
 
+/** Register anchored overlays with the existing sheet isolation and scroll lock. */
+export function useOverlayPresence(
+  id: string,
+  visible: boolean,
+  title: string,
+) {
+  React.useLayoutEffect(() => {
+    if (!visible) return;
+    registerActiveSheet(id);
+    setSheetVisibility(id, true);
+    setSheetLabel(id, title);
+    if (Platform.OS === "web") lockWebSheetScroll();
+    return () => {
+      unregisterActiveSheet(id);
+      if (Platform.OS === "web") unlockWebSheetScroll();
+    };
+  }, [id, visible, title]);
+}
+
 export function SheetIsolation({ children }: { children: React.ReactNode }) {
   const hasOpenSheet = React.useSyncExternalStore(
     subscribeToSheetStack,
@@ -551,6 +570,7 @@ export function Sheet({
   title,
   visible,
   onClose,
+  onDismiss,
   children,
   maxHeightPercent = 94,
   snapHeight,
@@ -561,6 +581,7 @@ export function Sheet({
   title: string;
   visible: boolean;
   onClose: () => void;
+  onDismiss?: () => void;
   children: React.ReactNode;
   maxHeightPercent?: number;
   snapHeight?: number;
@@ -940,16 +961,19 @@ export function Sheet({
           returnFocus.focus({ preventScroll: true });
         }
         if (visibleRef.current) onClose();
+        onDismiss?.();
       }}
     >
       <SheetContent
-        {...(scrollable ? {
-          keyboardShouldPersistTaps: "handled" as const,
-          nestedScrollEnabled: true,
-          enableFooterMarginAdjustment: !!footer,
-          stickyHeaderIndices: [0],
-          contentContainerStyle: { paddingBottom: tokens.space.xxl },
-        } : { style: { paddingBottom: tokens.space.xxl } })}
+        {...(scrollable
+          ? {
+              keyboardShouldPersistTaps: "handled" as const,
+              nestedScrollEnabled: true,
+              enableFooterMarginAdjustment: !!footer,
+              stickyHeaderIndices: [0],
+              contentContainerStyle: { paddingBottom: tokens.space.xxl },
+            }
+          : { style: { paddingBottom: tokens.space.xxl } })}
       >
         <View style={{ backgroundColor: colors.bg }}>
           <View
@@ -1078,7 +1102,9 @@ export function Screen({
         inputRange: [0, 1],
         outputRange: [expandedHeight, collapsedHeight],
       });
-  const visibleHeaderHeight = compactHeader ? compactHeaderHeight : headerHeight;
+  const visibleHeaderHeight = compactHeader
+    ? compactHeaderHeight
+    : headerHeight;
   const titleFontSize = reducedMotion
     ? tokens.type.display.fontSize
     : collapse.interpolate({
@@ -1211,12 +1237,17 @@ export function Screen({
                   accessibilityRole="header"
                   numberOfLines={1}
                   maxFontSizeMultiplier={tokens.type.denseMaxMultiplier}
-                  style={[styles.title, {
-                    flex: 1,
-                    minWidth: 0,
-                    fontSize: tokens.type.title.fontSize,
-                    lineHeight: tokens.type.title.lineHeight * Math.min(fontScale, tokens.type.denseMaxMultiplier),
-                  }]}
+                  style={[
+                    styles.title,
+                    {
+                      flex: 1,
+                      minWidth: 0,
+                      fontSize: tokens.type.title.fontSize,
+                      lineHeight:
+                        tokens.type.title.lineHeight *
+                        Math.min(fontScale, tokens.type.denseMaxMultiplier),
+                    },
+                  ]}
                 >
                   {title}
                 </Text>
@@ -1238,68 +1269,70 @@ export function Screen({
                 {action}
               </View>
             ) : null}
-            {!compactHeader ? <View
-              style={{
-                flexDirection: "row",
-                alignItems: "flex-end",
-                justifyContent: "space-between",
-                gap: tokens.space.sm,
-              }}
-            >
-              <Animated.View
+            {!compactHeader ? (
+              <View
                 style={{
-                  flex: 1,
-                  gap: tokens.space.xxs,
-                  minWidth: 0,
+                  flexDirection: "row",
+                  alignItems: "flex-end",
+                  justifyContent: "space-between",
+                  gap: tokens.space.sm,
                 }}
               >
-                {!!eyebrow && (
+                <Animated.View
+                  style={{
+                    flex: 1,
+                    gap: tokens.space.xxs,
+                    minWidth: 0,
+                  }}
+                >
+                  {!!eyebrow && (
+                    <Animated.Text
+                      maxFontSizeMultiplier={tokens.type.denseMaxMultiplier}
+                      style={[
+                        styles.label,
+                        {
+                          opacity: collapse.interpolate({
+                            inputRange: [0, 0.65, 1],
+                            outputRange: [1, 0.2, 0],
+                          }),
+                        },
+                      ]}
+                    >
+                      {eyebrow}
+                    </Animated.Text>
+                  )}
                   <Animated.Text
-                    maxFontSizeMultiplier={tokens.type.denseMaxMultiplier}
+                    accessibilityRole="header"
+                    onLayout={(event) => {
+                      if (
+                        !titleAtTopRef.current ||
+                        event.nativeEvent.layout.height <
+                          tokens.type.display.lineHeight * fontScale * 0.9
+                      ) {
+                        return;
+                      }
+                      const nextHeight = event.nativeEvent.layout.height;
+                      setMeasuredTitleHeight((current) =>
+                        Math.abs(current - nextHeight) > 0.5
+                          ? nextHeight
+                          : current,
+                      );
+                    }}
                     style={[
-                      styles.label,
+                      styles.title,
                       {
-                        opacity: collapse.interpolate({
-                          inputRange: [0, 0.65, 1],
-                          outputRange: [1, 0.2, 0],
-                        }),
+                        fontSize: titleFontSize,
+                        lineHeight: titleLineHeight,
                       },
                     ]}
+                    numberOfLines={2}
                   >
-                    {eyebrow}
+                    {title}
                   </Animated.Text>
-                )}
-                <Animated.Text
-                  accessibilityRole="header"
-                  onLayout={(event) => {
-                    if (
-                      !titleAtTopRef.current ||
-                      event.nativeEvent.layout.height <
-                        tokens.type.display.lineHeight * fontScale * 0.9
-                    ) {
-                      return;
-                    }
-                    const nextHeight = event.nativeEvent.layout.height;
-                    setMeasuredTitleHeight((current) =>
-                      Math.abs(current - nextHeight) > 0.5
-                        ? nextHeight
-                        : current,
-                    );
-                  }}
-                  style={[
-                    styles.title,
-                    {
-                      fontSize: titleFontSize,
-                      lineHeight: titleLineHeight,
-                    },
-                  ]}
-                  numberOfLines={2}
-                >
-                  {title}
-                </Animated.Text>
-              </Animated.View>
-              {!back ? action : null}
-            </View> : null}
+                </Animated.View>
+                {!back ? action : null}
+              </View>
+            ) : null}
           </Animated.View>
         </GlassBar>
         {footer ? (
@@ -1432,6 +1465,7 @@ export function InboxButton() {
 
   const { data, userId, act } = useBeacon();
   const [open, setOpen] = useState(false);
+  const nextNavigation = React.useRef<(() => void) | null>(null);
   const pending = pendingSocialCount(data, userId, useNow());
   const params = useLocalSearchParams<{ inbox?: string }>();
   useFocusEffect(
@@ -1484,19 +1518,44 @@ export function InboxButton() {
         title="Notifications"
         visible={open}
         onClose={() => setOpen(false)}
+        onDismiss={() => {
+          const next = nextNavigation.current;
+          nextNavigation.current = null;
+          next?.();
+        }}
       >
-        {pending > 0 ? (
-          <Button
-            title={`${pending} Pings & invitations need you`}
-            onPress={() => {
-              setOpen(false);
-              router.push({
-                pathname: "/(tabs)/squads",
-                params: { tab: "Pings" },
-              });
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Responses & Invitations"
+          onPress={() => {
+            nextNavigation.current = () => router.push("/responses");
+            setOpen(false);
+          }}
+          style={{
+            minHeight: 44,
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 10,
+            paddingVertical: 8,
+          }}
+        >
+          <Bell size={18} color={semanticColors.accent} />
+          <Text
+            style={{
+              flex: 1,
+              color: semanticColors.textPrimary,
+              fontSize: 14,
+              lineHeight: 20,
             }}
-          />
-        ) : null}
+          >
+            Responses & Invitations
+          </Text>
+          {pending > 0 ? (
+            <Text style={{ color: semanticColors.textSecondary, fontSize: 12 }}>
+              {pending}
+            </Text>
+          ) : null}
+        </Pressable>
         {unread > 0 && (
           <Action
             title="Mark all read"

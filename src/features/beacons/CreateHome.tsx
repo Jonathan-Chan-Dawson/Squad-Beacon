@@ -77,6 +77,7 @@ export function CreateHome({
   onRemoveInvitee,
   onClearInvitees,
   onClearStatusSource,
+  inviteeControl,
 }: {
   onBlank: () => void;
   onTemplate: (template: BeaconTemplate) => void;
@@ -86,6 +87,7 @@ export function CreateHome({
   onRemoveInvitee?: (id: string) => void;
   onClearInvitees?: () => void;
   onClearStatusSource?: () => void;
+  inviteeControl?: React.ReactNode;
 }) {
   const { data, userId } = useBeacon();
   const routeContext = useLocalSearchParams<{
@@ -337,11 +339,11 @@ export function CreateHome({
             : "Save a Plan to reuse or repeat."}
       </Txt>
       {!!(contextError || launcherError) && <Text accessibilityRole="alert" style={styles.error}>{contextError || launcherError}</Text>}
-      {(selectedFriends.length > 0 || contextError && context.inviteeIds !== "[]") && <View style={{ gap: 8 }}>
+      {inviteeControl ?? ((selectedFriends.length > 0 || contextError && context.inviteeIds !== "[]") && <View style={{ gap: 8 }}>
         <Txt muted>{selectedFriends.length} friends selected for this Beacon</Txt>
         <View style={[styles.row, { flexWrap: "wrap" }]}>{selectedFriends.map((friend) => <Button key={friend.id} compact secondary title={`Remove ${friend.name}`} onPress={() => onRemoveInvitee?.(friend.id)} />)}</View>
         <Button compact secondary title="Clear selected friends" onPress={() => { onClearInvitees?.(); setLauncherError(""); }} />
-      </View>}
+      </View>)}
       {!!context.statusSourceId && <View style={{ gap: 4 }}><Txt muted>Starting from your status note. Your status stays as it is.</Txt>
         <Button compact secondary title="Clear status source" onPress={() => { onClearStatusSource?.(); setLauncherError(""); }} /></View>}
       {tab === "Beacon" ? (

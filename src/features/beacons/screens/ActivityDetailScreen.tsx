@@ -1,5 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
-import { resolveActivityToolEntry, type BeaconToolId as ToolId } from "@/src/features/beacons/activityToolEntry";
+import {
+  resolveActivityToolEntry,
+  type BeaconToolId as ToolId,
+} from "@/src/features/beacons/activityToolEntry";
 import {
   Animated,
   KeyboardAvoidingView,
@@ -225,8 +228,20 @@ export default function ActivityDetail() {
   const { data, userId, demo, loading, error, refresh, act } = useBeacon();
   const activityId = Array.isArray(id) ? id[0] : id;
   const activity = data.activities.find((item) => item.id === activityId);
-  const toolRouteKey = JSON.stringify([activityId, initialTab, initialTool, userId, data.viewer_id]);
-  const entry = resolveActivityToolEntry(data, activity, userId, initialTab, initialTool);
+  const toolRouteKey = JSON.stringify([
+    activityId,
+    initialTab,
+    initialTool,
+    userId,
+    data.viewer_id,
+  ]);
+  const entry = resolveActivityToolEntry(
+    data,
+    activity,
+    userId,
+    initialTab,
+    initialTool,
+  );
   const now = useNow();
   const [scrollY] = useState(() => new Animated.Value(0));
   const [selectedTab, setSelectedTab] = useState<{
@@ -237,8 +252,13 @@ export default function ActivityDetail() {
     tab: entry.tab,
   });
   const [selectedTool, setSelectedTool] = useState<ToolId | null>(entry.tool);
-  const [appliedToolRoute, setAppliedToolRoute] = useState(activity ? toolRouteKey : null);
+  const [appliedToolRoute, setAppliedToolRoute] = useState(
+    activity ? toolRouteKey : null,
+  );
   const [comment, setComment] = useState("");
+  const detailScrollRef = useRef<ScrollView>(null);
+  const commentsSectionRef = useRef<View>(null);
+  const appliedCommentsEntry = useRef<string | null>(null);
   const [edit, setEdit] = useState(false);
   const [title, setTitle] = useState("");
   const [starts, setStarts] = useState("");
@@ -531,9 +551,32 @@ export default function ActivityDetail() {
     canReadComments && activity.status !== "cancelled" && !!userId && canAccess;
   const comments = canReadComments
     ? data.comments
-        .filter((item) => item.activity_id === activity.id)
+        .filter(
+          (item) =>
+            item.activity_id === activity.id &&
+            !!userId &&
+            canReadBeaconModuleEntry(data, activity, item.author_id, userId),
+        )
         .sort((left, right) => left.created_at.localeCompare(right.created_at))
     : [];
+  function focusComments() {
+    if (
+      initialTab !== "comments" ||
+      !canReadComments ||
+      appliedCommentsEntry.current === activity!.id
+    )
+      return;
+    const scroll = detailScrollRef.current;
+    if (!scroll || !commentsSectionRef.current) return;
+    commentsSectionRef.current.measureLayout(
+      scroll.getInnerViewNode(),
+      (_x, y) => {
+        appliedCommentsEntry.current = activity!.id;
+        scroll.scrollTo({ y: Math.max(0, y - 68), animated: !reducedMotion });
+      },
+      () => {},
+    );
+  }
   const savedBeacon = data.beacon_favorites.some(
     (favorite) =>
       favorite.owner_id === userId && favorite.activity_id === activity.id,
@@ -1029,6 +1072,8 @@ export default function ActivityDetail() {
       <SafeAreaView edges={["top"]} style={styles.screen}>
         <View style={{ flex: 1 }}>
           <Animated.ScrollView
+            ref={detailScrollRef}
+            onContentSizeChange={focusComments}
             keyboardShouldPersistTaps="handled"
             refreshControl={
               <RefreshControl
@@ -1184,11 +1229,20 @@ export default function ActivityDetail() {
                         ? `Reacted with ${selectedReaction.emoji}. ${reactionCount} reactions. Choose another reaction or remove it.`
                         : `Choose a reaction. ${reactionCount} reactions.`
                     }
-                    accessibilityState={{ selected: !!selectedReaction?.emoji, disabled: reactionBusy || activity.status === "cancelled" }}
-                    style={[styles.card, styles.row, { minHeight: 48, padding: 12 }]}
+                    accessibilityState={{
+                      selected: !!selectedReaction?.emoji,
+                      disabled: reactionBusy || activity.status === "cancelled",
+                    }}
+                    style={[
+                      styles.card,
+                      styles.row,
+                      { minHeight: 48, padding: 12 },
+                    ]}
                   >
                     <Text style={styles.body}>
-                      {selectedReaction?.emoji ? `${selectedReaction.emoji} Reacted` : "🙌 React"}
+                      {selectedReaction?.emoji
+                        ? `${selectedReaction.emoji} Reacted`
+                        : "🙌 React"}
                     </Text>
                     <Text style={styles.muted}>{reactionCount}</Text>
                     {floatingReaction ? (
@@ -1232,7 +1286,12 @@ export default function ActivityDetail() {
             {visibleTab === "Overview" ? (
               <View style={{ gap: tokens.space.md }}>
                 {canReadComments ? (
-                  <View style={[styles.card, { gap: 9 }]}>
+                  <View
+                    ref={commentsSectionRef}
+                    onLayout={focusComments}
+                    testID="beacon-comments-section"
+                    style={[styles.card, { gap: 9 }]}
+                  >
                     <View style={styles.row}>
                       <MessageCircle size={18} color={colors.green} />
                       <Text style={styles.h2}>Comments</Text>

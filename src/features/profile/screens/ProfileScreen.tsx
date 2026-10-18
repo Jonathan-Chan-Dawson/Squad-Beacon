@@ -209,6 +209,7 @@ function ProfileContent({ profile }: { profile: Profile }) {
             fill="url(#profile-identity-gradient)"
           />
         </Svg>
+        <View style={{ position: "absolute", top: 10, right: 10, zIndex: 1 }}><SharedStatusControl avatarControl /></View>
         <View style={{ alignItems: "center", gap: 8 }}>
           <View style={{ width: 84, height: 84 }}><Pressable
             testID="profile-avatar"
@@ -230,7 +231,7 @@ function ProfileContent({ profile }: { profile: Profile }) {
               size={76}
             />
           </Pressable>
-            <View style={{ position: "absolute", top: -12, right: -15 }}><SharedStatusControl avatarControl /></View>
+
           </View>
           <Text style={[tokens.type.title, { color: colors.textPrimary }]}>
             {profile.name}

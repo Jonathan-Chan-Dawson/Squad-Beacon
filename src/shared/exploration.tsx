@@ -35,6 +35,7 @@ export type ExplorationFilters = {
   /** Everyone/Friends or an existing list, squad, or organization audience ID. */
   audience: "Everyone" | "Friends" | "Public" | (string & {});
   category: "All categories" | Category;
+  categories?: Category[];
   time: "All" | "Now" | "Upcoming";
   planId: string | null;
   /** New discovery filters stay optional so older map/filter constructors remain valid. */

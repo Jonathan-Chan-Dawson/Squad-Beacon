@@ -4,6 +4,8 @@ import { LegacyStatusScreen } from "./LegacyStatusScreen";
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
 import { router, useLocalSearchParams, type Href } from "expo-router";
+import { usePlanningDraftState, usePlanningInvitees, planningDraftObject, hasPlanningDraftField, completePlanningDraft } from "../socialPlanningSession";
+import { CreationInvitees } from "../components/feed/CreationInvitees";
 import { CreateHome } from "@/src/features/beacons/CreateHome";
 import { canReadPlanningThread } from "@/src/features/planning/domain";
 import type { BeaconDraft } from "@/src/features/planning/types";
@@ -83,8 +85,9 @@ function moduleDefaultsFromControls(
 }
 export default function CreateActivity() {
   const params = useLocalSearchParams();
+  const { userId } = useBeacon();
   if (usesSharedStatusEditor(params)) return <LegacyStatusScreen params={params} />;
-  return <CreateEditor key={JSON.stringify(params)} />;
+  return <CreateEditor key={userId + JSON.stringify(params)} />;
 }
 
 function CreateEditor() {
@@ -109,6 +112,7 @@ function CreateEditor() {
     saveTemplate?: string;
     savedChecklist?: string;
     inviteeIds?: string;
+    planSession?: string;
     statusSourceId?: string;
     startsAt?: string;
     fromMap?: string;
@@ -120,15 +124,16 @@ function CreateEditor() {
     catch { /* Invalid route zones retain the normal creation default. */ }
   }
   const parsedInvitees = parseCreationInvitees(params.inviteeIds);
-  const [inviteeIds, setInviteeIds] = useState(parsedInvitees.ids);
+  const [inviteeIds, setInviteeIds] = usePlanningInvitees(userId, params.planSession, parsedInvitees.ids);
   const [inviteeError, setInviteeError] = useState(parsedInvitees.error);
-  const [statusSourceDismissed, setStatusSourceDismissed] = useState(false);
+  const [statusSourceDismissed, setStatusSourceDismissed] = usePlanningDraftState(userId, params.planSession, "statusSourceDismissed", false);
   const statusSourceId = statusSourceDismissed ? undefined : params.statusSourceId;
   const statusSeed = creationStatusSeed(data, userId, statusSourceId, currentTime);
   const dataRef = useRef(data);
   useLayoutEffect(() => { dataRef.current = data; }, [data]);
-  const invitationSession = useRef(newCreationInviteSession());
-  const [createdSession, setCreatedSession] = useState<CreationInviteSession | null>(null);
+  const [initialInvitationSession] = useState(() => planningDraftObject(userId, params.planSession, "invitationSession", newCreationInviteSession));
+  const invitationSession = useRef(initialInvitationSession);
+  const [createdSession, setCreatedSession] = useState<CreationInviteSession | null>(() => initialInvitationSession.atomicAttempt || initialInvitationSession.createdId || initialInvitationSession.creationUnverified ? { ...initialInvitationSession } : null);
   const [retryBusy, setRetryBusy] = useState(false);
   const retryBusyRef = useRef(false);
   const [templateNotice, setTemplateNotice] = useState("");
@@ -205,10 +210,10 @@ function CreateEditor() {
     params.spaceId ?? null,
     params.organizationId ?? null,
   ]);
-  const [associationDraft, setAssociationDraft] = useState<{
+  const [associationDraft, setAssociationDraft] = usePlanningDraftState<{
     routeKey: string;
     value: { entity_type: SocialEntityType; entity_id: string } | null;
-  }>(() => ({ routeKey: associationRouteKey, value: associationRouteSeed }));
+  }>(userId, params.planSession, "associationDraft", () => ({ routeKey: associationRouteKey, value: associationRouteSeed }));
   const selectedAssociation =
     associationDraft.routeKey === associationRouteKey
       ? associationDraft.value
@@ -244,7 +249,7 @@ function CreateEditor() {
   const currentAspirationIds = new Set(
     aspirations.map((aspiration) => aspiration.id),
   );
-  const [home, setHome] = useState(
+  const [home, setHome] = usePlanningDraftState(userId, params.planSession, "home",
     !params.editor &&
       !params.template &&
       !params.repeat &&
@@ -258,14 +263,14 @@ function CreateEditor() {
       !params.organizationId &&
       (!params.kind || params.kind === "beacon"),
   );
-  const [addTo, setAddTo] = useState(
+  const [addTo, setAddTo] = usePlanningDraftState(userId, params.planSession, "addTo",
     params.threadId ? "Vote / Draw" : params.planId ? "Plan" : "Standalone",
   );
-  const [decisionKind, setDecisionKind] = useState("Vote");
-  const [decisionTitle, setDecisionTitle] = useState("");
-  const [decisionId, setDecisionId] = useState(params.threadId ?? "");
-  const [selectedPlanId, setSelectedPlanId] = useState(params.planId ?? "");
-  const [planPosition, setPlanPosition] = useState("End");
+  const [decisionKind, setDecisionKind] = usePlanningDraftState(userId, params.planSession, "decisionKind", "Vote");
+  const [decisionTitle, setDecisionTitle] = usePlanningDraftState(userId, params.planSession, "decisionTitle", "");
+  const [decisionId, setDecisionId] = usePlanningDraftState(userId, params.planSession, "decisionId", params.threadId ?? "");
+  const [selectedPlanId, setSelectedPlanId] = usePlanningDraftState(userId, params.planSession, "selectedPlanId", params.planId ?? "");
+  const [planPosition, setPlanPosition] = usePlanningDraftState(userId, params.planSession, "planPosition", "End");
   const decisions = data.planning_threads.filter(
     (thread) =>
       thread.kind !== "ping" &&
@@ -283,27 +288,27 @@ function CreateEditor() {
   const [previewOpen, setPreviewOpen] = useState(false);
   const [associationOpen, setAssociationOpen] = useState(false);
   const [associationSearch, setAssociationSearch] = useState("");
-  const [selectedRecipe, setSelectedRecipe] = useState<BeaconTemplate | null>(
+  const [selectedRecipe, setSelectedRecipe] = usePlanningDraftState<BeaconTemplate | null>(userId, params.planSession, "selectedRecipe",
     null,
   );
-  const [prepAnswers, setPrepAnswers] = useState<string[]>([]);
-  const [view, setView] = useState("Normal");
-  const [kind, setKind] = useState(
+  const [prepAnswers, setPrepAnswers] = usePlanningDraftState<string[]>(userId, params.planSession, "prepAnswers", []);
+  const [view, setView] = usePlanningDraftState(userId, params.planSession, "view", "Normal");
+  const [kind, setKind] = usePlanningDraftState(userId, params.planSession, "kind",
     params.kind === "status"
       ? "Status"
       : params.kind === "squad"
         ? "Squad"
         : "Beacon",
   );
-  const [title, setTitle] = useState(statusSeed?.title ?? saved?.title ?? previous?.title ?? "");
-  const [description, setDescription] = useState(
+  const [title, setTitle] = usePlanningDraftState(userId, params.planSession, "title", statusSeed?.title ?? saved?.title ?? previous?.title ?? "");
+  const [description, setDescription] = usePlanningDraftState(userId, params.planSession, "description",
     statusSeed?.description ?? saved?.description ?? previous?.description ?? "",
   );
-  const [templateName, setTemplateName] = useState(
+  const [templateName, setTemplateName] = usePlanningDraftState(userId, params.planSession, "templateName",
     saved?.name ?? previous?.title ?? "",
   );
-  const [available, setAvailable] = useState(false);
-  const [category, setCategory] = useState<Category>(
+  const [available, setAvailable] = usePlanningDraftState(userId, params.planSession, "available", false);
+  const [category, setCategory] = usePlanningDraftState<Category>(userId, params.planSession, "category",
     statusSeed?.category ?? saved?.category ?? previous?.category ?? "Social",
   );
   const sourceHydrated = useRef(!!statusSeed);
@@ -313,11 +318,11 @@ function CreateEditor() {
     const seeded = mergeCreationStatusSeed({ title, description, category }, statusSeed, textEdited.current);
     setTitle(seeded.title); setDescription(seeded.description); setCategory(seeded.category as Category);
     sourceHydrated.current = true;
-  }, [statusSeed, title, description, category]);
-  const audienceEdited = useRef(false);
+  }, [statusSeed, title, description, category, setTitle, setDescription, setCategory]);
+  const audienceEdited = useRef(hasPlanningDraftField(userId, params.planSession, "audience"));
   const appliedDeviceDefault = useRef<string | null>(null);
   const [defaultNotice, setDefaultNotice] = useState("");
-  const [audience, setAudienceValue] = useState<Audience>(
+  const [audience, setAudienceValue] = usePlanningDraftState<Audience>(userId, params.planSession, "audience",
     routeDecision
       ? routeDecision.audience
       : routePlan
@@ -331,7 +336,7 @@ function CreateEditor() {
             : (data.profiles.find((p) => p.id === userId)?.default_audience ??
               "friends"),
   );
-  const [audienceId, setAudienceId] = useState<string | null>(
+  const [audienceId, setAudienceId] = usePlanningDraftState<string | null>(userId, params.planSession, "audienceId",
     routeDecision?.audience_id ??
       routePlan?.squad_id ??
       params.organizationId ??
@@ -397,32 +402,34 @@ function CreateEditor() {
     previous,
     templateEditor,
     controlsRouteKey,
+    setAudienceValue,
+    setAudienceId,
   ]);
-  const [target, setTarget] = useState(
+  const [target, setTarget] = usePlanningDraftState(userId, params.planSession, "target",
     saved?.target_count ? String(saved.target_count) : "",
   );
-  const [approval, setApproval] = useState(
+  const [approval, setApproval] = usePlanningDraftState(userId, params.planSession, "approval",
     saved?.approval_required ? "Host approval" : "Open joining",
   );
-  const [when, setWhen] = useState(
+  const [when, setWhen] = usePlanningDraftState(userId, params.planSession, "when",
       params.threadId || params.planId || params.startsAt && Number.isFinite(Date.parse(params.startsAt)) ? "Pick time" : "Now",
     ),
-    [duration, setDuration] = useState(
+    [duration, setDuration] = usePlanningDraftState(userId, params.planSession, "duration",
       formatDurationLabel(saved?.minutes ?? 60),
     );
-  const [starts, setStarts] = useState(() =>
+  const [starts, setStarts] = usePlanningDraftState(userId, params.planSession, "starts", () =>
     new Date(routeStart).toISOString(),
   );
-  const [ends, setEnds] = useState(() =>
+  const [ends, setEnds] = usePlanningDraftState(userId, params.planSession, "ends", () =>
     new Date(routeStart + (saved?.minutes ?? 60) * 60000).toISOString(),
   );
-  const [label, setLabel] = useState(params.placeLabel ?? saved?.label ?? "");
-  const [placeType, setPlaceType] = useState("In person"),
-    [url, setUrl] = useState("");
-  const [pin, setPin] = useState<{
+  const [label, setLabel] = usePlanningDraftState(userId, params.planSession, "label", params.placeLabel ?? saved?.label ?? "");
+  const [placeType, setPlaceType] = usePlanningDraftState(userId, params.planSession, "placeType", "In person"),
+    [url, setUrl] = usePlanningDraftState(userId, params.planSession, "url", "");
+  const [pin, setPin] = usePlanningDraftState<{
     latitude: number;
     longitude: number;
-  } | null>(() => {
+  } | null>(userId, params.planSession, "pin", () => {
     if (params.latitude == null || params.longitude == null) return null;
     const latitude = Number(params.latitude),
       longitude = Number(params.longitude);
@@ -434,10 +441,10 @@ function CreateEditor() {
       : null;
   });
   const [showPin, setShowPin] = useState(false);
-  const [beaconControlDraft, setBeaconControlDraft] = useState<{
+  const [beaconControlDraft, setBeaconControlDraft] = usePlanningDraftState<{
     routeKey: string;
     value: BeaconControlValues;
-  }>(() => ({
+  }>(userId, params.planSession, "beaconControlDraft", () => ({
     routeKey: controlsRouteKey,
     value: saved?.module_defaults
       ? { ...defaultBeaconControlValues(), ...saved.module_defaults }
@@ -451,7 +458,7 @@ function CreateEditor() {
       : defaultBeaconControlValues();
   const setBeaconControls = (value: BeaconControlValues) =>
     setBeaconControlDraft({ routeKey: controlsRouteKey, value });
-  const [aspirationIds, setAspirationIds] = useState<string[]>(() =>
+  const [aspirationIds, setAspirationIds] = usePlanningDraftState<string[]>(userId, params.planSession, "aspirationIds", () =>
     (previous?.aspiration_ids ?? []).filter((id) =>
       currentAspirationIds.has(id),
     ),
@@ -650,12 +657,14 @@ function CreateEditor() {
       if (invitationSession.current.pendingIds.length) return;
       if (!result.id)
         throw new Error("The Beacon could not be added to this Plan.");
+      completePlanningDraft(userId, params.planSession);
       router.replace({ pathname: "/plan/[id]", params: { id: plan.id } });
       return;
     }
     const create = () => act("create_activity", payload);
     const result = inviteeIds.length ? await publishAtomic("create_activity_with_invitees", payload) : await create();
     if (invitationSession.current.pendingIds.length) return;
+    completePlanningDraft(userId, params.planSession);
     router.replace({
       pathname: "/(tabs)",
       params: {
@@ -668,6 +677,7 @@ function CreateEditor() {
     try {
       const session=await atomicCreateAndInvite(invitationSession.current,inviteeIds,()=>dataRef.current,userId,action,payload,act,randomUUID);
       setCreatedSession(session);
+      completePlanningDraft(userId, params.planSession);
       return {id:session.createdId};
     } finally {
       setCreatedSession(invitationSession.current.atomicAttempt || invitationSession.current.createdId || invitationSession.current.creationUnverified ? {...invitationSession.current} : null);
@@ -733,20 +743,13 @@ function CreateEditor() {
   if (home)
     return (
       <CreateHome
+        inviteeControl={<CreationInvitees ids={inviteeIds} onChange={setInviteeIds} />}
         context={handoff} selectedFriends={inviteeIds.map((id) => ({ id, name: inviteeLabel(id) }))}
         contextError={inviteeError || sourceError}
         onRemoveInvitee={(id) => setInviteeIds((ids) => ids.filter((item) => item !== id))}
         onClearInvitees={() => { setInviteeIds([]); setInviteeError(""); }}
         onClearStatusSource={() => setStatusSourceDismissed(true)}
-        onBlank={() =>
-          router.push({
-            pathname: "/create",
-            params: {
-              editor: "yes",
-              ...handoff,
-            },
-          })
-        }
+        onBlank={() => setHome(false)}
         onTemplate={(recipe) => {
           applyTemplate(recipe);
           setHome(false);
@@ -784,10 +787,7 @@ function CreateEditor() {
       {inviteeError || sourceError ? <Text accessibilityRole="alert" style={styles.error}>{inviteeError || sourceError}</Text> : null}
       {workflowError ? <Text accessibilityRole="alert" style={styles.error}>{workflowError}</Text> : null}
       {templateNotice ? <Txt muted>{templateNotice}</Txt> : null}
-      {(inviteeIds.length > 0 || !!inviteeError) && <View style={{ gap: 8 }}><Text style={styles.label}>SELECTED FRIENDS · {inviteeIds.length}</Text>
-        <View style={[styles.row, { flexWrap: "wrap" }]}>{inviteeIds.map((id) => <Button key={id} compact secondary title={`Remove ${inviteeLabel(id)}`} onPress={() => setInviteeIds((ids) => ids.filter((item) => item !== id))} />)}</View>
-        <Button compact secondary title="Clear selected friends" onPress={() => { setInviteeIds([]); setInviteeError(""); }} />
-      </View>}
+      <CreationInvitees ids={inviteeIds} onChange={setInviteeIds} />
       {statusSourceId ? <Button compact secondary title="Clear status source" onPress={() => setStatusSourceDismissed(true)} /> : null}
       {!templateEditor && kind === "Beacon" && (
         <Button

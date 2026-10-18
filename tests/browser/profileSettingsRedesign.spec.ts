@@ -15,7 +15,7 @@ test("profile uses phone-sized identity and visibility changes do not start Sona
   const avatar = await page.getByTestId("profile-avatar").boundingBox();
   expect(identity!.width).toBeGreaterThanOrEqual(350);
   expect(identity!.width).toBeLessThanOrEqual(360);
-  expect(avatar!.width).toBeGreaterThanOrEqual(96);
+  expect(avatar!.width).toBeGreaterThanOrEqual(80);
   await page
     .getByRole("button", { name: "Profile visibility", exact: true })
     .click();

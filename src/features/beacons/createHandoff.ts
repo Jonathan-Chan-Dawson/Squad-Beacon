@@ -43,7 +43,7 @@ export function mergeCreationStatusSeed<T extends { title: string; description: 
 
 export function creationHandoffParams(context: Record<string, unknown>): Record<string, string> {
   const result: Record<string, string> = {};
-  for (const key of ["inviteeIds", "statusSourceId", "startsAt", "fromMap", "threadId", "planId"]) {
+  for (const key of ["inviteeIds", "statusSourceId", "startsAt", "fromMap", "threadId", "planId", "planSession"]) {
     if (typeof context[key] === "string" && context[key]) result[key] = context[key] as string;
   }
   if (typeof context.timezone === "string") {

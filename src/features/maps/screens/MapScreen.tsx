@@ -1,3 +1,4 @@
+import { discoveryActivities } from "@/src/features/beacons/discoverySelectors";
 import { mapTooltip } from "../tooltipConstants";
 import React, {
   useCallback,
@@ -274,6 +275,7 @@ export default function MapScreen() {
     person?: string;
     created?: string;
     search?: string;
+    mapDiscovery?: string;
     mapPlan?: string;
     mapThread?: string;
     pickLocation?: string;
@@ -291,6 +293,20 @@ export default function MapScreen() {
   const [mapSize, setMapSize] = useState({ width, height });
   const now = useNow();
   const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
+  const [discoveryViewer, setDiscoveryViewer] = useState<string | null>(null);
+  const discoveryActive = !!userId && discoveryViewer === userId;
+  const discoveryRestore = useRef<{
+    viewerId: string;
+    camera: MapViewport | null;
+    categories: Category[];
+    selected: string | null;
+    person: string | null;
+    squad: string | null;
+    detail: MapBeaconFeature | null;
+    cameraChanged: boolean;
+    categoriesChanged: boolean;
+    selectionChanged: boolean;
+  } | null>(null);
   const previousContextCamera = useRef<MapViewport | null>(null);
   const [contextState, setContextState] = useState<{
     viewerId: string | null;
@@ -298,13 +314,13 @@ export default function MapScreen() {
   }>({ viewerId: userId, filters: [] });
   const contextViews = useMemo(
     () =>
-      contextState.viewerId === userId
+      contextState.viewerId === userId && !discoveryActive
         ? contextState.filters.flatMap((filter) => {
             const view = resolveMapContext(data, userId, filter);
             return view ? [view] : [];
           })
         : [],
-    [contextState, data, userId],
+    [contextState, data, userId, discoveryActive],
   );
   const contextPoints = useMemo(
     () => [
@@ -486,12 +502,16 @@ export default function MapScreen() {
   const [controlCommand, setControlCommand] = useState<
     MapControlCommand | undefined
   >();
-  const [selectedCategories, setSelectedCategories] = useState<Category[]>(
-    () =>
-      exploration.filters.category === "All categories"
-        ? []
-        : [exploration.filters.category],
+  const [selectedCategories, setCategoriesValue] = useState<Category[]>(() =>
+    exploration.filters.category === "All categories"
+      ? []
+      : [exploration.filters.category],
   );
+  const setSelectedCategories = useCallback((categories: Category[]) => {
+    if (discoveryRestore.current)
+      discoveryRestore.current.categoriesChanged = true;
+    setCategoriesValue(categories);
+  }, []);
   const [recentSearchState, setRecentSearchState] = useState(() => ({
     viewerId: userId,
     queries: getRecentMapSearchQueries(userId),
@@ -701,6 +721,37 @@ export default function MapScreen() {
       ? selectFreshVisiblePersonLocation(data, params.person, userId, now)
       : undefined;
 
+  const discoveryIds = useMemo(
+    () =>
+      discoveryActive
+        ? new Set(
+            (["Active", "Upcoming"] as const)
+              .flatMap((period) =>
+                discoveryActivities(
+                  data,
+                  userId,
+                  now,
+                  period,
+                  exploration.query,
+                  { ...exploration.filters, categories: selectedCategories },
+                  exploration.area,
+                ),
+              )
+              .map((activity) => activity.id),
+          )
+        : null,
+    [
+      discoveryActive,
+      data,
+      userId,
+      now,
+      exploration.query,
+      exploration.filters,
+      exploration.area,
+      selectedCategories,
+    ],
+  );
+
   const safeActivities = useMemo(() => {
     if (!userId || data.viewer_id !== userId) return [];
     const selectedSquad = data.squads.find(
@@ -714,6 +765,17 @@ export default function MapScreen() {
     return data.activities
       .filter((activity) => canReadBeaconActivity(data, activity, userId))
       .filter((activity) => withinMapBeaconWindow(activity, now))
+      .filter((activity) => !discoveryIds || discoveryIds.has(activity.id))
+      .filter(
+        (activity) =>
+          !discoveryActive ||
+          (activity.mode !== "solo" &&
+            !(
+              activity.plan_id &&
+              activity.plan_step &&
+              activity.plan_started_at == null
+            )),
+      )
       .filter((activity) =>
         matchesBeaconFilters(
           data,
@@ -743,6 +805,8 @@ export default function MapScreen() {
     now,
     selectedCategories,
     userId,
+    discoveryActive,
+    discoveryIds,
   ]);
 
   const availabilityActivities = useMemo(
@@ -781,14 +845,17 @@ export default function MapScreen() {
             activity,
             userId,
             {
-              personId: person,
-              squadId: squadPreviewId ?? exploration.filters.audience,
+              personId: discoveryActive ? null : person,
+              squadId:
+                (discoveryActive ? null : squadPreviewId) ??
+                exploration.filters.audience,
             },
             now,
           ),
       ),
     [
       safeActivities,
+      discoveryActive,
       userId,
       data,
       person,
@@ -941,6 +1008,7 @@ export default function MapScreen() {
     () =>
       data.locations.filter((location) => {
         if (
+          discoveryActive ||
           !snapshotReady ||
           !userId ||
           (location.owner_id !== userId &&
@@ -995,6 +1063,7 @@ export default function MapScreen() {
       friends,
       now,
       selectedPersonLocation?.id,
+      discoveryActive,
       showAvatars,
       mapPreferences.showFriends,
       snapshotReady,
@@ -1057,6 +1126,10 @@ export default function MapScreen() {
     suggestion: false,
   }));
   function choosePublicBeacon(id: string) {
+    if (discoveryRestore.current) {
+      discoveryRestore.current.selectionChanged = true;
+      discoveryRestore.current.cameraChanged = true;
+    }
     setCompassSheetOpen(false);
     setSelected(null);
     setPerson(null);
@@ -1312,9 +1385,11 @@ export default function MapScreen() {
     chips.push(
       ...contextViews.map((view) => ({ key: view.key, label: view.label })),
     );
+    if (discoveryActive) chips.unshift({ key: "discovery", label: "Beacons" });
     return chips;
   }, [
     activeCategories,
+    discoveryActive,
     exploration.filters,
     mapAudiences,
     planFilterOptions,
@@ -1410,6 +1485,10 @@ export default function MapScreen() {
   }
 
   function chooseBeacon(id: string) {
+    if (discoveryRestore.current) {
+      discoveryRestore.current.selectionChanged = true;
+      discoveryRestore.current.cameraChanged = true;
+    }
     setCompassSheetOpen(false);
     setDetailTab(null);
     if (
@@ -1434,6 +1513,10 @@ export default function MapScreen() {
   }
 
   function choosePerson(id: string) {
+    if (discoveryRestore.current) {
+      discoveryRestore.current.selectionChanged = true;
+      discoveryRestore.current.cameraChanged = true;
+    }
     setCompassSheetOpen(false);
     if (
       !userId ||
@@ -1465,7 +1548,9 @@ export default function MapScreen() {
     setClusterPersonIds(null);
     setSelected(null);
     setPerson(null);
-    setPickedMapPoint((point) => point && isValidCoordinate(point) ? point : null);
+    setPickedMapPoint((point) =>
+      point && isValidCoordinate(point) ? point : null,
+    );
     setPickMode(true);
     setPlaceSearchOpen(false);
   }, [clearRouteSelection]);
@@ -1476,13 +1561,28 @@ export default function MapScreen() {
       startPickingLocation();
       const context = creationHandoffParams(params);
       creationLocationContext.current = context;
-      if (context.latitude && context.longitude) setPickedMapPoint({ latitude: Number(context.latitude), longitude: Number(context.longitude), label: context.placeLabel || "Pinned map location" });
-      router.setParams({ pickLocation: undefined, inviteeIds: undefined, statusSourceId: undefined, startsAt: undefined, fromMap: undefined, latitude: undefined, longitude: undefined, placeLabel: undefined });
+      if (context.latitude && context.longitude)
+        setPickedMapPoint({
+          latitude: Number(context.latitude),
+          longitude: Number(context.longitude),
+          label: context.placeLabel || "Pinned map location",
+        });
+      router.setParams({
+        pickLocation: undefined,
+        inviteeIds: undefined,
+        statusSourceId: undefined,
+        startsAt: undefined,
+        fromMap: undefined,
+        latitude: undefined,
+        longitude: undefined,
+        placeLabel: undefined,
+      });
     });
     return () => cancelAnimationFrame(frame);
   }, [params, startPickingLocation]);
 
   function exploreSavedPlace(place: ActivityPlace) {
+    if (discoveryRestore.current) discoveryRestore.current.cameraChanged = true;
     if (!validPhysicalPlace(place)) return;
     clearRouteSelection();
     setClusterActivityIds(null);
@@ -1515,6 +1615,7 @@ export default function MapScreen() {
   }
 
   function exploreWorldPlace(place: WorldwidePlace) {
+    if (discoveryRestore.current) discoveryRestore.current.cameraChanged = true;
     if (!isValidCoordinate(place.coordinate)) return;
     clearRouteSelection();
     setClusterActivityIds(null);
@@ -1560,7 +1661,9 @@ export default function MapScreen() {
 
   function handleViewportChange(next: MapViewport, userMoved = true) {
     setViewport(next);
-    if (preferencesReady)
+    if (discoveryActive && userMoved && discoveryRestore.current)
+      discoveryRestore.current.cameraChanged = true;
+    if (preferencesReady && (!discoveryActive || userMoved))
       void writeMapDevicePreferences({ camera: next }).catch(() => {});
     if (userMoved) {
       setClusterActivityIds(null);
@@ -1615,6 +1718,112 @@ export default function MapScreen() {
     return () => cancelAnimationFrame(frame);
   }, [params.mapPlan, params.mapThread, snapshotReady, focusContext]);
 
+  useEffect(() => {
+    if (discoveryRestore.current?.viewerId !== userId)
+      discoveryRestore.current = null;
+    if (params.mapDiscovery !== "yes" || !snapshotReady || !userId) return;
+    const frame = requestAnimationFrame(() => {
+      if (!discoveryRestore.current) {
+        discoveryRestore.current = {
+          viewerId: userId,
+          camera: viewport,
+          categories: selectedCategories,
+          selected,
+          person,
+          squad: squadPreviewId,
+          detail: detailTab,
+          cameraChanged: false,
+          categoriesChanged: false,
+          selectionChanged: false,
+        };
+        const categories =
+          exploration.filters.categories ??
+          (exploration.filters.category === "All categories"
+            ? []
+            : [exploration.filters.category]);
+        setCategoriesValue(categories);
+        setSelected(null);
+        setPerson(null);
+        setSquadPreviewId(null);
+        setDetailTab(null);
+        setClusterActivityIds(null);
+        setClusterPersonIds(null);
+        if (!exploration.area) {
+          const ids = new Set(
+            ["Active", "Upcoming"]
+              .flatMap((period) =>
+                discoveryActivities(
+                  data,
+                  userId,
+                  now,
+                  period as "Active" | "Upcoming",
+                  exploration.query,
+                  exploration.filters,
+                  exploration.area,
+                ),
+              )
+              .map((row) => row.id),
+          );
+          const coordinates = safePlaces
+            .filter(
+              (place) =>
+                ids.has(place.activity_id) && validPhysicalPlace(place),
+            )
+            .map((place) => ({
+              latitude: place.latitude!,
+              longitude: place.longitude!,
+            }));
+          if (coordinates.length)
+            setControlCommand((previous) => ({
+              kind: "fit",
+              coordinates,
+              revision: (previous?.revision ?? 0) + 1,
+            }));
+        }
+      }
+      setDiscoveryViewer(userId);
+      router.setParams({ mapDiscovery: undefined });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [
+    params.mapDiscovery,
+    snapshotReady,
+    userId,
+    viewport,
+    selectedCategories,
+    selected,
+    person,
+    squadPreviewId,
+    detailTab,
+    exploration.area,
+    exploration.filters,
+    exploration.query,
+    data,
+    now,
+    safePlaces,
+  ]);
+
+  function clearDiscovery() {
+    const original = discoveryRestore.current;
+    if (original?.viewerId === userId) {
+      if (!original.categoriesChanged) setCategoriesValue(original.categories);
+      if (!original.selectionChanged) {
+        setSelected(original.selected);
+        setPerson(original.person);
+        setSquadPreviewId(original.squad);
+        setDetailTab(original.detail);
+      }
+      if (original.camera && !original.cameraChanged)
+        setControlCommand((previous) => ({
+          kind: "restore",
+          camera: original.camera!,
+          revision: (previous?.revision ?? 0) + 1,
+        }));
+    }
+    discoveryRestore.current = null;
+    setDiscoveryViewer(null);
+  }
+
   function clearContexts(key?: string) {
     const remaining = contextViews.filter((view) => key && view.key !== key);
     if (!remaining.length && previousContextCamera.current) {
@@ -1645,6 +1854,10 @@ export default function MapScreen() {
   }
 
   function removeActiveChip(key: string) {
+    if (key === "discovery") {
+      clearDiscovery();
+      return;
+    }
     if (key.startsWith("context:")) {
       clearContexts(key);
       return;
@@ -1706,6 +1919,7 @@ export default function MapScreen() {
   }
 
   async function handleUseMyLocation() {
+    if (discoveryRestore.current) discoveryRestore.current.cameraChanged = true;
     if (compassBusy) return;
     setCompassBusy(true);
     setCompassMessage("");
@@ -1916,6 +2130,8 @@ export default function MapScreen() {
         icon={Maximize}
         onPress={() => {
           closePopovers();
+          if (discoveryRestore.current)
+            discoveryRestore.current.cameraChanged = true;
           setControlCommand((previous) => ({
             kind: "fit",
             revision: (previous?.revision ?? 0) + 1,
@@ -1928,6 +2144,8 @@ export default function MapScreen() {
         onPress={() => {
           exploration.setArea(null);
           closePopovers();
+          if (discoveryRestore.current)
+            discoveryRestore.current.cameraChanged = true;
           setControlCommand((previous) => ({
             kind: "fit",
             revision: (previous?.revision ?? 0) + 1,
@@ -2035,7 +2253,7 @@ export default function MapScreen() {
               ? [...activities, focusedBeacon]
               : activities
           }
-          availabilityActivities={availabilityActivities}
+          availabilityActivities={discoveryActive ? [] : availabilityActivities}
           places={safePlaces}
           locations={mapLocations}
           profiles={data.profiles}
@@ -2175,6 +2393,8 @@ export default function MapScreen() {
               : undefined
           }
           onBackNearMe={() => {
+            if (discoveryRestore.current)
+              discoveryRestore.current.cameraChanged = true;
             setPublicSelection(null);
             setPulsePlace(null);
             setSelected(null);
@@ -2260,7 +2480,7 @@ export default function MapScreen() {
               )
               .slice(0, 5)}
             onSelectPublicBeacon={(row) => choosePublicBeacon(row.activity_id)}
-            people={searchPeopleResults}
+            people={discoveryActive ? [] : searchPeopleResults}
             places={searchPlaceResults}
             recentQueries={recentQueries}
             onSelectBeacon={(activity) => {
@@ -2855,6 +3075,8 @@ export default function MapScreen() {
               setClusterPersonIds(null);
             }}
             onFit={() => {
+              if (discoveryRestore.current)
+                discoveryRestore.current.cameraChanged = true;
               setControlCommand((previous) => ({
                 kind: "fit",
                 coordinates: clusterCoordinates,
@@ -2980,6 +3202,8 @@ export default function MapScreen() {
         friendsApplicable={showAvatars && friends.length > 0}
         onShowFriends={(value) => updateMapPreference({ showFriends: value })}
         onFit={() => {
+          if (discoveryRestore.current)
+            discoveryRestore.current.cameraChanged = true;
           setOptionsOpen(false);
           setControlCommand((previous) => ({
             kind: "fit",

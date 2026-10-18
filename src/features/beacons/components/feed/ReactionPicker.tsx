@@ -121,11 +121,11 @@ export function ReactionPicker({
   const recents = useQuickRecents();
   const [mode, setMode] = useState<"closed" | "quick" | "picker">("closed");
   const [anchor, setAnchor] = useState<LayoutRectangle>({ x: 8, y: 8, width: 44, height: 44 });
-  const quickEmojiCount = Math.max(1, Math.min(5, Math.floor((width - 52) / 42)));
+  const quickEmojiCount = Math.max(1, Math.min(5, Math.floor((width - 52) / 44)));
   const popular = [selectedEmoji, ...recents, ...POPULAR_EMOJIS].filter(
     (emoji, index, all): emoji is string => !!emoji && all.indexOf(emoji) === index,
   ).slice(0, quickEmojiCount);
-  const quickWidth = (quickEmojiCount + 1) * 42 + 10;
+  const quickWidth = (quickEmojiCount + 1) * 44 + 10;
   const left = Math.max(8, Math.min(width - quickWidth - 8, anchor.x + anchor.width / 2 - quickWidth / 2));
   const above = anchor.y - 62 >= 8;
   const top = above
@@ -217,8 +217,8 @@ export function ReactionPicker({
                   disabled={disabled}
                   onPress={() => void choose(emoji)}
                   style={{
-                    minWidth: 40,
-                    minHeight: 42,
+                    minWidth: 44,
+                    minHeight: 44,
                     borderRadius: 14,
                     alignItems: "center",
                     justifyContent: "center",
@@ -233,8 +233,8 @@ export function ReactionPicker({
                 accessibilityLabel="More reactions"
                 onPress={() => setMode("picker")}
                 style={{
-                  minWidth: 40,
-                  minHeight: 42,
+                  minWidth: 44,
+                  minHeight: 44,
                   borderRadius: 14,
                   alignItems: "center",
                   justifyContent: "center",
@@ -284,7 +284,7 @@ export function ReactionPicker({
                   accessibilityLabel="Close emoji picker"
                   hitSlop={8}
                   onPress={close}
-                  style={{ minWidth: 40, minHeight: 40, alignItems: "center", justifyContent: "center" }}
+                  style={{ minWidth: 44, minHeight: 40, alignItems: "center", justifyContent: "center" }}
                 >
                   <Text style={{ color: colors.textSecondary, fontSize: 25 }}>×</Text>
                 </Pressable>

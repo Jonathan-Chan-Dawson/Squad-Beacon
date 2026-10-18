@@ -82,11 +82,22 @@ export async function saveOwnStatus(data: Data, userId: string | null, value: St
   const preserved = { label: place?.label, latitude: place?.latitude, longitude: place?.longitude, onlineUrl: place?.online_url, ...value };
   const result = await act("save_status_note", statusCreatePayload(preserved, source, data.profiles.find((profile) => profile.id === userId), now));
   if (result.event !== "save_status_note" || typeof result.id !== "string" || !Number.isInteger(result.cleared_count)) throw new Error("Your status could not be verified. Refresh before trying again.");
+  // The atomic writer intentionally lets scheduled statuses coexist. Replace the
+  // explicitly edited future note through the existing owner-only cancellation.
+  if (source && Date.parse(source.starts_at) > now && source.id !== result.id) {
+    try { await act("activity_status", { id: source.id, status: "cancelled" }); }
+    catch { return { savedId: result.id, failedIds: [source.id], message: "Your new status was saved. The previous scheduled status could not be removed; open scheduled statuses to clear it." }; }
+  }
   return { savedId: result.id, failedIds: [], message: "" };
 }
 
-export async function clearOwnStatuses(data: Data, userId: string | null, act: StatusAction, _now: number): Promise<StatusMutationResult> {
+export async function clearOwnStatuses(data: Data, userId: string | null, act: StatusAction, _now: number, sourceId?: string): Promise<StatusMutationResult> {
   requireViewer(data, userId);
+  const source = sourceId ? data.activities.find((item) => item.id === sourceId && item.owner_id === userId && item.mode === "solo" && item.status === "scheduled" && Date.parse(item.starts_at) > _now) : undefined;
+  if (source) {
+    await act("activity_status", { id: source.id, status: "cancelled" });
+    return { failedIds: [], message: "" };
+  }
   const result = await act("clear_status_notes");
   if (result.event !== "clear_status_notes" || !Number.isInteger(result.cleared_count)) throw new Error("Clearing your status could not be verified. Refresh before trying again.");
   return { failedIds: [], message: "" };
