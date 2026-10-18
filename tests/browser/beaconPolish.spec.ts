@@ -14,7 +14,7 @@ for (const width of [320, 375, 430, 1024]) {
     page.on("pageerror", (error) => errors.push(error.message));
     await home(page);
     const saved = page.getByRole("button", {
-      name: "Saved & Tools",
+      name: "My Collection",
       exact: true,
     });
     await saved.scrollIntoViewIfNeeded();
@@ -72,15 +72,13 @@ for (const width of [320, 375, 430, 1024]) {
     await expect(menu).toHaveCount(0);
     await expect(more).toBeFocused();
     await saved.click();
-    const tools = page.getByRole("dialog", {
-      name: "Saved & Tools",
-      exact: true,
-    });
+    await expect(page).toHaveURL(/my-collection/);
+    const tools = page;
     await expect(
       tools.getByRole("button", { name: "Saved Beacons", exact: true }),
     ).toBeVisible();
     await expect(
-      tools.getByRole("button", { name: "Favorite friends", exact: true }),
+      tools.getByRole("button", { name: "Favorite Friends", exact: true }),
     ).toBeVisible();
     await expect(
       tools.getByRole("button", { name: "Favorite Squads", exact: true }),
@@ -92,31 +90,28 @@ for (const width of [320, 375, 430, 1024]) {
     await tools
       .getByRole("button", { name: "Saved Beacons", exact: true })
       .click();
-    const collection = page.getByRole("dialog", {
-      name: "Saved Beacons",
-      exact: true,
-    });
+    await expect(page).toHaveURL(/section=saved/);
+    const collection = page;
     await expect(
-      collection.getByRole("button", { name: title!, exact: true }),
+      collection.getByRole("button", { name: `Open ${title}`, exact: true }),
     ).toBeVisible();
     await collection
       .getByRole("button", { name: `Unsave ${title}`, exact: true })
       .click();
     await expect(
-      collection.getByRole("button", { name: title!, exact: true }),
+      collection.getByRole("button", { name: `Open ${title}`, exact: true }),
     ).toHaveCount(0);
-    await page.keyboard.press("Escape");
+    await page.goBack();
+    await page.goBack();
     await page
       .getByRole("button", { name: "Explore all →", exact: true })
       .click();
     await page
       .getByRole("button", { name: "Saved Beacons", exact: true })
       .click();
+    await expect(page).toHaveURL(/my-collection\?section=saved/);
     await expect(
-      page.getByRole("dialog", { name: "Saved Beacons", exact: true }),
-    ).toBeVisible();
-    await expect(
-      page.getByText("Save a Beacon from its bookmark to find it here.", {
+      page.getByText("Use the bookmark on any Beacon to keep it here.", {
         exact: true,
       }),
     ).toBeVisible();

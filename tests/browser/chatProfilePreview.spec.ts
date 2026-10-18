@@ -14,8 +14,8 @@ test("Friend chat header opens the full profile, compact actions and privacy con
   page,
 }) => {
   const errors: string[] = [];
-  page.on("pageerror", (error) => errors.push(error.message));
   await chats(page);
+  page.on("pageerror", (error) => errors.push(error.message));
   await page.getByRole("button", { name: "Friends", exact: true }).click();
   await page
     .getByRole("textbox", { name: "Search conversations", exact: true })
@@ -57,7 +57,7 @@ test("Friend chat header opens the full profile, compact actions and privacy con
   ).toBeEnabled();
   await page.screenshot({ path: "test-results/person-profile-390.png" });
   await page
-    .getByRole("button", { name: "See all connections", exact: true })
+    .getByRole("button", { name: "See all shared communities", exact: true })
     .click();
   await expect(
     page

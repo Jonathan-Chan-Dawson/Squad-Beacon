@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   AppState,
+  Platform,
   Linking,
   Pressable,
   ScrollView,
@@ -8,6 +9,7 @@ import {
   Text,
   View,
 } from "react-native";
+import Constants, { ExecutionEnvironment } from "expo-constants";
 import { router, type Href } from "expo-router";
 import Animated, {
   FadeInDown,
@@ -383,6 +385,22 @@ function SettingsForm({ profile }: { profile: Profile }) {
       ? "Available in the mobile app"
       : `Permission: ${push.permission} · ${push.registration === "verified" ? "Registered for this account" : push.registration === "unknown" ? "Registration needs checking" : "Not registered"}${!push.physicalDevice ? " · Physical phone required" : !push.projectConfigured ? " · Push project is not configured" : ""}`;
   const groups = [
+    ...(Platform.OS === "ios" &&
+    Constants.executionEnvironment !== ExecutionEnvironment.StoreClient
+      ? [
+          {
+            title: "Home Screen",
+            items: rows([
+              {
+                title: "Widget Studio",
+                detail: "Friends and circles at a glance",
+                icon: Palette,
+                onPress: () => router.push("/widgets"),
+              },
+            ]),
+          },
+        ]
+      : []),
     {
       title: "Privacy",
       items: rows([

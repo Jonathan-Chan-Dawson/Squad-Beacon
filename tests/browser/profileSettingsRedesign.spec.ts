@@ -16,6 +16,7 @@ test("profile uses phone-sized identity and visibility changes do not start Sona
   expect(identity!.width).toBeGreaterThanOrEqual(350);
   expect(identity!.width).toBeLessThanOrEqual(360);
   expect(avatar!.width).toBeGreaterThanOrEqual(80);
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
   await page
     .getByRole("button", { name: "Profile visibility", exact: true })
     .click();
@@ -32,55 +33,42 @@ test("profile uses phone-sized identity and visibility changes do not start Sona
   await form
     .getByRole("button", { name: "Save profile privacy", exact: true })
     .click();
-  await expect(form).not.toBeVisible();
+  await page
+    .getByRole("button", { name: "Back to profile", exact: true })
+    .click();
   await expect(
-    page.getByText("Profile visibility: Friends", { exact: true }),
+    page
+      .getByRole("button", { name: "Profile visibility", exact: true })
+      .getByText("Friends", { exact: true }),
   ).toBeVisible();
-  const sonar = page.getByTestId("profile-sonar-card");
-  await sonar.scrollIntoViewIfNeeded();
+  await page
+    .getByRole("button", { name: "Temporary location sharing", exact: true })
+    .click();
   await expect(
-    sonar.getByText("Location sharing is off", { exact: true }),
+    page.getByText("Your location sharing is off.", { exact: true }),
   ).toBeVisible();
   await expect(
     page.getByRole("button", { name: "Open Widget Studio", exact: true }),
   ).toHaveCount(0);
 });
 
-test("Sonar requires picked friends and explicit confirmation and the demo never starts location", async ({
+test("Sonar is reached through Settings and the demo never starts device location", async ({
   page,
 }) => {
   await openProfile(page);
-  const sonar = page.getByTestId("profile-sonar-card");
-  await sonar.scrollIntoViewIfNeeded();
-  await sonar.getByRole("button", { name: "Start Sonar", exact: true }).click();
-  const confirmation = page.getByTestId("profile-sonar-confirmation");
-  await expect(confirmation).toBeVisible();
-  await expect(
-    confirmation.getByText(
-      "Temporary. Only the friends you pick. Not a safety service.",
-      { exact: true },
-    ),
-  ).toBeVisible();
-  const start = confirmation.getByRole("button", {
-    name: "Confirm and start Sonar",
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Temporary location sharing", exact: true })
+    .click();
+  const start = page.getByRole("button", {
+    name: "Start temporary sharing",
     exact: true,
   });
-  await expect(start).toBeDisabled();
-  await confirmation
-    .getByRole("checkbox", { name: /^Share location with/ })
-    .first()
-    .click();
+  await page.getByRole("button", { name: "Jordan Ellis", exact: true }).click();
   await expect(start).toBeEnabled();
   await start.click();
   await expect(
-    confirmation.getByText(
-      "The demo never shares your device location. Use a real account and mobile development build.",
-      { exact: true },
-    ),
-  ).toBeVisible();
-  await page.getByRole("button", { name: "Close", exact: true }).click();
-  await expect(
-    sonar.getByText("Location sharing is off", { exact: true }),
+    page.getByText(/The demo never shares your device location/),
   ).toBeVisible();
 });
 

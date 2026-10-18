@@ -1,3 +1,5 @@
+import { markerIdentity, categoryMarkerGlyphs } from "../markerIdentity";
+import { useBeacon } from "@/src/shared/store";
 import { avatarAvailability } from "@/src/features/profile/AvatarStatusBadge";
 import {
   clusterAreaSummary,
@@ -96,10 +98,12 @@ function mapTimeChip(activity: MapProps["activities"][number], now: number) {
 export default function BeaconMap(props: MapProps) {
   const { colors, resolvedAppearance } = useTheme();
   const { categories, availability } = useDesignTheme();
+  const { data: identityData, userId: identityViewer } = useBeacon();
   const now = useNow();
   const reducedMotion = useReducedMotion();
   const configuredCartoKey = Constants.expoConfig?.extra?.cartoBasemapsApiKey;
-  const cartoApiKey = typeof configuredCartoKey === "string" ? configuredCartoKey : undefined;
+  const cartoApiKey =
+    typeof configuredCartoKey === "string" ? configuredCartoKey : undefined;
 
   const element = useRef<HTMLDivElement>(null),
     map = useRef<Leaflet.Map | null>(null),
@@ -187,11 +191,15 @@ export default function BeaconMap(props: MapProps) {
           latest.current.onPick ||
           !latest.current.onLongPress ||
           !emptyMapTarget(event.target)
-        ) return;
+        )
+          return;
         const touch = event.touches[0];
         touchOrigin = { x: touch.clientX, y: touch.clientY };
         const bounds = container.getBoundingClientRect();
-        const point = L.point(touch.clientX - bounds.left, touch.clientY - bounds.top);
+        const point = L.point(
+          touch.clientX - bounds.left,
+          touch.clientY - bounds.top,
+        );
         const coordinate = m.containerPointToLatLng(point);
         holdTimer = setTimeout(() => {
           holdTimer = null;
@@ -210,7 +218,10 @@ export default function BeaconMap(props: MapProps) {
         if (
           event.touches.length !== 1 ||
           !touch ||
-          Math.hypot(touch.clientX - touchOrigin.x, touch.clientY - touchOrigin.y) > 8
+          Math.hypot(
+            touch.clientX - touchOrigin.x,
+            touch.clientY - touchOrigin.y,
+          ) > 8
         ) {
           cancelHold();
           touchOrigin = null;
@@ -493,6 +504,7 @@ export default function BeaconMap(props: MapProps) {
       availabilityLabel = "unknown",
       nowBeacon = false,
       timeChip = "",
+      identity: ReturnType<typeof markerIdentity> = null,
     ) => {
       const node = document.createElement("button");
       const dot = !friend && m.getZoom() < 12;
@@ -532,7 +544,8 @@ export default function BeaconMap(props: MapProps) {
         node.append(age);
       } else {
         const face = document.createElement("span");
-        face.style.cssText = "position:relative;display:flex;align-items:center;justify-content:center;flex-shrink:0;";
+        face.style.cssText =
+          "position:relative;display:flex;align-items:center;justify-content:center;flex-shrink:0;";
         if (nowBeacon) {
           const halo = document.createElement("span");
           halo.className = "map-now-halo";
@@ -548,6 +561,13 @@ export default function BeaconMap(props: MapProps) {
         badge.textContent = dot ? "" : text;
         badge.style.cssText = `position:relative;width:${visualSize}px;height:${visualSize}px;border:${dot ? 1 : 3}px solid ${dot ? colors.white : tone};border-radius:50%;background:${dot ? tone : colors.white};display:flex;align-items:center;justify-content:center;box-shadow:0 3px 10px #172c2940;font-size:22px;`;
         face.append(badge);
+        if (identity && !dot) {
+          const emblem = document.createElement("span");
+          emblem.textContent = identity.glyph;
+          emblem.setAttribute("aria-label", identity.label);
+          emblem.style.cssText = `position:absolute;right:-7px;bottom:-4px;width:21px;height:21px;border:2px solid ${colors.white};border-radius:${identity.kind === "community" ? 6 : 11}px;background:${colors.ink};color:${colors.white};display:flex;align-items:center;justify-content:center;font:700 12px system-ui;`;
+          face.append(emblem);
+        }
         node.append(face);
         if (timeChip) {
           const chip = document.createElement("span");
@@ -679,13 +699,15 @@ export default function BeaconMap(props: MapProps) {
         const node = document.createElement("button");
         node.type = "button";
         node.textContent = point.publicBeaconId
-          ? `Public \u00b7 ${point.title}`
-          : "? Suggestion";
+          ? categoryMarkerGlyphs[point.category ?? "Other"]
+          : "?";
         node.setAttribute(
           "aria-label",
           `${point.publicBeaconId ? "Public Beacon" : "Suggestion"}: ${point.title}`,
         );
         node.style.cssText = `max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-height:44px;padding:5px 8px;border:1px dashed ${colors.green};border-radius:12px;background:${colors.white};color:${colors.green};font:11px system-ui;cursor:pointer;`;
+        if (point.publicBeaconId)
+          node.style.cssText = `width:46px;height:46px;border:3px solid ${colors.green};border-radius:16px 16px 16px 5px;background:${colors.white};font-size:25px;cursor:pointer;box-shadow:0 3px 8px #172c2920;`;
         L.DomEvent.disableClickPropagation(node);
         node.onclick = () => {
           if (!onPick) onContextPoint?.(point);
@@ -695,8 +717,8 @@ export default function BeaconMap(props: MapProps) {
           icon: L.divIcon({
             html: node,
             className: "beacon-marker",
-            iconSize: [point.publicBeaconId ? 150 : 88, 44],
-            iconAnchor: [point.publicBeaconId ? 75 : 44, 22],
+            iconSize: [point.publicBeaconId ? 46 : 88, 46],
+            iconAnchor: [point.publicBeaconId ? 23 : 44, 23],
           }),
         }).addTo(group);
       }
@@ -891,7 +913,7 @@ export default function BeaconMap(props: MapProps) {
             Social: "\u2615",
             Other: "\u2728",
           }[a.category],
-          `Map: ${a.title}`,
+          `Map: ${a.title}${markerIdentity(identityData, a, identityViewer) ? `, ${markerIdentity(identityData, a, identityViewer)!.label}` : ""}`,
           () => onActivity(a.id),
           false,
           0,
@@ -910,6 +932,7 @@ export default function BeaconMap(props: MapProps) {
               : m.getZoom() >= 15
                 ? mapTimeChip(a, now)
                 : "",
+          markerIdentity(identityData, a, identityViewer),
         );
     });
     if (showAvatars)
@@ -1004,6 +1027,8 @@ export default function BeaconMap(props: MapProps) {
       fitted.current = true;
     }
   }, [
+    identityData,
+    identityViewer,
     ready,
     layoutVersion,
     viewVersion,

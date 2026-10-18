@@ -127,7 +127,7 @@ test("a sheet queues Escape during opening and can be reopened", async ({
   await page.getByRole("tab", { name: "Beacons", exact: true }).click();
 
   const create = page.getByRole("button", {
-    name: "Saved & Tools",
+    name: /Add a status note|Edit your status note/,
     exact: true,
   });
   const dialog = page.getByRole("dialog");

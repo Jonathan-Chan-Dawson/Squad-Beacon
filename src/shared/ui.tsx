@@ -6,6 +6,7 @@ import {
   Platform,
   Pressable,
   StyleSheet,
+  ScrollView,
   Text,
   TextInput,
   View,
@@ -1026,6 +1027,7 @@ export function Screen({
   create: _create = true,
   footer,
   headerAction,
+  scrollStateKey,
 }: {
   title: string;
   eyebrow: string;
@@ -1038,6 +1040,8 @@ export function Screen({
   footer?: React.ReactNode;
   headerAction?: React.ReactNode;
   showDemoNotice?: boolean;
+  /** Preserve independent scroll positions for in-page sections such as Profile tabs. */
+  scrollStateKey?: string;
 }) {
   const { styles, colors, tokens } = useTheme();
   const insets = useSafeAreaInsets();
@@ -1047,10 +1051,25 @@ export function Screen({
   const inTabs = segments[0] === "(tabs)";
   const back = !inTabs;
   const scrollY = useMemo(() => new Animated.Value(0), []);
+  const scrollRef = React.useRef<ScrollView>(null);
+  const scrollPositions = React.useRef(new Map<string, number>());
+  const activeScrollKey = React.useRef(scrollStateKey);
+  React.useLayoutEffect(() => {
+    activeScrollKey.current = scrollStateKey;
+    if (scrollStateKey == null) return;
+    const position = scrollPositions.current.get(scrollStateKey) ?? 0;
+    const timer = setTimeout(
+      () => scrollRef.current?.scrollTo({ y: position, animated: false }),
+      0,
+    );
+    return () => clearTimeout(timer);
+  }, [scrollStateKey]);
   const titleAtTopRef = React.useRef(true);
   const handleScreenScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       const offset = event.nativeEvent.contentOffset.y;
+      if (activeScrollKey.current != null)
+        scrollPositions.current.set(activeScrollKey.current, offset);
       titleAtTopRef.current = offset <= 0.5;
       scrollY.setValue(offset);
     },
@@ -1134,6 +1153,7 @@ export function Screen({
       <View style={{ flex: 1 }}>
         {scroll ? (
           <Animated.ScrollView
+            ref={scrollRef}
             style={{ flex: 1 }}
             keyboardShouldPersistTaps="handled"
             onScroll={handleScreenScroll}

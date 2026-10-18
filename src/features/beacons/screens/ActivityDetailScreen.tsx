@@ -1,3 +1,5 @@
+import { BeaconSupplies, BeaconReadiness } from "../components/BeaconSupplies";
+import { BeaconCardEngagement } from "../components/BeaconCardEngagement";
 import {
   useBeaconParticipation,
   ParticipationButtons,
@@ -110,21 +112,22 @@ import {
   type BeaconMemory,
 } from "@/src/features/beacons/models";
 
-type DetailTab = "Overview" | "People" | "Tools" | "Chat";
+type DetailTab = "Overview" | "People" | "Activity" | "Memories" | "Chat";
 const tabIcons = {
   Overview: Info,
   People: UsersRound,
-  Tools: Wrench,
+  Activity: Wrench,
+  Memories: Camera,
   Chat: MessagesSquare,
 } satisfies Record<DetailTab, typeof Info>;
 
 const toolLabels: Record<ToolId, string> = {
   checklist: "Checklist",
-  journal: "Beacon Sketchboard",
-  focus: "Focus timer",
+  journal: "Scratchboard",
+  focus: "Timer",
   experiences: "Memories",
   scoreboard: "Teams & scores",
-  music: "Music",
+  music: "Songs",
   chat: "Chat",
 };
 const toolIcons: Record<ToolId, React.ReactNode> = {
@@ -205,7 +208,6 @@ function activityHasTools(activity: Activity) {
     isBeaconModuleEnabled(activity, "checklist") ||
     isBeaconModuleEnabled(activity, "journal") ||
     isBeaconModuleEnabled(activity, "focus") ||
-    isBeaconModuleEnabled(activity, "experiences") ||
     isBeaconModuleEnabled(activity, "scoreboard") ||
     (isBeaconModuleEnabled(activity, "music") && !!activity.music_url)
   );
@@ -653,11 +655,11 @@ export default function ActivityDetail() {
     canAccess &&
     (activityHasTools(activity) || hasPausedHistory || chatEnabled)
   )
-    options.push("Tools");
-  if (canAccess && (chatEnabled || hasChatHistory)) options.push("Chat");
+    options.push("Activity");
+  if (canAccess && isBeaconModuleEnabled(activity,"experiences")) options.push("Memories");
   const requestedTab =
     selectedTab.activityId === activity.id ? selectedTab.tab : "Overview";
-  const visibleTab = options.includes(requestedTab) ? requestedTab : "Overview";
+  const visibleTab = requestedTab === "Chat" && canAccess && (chatEnabled || hasChatHistory) ? "Chat" : options.includes(requestedTab) ? requestedTab : "Overview";
   const selectTab = (tab: DetailTab) => {
     setSelectedTab({ activityId: activity.id, tab });
   };
@@ -926,15 +928,7 @@ export default function ActivityDetail() {
     if (tool === "chat") return hasChatHistory;
     return false;
   };
-  const toolOrder: ToolId[] = [
-    "checklist",
-    "journal",
-    "focus",
-    "experiences",
-    "scoreboard",
-    "music",
-    "chat",
-  ];
+  const toolOrder: ToolId[] = activity.category === "Fitness" ? ["scoreboard","checklist","focus","journal","music"] : activity.category === "Study" ? ["focus","journal","checklist","music","scoreboard"] : ["checklist","journal","focus","music","scoreboard"];
   const checklistHistory = data.beacon_checklist_items
     .filter(
       (item) =>
@@ -1001,7 +995,7 @@ export default function ActivityDetail() {
     ? toolOrder
         .filter(
           (tool) =>
-            enabledFor(tool) || (tool !== "focus" && hasToolHistory(tool)),
+            enabledFor(tool),
         )
         .map((tool) => ({
           id: tool,
@@ -1015,6 +1009,7 @@ export default function ActivityDetail() {
           },
         }))
     : [];
+  const activeTool = selectedTool && tools.some(tool=>tool.id===selectedTool) ? selectedTool : tools[0]?.id as ToolId | undefined;
   const contentWidth = Math.min(width, tokens.layout.contentMaxWidth ?? width);
   const bottomClearance = 90 + Math.max(insets.bottom, 8);
 
@@ -1058,6 +1053,14 @@ export default function ActivityDetail() {
               </View>
             ) : null}
 
+            <SlidingTabBar
+              options={options}
+              activeTab={visibleTab}
+              onSelect={selectTab}
+              reducedMotion={reducedMotion}
+            />
+
+            {visibleTab === "Overview" ? <>
             <ActivityDetailInfo
               startsAt={activity.starts_at}
               endsAt={activity.ends_at}
@@ -1228,15 +1231,12 @@ export default function ActivityDetail() {
               />
             ) : null}
 
-            <SlidingTabBar
-              options={options}
-              activeTab={visibleTab}
-              onSelect={selectTab}
-              reducedMotion={reducedMotion}
-            />
+              <BeaconReadiness activity={activity} onNavigate={selectTab} />
+            </> : null}
 
-            {visibleTab === "Overview" ? (
+            {visibleTab === "Overview" || visibleTab === "Memories" ? (
               <View style={{ gap: tokens.space.md }}>
+                {visibleTab === "Memories" && <><BeaconMemories activity={activity} /><BeaconCardEngagement activityId={activity.id} /></>}
                 {canReadComments ? (
                   <View
                     ref={commentsSectionRef}
@@ -1331,6 +1331,7 @@ export default function ActivityDetail() {
 
             {visibleTab === "People" ? (
               <View style={{ gap: tokens.space.md }}>
+                <BeaconSupplies activity={activity} />
                 <ActivityDetailPeople
                   going={goingRows}
                   maybe={maybeRows}
@@ -1421,10 +1422,10 @@ export default function ActivityDetail() {
               </View>
             ) : null}
 
-            {visibleTab === "Tools" && canAccess ? (
+            {visibleTab === "Activity" && canAccess ? (
               <View style={{ gap: tokens.space.md }}>
-                <ActivityDetailTools tools={tools} />
-                {selectedTool === "checklist" && !enabledFor("checklist") ? (
+                <ActivityDetailTools tools={tools} selected={activeTool} />
+                {activeTool === "checklist" && !enabledFor("checklist") ? (
                   <ReadOnlyHistoryCard title="Checklist history">
                     {checklistHistory.length ? (
                       checklistHistory.map((item) => (
@@ -1441,7 +1442,7 @@ export default function ActivityDetail() {
                     )}
                   </ReadOnlyHistoryCard>
                 ) : null}
-                {selectedTool === "journal" && !enabledFor("journal") ? (
+                {activeTool === "journal" && !enabledFor("journal") ? (
                   <ReadOnlyHistoryCard title="Beacon Sketchboard history">
                     {journalHistory.length ? (
                       journalHistory.map((note) => (
@@ -1457,7 +1458,7 @@ export default function ActivityDetail() {
                     )}
                   </ReadOnlyHistoryCard>
                 ) : null}
-                {selectedTool === "experiences" ? (
+                {activeTool === "experiences" ? (
                   enabledFor("experiences") ? (
                     <View style={styles.card}>
                       <BeaconMemories activity={activity} />
@@ -1479,7 +1480,7 @@ export default function ActivityDetail() {
                     </ReadOnlyHistoryCard>
                   )
                 ) : null}
-                {selectedTool === "scoreboard" ? (
+                {activeTool === "scoreboard" ? (
                   enabledFor("scoreboard") ? (
                     <View style={styles.card}>
                       <BeaconScoreboard activity={activity} />
@@ -1505,7 +1506,7 @@ export default function ActivityDetail() {
                     </ReadOnlyHistoryCard>
                   )
                 ) : null}
-                {selectedTool === "music" && activity.music_url ? (
+                {activeTool === "music" && activity.music_url ? (
                   <View style={[styles.card, { gap: 8 }]}>
                     <View style={styles.row}>
                       <Music2 size={19} color={colors.green} />
@@ -1524,20 +1525,21 @@ export default function ActivityDetail() {
                     />
                   </View>
                 ) : null}
-                {selectedTool === "chat" ? (
+                {activeTool === "chat" ? (
                   <View style={{ height: 470, minHeight: 320 }}>
                     <ActivityChatPanel activity={activity} />
                   </View>
                 ) : null}
-                {selectedTool &&
-                ["checklist", "journal", "focus"].includes(selectedTool) &&
+                {activeTool &&
+                ["checklist", "journal", "focus"].includes(activeTool) &&
                 (isBeaconModuleEnabled(activity, "checklist") ||
                   isBeaconModuleEnabled(activity, "journal") ||
                   isBeaconModuleEnabled(activity, "focus")) ? (
                   <BeaconTools
                     key={activity.id + ":" + (userId ?? "viewer")}
                     activity={activity}
-                    section={selectedTool as "checklist" | "journal" | "focus"}
+                    inlineEditors
+                    section={activeTool as "checklist" | "journal" | "focus"}
                   />
                 ) : null}
                 {canManageSettings ? (
@@ -1591,7 +1593,7 @@ export default function ActivityDetail() {
             ) : null}
 
             {visibleTab === "Chat" && canAccess ? (
-              <View style={{ height: 470, minHeight: 320 }}>
+              <View style={{ height: Math.max(400,height - 200), minHeight: 320 }}>
                 <ActivityChatPanel activity={activity} />
               </View>
             ) : null}
@@ -1612,7 +1614,8 @@ export default function ActivityDetail() {
             chips={audienceChips}
             demo={demo}
             scrollY={scrollY}
-            onBack={() => router.back()}
+            onChat={canAccess && chatEnabled ? () => selectTab("Chat") : undefined}
+            onBack={() => visibleTab === "Chat" ? selectTab("Overview") : router.back()}
             onOverflow={() => setOverflow(true)}
           />
 
@@ -1821,7 +1824,7 @@ export default function ActivityDetail() {
           secondary
           onPress={() => {
             setManage(false);
-            selectTab("Tools");
+            selectTab("Activity");
           }}
         />
         <Button

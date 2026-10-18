@@ -5,7 +5,7 @@ import { canOpenSquadProfile } from "@/src/features/people/squadProfile";
 export type BeaconCollection = "saved" | "friends" | "squads";
 export const collectionTitles: Record<BeaconCollection, string> = {
   saved: "Saved Beacons",
-  friends: "Favorite friends",
+  friends: "Favorite Friends",
   squads: "Favorite Squads",
 };
 /** These are three existing collections, each with its own access policy. */

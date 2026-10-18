@@ -146,9 +146,11 @@ export function useOwnStatusControl() {
 export function SharedStatusControl({
   compact = false,
   avatarControl = false,
+  profilePill = false,
 }: {
   compact?: boolean;
   avatarControl?: boolean;
+  profilePill?: boolean;
 }) {
   const { userId } = useBeacon();
   return (
@@ -156,6 +158,7 @@ export function SharedStatusControl({
       key={userId ?? "signed-out"}
       compact={compact}
       avatarControl={avatarControl}
+      profilePill={profilePill}
     />
   );
 }
@@ -163,9 +166,11 @@ export function SharedStatusControl({
 function SharedStatusContent({
   compact,
   avatarControl,
+  profilePill,
 }: {
   compact: boolean;
   avatarControl: boolean;
+  profilePill: boolean;
 }) {
   const control = useOwnStatusControl();
   const { colors, tokens } = useDesignTheme();
@@ -326,6 +331,7 @@ function SharedStatusContent({
         observedNow={control.now}
         compact={compact}
         avatarControl={avatarControl}
+        profilePill={profilePill}
         profile={control.profile}
         status={
           control.status

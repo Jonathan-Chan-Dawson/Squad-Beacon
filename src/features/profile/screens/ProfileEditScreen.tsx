@@ -415,7 +415,7 @@ function Editor({ profile }: { profile: Profile }) {
             )}
           </View>
           <View style={{ gap: 16 }}>
-            {heading("Introduce yourself")}
+            {heading("Basics")}
             <Field
               label="Name"
               value={draft.name}
@@ -449,7 +449,7 @@ function Editor({ profile }: { profile: Profile }) {
           </View>
           <View style={{ gap: 12 }}>
             {heading(
-              "Identity badges",
+              "Interests & Identity",
               "Optional details you choose to share on your profile.",
             )}
             <Button

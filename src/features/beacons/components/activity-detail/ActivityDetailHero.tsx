@@ -7,7 +7,7 @@ import {
   useWindowDimensions,
 } from "react-native";
 import Svg, { Defs, LinearGradient, Stop, Circle } from "react-native-svg";
-import { ArrowLeft, Ellipsis } from "lucide-react-native";
+import { ArrowLeft, Ellipsis, MessagesSquare } from "lucide-react-native";
 import type { Category } from "@/src/shared/types";
 import { useDesignTheme, useReducedMotion } from "@/src/shared/design-system";
 import { radius, space, type } from "@/src/theme/data";
@@ -24,6 +24,7 @@ export type ActivityDetailHeroProps = {
   scrollY: Animated.Value;
   onBack: () => void;
   onOverflow: () => void;
+  onChat?: () => void;
 };
 
 const stateColors: Record<
@@ -47,6 +48,7 @@ export function ActivityDetailHero({
   scrollY,
   onBack,
   onOverflow,
+  onChat,
 }: ActivityDetailHeroProps) {
   const { height: screenHeight, width: screenWidth } = useWindowDimensions();
   const { categories, tokens, theme, appearance } = useDesignTheme();
@@ -184,7 +186,7 @@ export function ActivityDetailHero({
             {
               position: "absolute",
               left: 68,
-              right: 68,
+              right: onChat ? 116 : 68,
               textAlign: "center",
               color: heroText,
               ...type.headline,
@@ -195,6 +197,8 @@ export function ActivityDetailHero({
         >
           {title}
         </Animated.Text>
+        <View style={{flexDirection:"row",gap:6}}>
+        {onChat && <Pressable accessibilityRole="button" accessibilityLabel="Open Chatroom" onPress={onChat} style={({pressed})=>({width:44,height:44,borderRadius:22,alignItems:"center",justifyContent:"center",backgroundColor:"rgba(255,255,255,0.16)",opacity:pressed?0.7:1})}><MessagesSquare size={20} color={heroText}/></Pressable>}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="More activity options"
@@ -211,6 +215,7 @@ export function ActivityDetailHero({
         >
           <Ellipsis size={22} color={heroText} />
         </Pressable>
+        </View>
       </View>
 
       <Animated.View

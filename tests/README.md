@@ -5,6 +5,7 @@
 - `database.test.ts`: migrations and access checks in an isolated PGlite database.
 - `organizations.test.ts` and `organizations.database.test.ts`: organization role/domain behavior and PGlite authorization, chat, audience, profile-grant, and deletion-audit coverage.
 - `browser/`: phone-sized Playwright flows.
+- `demoProfileFixtures.test.ts` and `src/shared/demoProfileFixtures.ts`: Avery Bennett, Noor Haddad, Rafael Costa, and a richer own profile; 38 interests each, 12–16 aspirations, long biographies, shared communities, current activity, history, and eight sample albums per person. Sample media uses category artwork, never real personal photographs or fabricated storage URLs. `profileShowcase.spec.ts` captures seven real app views per person at 390 × 844.
 
 Run `npm test`, `npm run export:web -- --max-workers 2`, then `npm run test:e2e`.
 

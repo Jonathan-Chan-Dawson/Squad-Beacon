@@ -43,6 +43,8 @@ export interface Profile {
   viewer_can_view_full_profile?: boolean;
   /** A privacy-filtered featured beacon id for non-owner profile projections. */
   viewer_featured_activity_id?: ID | null;
+  /** Server-projected hide-featured choice, independent of an automatic selection. */
+  viewer_profile_feature_hidden?: boolean;
   avatar_seed?: number;
   avatar_style?: "illustrated" | "photo";
   home?: string;
@@ -143,6 +145,10 @@ export interface Checkin {
 }
 export interface Activity extends Shared {
   available?: boolean;
+  status_sharing?: boolean;
+  status_note_hidden?: boolean;
+  /** Owner-only note contents, never returned to other viewers. */
+  own_status_note?: { title: string; description: string };
   /** Snapshot projection for the authenticated viewer; never accepted as write input. */
   viewer_can_access?: boolean;
   /** Authoritative host + accepted-Going count from the current snapshot. */
@@ -497,6 +503,8 @@ export interface Data {
   beacon_teams: BeaconTeam[];
   beacon_team_members: BeaconTeamMember[];
   beacon_memories: BeaconMemory[];
+  beacon_supply_requests: import("@/src/features/beacons/supplies").SupplyRequest[];
+  beacon_supply_claims: import("@/src/features/beacons/supplies").SupplyClaim[];
   beacon_favorites: BeaconFavorite[];
   favorites: {
     owner_id: string;
@@ -546,7 +554,7 @@ export interface Data {
   places: ActivityPlace[];
   rsvps: RSVP[];
   resolved_beacon_responses?: RSVP[];
-  capabilities?: { rsvp_decline?: boolean };
+  capabilities?: { rsvp_decline?: boolean; beacon_supplies?: boolean; status_privacy?: boolean };
   comments: Comment[];
   reactions: Reaction[];
   locations: LocationSession[];
@@ -575,6 +583,8 @@ export const emptyData = (): Data => ({
   beacon_teams: [],
   beacon_team_members: [],
   beacon_memories: [],
+  beacon_supply_requests: [],
+  beacon_supply_claims: [],
   beacon_favorites: [],
   favorites: [],
   templates: [],
@@ -636,7 +646,9 @@ export function normalizeData(value: Partial<Data> | null | undefined): Data {
     return [`${row.activity_id}:${row.user_id}`, response] as const;
   })).values()];
   data.resolved_beacon_responses = undefined;
-  data.capabilities = { rsvp_decline: data.is_demo === true || data.capabilities?.rsvp_decline === true };
+  data.beacon_supply_requests = Array.isArray(data.beacon_supply_requests) ? data.beacon_supply_requests : [];
+  data.beacon_supply_claims = Array.isArray(data.beacon_supply_claims) ? data.beacon_supply_claims : [];
+  data.capabilities = { beacon_supplies: data.is_demo === true || data.capabilities?.beacon_supplies === true, status_privacy: data.is_demo === true || data.capabilities?.status_privacy === true, rsvp_decline: data.is_demo === true || data.capabilities?.rsvp_decline === true };
   data.dm_message_reads = Array.isArray(data.dm_message_reads) ? data.dm_message_reads : [];
   data.plan_members = Array.isArray(data.plan_members) ? data.plan_members : [];
   data.plan_routines = Array.isArray(data.plan_routines)

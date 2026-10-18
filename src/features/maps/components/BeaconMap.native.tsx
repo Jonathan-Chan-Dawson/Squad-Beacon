@@ -1,3 +1,4 @@
+import { categoryMarkerGlyphs } from "../markerIdentity";
 import {
   clusterAreaSummary,
   mapClusterGroups,
@@ -847,9 +848,14 @@ export default function BeaconMap({
                     style={{
                       paddingHorizontal: 8,
                       paddingVertical: 5,
-                      borderRadius: 12,
-                      borderWidth: 1,
-                      borderStyle: "dashed",
+                      borderRadius: point.publicBeaconId ? 16 : 12,
+                      borderBottomLeftRadius: point.publicBeaconId ? 5 : 12,
+                      minWidth: 46,
+                      minHeight: 46,
+                      alignItems: "center",
+                      justifyContent: "center",
+                      borderWidth: point.publicBeaconId ? 3 : 1,
+                      borderStyle: point.publicBeaconId ? "solid" : "dashed",
                       borderColor: colors.green,
                       backgroundColor: colors.white,
                     }}
@@ -859,11 +865,11 @@ export default function BeaconMap({
                       style={{
                         maxWidth: 150,
                         color: colors.green,
-                        fontSize: 11,
+                        fontSize: point.publicBeaconId ? 25 : 11,
                       }}
                     >
                       {point.publicBeaconId
-                        ? `Public \u00b7 ${point.title}`
+                        ? categoryMarkerGlyphs[point.category ?? "Other"]
                         : "? Suggestion"}
                     </Text>
                   </View>

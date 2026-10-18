@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Platform, Pressable, Text, View } from "react-native";
 import {
   ChevronDown,
   Settings2,
@@ -20,7 +20,7 @@ import {
   useDesignTheme,
   uiHaptics,
 } from "@/src/shared/design-system";
-import { Action, AudiencePicker, Field, Sheet } from "@/src/shared/ui";
+import { AudiencePicker, Field, Sheet } from "@/src/shared/ui";
 import { radius, space, type } from "@/src/theme/data";
 import { statusEndAt, type StatusDraft } from "./statusActions";
 import { HomeAction } from "../HomeAction";
@@ -46,6 +46,7 @@ export type StatusPanelProps = {
   advanced?: boolean;
   compact?: boolean;
   avatarControl?: boolean;
+  profilePill?: boolean;
   profile?: Profile;
   status: FeedStatus | null;
   editorVisible: boolean;
@@ -71,6 +72,7 @@ export function StatusPanel({
   advanced = false,
   compact = false,
   avatarControl = false,
+  profilePill = false,
   profile,
   status,
   editorVisible,
@@ -106,7 +108,8 @@ export function StatusPanel({
   const [audienceId, setAudienceId] = useState<string | null>(
     initialDraft?.audienceId ?? null,
   );
-  const [noteOpen, setNoteOpen] = useState(advanced);
+  const [noteOpen, setNoteOpen] = useState(true);
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [available, setAvailable] = useState(initialDraft?.available ?? true);
   const [preset, setPreset] = useState<DurationPreset>("custom");
   const [customMinutes, setCustomMinutes] = useState("60");
@@ -167,7 +170,8 @@ export function StatusPanel({
     setCategory(editingStatus?.category ?? "Social");
     setAudience(editingStatus?.audience ?? "friends");
     setAudienceId(editingStatus?.audienceId ?? null);
-    setNoteOpen(compact || advanced);
+    setNoteOpen(true);
+    setDetailsOpen(false);
     setAvailable(editingStatus?.available ?? true);
     setPreset("custom");
     setTitleTouched(!!editingStatus?.title);
@@ -200,26 +204,9 @@ export function StatusPanel({
     setPreset(next);
     setLocalError("");
     if (next !== "custom") setPreservedEndsAt(null);
-    if (!titleTouched) {
-      setTitle(
-        next === "hour"
-          ? "Free for 1 hr"
-          : next === "tonight"
-            ? "Free tonight"
-            : next === "busy"
-              ? "Busy"
-              : available
-                ? "Free to hang"
-                : "Busy",
-      );
-    }
     if (next === "hour") {
-      setAvailable(true);
       setCustomMinutes("60");
-    } else if (next === "tonight") {
-      setAvailable(true);
     } else if (next === "busy") {
-      setAvailable(false);
       setCustomMinutes("60");
     }
   };
@@ -227,23 +214,14 @@ export function StatusPanel({
   const chooseAvailability = (next: boolean) => {
     setAvailable(next);
     if (!titleTouched) setTitle(next ? "Free to hang" : "Busy");
-    setPreset("custom");
     setLocalError("");
+    void uiHaptics.light();
   };
 
   const save = async () => {
     setLocalError("");
     try {
-      const presetTitle =
-        preset === "hour"
-          ? "Free for 1 hr"
-          : preset === "tonight"
-            ? "Free tonight"
-            : preset === "busy"
-              ? "Busy"
-              : available
-                ? "Free to hang"
-                : "Busy";
+      const presetTitle = available ? "Free to hang" : "Busy";
       await onSave({
         title: title.trim() || presetTitle,
         available,
@@ -268,45 +246,6 @@ export function StatusPanel({
     }
   };
 
-  const quickAvailability = async (next: boolean) => {
-    if (saving) return;
-    if (noteOpen) {
-      chooseAvailability(next);
-      return;
-    }
-    setLocalError("");
-    setAvailable(next);
-    const quickTitle = titleTouched
-      ? title.trim()
-      : next
-        ? "Free to hang"
-        : "Busy";
-    setTitle(quickTitle);
-    try {
-      await onSave({
-        title: quickTitle || (next ? "Free to hang" : "Busy"),
-        available: next,
-        endsAt: statusEndAt(
-          preset,
-          customMinutes,
-          preservedEndsAt,
-          expiryBase(),
-        ),
-        description,
-        category,
-        audience,
-        audienceId,
-        ...advancedValues,
-      });
-    } catch (failure) {
-      setLocalError(
-        failure instanceof Error
-          ? failure.message
-          : "Could not update your availability. Try again.",
-      );
-    }
-  };
-
   const clear = async () => {
     setLocalError("");
     try {
@@ -322,7 +261,60 @@ export function StatusPanel({
 
   return (
     <>
-      {avatarControl ? (
+      {profilePill ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Edit your status"
+          disabled={saving}
+          onPress={status ? beginEdit : beginCreate}
+          style={({ pressed }) => ({
+            minHeight: 44,
+            paddingVertical: 7,
+            paddingHorizontal: 10,
+            borderRadius: 18,
+            backgroundColor: colors.surfaceRaised,
+            opacity: pressed ? 0.75 : 1,
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 7,
+          })}
+        >
+          <View
+            style={{
+              width: 7,
+              height: 7,
+              borderRadius: 4,
+              backgroundColor:
+                status?.available &&
+                Date.parse(status.startsAt) <= now &&
+                Date.parse(status.endsAt) > now
+                  ? colors.accent
+                  : colors.textSecondary,
+            }}
+          />
+          <Text
+            numberOfLines={2}
+            style={{
+              flex: 1,
+              color:
+                status?.available &&
+                Date.parse(status.startsAt) <= now &&
+                Date.parse(status.endsAt) > now
+                  ? colors.accent
+                  : colors.textSecondary,
+              fontSize: 12,
+              lineHeight: 17,
+            }}
+          >
+            {saving
+              ? "Saving…"
+              : status
+                ? `${Date.parse(status.startsAt) > now ? "Scheduled" : Date.parse(status.endsAt) <= now ? "Ended" : status.available ? "Available" : "Unavailable"} · ${status.title}`
+                : "Set your availability"}
+          </Text>
+          <ChevronDown size={13} color={colors.textSecondary} />
+        </Pressable>
+      ) : avatarControl ? (
         <Pressable
           testID="profile-status-control"
           accessibilityRole="button"
@@ -620,11 +612,62 @@ export function StatusPanel({
         title={status ? "Edit your status" : "Share your status"}
         visible={editorVisible}
         onClose={onCloseEditor}
+        centered={Platform.OS === "web"}
+        maxHeightPercent={90}
+        footer={
+          <PrimaryButton
+            title="Save Status"
+            loading={saving}
+            disabled={saving}
+            onPress={() => void save()}
+          />
+        }
       >
         <View style={{ gap: space.md }}>
-          <Text style={{ color: colors.textSecondary, ...type.secondary }}>
-            Share availability only. This will not RSVP you to a Beacon.
-          </Text>
+          <View
+            accessibilityRole="radiogroup"
+            accessibilityLabel="Availability"
+            style={{ flexDirection: "row", gap: space.sm }}
+          >
+            {[true, false].map((choice) => {
+              const selected = available === choice;
+              const choiceToken =
+                tokens.availability[choice ? "available" : "unavailable"];
+              const Icon = choiceToken.icon;
+              return (
+                <Pressable
+                  key={String(choice)}
+                  accessibilityRole="radio"
+                  aria-checked={selected}
+                  accessibilityState={{ checked: selected, disabled: saving }}
+                  accessibilityLabel={choice ? "Available" : "Busy"}
+                  disabled={saving}
+                  onPress={() => chooseAvailability(choice)}
+                  style={({ pressed }) => ({
+                    flex: 1,
+                    minHeight: 76,
+                    borderRadius: radius.md,
+                    borderWidth: 1,
+                    borderColor: selected ? choiceToken.color : colors.border,
+                    backgroundColor: selected
+                      ? choiceToken.color + "15"
+                      : colors.surfaceRaised,
+                    padding: space.md,
+                    gap: 6,
+                    opacity: pressed ? 0.75 : 1,
+                  })}
+                >
+                  <Icon
+                    size={22}
+                    color={selected ? choiceToken.color : colors.textSecondary}
+                  />
+                  <Text style={{ color: colors.textPrimary, ...type.headline }}>
+                    {choice ? "Available" : "Busy"}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
           <SecondaryButton
             compact
             disabled={saving}
@@ -640,7 +683,7 @@ export function StatusPanel({
           {noteOpen ? (
             <View style={{ gap: space.sm }}>
               <Field
-                label="Status note"
+                label="Activity Note"
                 value={title}
                 onChangeText={(value) => {
                   setTitle(value);
@@ -652,18 +695,74 @@ export function StatusPanel({
                     : "Taking a quiet night"
                 }
                 maxLength={120}
-                returnKeyType="done"
-              />
-              <Field
-                label="Description"
-                value={description}
-                onChangeText={setDescription}
-                placeholder="A little more about what you are up to"
                 multiline
+                style={{ minHeight: 92, fontSize: 19, lineHeight: 27 }}
+                editable={!saving}
               />
-              <Text style={{ color: colors.textSecondary, ...type.secondary }}>
-                Category
-              </Text>
+              <SecondaryButton
+                compact
+                title={
+                  detailsOpen ? "Fewer Details" : "More Details & Settings"
+                }
+                onPress={() => setDetailsOpen((value) => !value)}
+              />
+              {detailsOpen ? (
+                <View style={{ gap: space.sm }}>
+                  <Field
+                    label="Description"
+                    value={description}
+                    onChangeText={setDescription}
+                    placeholder="A little more about what you are up to"
+                    multiline
+                  />
+                  <Text
+                    style={{ color: colors.textSecondary, ...type.secondary }}
+                  >
+                    Category
+                  </Text>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      flexWrap: "wrap",
+                      gap: space.xs,
+                    }}
+                  >
+                    {(
+                      [
+                        "Fitness",
+                        "Study",
+                        "Gaming",
+                        "Creative",
+                        "Social",
+                        "Other",
+                      ] as const
+                    ).map((option) => (
+                      <Chip
+                        key={option}
+                        label={option}
+                        selected={category === option}
+                        onPress={() => setCategory(option)}
+                      />
+                    ))}
+                  </View>
+                </View>
+              ) : null}
+            </View>
+          ) : null}
+          <View style={{ gap: space.sm }}>
+            <Text style={{ color: colors.textSecondary, ...type.secondary }}>
+              Visibility
+            </Text>
+            {advanced ? (
+              <AudiencePicker
+                value={audience}
+                id={audienceId}
+                onChange={(value, id) => {
+                  setAudience(value);
+                  setAudienceId(id);
+                }}
+              />
+            ) : (
               <View
                 style={{
                   flexDirection: "row",
@@ -671,100 +770,36 @@ export function StatusPanel({
                   gap: space.xs,
                 }}
               >
-                {(
-                  [
-                    "Fitness",
-                    "Study",
-                    "Gaming",
-                    "Creative",
-                    "Social",
-                    "Other",
-                  ] as const
-                ).map((option) => (
-                  <Chip
-                    key={option}
-                    label={option}
-                    selected={category === option}
-                    onPress={() => setCategory(option)}
-                  />
-                ))}
-              </View>
-              <Text style={{ color: colors.textSecondary, ...type.secondary }}>
-                Share with
-              </Text>
-              {advanced ? (
-                <AudiencePicker
-                  value={audience}
-                  id={audienceId}
-                  onChange={(value, id) => {
-                    setAudience(value);
-                    setAudienceId(id);
+                <Chip
+                  label="Friends"
+                  selected={audience === "friends"}
+                  onPress={() => {
+                    setAudience("friends");
+                    setAudienceId(null);
                   }}
                 />
-              ) : (
-                <View
-                  style={{
-                    flexDirection: "row",
-                    flexWrap: "wrap",
-                    gap: space.xs,
+                <Chip
+                  label="Only me"
+                  selected={audience === "private"}
+                  onPress={() => {
+                    setAudience("private");
+                    setAudienceId(null);
                   }}
-                >
+                />
+                {status?.audience &&
+                status.audience !== "friends" &&
+                status.audience !== "private" ? (
                   <Chip
-                    label="Friends"
-                    selected={audience === "friends"}
+                    label="Existing audience"
+                    selected={audience === status.audience}
                     onPress={() => {
-                      setAudience("friends");
-                      setAudienceId(null);
+                      setAudience(status.audience!);
+                      setAudienceId(status.audienceId ?? null);
                     }}
                   />
-                  <Chip
-                    label="Only me"
-                    selected={audience === "private"}
-                    onPress={() => {
-                      setAudience("private");
-                      setAudienceId(null);
-                    }}
-                  />
-                  {status?.audience &&
-                  status.audience !== "friends" &&
-                  status.audience !== "private" ? (
-                    <Chip
-                      label="Existing audience"
-                      selected={audience === status.audience}
-                      onPress={() => {
-                        setAudience(status.audience!);
-                        setAudienceId(status.audienceId ?? null);
-                      }}
-                    />
-                  ) : null}
-                </View>
-              )}
-            </View>
-          ) : null}
-          <View style={{ gap: space.xs }}>
-            <Text
-              style={{
-                color: colors.textSecondary,
-                ...type.secondary,
-                fontWeight: "600",
-              }}
-            >
-              Availability
-            </Text>
-            <View style={{ flexDirection: "row", gap: space.sm }}>
-              <Chip
-                label="Free"
-                selected={available}
-                disabled={saving}
-                onPress={() => void quickAvailability(true)}
-              />
-              <Chip
-                label="Busy"
-                selected={!available}
-                disabled={saving}
-                onPress={() => void quickAvailability(false)}
-              />
-            </View>
+                ) : null}
+              </View>
+            )}
           </View>
           <View style={{ gap: space.xs }}>
             <Text
@@ -774,28 +809,22 @@ export function StatusPanel({
                 fontWeight: "600",
               }}
             >
-              Quick duration
+              Duration
             </Text>
             <View
               style={{ flexDirection: "row", flexWrap: "wrap", gap: space.xs }}
             >
               <Chip
-                label="Free for 1 hr"
+                label="1 Hour"
                 selected={preset === "hour"}
                 disabled={saving}
                 onPress={() => choosePreset("hour")}
               />
               <Chip
-                label="Free tonight"
+                label="Tonight"
                 selected={preset === "tonight"}
                 disabled={saving}
                 onPress={() => choosePreset("tonight")}
-              />
-              <Chip
-                label="Busy"
-                selected={preset === "busy"}
-                disabled={saving}
-                onPress={() => choosePreset("busy")}
               />
               <Chip
                 label="Custom"
@@ -817,7 +846,7 @@ export function StatusPanel({
               maxLength={4}
             />
           ) : null}
-          {advanced ? (
+          {advanced && detailsOpen ? (
             <View style={{ gap: space.sm }}>
               <Field
                 label="Starts at (ISO date/time with offset)"
@@ -875,29 +904,50 @@ export function StatusPanel({
               {localError || error}
             </Text>
           ) : null}
-          <View style={{ gap: space.sm }}>
-            <PrimaryButton
-              title="Save status"
-              loading={saving}
-              disabled={saving}
-              onPress={() => void save()}
-            />
-            {status ? (
-              <Action
-                title="Clear status"
-                secondary
+          {status ? (
+            <View style={{ flexDirection: "row", gap: space.sm }}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Clear Status"
                 disabled={saving}
-                run={clear}
-              />
-            ) : null}
-            {status ? (
-              <SecondaryButton
-                title="Create Beacon from Status"
+                onPress={() => void clear()}
+                style={({ pressed }) => ({
+                  flex: 1,
+                  minHeight: 44,
+                  flexDirection: "row",
+                  gap: 7,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  opacity: saving || pressed ? 0.6 : 1,
+                })}
+              >
+                <Trash2 size={16} color={colors.textSecondary} />
+                <Text style={{ color: colors.textSecondary, ...type.caption }}>
+                  Clear Status
+                </Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Create Beacon from Status"
                 disabled={saving}
                 onPress={onConvert}
-              />
-            ) : null}
-          </View>
+                style={({ pressed }) => ({
+                  flex: 1,
+                  minHeight: 44,
+                  flexDirection: "row",
+                  gap: 7,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  opacity: saving || pressed ? 0.6 : 1,
+                })}
+              >
+                <Sparkles size={16} color={colors.accent} />
+                <Text style={{ color: colors.accent, ...type.caption }}>
+                  Create Beacon
+                </Text>
+              </Pressable>
+            </View>
+          ) : null}
         </View>
       </Sheet>
     </>

@@ -1,3 +1,4 @@
+import { applyDemoSupplyAction, eligibleSupplyClaim } from "@/src/features/beacons/supplies";
 import { validateCreationInvitees } from "@/src/features/beacons/createHandoff";
 import { applyDemoMessaging } from "@/src/features/messages/demoMessaging";
 import { statusReactionEmoji } from "@/src/features/beacons/statusReactions";
@@ -80,6 +81,7 @@ import { canInviteWithPolicy, SOCIAL_ROLE_RANK } from "@/src/features/social/dom
 import type { ActivitySocialLink, InvitePolicy, SocialMemberRole, SocialRole } from "@/src/features/social/types";
 import { makeDemo as makeNeighborhoodDemo } from "@/tests/fixtures/neighborhood";
 import { addDemoMapFixtures } from "./demoMapFixtures";
+import { addDemoProfileFixtures } from "./demoProfileFixtures";
 export const DEMO_ID = "demo-you";
 export function makeDemo(): Data {
   const data = makeNeighborhoodDemo(),
@@ -712,6 +714,7 @@ export function makeDemo(): Data {
     return [{ activity_id: id, title: activity.title, category: activity.category, interest_tags: [activity.category, "basketball"], starts_at: activity.starts_at, ends_at: activity.ends_at, area_label: "Chicago", coarse_lat: id === "neighborhood-12" ? 41.89 : 41.88, coarse_lng: id === "neighborhood-0" ? -87.63 : id === "neighborhood-6" ? -87.65 : -87.64, requires_approval: activity.approval_required, capacity_limit: null, capacity_policy: "soft" as const, accepted_seat_count: 1, closed: false }];
   });
   addDemoMapFixtures(data, DEMO_ID, now);
+  addDemoProfileFixtures(data, DEMO_ID, now);
   return data;
 }
 
@@ -1679,7 +1682,7 @@ function applyDemoSocialMembershipAction(
   }
 }
 
-export function demoAction(previous: Data, action: string, p: Payload): Data {
+function demoActionInner(previous: Data, action: string, p: Payload): Data {
   const d = structuredClone(previous),
     id = String(p.id ?? ""),
     uid = DEMO_ID;
@@ -1752,6 +1755,7 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
   }
   const newId = () => "demo-" + Math.random().toString(36).slice(2);
   const currentProfile = d.profiles.find((profile) => profile.id === uid)!;
+  if (applyDemoSupplyAction(d, action, p, uid)) return d;
   if (applyDemoBeaconMediaTeamAction(d, action, p, uid)) return d;
   if (applyDemoModuleCollectionAction(d, action, p, uid, newId)) return d;
   if (
@@ -3636,3 +3640,5 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
     );
   return d;
 }
+
+export function demoAction(previous: Data, action: string, payload: Payload): Data { const next = demoActionInner(previous, action, payload); next.beacon_supply_claims = next.beacon_supply_claims.filter(row => eligibleSupplyClaim(next,row)); return next; }

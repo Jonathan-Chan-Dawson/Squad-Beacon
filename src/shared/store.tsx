@@ -8,6 +8,7 @@ import React, {
   useState,
 } from "react";
 import { AppState } from "react-native";
+import { normalizeProfileQuery, parseProfileContentPage, profilePermissionKey, selectProfileContent, type ProfileContentQuery, type ProfileContentPage } from "@/src/features/profile/profileContent";
 import * as Network from "expo-network";
 import type { Session } from "@supabase/supabase-js";
 import { supabase, rpc, clearPendingRequests } from "@/src/shared/supabase";
@@ -60,6 +61,7 @@ type Store = {
     id: string,
   ) => Promise<SocialDirectorySummary | null>;
   loadActivityHistory: (input?: ActivityHistoryQuery) => Promise<ActivityHistoryPage>;
+  loadProfileContent: (input: ProfileContentQuery) => Promise<ProfileContentPage>;
   startDemo: () => void;
   signOut: () => Promise<void>;
 };
@@ -230,6 +232,37 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
     if (failure) throw new Error(failure.message);
     return parseActivityHistoryPage(result);
   }, [demo, session]);
+  const loadProfileContent = useCallback(
+    async (input: ProfileContentQuery) => {
+      const query = normalizeProfileQuery(input);
+      const snapshot = dataRef.current;
+      if (demo) return selectProfileContent(snapshot, DEMO_ID, query);
+      if (!session || !supabase || snapshot.viewer_id !== session.user.id)
+        throw new Error("Refresh your profile before loading experiences.");
+      const viewer = session.user.id;
+      const generation = epoch.current;
+      const { data: result, error: failure } = await supabase.rpc(
+        "profile_content_page",
+        {
+          p_person: query.personId,
+          p_filter: query.filter,
+          p_query: query.query || null,
+          p_cursor: query.cursor,
+          p_page_size: query.pageSize,
+        },
+      );
+      const { data: auth } = await supabase.auth.getSession();
+      if (
+        generation !== epoch.current ||
+        auth.session?.user.id !== viewer ||
+        profilePermissionKey(dataRef.current) !== profilePermissionKey(snapshot)
+      )
+        throw new Error("Your profile access changed. Please retry.");
+      if (failure) throw new Error(failure.message);
+      return parseProfileContentPage(result);
+    },
+    [demo, session],
+  );
   useEffect(() => {
     if (demo || !session || !supabase) return;
     // Refresh crosses an async database boundary; state changes happen after the response.
@@ -536,6 +569,7 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
         searchDirectory,
         loadCommunitySummary,
         loadActivityHistory,
+        loadProfileContent,
         loadRoutineCalendar,
         startDemo: () => {
           demoRequests.current.clear();

@@ -5,6 +5,7 @@ import { activeOrganizationRole } from "@/src/features/organizations/domain";
 import { activeSpaceRole, canReadSpace } from "@/src/features/spaces/domain";
 import type { SocialEntityType } from "@/src/features/social/types";
 import { canViewProfile } from "@/src/features/profile/privacy";
+import { selectProfileBeacon } from "@/src/features/profile/profileContent";
 import type { FriendAvailabilityState } from "@/src/shared/domain";
 import {
   friendAvailabilityState,
@@ -212,33 +213,7 @@ export function selectPersonPreview(
     };
   }
 
-  const accessibleUpcoming = data.activities
-    .filter(
-      (activity) =>
-        (activity.owner_id === personId ||
-          isApprovedGoing(
-            activity,
-            data.rsvps.find(
-              (rsvp) =>
-                rsvp.activity_id === activity.id && rsvp.user_id === personId,
-            ),
-          )) &&
-        activity.status === "scheduled" &&
-        Number.isFinite(Date.parse(activity.starts_at)) &&
-        Number.isFinite(Date.parse(activity.ends_at)) &&
-        Date.parse(activity.ends_at) > now &&
-        canReadBeaconActivity(data, activity, viewerId),
-    )
-    .sort((left, right) => {
-      const leftLive = Date.parse(left.starts_at) <= now;
-      const rightLive = Date.parse(right.starts_at) <= now;
-      if (leftLive !== rightLive) return leftLive ? -1 : 1;
-      const leftOwned = left.owner_id === personId;
-      const rightOwned = right.owner_id === personId;
-      if (leftOwned !== rightOwned) return leftOwned ? -1 : 1;
-      return left.starts_at.localeCompare(right.starts_at);
-    });
-  const beacon = accessibleUpcoming[0];
+  const beacon = selectProfileBeacon(data, candidate, viewerId, now);
   const activeAvailability = visibleSoloActivity(data, personId, viewerId, now);
   const location = selectFreshVisiblePersonLocation(
     data,

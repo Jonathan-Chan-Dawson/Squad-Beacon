@@ -150,7 +150,11 @@ test("Person preview resolves an accepted friend's current identity, explicit st
   assert.equal(selected.canViewFullProfile, true);
   assert.equal(selected.profile?.name, "Jordan Ellis");
   assert.equal(selected.availability, "ending-soon");
-  assert.equal(selected.beacon?.id, "jordan-live-status");
+  assert.equal(
+    selected.beacon,
+    undefined,
+    "availability is distinct from a social Beacon",
+  );
   assert.equal(selected.canViewMap, true);
 });
 

@@ -1,3 +1,4 @@
+import { markerIdentity } from "../markerIdentity";
 import {
   AvatarStatusBadge,
   avatarAvailability,
@@ -214,8 +215,12 @@ function BeaconMapPinComponent({
   disabled?: boolean;
   dot?: boolean;
 }) {
+  const { data, userId } = useBeacon();
+  const { colors } = useTheme();
+  const activity = data.activities.find((row) => row.id === id);
+  const identity = activity ? markerIdentity(data, activity, userId) : null;
   const tracking = useMarkerTracking(
-    `${id}:${categoryColor}:${selected}:${dimmed}:${streetTime ?? ""}:${appearanceKey}:${dot}`,
+    `${identity?.label}:${id}:${categoryColor}:${selected}:${dimmed}:${streetTime ?? ""}:${appearanceKey}:${dot}`,
   );
   const visualSize = markerVisualSize("beacon");
   if (dot)
@@ -224,7 +229,7 @@ function BeaconMapPinComponent({
         coordinate={coordinate}
         anchor={{ x: 0.5, y: 0.5 }}
         tracksViewChanges={tracking}
-        accessibilityLabel={`Map: ${title}`}
+        accessibilityLabel={`Map: ${title}${identity ? `, ${identity.label}` : ""}`}
         onPress={(event) => {
           event.stopPropagation();
           if (!disabled) onPress(id);
@@ -257,7 +262,7 @@ function BeaconMapPinComponent({
       coordinate={coordinate}
       anchor={{ x: 0.5, y: streetTime ? 0.82 : 0.92 }}
       tracksViewChanges={tracking}
-      accessibilityLabel={`Map: ${title}`}
+      accessibilityLabel={`Map: ${title}${identity ? `, ${identity.label}` : ""}`}
       onPress={(event) => {
         event.stopPropagation();
         if (!disabled) onPress(id);
@@ -289,6 +294,33 @@ function BeaconMapPinComponent({
             }}
           >
             <ActivityBadge category={category} size={26} />
+            {identity && (
+              <View
+                style={{
+                  position: "absolute",
+                  right: -7,
+                  bottom: -4,
+                  width: 21,
+                  height: 21,
+                  borderRadius: identity.kind === "community" ? 6 : 11,
+                  borderWidth: 2,
+                  borderColor: colors.white,
+                  backgroundColor: colors.ink,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Text
+                  style={{
+                    color: colors.white,
+                    fontSize: 12,
+                    fontWeight: "700",
+                  }}
+                >
+                  {identity.glyph}
+                </Text>
+              </View>
+            )}
           </View>
           <View
             style={{

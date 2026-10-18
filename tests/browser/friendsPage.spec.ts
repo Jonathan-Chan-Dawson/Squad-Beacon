@@ -209,9 +209,9 @@ test("full-network search and private/favorite filters stay distinct", async ({
     .click();
   const screen = page.getByTestId("friends-screen");
   await expect(screen.getByTestId("friends-summary")).toContainText(
-    "143 friends",
+    "146 friends",
   );
-  expect(await screen.getByTestId(/^social-friend-/).count()).toBeLessThan(143);
+  expect(await screen.getByTestId(/^social-friend-/).count()).toBeLessThan(146);
   const search = screen.getByLabel("Search all friends", { exact: true });
   await search.fill("Zoe Chen");
   await expect(

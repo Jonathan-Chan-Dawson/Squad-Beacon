@@ -1,8 +1,5 @@
-import { BeaconCollections } from "../components/BeaconCollections";
-import { SavedToolsMenu } from "../components/SavedToolsMenu";
-import type { BeaconCollection } from "../personalCollections";
 import { discoveryActivities } from "../discoverySelectors";
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   Pressable,
   RefreshControl,
@@ -79,12 +76,8 @@ export default function ActivitiesScreen() {
     participation?: string;
     confirmed?: string;
   }>();
-  const [savedToolsOpen, setSavedToolsOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [requestError, setRequestError] = useState("");
-  const [collection, setCollection] = useState<BeaconCollection | null>(null);
-  const savedToolsAnchor = useRef<View>(null);
-  const [templatesOpen, setTemplatesOpen] = useState(false);
   const [reportActivityId, setReportActivityId] = useState<string | null>(null);
   const [reportReason, setReportReason] = useState("");
   const [reportBusy, setReportBusy] = useState(false);
@@ -119,9 +112,6 @@ export default function ActivitiesScreen() {
   );
   const personalPreview = personalHubPreview(confirmedActivities, now);
 
-  const ownTemplates = data.templates.filter(
-    (template) => template.owner_id === userId,
-  );
   const goToActivity = useCallback((id: string) => {
     router.push({ pathname: "/activity/[id]", params: { id } });
   }, []);
@@ -668,7 +658,6 @@ export default function ActivitiesScreen() {
         </View>
 
         <View
-          ref={savedToolsAnchor}
           collapsable={false}
           style={{
             borderTopWidth: 1,
@@ -680,8 +669,8 @@ export default function ActivitiesScreen() {
           <Pressable
             testID="saved-tools-entry"
             accessibilityRole="button"
-            accessibilityLabel="Saved & Tools"
-            onPress={() => setSavedToolsOpen(true)}
+            accessibilityLabel="My Collection"
+            onPress={() => router.push("/my-collection" as Href)}
             style={{
               minHeight: 60,
               flexDirection: "row",
@@ -711,7 +700,7 @@ export default function ActivitiesScreen() {
                   fontWeight: "500",
                 }}
               >
-                Saved & Tools
+                My Collection
               </Text>
               <Text
                 style={{
@@ -727,102 +716,6 @@ export default function ActivitiesScreen() {
           </Pressable>
         </View>
       </ScrollView>
-
-      <SavedToolsMenu
-        visible={savedToolsOpen}
-        onClose={() => setSavedToolsOpen(false)}
-        anchorRef={savedToolsAnchor}
-        onCollection={setCollection}
-        onTemplates={() => setTemplatesOpen(true)}
-      />
-      <BeaconCollections
-        key={userId ?? "signed-out"}
-        collection={collection}
-        onClose={() => setCollection(null)}
-      />
-      <Sheet
-        title="My templates"
-        visible={templatesOpen}
-        onClose={() => setTemplatesOpen(false)}
-      >
-        <Button
-          title="New template"
-          onPress={() => {
-            setTemplatesOpen(false);
-            router.push({
-              pathname: "/create",
-              params: { editTemplate: "yes" },
-            });
-          }}
-        />
-        {!ownTemplates.length ? (
-          <Txt muted>
-            Save your usual coffee, study session, or game. Next time, the
-            details are ready.
-          </Txt>
-        ) : null}
-        {ownTemplates.map((template) => (
-          <View
-            key={template.id}
-            style={{
-              gap: tokens.space.xs,
-              padding: tokens.space.md,
-              borderWidth: 1,
-              borderColor: designColors.border,
-              borderRadius: tokens.radius.card,
-            }}
-          >
-            <Text
-              style={{
-                color: designColors.textPrimary,
-                ...tokens.type.titleSmall,
-              }}
-            >
-              {template.name}
-            </Text>
-            <Txt muted>
-              {template.title} · {template.minutes} min
-            </Txt>
-            <Button
-              title={"Use " + template.name}
-              onPress={() => {
-                setTemplatesOpen(false);
-                router.push({
-                  pathname: "/create",
-                  params: { template: template.id },
-                });
-              }}
-            />
-            <Button
-              title={"Edit " + template.name}
-              secondary
-              onPress={() => {
-                setTemplatesOpen(false);
-                router.push({
-                  pathname: "/create",
-                  params: { template: template.id, editTemplate: "yes" },
-                });
-              }}
-            />
-            <Button
-              title={"Delete " + template.name}
-              secondary
-              onPress={async () => {
-                try {
-                  await act("delete_template", { id: template.id });
-                } catch (failure) {
-                  setRequestError(
-                    failure instanceof Error
-                      ? failure.message
-                      : "Could not delete that template.",
-                  );
-                }
-              }}
-            />
-          </View>
-        ))}
-        <Button title="Done" onPress={() => setTemplatesOpen(false)} />
-      </Sheet>
 
       <Sheet
         title="Your response"

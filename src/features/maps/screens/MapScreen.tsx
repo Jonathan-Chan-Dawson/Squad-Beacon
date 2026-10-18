@@ -2001,6 +2001,11 @@ export default function MapScreen() {
       return;
     setSelected(id);
     setPerson(null);
+    if (tab === "overview") {
+      setDetailTab(null);
+      router.push({ pathname: "/activity/[id]", params: { id, from: "map" } });
+      return;
+    }
     setDetailTab(tab);
   }
 
@@ -2070,9 +2075,9 @@ export default function MapScreen() {
       8,
   );
   const controlsVisible = availableControlHeight >= 44;
-  const weatherControlVisible = weather.visible && availableControlHeight >= 98;
-  const displayControlVisible =
-    availableControlHeight >= (weatherControlVisible ? 152 : 98);
+  const displayControlVisible = availableControlHeight >= 98;
+  const weatherControlVisible =
+    weather.visible && availableControlHeight >= 152;
   const activeAreaTarget = explorationTarget;
   const activeSearchVisible = placeSearchOpen || params.search === "yes";
   const shareIndicator = (
@@ -2744,6 +2749,20 @@ export default function MapScreen() {
               <Navigation size={19} color={colors.green} />
             </MapControl>
           </View>
+          {displayControlVisible && (
+            <MapControl
+              label="Map Display"
+              expanded={mapControlSettingsOpen}
+              selected={mapControlSettingsOpen}
+              onPress={() => {
+                const next = !mapControlSettingsOpen;
+                closePopovers();
+                setMapControlSettingsOpen(next);
+              }}
+            >
+              <Layers size={19} color={colors.green} />
+            </MapControl>
+          )}
           {weatherControlVisible && (
             <Pressable
               accessibilityRole="button"
@@ -2789,20 +2808,6 @@ export default function MapScreen() {
               </Text>
             </Pressable>
           )}
-          {displayControlVisible && (
-            <MapControl
-              label="Map Display"
-              expanded={mapControlSettingsOpen}
-              selected={mapControlSettingsOpen}
-              onPress={() => {
-                const next = !mapControlSettingsOpen;
-                closePopovers();
-                setMapControlSettingsOpen(next);
-              }}
-            >
-              <Layers size={19} color={colors.green} />
-            </MapControl>
-          )}
           {(compassSheetOpen || mapControlSettingsOpen || weatherOpen) && (
             <MapControlPopover
               title={
@@ -2825,13 +2830,7 @@ export default function MapScreen() {
               top={Math.max(
                 0,
                 Math.min(
-                  compassSheetOpen
-                    ? 0
-                    : weatherOpen
-                      ? 54
-                      : weatherControlVisible
-                        ? 108
-                        : 54,
+                  compassSheetOpen ? 0 : weatherOpen ? 108 : 54,
                   availableControlHeight - (compassSheetOpen ? 250 : 210),
                 ),
               )}

@@ -384,7 +384,7 @@ export function BeaconTools({
   return (
     <View style={{ gap: 10 }}>
       {allowed && checklistEnabled ? (
-        <View style={[styles.card, inlineEditors && { padding: 12, gap: 8 }]}>
+        <View style={[section ? { gap: 10 } : styles.card, inlineEditors && { padding: 0, gap: 8 }]}>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={
@@ -709,7 +709,7 @@ export function BeaconTools({
       ) : null}
 
       {allowed && journalEnabled ? (
-        <View style={[styles.card, inlineEditors && { padding: 12, gap: 8 }]}>
+        <View style={[section ? { gap: 10 } : styles.card, inlineEditors && { padding: 0, gap: 8 }]}>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={
@@ -881,7 +881,7 @@ export function BeaconTools({
       ) : null}
 
       {focusEnabled ? (
-        <View style={[styles.card, inlineEditors && { padding: 12, gap: 8 }]}>
+        <View style={[section ? { gap: 10 } : styles.card, inlineEditors && { padding: 0, gap: 8 }]}>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={
@@ -1116,7 +1116,7 @@ export function BeaconTools({
       ) : null}
 
       {!allowed && (checklistEnabled || journalEnabled) ? (
-        <View style={[styles.card, inlineEditors && { padding: 12, gap: 8 }]}>
+        <View style={[section ? { gap: 10 } : styles.card, inlineEditors && { padding: 0, gap: 8 }]}>
           <Txt muted>
             Join this Beacon to use its shared Checklist and Beacon Sketchboard.
           </Txt>
