@@ -96,7 +96,7 @@ async function performCreateAndInvite(session: CreationInviteSession, ids: strin
     try {
       validateCreationInvitees(getData(), userId, [id]);
       const existing = getData().rsvps.find((row) => row.activity_id === session.createdId && row.user_id === id);
-      if (!existing || !["going", "requested", "invited"].includes(existing.status)) {
+      if (!existing || !["going", "requested", "invited", "declined"].includes(existing.status)) {
         await act("invite_activity", { id: session.createdId, user_id: id });
       }
       session.invitedIds.push(id);

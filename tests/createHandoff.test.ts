@@ -48,11 +48,11 @@ test("partial invitation retry keeps one created Beacon and never repeats succes
   assert.deepEqual(retried.errors, {});
 });
 
-test("existing going/requested/invited attendance is preserved without another invitation action", async () => {
+test("existing going/requested/invited/declined responses are preserved without another invitation action", async () => {
   const data = makeDemo();
   const session = newCreationInviteSession();
   session.createdId = "beacon"; session.viewerId = DEMO_ID; session.pendingIds = ["jordan"];
-  for (const status of ["going", "requested", "invited"] as const) {
+  for (const status of ["going", "requested", "invited", "declined"] as const) {
     session.pendingIds = ["jordan"]; session.invitedIds = [];
     data.rsvps = [{ activity_id: "beacon", user_id: "jordan", status, approved: false }];
     await createAndInvite(session, ["jordan"], () => data, DEMO_ID,

@@ -4,7 +4,7 @@ import { isApprovedGoing } from "@/src/features/beacons/permissions";
 import { canViewProfile } from "@/src/features/profile/privacy";
 
 export type ActivityHistoryLabel = "cancelled" | "completed" | "ended";
-export type ActivityHistoryRsvpStatus = "interested" | "going" | "requested" | "invited";
+export type ActivityHistoryRsvpStatus = "interested" | "going" | "requested" | "invited" | "declined" | "unknown";
 
 export interface ActivityHistoryQuery {
   query?: string;
@@ -163,7 +163,7 @@ export function parseActivityHistoryPage(value: unknown): ActivityHistoryPage {
       typeof row.timezone !== "string" || typeof row.owner_id !== "string" || !row.owner_id ||
       !(row.owner_name === null || typeof row.owner_name === "string") ||
       (row.viewer_role !== "host" && row.viewer_role !== "attendee") ||
-      !(row.viewer_rsvp_status === null || row.viewer_rsvp_status === "interested" || row.viewer_rsvp_status === "going" || row.viewer_rsvp_status === "requested" || row.viewer_rsvp_status === "invited"))
+      !(row.viewer_rsvp_status === null || row.viewer_rsvp_status === "interested" || row.viewer_rsvp_status === "going" || row.viewer_rsvp_status === "requested" || row.viewer_rsvp_status === "invited" || row.viewer_rsvp_status === "declined" || typeof row.viewer_rsvp_status === "string"))
       throw new Error("Activity history returned an invalid row.");
     rows.push({
       id: row.id,
@@ -178,7 +178,7 @@ export function parseActivityHistoryPage(value: unknown): ActivityHistoryPage {
       ownerId: row.owner_id,
       ownerName: row.owner_name,
       viewerRole: row.viewer_role,
-      viewerRsvpStatus: row.viewer_rsvp_status,
+      viewerRsvpStatus: row.viewer_rsvp_status === null ? null : ["going","interested","requested","invited","declined"].includes(String(row.viewer_rsvp_status)) ? row.viewer_rsvp_status as ActivityHistoryRsvpStatus : "unknown",
     });
   }
   if (page.has_more) {

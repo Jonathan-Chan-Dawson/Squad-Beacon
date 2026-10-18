@@ -247,7 +247,14 @@ export function ContextMenu({
       );
     const dismiss = () => callbacks.current.onClose();
     const scroll = (event: Event) => {
-      if (!inside(event)) dismiss();
+      if (inside(event)) return;
+      const target = anchorRef.current as unknown as HTMLElement | null;
+      const rectangle = target?.getBoundingClientRect?.();
+      // Follow the trigger through focus/scroll adjustments while it remains
+      // visible. Background-tab scrolling must not dismiss a foreground menu.
+      if (!rectangle || rectangle.bottom < 0 || rectangle.top > height || rectangle.right < 0 || rectangle.left > width) dismiss();
+      else if (!anchor || Math.abs(rectangle.x - anchor.x) > 1 || Math.abs(rectangle.y - anchor.y) > 1)
+        setAnchor({ x: rectangle.x, y: rectangle.y, width: rectangle.width, height: rectangle.height });
     };
     const keydown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
@@ -283,7 +290,7 @@ export function ContextMenu({
       window.removeEventListener("scroll", scroll, true);
       document.removeEventListener("keydown", keydown, true);
     };
-  }, [visible, anchored]);
+  }, [visible, anchored, anchor, anchorRef, height, width]);
   const focus = useCallback(() => {
     if (Platform.OS !== "web") return;
     const root = dialogRef.current as unknown as HTMLElement | null;

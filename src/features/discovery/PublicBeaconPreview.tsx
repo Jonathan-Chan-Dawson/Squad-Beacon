@@ -19,9 +19,9 @@ export function PublicBeaconPreview({
   const { styles } = useTheme();
   const { data, userId, act } = useBeacon();
   const now = useNow();
-  const [requested, setRequested] = useState(false);
+  const [requestedId, setRequestedId] = useState<string | null>(null);
   const pending =
-    requested ||
+    requestedId === summary.activity_id ||
     summary.viewer_response === "requested" ||
     data.rsvps.some(
       (row) =>
@@ -47,9 +47,9 @@ export function PublicBeaconPreview({
       <Action
         title={
           pending
-            ? "Request sent"
+            ? "Requested ✓"
             : summary.viewer_response === "going"
-              ? "Open Beacon"
+              ? "Going ✓"
               : summary.closed
                 ? "Closed"
                 : summary.requires_approval
@@ -69,7 +69,8 @@ export function PublicBeaconPreview({
           const result = await act("join_public_beacon", {
             activity_id: summary.activity_id,
           });
-          if (result.status === "requested") setRequested(true);
+          if (result.status === "requested")
+            setRequestedId(summary.activity_id);
           else onJoined(summary.activity_id);
         }}
       />

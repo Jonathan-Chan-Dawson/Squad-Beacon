@@ -41,7 +41,9 @@ for (const phone of phones) {
       44,
     );
     await expect(
-      page.getByRole("button", { name: /^(Open Beacon|Return to Beacon)$/ }),
+      page
+        .getByTestId("home-personal-timeline")
+        .getByRole("button", { name: /^(Open Beacon|Return to Beacon)$/ }),
     ).toHaveCount(0);
     await expectNoHorizontalOverflow(page);
     if (phone.width === 320 || phone.width === 390)

@@ -14,6 +14,7 @@ export function HomeAction({
   icon,
   testID,
   stretch = false,
+  outlined = false,
 }: {
   title?: string;
   label?: string;
@@ -25,6 +26,7 @@ export function HomeAction({
   icon?: React.ReactNode;
   testID?: string;
   stretch?: boolean;
+  outlined?: boolean;
 }) {
   const { colors } = useDesignTheme();
   return (
@@ -49,7 +51,8 @@ export function HomeAction({
         testID={testID ? `${testID}-face` : undefined}
         style={{
           width: stretch ? "100%" : undefined,
-          minHeight: 30,
+          minHeight: outlined ? 34 : 30,
+          minWidth: outlined ? 36 : undefined,
           paddingHorizontal: plain ? 4 : 10,
           paddingVertical: 5,
           flexDirection: "row",
@@ -61,8 +64,8 @@ export function HomeAction({
             : plain
               ? "transparent"
               : colors.surfaceRaised,
-          borderRadius: stretch ? 9 : 15,
-          borderWidth: plain || primary ? 0 : 1,
+          borderRadius: outlined ? 11 : stretch ? 9 : 15,
+          borderWidth: outlined ? 1 : plain || primary ? 0 : 1,
           borderColor: colors.border,
         }}
       >

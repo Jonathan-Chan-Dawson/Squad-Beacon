@@ -24,7 +24,15 @@ const toolIcons = {
   scoreboard: Trophy,
   music: Music2,
 };
-export function BeaconCardEngagement({ activityId }: { activityId: string }) {
+export function BeaconCardEngagement({
+  activityId,
+  mode = "both",
+  outlined = false,
+}: {
+  activityId: string;
+  mode?: "both" | "reactions" | "comments";
+  outlined?: boolean;
+}) {
   const { data, userId, act } = useBeacon();
   const { colors } = useDesignTheme();
   const preview = beaconEngagement(data, userId, activityId);
@@ -66,7 +74,11 @@ export function BeaconCardEngagement({ activityId }: { activityId: string }) {
       setBusy(false);
     }
   };
-  if (!preview || (!preview.canReact && !preview.canReadComments)) return null;
+  if (
+    !preview ||
+    (!preview.canReact && !preview.canReadComments && !preview.canChat)
+  )
+    return null;
   return (
     <View
       testID={`beacon-engagement-${activityId}`}
@@ -77,7 +89,7 @@ export function BeaconCardEngagement({ activityId }: { activityId: string }) {
         gap: 4,
       }}
     >
-      {preview.canReact ? (
+      {preview.canReact && mode !== "comments" ? (
         <ReactionPicker
           selectedEmoji={preview.selectedEmoji}
           disabled={busy}
@@ -102,8 +114,10 @@ export function BeaconCardEngagement({ activityId }: { activityId: string }) {
                 paddingHorizontal: 4,
               }}
             >
-              {preview.selectedEmoji ? (
-                <Text style={{ fontSize: 16 }}>{preview.selectedEmoji}</Text>
+              {preview.reactionGroups.length ? (
+                <Text style={{ fontSize: 14 }}>
+                  {preview.reactionGroups.map((group) => group.emoji).join(" ")}
+                </Text>
               ) : (
                 <SmilePlus size={17} color={colors.textSecondary} />
               )}
@@ -116,21 +130,28 @@ export function BeaconCardEngagement({ activityId }: { activityId: string }) {
           }
         />
       ) : null}
-      {preview.canReadComments ? (
+      {(preview.canReadComments || preview.canChat) && mode !== "reactions" ? (
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`Comments on ${preview.activity.title}${preview.commentCount ? `, ${preview.commentCount} comments` : ""}`}
+          accessibilityLabel={
+            preview.canReadComments
+              ? `Comments on ${preview.activity.title}${preview.commentCount ? `, ${preview.commentCount} comments` : ""}`
+              : `Open ${preview.activity.title} chat`
+          }
           onPress={() => {
             if (
               beaconEngagement(
                 latest.current.data,
                 latest.current.userId,
                 activityId,
-              )?.canReadComments
+              )?.[preview.canReadComments ? "canReadComments" : "canChat"]
             )
               router.push({
                 pathname: "/activity/[id]",
-                params: { id: activityId, tab: "comments" },
+                params: {
+                  id: activityId,
+                  tab: preview.canReadComments ? "comments" : "chat",
+                },
               });
           }}
           style={{
@@ -143,12 +164,32 @@ export function BeaconCardEngagement({ activityId }: { activityId: string }) {
             paddingHorizontal: 4,
           }}
         >
-          <MessageCircle size={17} color={colors.textSecondary} />
-          {preview.commentCount > 0 ? (
-            <Text style={{ color: colors.textSecondary, fontSize: 12 }}>
-              {preview.commentCount}
-            </Text>
-          ) : null}
+          <View
+            testID={`beacon-comment-face-${activityId}`}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "center",
+              gap: 4,
+              minHeight: outlined ? 34 : undefined,
+              minWidth: outlined ? 36 : undefined,
+              paddingHorizontal: outlined ? 8 : 0,
+              borderWidth: outlined ? 1 : 0,
+              borderColor: colors.border,
+              borderRadius: 11,
+              backgroundColor: outlined ? colors.surfaceRaised : "transparent",
+            }}
+          >
+            <MessageCircle
+              size={17}
+              color={outlined ? colors.accent : colors.textSecondary}
+            />
+            {preview.canReadComments && preview.commentCount > 0 ? (
+              <Text style={{ color: colors.textSecondary, fontSize: 12 }}>
+                {preview.commentCount}
+              </Text>
+            ) : null}
+          </View>
         </Pressable>
       ) : null}
     </View>

@@ -104,7 +104,7 @@ export function crew(
     const r = data.rsvps.find(
       (r) => r.activity_id === a.id && r.user_id === person.id,
     );
-    return r
+    return r && r.status !== "declined" && r.status !== "unknown"
       ? [
           {
             person,

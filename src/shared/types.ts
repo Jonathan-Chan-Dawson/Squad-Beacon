@@ -232,7 +232,7 @@ export interface ActivityPlace {
 export interface RSVP {
   activity_id: ID;
   user_id: ID;
-  status: "interested" | "going" | "requested" | "invited";
+  status: "interested" | "going" | "requested" | "invited" | "declined" | "unknown";
   approved: boolean;
 }
 export interface BeaconAttendance {
@@ -545,6 +545,8 @@ export interface Data {
   activities: Activity[];
   places: ActivityPlace[];
   rsvps: RSVP[];
+  resolved_beacon_responses?: RSVP[];
+  capabilities?: { rsvp_decline?: boolean };
   comments: Comment[];
   reactions: Reaction[];
   locations: LocationSession[];
@@ -625,6 +627,16 @@ export const emptyData = (): Data => ({
 export function normalizeData(value: Partial<Data> | null | undefined): Data {
   const hasInvitationGrantRows = Array.isArray(value?.beacon_invitation_grants);
   const data = { ...emptyData(), ...(value ?? {}) } as Data;
+  const responseRows = [...(Array.isArray(data.rsvps) ? data.rsvps : []),
+    ...(Array.isArray(data.resolved_beacon_responses) ? data.resolved_beacon_responses : [])];
+  const knownResponses = new Set(["interested", "going", "requested", "invited", "declined"]);
+  data.rsvps = [...new Map(responseRows.filter((row) => row && typeof row.activity_id === "string" && typeof row.user_id === "string").map((row) => {
+    const known = knownResponses.has(row.status);
+    const response: RSVP = { ...row, status: known ? row.status : "unknown", approved: known && row.approved === true };
+    return [`${row.activity_id}:${row.user_id}`, response] as const;
+  })).values()];
+  data.resolved_beacon_responses = undefined;
+  data.capabilities = { rsvp_decline: data.is_demo === true || data.capabilities?.rsvp_decline === true };
   data.dm_message_reads = Array.isArray(data.dm_message_reads) ? data.dm_message_reads : [];
   data.plan_members = Array.isArray(data.plan_members) ? data.plan_members : [];
   data.plan_routines = Array.isArray(data.plan_routines)

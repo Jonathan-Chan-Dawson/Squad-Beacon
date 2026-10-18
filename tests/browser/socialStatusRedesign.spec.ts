@@ -82,7 +82,7 @@ for (const width of [320, 375, 430]) {
     const countBox = await card
       .getByTestId("discovery-going-count")
       .boundingBox();
-    expect(titleBox!.x + titleBox!.width).toBeLessThanOrEqual(countBox!.x + 1);
+    expect(titleBox!.y + titleBox!.height).toBeLessThanOrEqual(countBox!.y + 1);
     expect(
       await page.evaluate(
         () => document.documentElement.scrollWidth <= innerWidth,
@@ -97,16 +97,17 @@ for (const width of [320, 375, 430]) {
       friends.getByRole("button", { name: /^Deselect .+ for planning$/ }),
     ).toHaveCount(2);
     await friends
-      .getByRole("button", { name: "Show more friends", exact: true })
+      .getByRole("button", { name: "View all friends", exact: true })
       .click();
-    await friends
+    const full = page.getByTestId("friends-screen");
+    await full
       .getByLabel("Search all friends", { exact: true })
       .fill("no-match-example");
     await expect(
-      friends.getByRole("button", { name: "Plan with 2", exact: true }),
+      full.getByRole("button", { name: "Plan with 2", exact: true }),
     ).toBeVisible();
-    await friends
-      .getByRole("button", { name: "Show less", exact: true })
+    await full
+      .getByRole("button", { name: "Back to Beacons", exact: true })
       .click();
     await friends
       .getByRole("button", { name: "Plan with 2", exact: true })
@@ -251,19 +252,20 @@ test("invitee editing preserves form and returning to Plan resumes the draft", a
   ).toHaveCount(0);
 });
 
-test("expanded friends search the complete network and full browsing shares selection", async ({
+test("dedicated Friends page searches the network and shares planning selection", async ({
   page,
 }) => {
   await home(page);
   const friends = page.getByTestId("friends-right-now");
+  await expect(friends.getByTestId(/^social-friend-/)).toHaveCount(4);
   await friends
-    .getByRole("button", { name: "Show more friends", exact: true })
+    .getByRole("button", { name: "View all friends", exact: true })
     .click();
-  expect(
-    await friends.getByTestId(/^social-friend-/).count(),
-  ).toBeLessThanOrEqual(12);
-  await friends.getByRole("button", { name: /^View all friends/ }).click();
-  const full = page.getByRole("dialog", { name: "All friends", exact: true });
+  const full = page.getByTestId("friends-screen");
+  await expect(page).toHaveURL(/\/friends$/);
+  await expect(
+    page.getByRole("dialog", { name: "All friends", exact: true }),
+  ).toHaveCount(0);
   await full.getByLabel("Search all friends", { exact: true }).fill("Jordan");
   await expect(full.getByTestId(/^social-friend-/).first()).toBeVisible();
   await full
@@ -274,7 +276,9 @@ test("expanded friends search the complete network and full browsing shares sele
     full.getByRole("button", { name: /^Deselect .+ for planning$/ }).first(),
   ).toBeVisible();
   await full.screenshot({ path: "test-results/social-full-friends.png" });
-  await full.getByRole("button", { name: "Close", exact: true }).click();
+  await full
+    .getByRole("button", { name: "Back to Beacons", exact: true })
+    .click();
   await expect(
     friends.getByRole("button", { name: "Plan with 1", exact: true }),
   ).toBeVisible();

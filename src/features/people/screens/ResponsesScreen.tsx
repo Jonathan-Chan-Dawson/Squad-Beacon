@@ -1,3 +1,5 @@
+import { BeaconParticipation } from "@/src/features/beacons/useBeaconParticipation";
+import { canReadBeaconActivity } from "@/src/features/beacons/beaconModules";
 import React, { useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import {
@@ -18,7 +20,7 @@ type Filter = (typeof filters)[number];
 
 export default function ResponsesScreen() {
   const { styles, colors } = useTheme();
-  const { loading, error, refresh } = useBeacon();
+  const { data, userId, loading, error, refresh } = useBeacon();
   const now = useNow();
   const { cards, invitations } = usePlanningResponses(now);
   const [filter, setFilter] = useState<Filter>("All");
@@ -31,6 +33,28 @@ export default function ResponsesScreen() {
         ({ ping: "Pings", vote: "Votes", draw: "Draws" } as const)[item.kind],
   );
   const showInvites = filter === "All" || filter === "Invites";
+  const answered =
+    data.viewer_id === userId && userId
+      ? data.activities
+          .filter(
+            (activity) =>
+              activity.mode !== "solo" &&
+              activity.status === "scheduled" &&
+              Date.parse(activity.ends_at) > now &&
+              canReadBeaconActivity(data, activity, userId) &&
+              data.rsvps.some(
+                (row) =>
+                  row.activity_id === activity.id &&
+                  row.user_id === userId &&
+                  ["interested", "declined"].includes(row.status),
+              ),
+          )
+          .sort((a, b) => a.starts_at.localeCompare(b.starts_at))
+      : [];
+  const selectedBeaconId =
+    selected?.id.startsWith("beacon:") && selected.title === "Beacon invitation"
+      ? selected.id.split(":")[1]
+      : null;
   function row(
     id: string,
     title: string,
@@ -84,6 +108,18 @@ export default function ResponsesScreen() {
           <Text style={styles.h2}>{selected.title}</Text>
           {selected.sourceLabel ? (
             <Txt muted>{selected.sourceLabel}</Txt>
+          ) : null}
+          {selectedBeaconId ? (
+            <BeaconParticipation
+              activityId={selectedBeaconId}
+              stretch
+              onOpen={() =>
+                router.push({
+                  pathname: "/activity/[id]",
+                  params: { id: selectedBeaconId },
+                })
+              }
+            />
           ) : null}
           {selected.actions.map((action) => (
             <Action
@@ -174,7 +210,39 @@ export default function ResponsesScreen() {
                 : null}
             </View>
           )}
-          {!loading && !rows.length && (!showInvites || !invitations.length) ? (
+          {showInvites && answered.length ? (
+            <View style={{ gap: 10, marginTop: 16 }}>
+              <Text style={styles.h2}>Your Beacon responses</Text>
+              {answered.map((activity) => (
+                <View key={activity.id} style={[styles.card, { gap: 6 }]}>
+                  <Text style={styles.body}>{activity.title}</Text>
+                  <BeaconParticipation
+                    activityId={activity.id}
+                    onOpen={() =>
+                      router.push({
+                        pathname: "/activity/[id]",
+                        params: { id: activity.id },
+                      })
+                    }
+                  />
+                  <Button
+                    compact
+                    secondary
+                    title="Open Beacon"
+                    onPress={() =>
+                      router.push({
+                        pathname: "/activity/[id]",
+                        params: { id: activity.id },
+                      })
+                    }
+                  />
+                </View>
+              ))}
+            </View>
+          ) : null}
+          {!loading &&
+          !rows.length &&
+          (!showInvites || (!invitations.length && !answered.length)) ? (
             <Empty
               title="You're all caught up"
               body="New responses and invitations will appear here."

@@ -94,7 +94,7 @@ test("small-phone inbox and New Message keep conversations accessible", async ({
   await page.getByRole("button", { name: "New message", exact: true }).click();
   await expect(
     page.getByRole("textbox", {
-      name: "Search chats, people and communities",
+      name: "Search conversations",
       exact: true,
     }),
   ).toBeVisible();

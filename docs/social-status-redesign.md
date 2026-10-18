@@ -70,3 +70,39 @@ Quick availability explicitly targets the current record. Available and Busy pre
 - All 26 browser scenarios passed across the main run and targeted reruns. A reaction assertion was corrected to verify the visible emoji rather than an unsupported web button attribute; its accessible selected-emoji label also passed. One overlapping runner artifact-cleanup error was resolved by rerunning sequentially.
 - Phone screenshots at 320, 375, and 430px were compared before/after, plus contextual menus at 1024px. Local captures are in `.expo/final-polish/`. Browser coverage includes compact/wrapped action targets, collection sharing/removal, menu dismissal and focus restoration, current/future status coexistence, comments/reactions, Sonar confirmation, friend planning, draft retention, Browse, My Activity, Map, and deep links.
 - Physical-device GPS/Sonar, native keyboard/safe-area interaction, screen-reader behavior, iOS compilation, and hosted production-backend flows were not exercised. No deployment was performed.
+
+
+## Dedicated Friends page — October 17, 2026
+
+Friends Right Now now stays at four rows. A top-right people icon and View all arrow open the normal `/friends` stack page; the 12-row inline expansion and All friends bottom sheet are removed. The section heading can wrap without shrinking. `/find-friends` retains its separate discovery/invitation purpose.
+
+The Friends page has a back arrow, a mint people emblem, authorized summary counts, full-network search, the existing availability/Beacon/Favorites filters, and private-list filters. A virtualized list shares the homepage row, status detail, avatar preference, and planning controller. Existing detail sheets remain, with navigation queued until dismissal completes. Back restores the prior screen; direct entry falls back to Beacons.
+
+A single bottom planning area appears only with selections or a validation error. Selected-person chips support individual removal, alongside Clear and Plan with N. Account-scoped session memory preserves query, filters, list position, and the existing planning draft/selection. Scroll restoration waits for virtualized content measurement and clamps at the actual end if the list shrinks. No backend, schema, or tab changes.
+
+### Friends page validation
+
+- 30 focused domain/database tests passed, including 500-friend search and private-list authorization, account-isolated browse state, selection/draft retention, reaction/status privacy, and atomic creation/invitation retry protection.
+- All 17 Friends/social browser scenarios passed. TypeScript, full-project lint, web export, and Android JavaScript/Hermes export passed. Browser checks cover 320/375/430/1024px, four-row homepage limits, icon/link touch targets, the 143-friend demo list and virtualized rendering, full-network search, Favorites/private-list separation, individual removal/Clear, Create handoff, preserved homepage/list positions, Profile/detail return, direct entry, and larger text/long names.
+- Screenshots are retained locally under `.expo/friends-page/`, including homepage previews, the new page, selected-person footer, and the 320px text-size stress case.
+- Physical-device keyboard/safe-area interactions, screen readers, iOS compilation, and live hosted-backend behavior remain untested. No deployment was performed.
+
+## Smart RSVP — October 17, 2026
+
+Discovery cards now use viewer-specific participation controls: unanswered invitations offer I’m In / I’m Out and Maybe; discovery offers Join or Request to Join; existing responses show Going, Requested, Maybe, or Can’t Go. Hosting opens the Beacon. Following the final visual reference, compact time, Live and Hosting badges sit above the wrapping title beside the category artwork, inside a complete subtle card outline. The live accent is an expanding ring that fades out and restarts, disabled for reduced motion and inactive screens. Actual emoji summaries and More remain at the upper-right, with authorized attendance and optional friend avatars grouped together. Strict limits have a small proportional capacity meter; soft limits use suggested-size text. Artwork remains decoration/category/default only, with no Memory-image reuse.
+
+`participation.ts` and `useBeaconParticipation.tsx` share state, permitted intents, account/Beacon submission serialization, canonical refresh, ambiguous-retry identities, and consequence-aware confirmation across cards, Overview, Map, linked Beacons and Responses. Going is independent of arrival and takes precedence over capacity labels. Leave is explicit; consequential departures and Going-to-Maybe explain capacity, role, unfinished assignments, arrival, live or Plan-stop consequences. Harmless changes do not add a confirmation. Existing role assignments and check-in history are retained.
+
+The additive migration `202610170001_smart_rsvp.sql` supports declined invitation responses while preserving grants, canonical RSVP rows, RLS, legacy withdrawal callers and request replay. Ordinary invitation retries cannot reopen a decline. Reopening uses an explicit manager-authorized Reinvite. Public Maybe/removal and public departure do not create invitation grants. The legacy snapshot retains only invited/requested/interested/going; declined database rows travel through `resolved_beacon_responses` and normalize into the same internal RSVP collection. Unknown statuses fail closed. Updated clients enable decline only with `capabilities.rsvp_decline` (or the local demo).
+
+**Rollout:** apply and verify the compatible database/read/action migration before releasing the updated client. The capability is emitted only by the completed migration. No hosted migration or deployment was performed by this implementation.
+
+### Smart RSVP validation
+
+- TypeScript, full-project lint, web export and Android JavaScript/Hermes export passed.
+- The dedicated `npm run test:rsvp` command passes 39 domain/database checks. An additional focused run passes 59 checks covering profile/module privacy, Ping conversion, calendar projection, Map context, planning, Friends session state and publication retry protection (the two runs overlap).
+- Database tests exercise decline/reinvite/replay, old/new snapshots, RLS, public tentative responses and departures, invitation departures, capacity release, request cancellation, dormant roles and preserved arrival. Queued transactions contend for the last seat; this is an embedded PostgreSQL test, not a hosted multi-connection load test.
+- The final nine-case RSVP/layout rerun passes after the badge and border refinements, including animated-ring progress and reduced-motion suppression. The preceding 15-case RSVP/menu run also passes. There are 26 review captures linked by `.expo/smart-rsvp/review.html`. Phone and desktop browser checks cover invitation responses, shared Overview/Map state, confirmations, answered Responses, menus and focus, collection access, scheduling, Sonar, friend selection, planning drafts and deep links. Review screenshots are under `.expo/smart-rsvp/` at 320/375/430/1024px; compared with the earlier phone captures under `.expo/final-polish/`.
+- Physical devices, native screen readers, native keyboard/safe-area interactions, iOS compilation, hosted Supabase flows and real network-loss delivery remain untested. Ambiguous publication retries are tested in the existing handoff suite; RSVP request replay is tested at the database layer.
+
+The final card-spacing follow-up aligns the upper toolbar within the card padding so it no longer creates a tall gap above the title. Title and meaningful location share one content target. Comments/Chat and the bottom-right Open shortcut use matching rounded outlines and mint icons, while their actual touch targets remain at least 44px.

@@ -1,5 +1,7 @@
 Expo Router map
 
+- friends.tsx: full-screen Friends browsing, status details, and shared planning selections.
+
 - responses.tsx: full-screen Responses & Invitations inbox, reusing the existing planning and social records.
 
 - space/[id].tsx: independent Space overview, people and privacy-preserving Squad links.

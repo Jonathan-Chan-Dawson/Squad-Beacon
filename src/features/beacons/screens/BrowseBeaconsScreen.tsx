@@ -75,6 +75,24 @@ export default function BrowseBeaconsScreen() {
     [],
   );
   const pendingSection = useRef<BrowseSection | null>(null);
+  const [visibleCards, setVisibleCards] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const onVisibleCards = useCallback(
+    ({
+      viewableItems,
+    }: {
+      viewableItems: { item: Activity; isViewable: boolean }[];
+    }) =>
+      setVisibleCards(
+        new Set(
+          viewableItems
+            .filter((row) => row.isViewable && row.item?.id)
+            .map((row) => row.item.id),
+        ),
+      ),
+    [],
+  );
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [savedOpen, setSavedOpen] = useState(false);
   const [selectedCategories, setSelectedCategories] = useState(
@@ -329,6 +347,7 @@ export default function BrowseBeaconsScreen() {
         key={activity.id}
         compact
         presentation="discovery"
+        animationVisible={visibleCards.has(activity.id)}
         {...activityFeedCardProps(data, activity, userId, now, {
           onOpen: () => openActivity(activity.id),
           onRSVP: (status) => respond(activity.id, status),
@@ -450,6 +469,8 @@ export default function BrowseBeaconsScreen() {
           paddingBottom: insets.bottom + tokens.layout.scrollClearance,
           gap: 0,
         }}
+        onViewableItemsChanged={onVisibleCards}
+        viewabilityConfig={{ itemVisiblePercentThreshold: 10 }}
         sections={[
           { key: "now", title: "Happening Now", data: nowActivities },
           { key: "upcoming", title: "Coming Up", data: upcomingActivities },

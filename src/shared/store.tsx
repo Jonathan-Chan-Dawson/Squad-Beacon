@@ -295,7 +295,7 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
         let next: Data;
         try { next = demoAction(baseData, action, payload); }
         catch (failure) {
-          if (atomic && failure instanceof Error) Object.assign(failure,{definitive:true});
+          if ((atomic || action === "rsvp") && failure instanceof Error) Object.assign(failure,{definitive:true});
           throw failure;
         }
         setData(next);
@@ -483,7 +483,7 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
       const viewer = session.user.id;
       const atomicCreation = action === "create_activity_with_invitees" || action === "create_plan_beacon_with_invitees";
       const assertAtomicViewer = () => {
-        if (atomicCreation && (generation !== epoch.current || dataRef.current.viewer_id !== viewer)) throw new Error("Your account changed before publication. Return to the account that started this Beacon.");
+        if ((atomicCreation || action === "rsvp") && (generation !== epoch.current || dataRef.current.viewer_id !== viewer)) throw new Error(action === "rsvp" ? "Your account changed. Refresh before responding." : "Your account changed before publication. Return to the account that started this Beacon.");
       };
       assertAtomicViewer();
       const network = await Network.getNetworkStateAsync();
@@ -493,7 +493,7 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
         network.isInternetReachable === false
       )
         throw new Error("Reconnect to save changes. Nothing was queued.");
-      const result = await rpc(action, payload, requestId, atomicCreation ? viewer : undefined);
+      const result = await rpc(action, payload, requestId, atomicCreation || action === "rsvp" ? viewer : undefined);
       assertAtomicViewer();
       if (generation === epoch.current) await refresh();
       assertAtomicViewer();

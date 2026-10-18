@@ -1,16 +1,23 @@
 import {
+  useBeaconParticipation,
+  ParticipationButtons,
+  ParticipationActions,
+} from "../useBeaconParticipation";
+import { cardSocialPreview } from "../cardSocialPreview";
+import { useBeacon } from "@/src/shared/store";
+import { usePreferences } from "@/src/shared/preferences";
+import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
+import { useFocusEffect } from "expo-router";
+import {
   BeaconCardEngagement,
   BeaconToolMenuRows,
 } from "./BeaconCardEngagement";
 import { ActionRow, ContextMenu, MenuGroup } from "@/src/shared/ContextMenu";
-import {
-  cardSecondaryMetadata,
-  compactCountdown,
-  discoveryPrimaryLabel,
-} from "../cardPresentation";
+import { cardSecondaryMetadata, compactCountdown } from "../cardPresentation";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   Image,
+  AppState,
   Pressable,
   Text,
   View,
@@ -29,11 +36,8 @@ import {
   Share2,
   Star,
   ChevronRight,
-  UsersRound,
   CircleHelp,
-  LogOut,
-  X,
-  UserRound,
+  Crown,
 } from "lucide-react-native";
 import Swipeable, {
   SwipeDirection,
@@ -54,8 +58,6 @@ import {
   AvatarStack,
   Card,
   IconButton,
-  PrimaryButton,
-  SecondaryButton,
   uiHaptics,
   useDesignTheme,
   useReducedMotion,
@@ -65,7 +67,8 @@ import { useNow } from "@/src/shared/useNow";
 import { HomeAction } from "./HomeAction";
 import { BeaconIcon } from "./BeaconIcon";
 
-export type FeedRsvpStatus = "going" | "interested" | "requested" | "invited";
+export type FeedRsvpStatus =
+  "going" | "interested" | "requested" | "invited" | "declined" | "unknown";
 export type FeedRsvpAction = "going" | "interested" | "withdraw";
 
 export type BeaconFeedAvatar = {
@@ -84,6 +87,7 @@ export interface BeaconFeedCardProps {
   /** Homepage-only display treatments; other lists retain their existing layout. */
   presentation?: "personal-preview" | "home" | "discovery";
   decorationEmoji?: string | null;
+  animationVisible?: boolean;
   /** Use the compact home/list treatment while keeping the same permission and RSVP callbacks. */
   compact?: boolean;
   /** Emphasize a confirmed personal Beacon on the home hub. */
@@ -156,45 +160,71 @@ function formatDateTime(value: number) {
   }
 }
 
-function LiveIndicator({ reducedMotion }: { reducedMotion: boolean }) {
+function LiveIndicator({
+  reducedMotion,
+  active = true,
+}: {
+  reducedMotion: boolean;
+  active?: boolean;
+}) {
   const { colors } = useDesignTheme();
   const pulse = useSharedValue(0);
   const pulseStyle = useAnimatedStyle(() => ({
-    opacity: 0.58 + pulse.value * 0.42,
-    transform: [{ scale: 0.88 + pulse.value * 0.12 }],
+    opacity: reducedMotion || !active ? 0 : (1 - pulse.value) * 0.55,
+    transform: [{ scale: 0.5 + pulse.value * 1.3 }],
   }));
 
   useEffect(() => {
     cancelAnimation(pulse);
-    if (!reducedMotion) {
+    if (!reducedMotion && active) {
       pulse.value = withRepeat(
         withTiming(1, {
-          duration: 900,
-          easing: Easing.inOut(Easing.ease),
+          duration: 1400,
+          easing: Easing.out(Easing.quad),
         }),
         -1,
-        true,
+        false,
       );
     } else {
       pulse.value = 0;
     }
     return () => cancelAnimation(pulse);
-  }, [pulse, reducedMotion]);
+  }, [pulse, reducedMotion, active]);
 
   return (
     <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-      <Animated.View
-        accessibilityElementsHidden
-        style={[
-          {
-            width: 8,
-            height: 8,
+      <View
+        style={{
+          width: 18,
+          height: 18,
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        <Animated.View
+          testID="beacon-live-pulse"
+          accessibilityElementsHidden
+          style={[
+            {
+              position: "absolute",
+              width: 16,
+              height: 16,
+              borderRadius: 8,
+              borderWidth: 1,
+              borderColor: colors.accent,
+            },
+            pulseStyle,
+          ]}
+        />
+        <View
+          style={{
+            width: 7,
+            height: 7,
             borderRadius: 4,
             backgroundColor: colors.accent,
-          },
-          pulseStyle,
-        ]}
-      />
+          }}
+        />
+      </View>
       <Text
         style={{
           color: colors.accent,
@@ -265,6 +295,7 @@ function SwipeReveal({
 export function BeaconFeedCard({
   presentation,
   decorationEmoji,
+  animationVisible = true,
   compact = false,
   featured = false,
   planRelation,
@@ -304,6 +335,26 @@ export function BeaconFeedCard({
   onCardSwipeStateChange,
 }: BeaconFeedCardProps) {
   const { colors, tokens } = useDesignTheme();
+  const { data: socialData, userId: socialViewer } = useBeacon();
+  const { showAvatars } = usePreferences();
+  const participation = useBeaconParticipation(activityId);
+  const socialPreview = cardSocialPreview(socialData, socialViewer, activityId);
+  const [screenFocused, setScreenFocused] = useState(true);
+  useFocusEffect(
+    useCallback(() => {
+      setScreenFocused(true);
+      return () => setScreenFocused(false);
+    }, []),
+  );
+  const [appActive, setAppActive] = useState(
+    AppState.currentState === "active",
+  );
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (value) =>
+      setAppActive(value === "active"),
+    );
+    return () => subscription.remove();
+  }, []);
   const reducedMotion = useReducedMotion();
   const now = useNow();
   const [menuVisible, setMenuVisible] = useState(false);
@@ -395,56 +446,19 @@ export function BeaconFeedCard({
     [],
   );
 
-  const runRsvp = useCallback(
-    async (status: FeedRsvpAction) => {
-      if (
-        actionLock.current ||
-        busyAction !== null ||
-        isHost ||
-        isSolo ||
-        isEnded ||
-        isCancelled
-      )
-        return;
-      if (status === "going" && (isClosed || full)) return;
-      // Existing responses can be withdrawn even when new joins are closed or full.
-      if (
-        status === "withdraw" &&
-        !isGoing &&
-        !requestPending &&
-        rsvpStatus !== "interested"
-      )
-        return;
-      actionLock.current = true;
-      setBusyAction("rsvp");
-      setActionError("");
-      try {
-        await onRSVP(status);
-        if (status !== "withdraw") void uiHaptics.success();
-      } catch (error) {
-        setActionError(readableError(error, "Could not update your response."));
-      } finally {
-        actionLock.current = false;
-        setBusyAction(null);
-        swipeableRef.current?.close();
-        notifySwipeState(false);
-      }
-    },
-    [
-      busyAction,
-      full,
-      isHost,
-      isSolo,
-      isEnded,
-      isCancelled,
-      isClosed,
-      isGoing,
-      requestPending,
-      rsvpStatus,
-      notifySwipeState,
-      onRSVP,
-    ],
-  );
+  const runRsvp = async (status: FeedRsvpAction) => {
+    const intent =
+      status === "going"
+        ? "join"
+        : status === "interested"
+          ? "maybe"
+          : participation.state?.going
+            ? "leave"
+            : participation.state?.pending
+              ? "cancel_request"
+              : "remove_maybe";
+    await participation.perform(intent);
+  };
 
   const runAction = useCallback(
     async (
@@ -486,84 +500,6 @@ export function BeaconFeedCard({
     }
     return whenLabel || "";
   })();
-
-  const primaryTitle = isHost
-    ? "Manage Beacon"
-    : isCancelled
-      ? "Cancelled"
-      : isEnded
-        ? "Ended"
-        : isSolo
-          ? "Solo activity"
-          : requestPending
-            ? "Request pending"
-            : isGoing
-              ? onChangeRSVP
-                ? "Going ✓"
-                : "I'm Out"
-              : full
-                ? "Full"
-                : isClosed
-                  ? "Closed"
-                  : approvalRequired && !approved
-                    ? "Request to join"
-                    : rsvpStatus === "invited"
-                      ? "Accept invitation"
-                      : "I'm In";
-  const primaryDisabled =
-    busyAction !== null ||
-    (!isHost &&
-      (isCancelled ||
-        isEnded ||
-        isSolo ||
-        requestPending ||
-        (!isGoing && (isClosed || full))));
-  const compactOpensActivity =
-    featured ||
-    isHost ||
-    isCancelled ||
-    isEnded ||
-    isSolo ||
-    requestPending ||
-    isGoing ||
-    full ||
-    isClosed;
-  const compactPrimaryTitle = editorial
-    ? discoveryPrimaryLabel({
-        pending: requestPending,
-        opens: compactOpensActivity,
-        requiresApproval: approvalRequired && !approved,
-        approvalGranted: joinApprovalGranted,
-      })
-    : featured
-      ? isLive
-        ? "Return to Beacon"
-        : "Open Beacon"
-      : isHost
-        ? "Manage"
-        : compactOpensActivity
-          ? isLive && isGoing
-            ? "Return"
-            : "Open"
-          : approvalRequired && !approved
-            ? "Request"
-            : "I’m In";
-  const onCompactPrimaryPress = () => {
-    if (compactOpensActivity) onOpen();
-    else void runRsvp("going");
-  };
-
-  const onPrimaryPress = () => {
-    if (isHost) {
-      onOpen();
-    } else if (isGoing && onChangeRSVP) {
-      void runAction("change", onChangeRSVP, "Could not open RSVP options.");
-    } else if (isGoing) {
-      void runRsvp("withdraw");
-    } else if (!primaryDisabled) {
-      void runRsvp("going");
-    }
-  };
 
   const onSwipeableOpen = (
     direction: SwipeDirection.LEFT | SwipeDirection.RIGHT,
@@ -641,14 +577,14 @@ export function BeaconFeedCard({
     <Card
       testID={`beacon-feed-card-${activityId}`}
       style={{
-        padding: editorial ? 0 : compact ? tokens.space.sm : tokens.space.md,
-        gap: editorial ? 0 : compact ? tokens.space.sm : tokens.space.md,
-        borderWidth: editorial ? 0 : 1,
+        padding: editorial ? 12 : compact ? tokens.space.sm : tokens.space.md,
+        gap: editorial ? 8 : compact ? tokens.space.sm : tokens.space.md,
+        borderWidth: 1,
         borderBottomWidth: 1,
         borderBottomColor: colors.border,
-        borderLeftWidth: editorial ? 0 : 4,
-        borderLeftColor: categoryToken.color,
-        borderRadius: editorial ? 0 : tokens.radius.card,
+        borderLeftWidth: editorial ? 1 : 4,
+        borderLeftColor: editorial ? colors.border : categoryToken.color,
+        borderRadius: editorial ? 14 : tokens.radius.card,
         backgroundColor: colors.surface,
       }}
     >
@@ -656,18 +592,13 @@ export function BeaconFeedCard({
         <>
           <View
             testID="discovery-editorial-row"
-            style={{
-              flexDirection: "row",
-              alignItems: "flex-start",
-              gap: 12,
-              paddingVertical: 8,
-            }}
+            style={{ flexDirection: "row", alignItems: "flex-start", gap: 12 }}
           >
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={`Open ${title}`}
               onPress={onOpen}
-              style={{ width: 64, gap: 6 }}
+              style={{ width: 64, gap: 5, minHeight: 80 }}
             >
               <View
                 testID="beacon-category-artwork"
@@ -684,27 +615,27 @@ export function BeaconFeedCard({
                 <View
                   style={{
                     position: "absolute",
-                    width: 58,
-                    height: 58,
-                    borderRadius: 29,
+                    width: 70,
+                    height: 70,
+                    borderRadius: 35,
                     borderWidth: 1,
                     borderColor: categoryToken.color,
-                    opacity: 0.15,
-                    top: -18,
-                    right: -18,
+                    opacity: 0.18,
+                    top: -24,
+                    right: -22,
                   }}
                 />
                 <View
                   style={{
                     position: "absolute",
-                    width: 42,
-                    height: 42,
-                    borderRadius: 21,
+                    width: 45,
+                    height: 45,
+                    borderRadius: 23,
                     borderWidth: 1,
                     borderColor: categoryToken.color,
-                    opacity: 0.15,
-                    bottom: -12,
-                    left: -8,
+                    opacity: 0.18,
+                    bottom: -16,
+                    left: -12,
                   }}
                 />
                 <BeaconIcon
@@ -714,7 +645,6 @@ export function BeaconFeedCard({
                 />
               </View>
               <Text
-                numberOfLines={2}
                 style={{
                   color: categoryToken.color,
                   fontSize: 10,
@@ -730,185 +660,319 @@ export function BeaconFeedCard({
               <View
                 style={{
                   flexDirection: "row",
+                  justifyContent: "space-between",
                   alignItems: "flex-start",
-                  gap: 6,
+                  gap: 4,
                 }}
               >
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`View ${title} details`}
-                  onPress={onOpen}
-                  style={{
-                    flex: 1,
-                    minWidth: 0,
-                    minHeight: 44,
-                    justifyContent: "center",
-                  }}
-                >
-                  <Text
-                    accessibilityRole="header"
-                    numberOfLines={2}
-                    style={{
-                      color: colors.textPrimary,
-                      fontSize: 16,
-                      lineHeight: 21,
-                      fontWeight: "500",
-                    }}
-                  >
-                    {title}
-                  </Text>
-                </Pressable>
                 <View
-                  testID="discovery-going-count"
                   style={{
-                    flexShrink: 0,
                     flexDirection: "row",
                     alignItems: "center",
-                    gap: 3,
-                    paddingTop: 3,
-                  }}
-                >
-                  <UsersRound size={12} color={colors.textSecondary} />
-                  <Text
-                    style={{
-                      color: colors.textSecondary,
-                      fontSize: 11,
-                      lineHeight: 16,
-                    }}
-                  >
-                    {goingCount} going
-                  </Text>
-                </View>
-              </View>
-              <View
-                style={{ flexDirection: "row", gap: 5, alignItems: "center" }}
-              >
-                <Clock3
-                  size={13}
-                  color={isLive ? colors.accent : colors.textSecondary}
-                />
-                <Text
-                  style={{
+                    flexWrap: "wrap",
+                    gap: 4,
                     flex: 1,
-                    color: isLive ? colors.accent : colors.textSecondary,
-                    fontSize: 12,
-                    lineHeight: 17,
+                    minWidth: 0,
+                    maxWidth: "100%",
                   }}
                 >
-                  {isLive ? `Live · ${whenText}` : whenText}
-                </Text>
-              </View>
-              {secondaryMetadata ? (
-                <View
-                  style={{ flexDirection: "row", gap: 5, alignItems: "center" }}
-                >
-                  {secondaryMetadata.kind === "online" ? (
-                    <Monitor size={13} color={colors.textSecondary} />
-                  ) : secondaryMetadata.kind === "host" ? (
-                    <UserRound size={13} color={colors.textSecondary} />
-                  ) : (
-                    <MapPin size={13} color={colors.textSecondary} />
-                  )}
-                  <Text
-                    testID="discovery-secondary-metadata"
-                    numberOfLines={1}
+                  {isHost ? (
+                    <View
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 4,
+                        paddingHorizontal: 6,
+                        paddingVertical: 3,
+                        borderRadius: 8,
+                        backgroundColor: colors.surfaceRaised,
+                      }}
+                    >
+                      <Crown size={11} color={colors.accent} />
+                      <Text
+                        style={{
+                          color: colors.accent,
+                          fontSize: 11,
+                          lineHeight: 16,
+                        }}
+                      >
+                        Hosting
+                      </Text>
+                    </View>
+                  ) : null}
+                  {isLive ? (
+                    <View
+                      style={{
+                        paddingHorizontal: 5,
+                        paddingVertical: 3,
+                        borderRadius: 8,
+                        backgroundColor: colors.surfaceRaised,
+                      }}
+                    >
+                      <LiveIndicator
+                        reducedMotion={reducedMotion}
+                        active={screenFocused && appActive && animationVisible}
+                      />
+                    </View>
+                  ) : null}
+                  <View
                     style={{
-                      flex: 1,
-                      color: colors.textSecondary,
-                      fontSize: 12,
-                      lineHeight: 17,
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 4,
+                      paddingHorizontal: 6,
+                      paddingVertical: 3,
+                      borderRadius: 8,
+                      backgroundColor: categoryToken.tint,
+                      flexShrink: 1,
+                      maxWidth: "100%",
                     }}
                   >
-                    {secondaryMetadata.label}
-                  </Text>
+                    <Clock3
+                      size={11}
+                      color={isLive ? colors.accent : categoryToken.color}
+                    />
+                    <Text
+                      testID="discovery-timing"
+                      style={{
+                        color: isLive ? colors.accent : categoryToken.color,
+                        fontSize: 11,
+                        lineHeight: 16,
+                        flexShrink: 1,
+                      }}
+                    >
+                      {isCancelled ? "Cancelled" : isEnded ? "Ended" : whenText}
+                    </Text>
+                  </View>
                 </View>
-              ) : null}
-              {responseLabel ? (
-                <Text
+                <View
                   style={{
-                    color: isGoing ? colors.accent : colors.textSecondary,
-                    fontSize: 11,
-                    lineHeight: 16,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    marginLeft: "auto",
+                    marginTop: -12,
+                    flexShrink: 0,
+                    gap: 2,
                   }}
                 >
-                  {responseLabel}
-                </Text>
-              ) : null}
-              {actionError ? (
+                  <BeaconCardEngagement
+                    activityId={activityId}
+                    mode="reactions"
+                  />
+                  <View ref={menuAnchor} collapsable={false}>
+                    <HomeAction
+                      label="More Beacon actions"
+                      plain
+                      icon={
+                        <MoreHorizontal
+                          size={18}
+                          color={colors.textSecondary}
+                        />
+                      }
+                      onPress={() => setMenuVisible(true)}
+                    />
+                  </View>
+                </View>
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`View ${title} details`}
+                onPress={onOpen}
+                style={{ minHeight: 44, justifyContent: "flex-start", gap: 5 }}
+              >
                 <Text
-                  accessibilityRole="alert"
-                  style={{ color: colors.danger, fontSize: 12 }}
+                  accessibilityRole="header"
+                  style={{
+                    color: colors.textPrimary,
+                    fontSize: 17,
+                    lineHeight: 23,
+                    fontWeight: "500",
+                  }}
                 >
-                  {actionError}
+                  {title}
                 </Text>
-              ) : null}
+                {secondaryMetadata?.kind !== "host" && secondaryMetadata ? (
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "flex-start",
+                      gap: 5,
+                    }}
+                  >
+                    <MapPin size={13} color={colors.textSecondary} />
+                    <Text
+                      testID="discovery-secondary-metadata"
+                      style={{
+                        flex: 1,
+                        color: colors.textSecondary,
+                        fontSize: 12,
+                        lineHeight: 17,
+                      }}
+                    >
+                      {secondaryMetadata.label}
+                    </Text>
+                  </View>
+                ) : null}
+              </Pressable>
             </View>
           </View>
           <View
             style={{
               flexDirection: "row",
-              flexWrap: "wrap",
               alignItems: "center",
-              justifyContent: "space-between",
-              gap: 4,
+              flexWrap: "wrap",
+              gap: 6,
             }}
           >
-            <BeaconCardEngagement activityId={activityId} />
-            <View
-              testID="discovery-card-actions"
-              style={{
-                marginLeft: "auto",
-                flexDirection: "row",
-                alignItems: "center",
-                justifyContent: "flex-end",
-                gap: 4,
-                flexWrap: "wrap",
-              }}
-            >
-              <View>
-                <HomeAction
-                  title={
-                    busyAction === "rsvp" ? "Updating…" : compactPrimaryTitle
-                  }
-                  label={compactPrimaryTitle}
-                  primary
-                  disabled={busyAction !== null}
-                  onPress={onCompactPrimaryPress}
-                  testID={`home-beacon-action-${activityId}`}
-                />
+            {showAvatars && socialPreview?.friendAvatars.length ? (
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  paddingRight: 4,
+                }}
+              >
+                {socialPreview.friendAvatars.map((person, index) => (
+                  <View
+                    key={person.id}
+                    style={{
+                      marginLeft: index ? -7 : 0,
+                      borderRadius: 16,
+                      borderWidth: 2,
+                      borderColor: colors.surface,
+                    }}
+                  >
+                    <ProfileAvatar profile={person} size={25} />
+                  </View>
+                ))}
+                {socialPreview.friendRemainder > 0 ? (
+                  <Text
+                    style={{
+                      color: colors.textSecondary,
+                      fontSize: 11,
+                      marginLeft: 3,
+                    }}
+                  >
+                    +{socialPreview.friendRemainder}
+                  </Text>
+                ) : null}
               </View>
-              <HomeAction
-                label={saved ? "Remove from saved Beacons" : "Save Beacon"}
-                onPress={() =>
-                  void runAction(
-                    "save",
-                    onSave,
-                    "Could not update saved Beacons.",
-                  )
-                }
-                disabled={busyAction !== null}
-                plain
-                icon={
-                  <Bookmark
-                    size={17}
-                    fill={saved ? colors.accent : "none"}
-                    color={saved ? colors.accent : colors.textSecondary}
-                  />
-                }
-              />
-              <View ref={menuAnchor} collapsable={false}>
-                <HomeAction
-                  label="More Beacon actions"
-                  onPress={() => setMenuVisible(true)}
-                  disabled={busyAction !== null}
-                  plain
-                  icon={
-                    <MoreHorizontal size={18} color={colors.textSecondary} />
-                  }
-                />
-              </View>
+            ) : null}
+            <View style={{ flex: 1, minWidth: 0 }}>
+              {socialPreview?.host ? (
+                <Text
+                  testID="discovery-host"
+                  style={{
+                    color: colors.textSecondary,
+                    fontSize: 11,
+                    lineHeight: 16,
+                  }}
+                >
+                  {socialPreview.host.id === socialViewer
+                    ? "You’re hosting"
+                    : `Hosted by ${socialPreview.host.name}`}
+                </Text>
+              ) : null}
+              <Text
+                testID="discovery-going-count"
+                style={{
+                  color: colors.textSecondary,
+                  fontSize: 11,
+                  lineHeight: 16,
+                }}
+              >
+                {socialPreview?.capacity.count ?? goingCount} going
+                {socialPreview && socialPreview.friendCount > 1
+                  ? ` · ${socialPreview.friendCount} friends attending`
+                  : ""}
+              </Text>
             </View>
+            {participation.state?.invitationPair &&
+            participation.state.allowed.includes("maybe") ? (
+              <HomeAction
+                title="Maybe"
+                plain
+                disabled={participation.operation.busy}
+                onPress={() => {
+                  void participation.perform("maybe");
+                }}
+              />
+            ) : null}
           </View>
+          {socialPreview?.capacity.limit != null ? (
+            <View style={{ gap: 5 }}>
+              <Text
+                style={{
+                  color: colors.textSecondary,
+                  fontSize: 11,
+                  lineHeight: 16,
+                }}
+              >
+                {socialPreview.capacity.strict
+                  ? `${socialPreview.capacity.count} of ${socialPreview.capacity.limit} · ${socialPreview.capacity.remaining} spots left`
+                  : `Suggested size ${socialPreview.capacity.limit}`}
+              </Text>
+              {socialPreview.capacity.strict ? (
+                <View
+                  accessible
+                  accessibilityLabel={`${socialPreview.capacity.count} of ${socialPreview.capacity.limit} places filled`}
+                  style={{ flexDirection: "row", gap: 3 }}
+                >
+                  {Array.from({ length: 8 }, (_, index) => (
+                    <View
+                      key={index}
+                      style={{
+                        flex: 1,
+                        height: 4,
+                        borderRadius: 3,
+                        overflow: "hidden",
+                        backgroundColor: colors.border,
+                      }}
+                    >
+                      <View
+                        style={{
+                          height: 4,
+                          width: `${Math.max(0, Math.min(1, (socialPreview.capacity.count / Math.max(1, socialPreview.capacity.limit!)) * 8 - index)) * 100}%`,
+                          backgroundColor: colors.accent,
+                        }}
+                      />
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+            </View>
+          ) : null}
+          <View
+            testID="discovery-card-actions"
+            style={{
+              flexDirection: "row",
+              flexWrap: "wrap",
+              alignItems: "flex-end",
+              gap: 6,
+            }}
+          >
+            <View style={{ flexGrow: 1, flexBasis: 132, minWidth: 0 }}>
+              <ParticipationButtons
+                controller={participation}
+                onOpen={onOpen}
+                stretch
+                showMaybe={false}
+              />
+            </View>
+            <BeaconCardEngagement
+              activityId={activityId}
+              mode="comments"
+              outlined
+            />
+            <HomeAction
+              label="Open Beacon overview"
+              testID={`beacon-open-${activityId}`}
+              outlined
+              icon={<ChevronRight size={20} color={colors.accent} />}
+              onPress={onOpen}
+            />
+          </View>
+          {participation.feedback}
         </>
       ) : compact ? (
         <>
@@ -1041,20 +1105,7 @@ export function BeaconFeedCard({
                   .join(" · ")}
               </Text>
             </View>
-            <PrimaryButton
-              compact
-              title={busyAction === "rsvp" ? "Updating…" : compactPrimaryTitle}
-              loading={busyAction === "rsvp"}
-              disabled={busyAction !== null}
-              onPress={onCompactPrimaryPress}
-              accessibilityLabel={
-                featured
-                  ? compactPrimaryTitle
-                  : isHost
-                    ? `Manage ${title}`
-                    : compactPrimaryTitle
-              }
-            />
+            <ParticipationButtons controller={participation} onOpen={onOpen} />
           </View>
           {planRelation ? (
             <Text
@@ -1355,42 +1406,12 @@ export function BeaconFeedCard({
             </Text>
           ) : null}
 
-          <View style={{ flexDirection: "row", gap: tokens.space.sm }}>
-            <PrimaryButton
-              title={busyAction === "rsvp" ? "Updating…" : primaryTitle}
-              loading={busyAction === "rsvp" || busyAction === "change"}
-              disabled={primaryDisabled || busyAction !== null}
-              onPress={onPrimaryPress}
-              accessibilityLabel={
-                isHost
-                  ? `Manage ${title}`
-                  : isGoing && onChangeRSVP
-                    ? "Change RSVP"
-                    : primaryTitle
-              }
-              style={{ flex: 1, minHeight: 52 }}
-            />
-            {requestPending ? (
-              <SecondaryButton
-                title="Cancel request"
-                compact
-                disabled={busyAction !== null || isEnded || isCancelled}
-                loading={busyAction === "rsvp"}
-                onPress={() => void runRsvp("withdraw")}
-                style={{ minHeight: 52 }}
-              />
-            ) : !isHost && !isEnded && !isCancelled && !isSolo && !isGoing ? (
-              <SecondaryButton
-                title={rsvpStatus === "interested" ? "Maybe ✓" : "Maybe"}
-                compact
-                disabled={busyAction !== null || rsvpStatus === "interested"}
-                loading={busyAction === "rsvp"}
-                onPress={() => void runRsvp("interested")}
-                accessibilityState={{ selected: rsvpStatus === "interested" }}
-                style={{ minWidth: 94, minHeight: 52 }}
-              />
-            ) : null}
-          </View>
+          <ParticipationButtons
+            controller={participation}
+            onOpen={onOpen}
+            stretch
+          />
+          {participation.feedback}
 
           {onMap || onChat || saved ? (
             <View style={{ flexDirection: "row", gap: tokens.space.sm }}>
@@ -1487,41 +1508,22 @@ export function BeaconFeedCard({
         onClose={() => setMenuVisible(false)}
         onDismiss={menuDismissed}
       >
-        {compact && !isHost && !isEnded && !isCancelled && !isSolo ? (
+        {participation.state?.allowed.length ? (
           <MenuGroup title="Participation">
-            {requestPending ? (
+            {participation.state.choices ? (
               <ActionRow
-                label="Cancel request"
-                icon={<X size={18} color={colors.textSecondary} />}
-                disabled={busyAction !== null}
-                onPress={() => afterMenu(() => void runRsvp("withdraw"))}
-              />
-            ) : isGoing ? (
-              <ActionRow
-                label={onChangeRSVP ? "Change RSVP" : "Leave Beacon"}
-                icon={<LogOut size={18} color={colors.textSecondary} />}
-                disabled={busyAction !== null}
-                onPress={() =>
-                  afterMenu(() => {
-                    if (onChangeRSVP)
-                      void runAction(
-                        "change",
-                        onChangeRSVP,
-                        "Could not open RSVP options.",
-                      );
-                    else void runRsvp("withdraw");
-                  })
-                }
-              />
-            ) : (
-              <ActionRow
-                label="Maybe"
-                selected={rsvpStatus === "interested"}
+                label="Change RSVP"
                 icon={<CircleHelp size={18} color={colors.textSecondary} />}
-                disabled={busyAction !== null || rsvpStatus === "interested"}
-                onPress={() => afterMenu(() => void runRsvp("interested"))}
+                onPress={() => afterMenu(participation.openChoices)}
               />
-            )}
+            ) : null}
+            <ParticipationActions
+              state={participation.state}
+              busy={participation.operation.busy}
+              onPerform={participation.perform}
+              after={afterMenu}
+              omitJoin
+            />
           </MenuGroup>
         ) : null}
         {compact && (onMap || onChat) ? (
@@ -1596,6 +1598,7 @@ export function BeaconFeedCard({
           </MenuGroup>
         ) : null}
       </ContextMenu>
+      {participation.dialogs}
     </View>
   );
 }

@@ -43,12 +43,24 @@ export function beaconEngagement(
       resolveActivityToolEntry(data, activity, viewer, "tools", tool).tool ===
         tool,
   );
+  const uniqueReactions = [
+    ...new Map(reactions.map((row) => [row.user_id, row])).values(),
+  ];
+  const reactionGroups = [...new Set(uniqueReactions.map((row) => row.emoji))]
+    .map((emoji) => ({
+      emoji,
+      count: uniqueReactions.filter((row) => row.emoji === emoji).length,
+    }))
+    .sort((a, b) => b.count - a.count || a.emoji.localeCompare(b.emoji))
+    .slice(0, 3);
   return {
     activity,
     canReact:
       isBeaconModuleEnabled(activity, "reactions") &&
       activity.status !== "cancelled",
     canReadComments: isBeaconModuleEnabled(activity, "comments"),
+    canChat: isBeaconModuleEnabled(activity, "chat"),
+    reactionGroups,
     reactionCount: new Set(reactions.map((row) => row.user_id)).size,
     commentCount: new Set(comments.map((row) => row.id)).size,
     selectedEmoji: reactions.find((row) => row.user_id === viewer)?.emoji,

@@ -3280,6 +3280,16 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
       !canReadBeaconActivity(d, activity, uid)
     )
       throw new Error("This beacon is not open for joining.");
+    if (p.intent && !["leave", "cancel_request", "remove_maybe"].includes(String(p.intent))) throw new Error("Unknown RSVP intent.");
+    if (p.status === "declined") {
+      if (!invite || !existing || !["invited", "interested", "declined"].includes(existing.status)) throw new Error("Only an invitation can be declined. Use Leave Beacon for confirmed attendance.");
+      existing.status = "declined";
+      return d;
+    }
+    if (p.status === "withdraw" && existing?.status === "declined") return d;
+    if (p.intent === "leave" && !isApprovedGoing(activity, existing)) throw new Error("Your response changed. Refresh before leaving.");
+    if (p.intent === "cancel_request" && existing?.status !== "requested" && !(existing?.status === "going" && !isApprovedGoing(activity, existing))) throw new Error("There is no pending request to cancel.");
+    if (p.intent === "remove_maybe" && (existing?.status !== "interested" || invite)) throw new Error("Your tentative response changed.");
     if (p.status === "withdraw") {
       d.rsvps = d.rsvps.filter(
         (item) => !(item.activity_id === id && item.user_id === uid),
@@ -3288,7 +3298,7 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
         d.rsvps.push({
           activity_id: id,
           user_id: uid,
-          status: "invited",
+          status: p.intent === "leave" ? "declined" : "invited",
           approved: true,
         });
       return d;
@@ -3379,6 +3389,7 @@ export function demoAction(previous: Data, action: string, p: Payload): Data {
       throw new Error("Invite an accepted friend to an active beacon.");
     if (existing && ["going", "requested", "invited"].includes(existing.status))
       return d;
+    if (existing?.status === "declined" && p.reinvite !== true) return d;
     d.activity_exclusions = d.activity_exclusions.filter(
       (entry) => !(entry.activity_id === id && entry.user_id === targetId),
     );

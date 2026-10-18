@@ -1,143 +1,26 @@
 import React from "react";
 import { View, Text } from "react-native";
+import { router } from "expo-router";
 import { useBeacon } from "@/src/shared/store";
-import { useNow } from "@/src/shared/useNow";
-import { Action, useTheme } from "@/src/shared/ui";
-import { beaconCapacity } from "@/src/features/beacons/permissions";
+import { useTheme } from "@/src/shared/ui";
 import type { Activity } from "@/src/shared/types";
-import { uiHaptics } from "@/src/shared/design-system";
+import { BeaconParticipation } from "./useBeaconParticipation";
 export function BeaconResponse({
-  activity: a,
+  activity,
   compact = false,
-  joinLabel = "I'm In",
 }: {
   activity: Activity;
   compact?: boolean;
   joinLabel?: string;
 }) {
-  const { styles } = useTheme();
-
-  const { data, userId, act } = useBeacon();
-  const now = useNow();
-  const rsvp = data.rsvps.find(
-    (r) => r.activity_id === a.id && r.user_id === userId,
-  );
-  async function respond(status: "going" | "interested" | "withdraw") {
-    await act("rsvp", { id: a.id, status });
-    if (status !== "withdraw") uiHaptics.success();
-  }
-  if (
-    a.owner_id === userId ||
-    a.mode === "solo" ||
-    a.status !== "scheduled" ||
-    Date.parse(a.ends_at) <= now
-  )
-    return null;
-  const pending = rsvp?.status === "requested";
-  const approval =
-    (a.approval_required || a.mode === "invite") && !rsvp?.approved;
-  if (compact) {
-    const pending = rsvp?.status === "requested";
-    const going = rsvp?.status === "going";
-    const capacity = beaconCapacity(data, a);
-    const closed = capacity.closed && !pending && !going;
-    return (
-      <View
-        style={{
-          flexDirection: "row",
-          gap: 6,
-          justifyContent: "flex-start",
-          flexWrap: "wrap",
-        }}
-      >
-        <View>
-          <Action
-            title={
-              pending
-                ? "Pending"
-                : going
-                  ? "I'm Out"
-                  : capacity.full
-                    ? "Full"
-                    : closed
-                      ? "Closed"
-                      : approval
-                        ? "Request"
-                        : joinLabel
-            }
-            disabled={pending || closed}
-            compact
-            secondary={pending || going || closed}
-            run={() => respond(going ? "withdraw" : "going")}
-          />
-        </View>
-        {pending ? (
-          <View>
-            <Action
-              title="Cancel request"
-              secondary
-              compact
-              run={() => respond("withdraw")}
-            />
-          </View>
-        ) : !going && !closed ? (
-          <View>
-            <Action
-              title="Maybe"
-              disabled={rsvp?.status === "interested"}
-              secondary
-              compact
-              run={() => respond("interested")}
-            />
-          </View>
-        ) : null}
-      </View>
-    );
-  }
   return (
-    <View style={{ gap: 8 }}>
-      {rsvp && (
-        <Text accessibilityLiveRegion="polite" style={styles.label}>
-          {pending
-            ? "Pending"
-            : rsvp.status === "going"
-              ? "You're in. See you there!"
-              : rsvp.status === "interested"
-                ? "You're considering it. No pressure."
-                : "You're invited. One tap and you're in."}
-        </Text>
-      )}
-      <View style={{ flexDirection: "row", gap: 6 }}>
-        <View style={{ flex: 1 }}>
-          <Action
-            title={
-              pending
-                ? "Pending"
-                : rsvp?.status === "going"
-                  ? "I'm In"
-                  : approval
-                    ? "Request"
-                    : joinLabel
-            }
-            disabled={pending || rsvp?.status === "going"}
-            secondary={rsvp?.status === "going"}
-            run={() => respond("going")}
-          />
-        </View>
-        <View style={{ flex: 1 }}>
-          <Action
-            title="Maybe"
-            secondary={rsvp?.status !== "interested"}
-            run={() => respond("interested")}
-          />
-        </View>
-        {rsvp && (
-          <View style={{ flex: 1 }}>
-            <Action title="I'm Out" secondary run={() => respond("withdraw")} />
-          </View>
-        )}
-      </View>
-    </View>
+    <BeaconParticipation
+      activityId={activity.id}
+      stretch={!compact}
+      onOpen={() =>
+        router.push({ pathname: "/activity/[id]", params: { id: activity.id } })
+      }
+    />
   );
 }
 export function BeaconMomentum({ activity: a }: { activity: Activity }) {

@@ -86,7 +86,7 @@ export async function rpc(
     data: { session },
   } = await supabase.auth.getSession();
   if (!session) throw new Error("Sign in to continue.");
-  if (expectedViewerId && session.user.id !== expectedViewerId) throw new Error("Your account changed before publication. Return to the account that started this Beacon.");
+  if (expectedViewerId && session.user.id !== expectedViewerId) throw new Error(action === "rsvp" ? "Your account changed. Refresh before responding." : "Your account changed before publication. Return to the account that started this Beacon.");
   const key = session.user.id + ":" + action;
   // Keep only the latest operation of each kind in memory. Coordinates are never retried.
   const retryable = ![

@@ -1,3 +1,7 @@
+import {
+  useBeaconParticipation,
+  ParticipationButtons,
+} from "../useBeaconParticipation";
 import React, { useEffect, useRef, useState } from "react";
 import {
   resolveActivityToolEntry,
@@ -271,25 +275,24 @@ export default function ActivityDetail() {
   const [hostSheet, setHostSheet] = useState(false);
   const [denyTarget, setDenyTarget] = useState<SafeRsvpRow | null>(null);
   const [removeTarget, setRemoveTarget] = useState<SafeRsvpRow | null>(null);
+  const [reinviteTarget, setReinviteTarget] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [floatingReaction, setFloatingReaction] = useState(false);
   const [floatingReactionEmoji, setFloatingReactionEmoji] = useState("🙌");
-  const [joining, setJoining] = useState(false);
-  const [rsvpBusy, setRsvpBusy] = useState(false);
+  const participation = useBeaconParticipation(activityId ?? "");
+  const joining = participation.operation.busy;
+
   const [reactionBusy, setReactionBusy] = useState(false);
   const [shareBusy, setShareBusy] = useState(false);
   const [saveBusy, setSaveBusy] = useState(false);
   const [interactionError, setInteractionError] = useState("");
   const [retryAction, setRetryAction] = useState<(() => void) | null>(null);
-  const [joinFeedback, setJoinFeedback] = useState(false);
-  const [rsvpChoices, setRsvpChoices] = useState(false);
   const [floatingReactionProgress] = useState(() => new Animated.Value(0));
   const [interactionActivityId, setInteractionActivityId] =
     useState(activityId);
   if (interactionActivityId !== activityId) {
     setInteractionActivityId(activityId);
     setSelectedTool(null);
-    setJoinFeedback(false);
   }
   if (activity && appliedToolRoute !== toolRouteKey) {
     setAppliedToolRoute(toolRouteKey);
@@ -790,38 +793,6 @@ export default function ActivityDetail() {
       setReactionBusy(false);
     }
   };
-  const respond = async (
-    status: "going" | "interested" | "withdraw",
-  ): Promise<boolean> => {
-    if (rsvpBusy) return false;
-    setRsvpBusy(true);
-    setInteractionError("");
-    setRetryAction(null);
-    setJoining(status !== "withdraw");
-    try {
-      await act("rsvp", { id: activity.id, status });
-      if (status !== "withdraw") {
-        await uiHaptics.success();
-        if (status === "going") {
-          setJoinFeedback(true);
-          setTimeout(() => setJoinFeedback(false), 1200);
-        }
-      }
-      return true;
-    } catch (failure) {
-      setJoinFeedback(false);
-      setInteractionError(
-        feedbackMessage(failure, "Could not update your response. Try again."),
-      );
-      setRetryAction(() => () => {
-        void respond(status);
-      });
-      return false;
-    } finally {
-      setJoining(false);
-      setRsvpBusy(false);
-    }
-  };
   const denyRequest = async () => {
     if (!denyTarget || !userId || !canAdmit) return;
     const currentRequest = data.rsvps.find(
@@ -890,13 +861,15 @@ export default function ActivityDetail() {
             ? "Going"
             : myRsvp?.status === "interested"
               ? "Maybe"
-              : myRsvp?.status === "invited"
-                ? "Invited"
-                : capacity.closed
-                  ? capacity.manuallyClosed
-                    ? "Closed"
-                    : "Full"
-                  : startLabel;
+              : myRsvp?.status === "declined"
+                ? "Can’t Go"
+                : myRsvp?.status === "invited"
+                  ? "Invited"
+                  : capacity.closed
+                    ? capacity.manuallyClosed
+                      ? "Closed"
+                      : "Full"
+                    : startLabel;
   const stateTone =
     stateLabel === "Request pending"
       ? "pending"
@@ -1044,27 +1017,6 @@ export default function ActivityDetail() {
     : [];
   const contentWidth = Math.min(width, tokens.layout.contentMaxWidth ?? width);
   const bottomClearance = 90 + Math.max(insets.bottom, 8);
-  const openForRsvp =
-    activity.status === "scheduled" && Date.parse(activity.ends_at) > now;
-  const pending = isApprovalPending(myRsvp);
-  const going = myRsvp?.status === "going" && !pending;
-  const approval = approvalRequired && !myRsvp?.approved;
-  const blockedForJoin = capacity.closed && !pending && !going;
-  const primaryRsvpLabel = !openForRsvp
-    ? stateLabel
-    : pending
-      ? "Request pending"
-      : going
-        ? "Going ✓"
-        : myRsvp?.status === "interested"
-          ? "Maybe ✓"
-          : capacity.full
-            ? "Full"
-            : capacity.closed
-              ? "Closed"
-              : approval
-                ? "Request to join"
-                : "I'm In";
 
   return (
     <>
@@ -1423,6 +1375,23 @@ export default function ActivityDetail() {
                 {canAdmit && activity.status === "scheduled" && !isPast ? (
                   <View style={[styles.card, { gap: 8 }]}>
                     <Text style={styles.h2}>Invite a friend</Text>
+                    {data.capabilities?.rsvp_decline || demo
+                      ? rsvps
+                          .filter((row) => row.status === "declined")
+                          .map((row) => {
+                            const profile = data.profiles.find(
+                              (person) => person.id === row.user_id,
+                            );
+                            return (
+                              <Button
+                                key={row.user_id}
+                                secondary
+                                title={`Reinvite ${profile && safeProfile(data, profile, userId) ? profile.name : "friend"}`}
+                                onPress={() => setReinviteTarget(row.user_id)}
+                              />
+                            );
+                          })
+                      : null}
                     {data.profiles
                       .filter(
                         (profile) =>
@@ -1710,67 +1679,13 @@ export default function ActivityDetail() {
                   <Button title="Solo activity" disabled onPress={() => {}} />
                 </View>
               ) : (
-                <View style={{ flex: 1, flexDirection: "row", gap: 6 }}>
-                  <View style={{ flex: 1 }}>
-                    <Button
-                      title={
-                        joining
-                          ? "Joining…"
-                          : joinFeedback
-                            ? approval
-                              ? "Request sent ✓"
-                              : "You're in ✓"
-                            : primaryRsvpLabel
-                      }
-                      disabled={
-                        rsvpBusy ||
-                        (!openForRsvp &&
-                          !going &&
-                          myRsvp?.status !== "interested" &&
-                          !pending) ||
-                        (blockedForJoin &&
-                          !going &&
-                          myRsvp?.status !== "interested")
-                      }
-                      secondary={
-                        !!going ||
-                        blockedForJoin ||
-                        pending ||
-                        myRsvp?.status === "interested"
-                      }
-                      onPress={() => {
-                        if (
-                          going ||
-                          myRsvp?.status === "interested" ||
-                          pending
-                        ) {
-                          setRsvpChoices(true);
-                        } else {
-                          void respond("going");
-                        }
-                      }}
-                    />
-                  </View>
-                  {pending ? (
-                    <Button
-                      title="Cancel request"
-                      compact
-                      secondary
-                      disabled={rsvpBusy}
-                      onPress={() => void respond("withdraw")}
-                    />
-                  ) : !going &&
-                    myRsvp?.status !== "interested" &&
-                    !blockedForJoin &&
-                    openForRsvp ? (
-                    <Button
-                      title="Maybe"
-                      compact
-                      secondary
-                      disabled={rsvpBusy}
-                      onPress={() => void respond("interested")}
-                    />
-                  ) : null}
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <ParticipationButtons
+                    controller={participation}
+                    onOpen={() => {}}
+                    stretch
+                  />
+                  {participation.feedback}
                 </View>
               )}
               <Pressable
@@ -2020,41 +1935,27 @@ export default function ActivityDetail() {
         />
       </Sheet>
       <Sheet
-        title={pending ? "Request pending" : "Your response"}
-        visible={rsvpChoices}
-        onClose={() => setRsvpChoices(false)}
+        title="Send a new invitation?"
+        visible={!!reinviteTarget && canAdmit}
+        onClose={() => setReinviteTarget(null)}
       >
         <Txt>
-          {pending
-            ? "Your request is waiting for the host."
-            : "You can update your response while this Beacon is open."}
+          This will reopen their resolved invitation. Their previous response
+          will no longer be current.
         </Txt>
-        {pending ? (
-          <Action
-            title="Cancel request"
-            secondary
-            run={async () => {
-              if (await respond("withdraw")) setRsvpChoices(false);
-            }}
-          />
-        ) : myRsvp?.status === "interested" ? (
-          <Action
-            title={approval ? "Request to join" : "I'm In"}
-            run={async () => {
-              if (await respond("going")) setRsvpChoices(false);
-            }}
-          />
-        ) : null}
-        {!pending ? (
-          <Action
-            title="I'm Out"
-            secondary
-            run={async () => {
-              if (await respond("withdraw")) setRsvpChoices(false);
-            }}
-          />
-        ) : null}
+        <Action
+          title="Send new invitation"
+          run={async () => {
+            await act("invite_activity", {
+              id: activity.id,
+              user_id: reinviteTarget!,
+              reinvite: true,
+            });
+            setReinviteTarget(null);
+          }}
+        />
       </Sheet>
+      {participation.dialogs}
     </>
   );
 }
