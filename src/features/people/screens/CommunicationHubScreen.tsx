@@ -138,7 +138,6 @@ export function CommunicationHub({
     initialSection === "Pings",
   );
   const [exploreOpen, setExploreOpen] = useState(false);
-  const [trayOpen, setTrayOpen] = useState(false);
   const setRowGestureActive = useCallback(() => {}, []);
   const [refreshing, setRefreshing] = useState(false);
   const [refreshError, setRefreshError] = useState("");
@@ -310,6 +309,8 @@ export function CommunicationHub({
       setRefreshing(false);
     }
   }, [refresh]);
+  const showStartFriends =
+    activeList || conversationFilter === "Friends" || conversationFilter === "All";
   const chatItems: ListItem[] =
     loading && !current
       ? Array.from({ length: 6 }, (_, index) => ({
@@ -323,19 +324,10 @@ export function CommunicationHub({
             chat,
           })),
           ...(!chats.length &&
-          !(
-            startFriends.length &&
-            (activeList ||
-              conversationFilter === "Friends" ||
-              (conversationFilter === "All" &&
-                (trayOpen || activeQuery || !allChats.length)))
-          )
+          !(startFriends.length && showStartFriends)
             ? [{ key: "empty", type: "empty" as const }]
             : []),
-          ...(activeList ||
-          conversationFilter === "Friends" ||
-          (conversationFilter === "All" &&
-            (trayOpen || activeQuery || !allChats.length))
+          ...(showStartFriends
             ? startFriends.map((person) => ({
                 key: `start:${person.id}`,
                 type: "person" as const,
@@ -500,7 +492,6 @@ export function CommunicationHub({
               isNew
                 ? findFriends
                 : () => {
-                    setTrayOpen(true);
                     onNewMenuOpenChange(true);
                   }
             }
@@ -775,7 +766,6 @@ export function CommunicationHub({
                 changeSection("Chats");
                 onClearList?.();
                 onConversationFilterChange("Friends");
-                setTrayOpen(true);
                 onSearchOpenChange(true);
                 onQueryChange("", "Chats");
               }}
