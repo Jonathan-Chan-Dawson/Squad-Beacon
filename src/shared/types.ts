@@ -144,6 +144,14 @@ export interface Checkin {
   local_date: string;
 }
 export interface Activity extends Shared {
+  /** Owner-only choice for linking this Status to a live group Beacon. */
+  status_show_current_beacon?: boolean;
+  /** Owner-only selected Beacon id; null means Auto. */
+  status_current_beacon_id?: ID | null;
+  /** Server-computed source visible to this snapshot viewer. */
+  status_current_beacon?: { id: ID; role: "hosting" | "cohosting" | "going" } | null;
+  status_attachment?: import("@/src/features/beacons/statusAttachments").StatusAttachment | null;
+  status_presentation?: import("@/src/features/beacons/statusAttachments").StatusPresentation;
   available?: boolean;
   status_sharing?: boolean;
   status_note_hidden?: boolean;
@@ -151,6 +159,8 @@ export interface Activity extends Shared {
   own_status_note?: { title: string; description: string };
   /** Snapshot projection for the authenticated viewer; never accepted as write input. */
   viewer_can_access?: boolean;
+  /** Authorized preview/RSVP access; distinct from participant-tool access. */
+  viewer_can_read?: boolean;
   /** Authoritative host + accepted-Going count from the current snapshot. */
   accepted_seat_count?: number;
   description?: string;
@@ -554,7 +564,7 @@ export interface Data {
   places: ActivityPlace[];
   rsvps: RSVP[];
   resolved_beacon_responses?: RSVP[];
-  capabilities?: { rsvp_decline?: boolean; beacon_supplies?: boolean; status_privacy?: boolean };
+  capabilities?: { rsvp_decline?: boolean; beacon_supplies?: boolean; status_privacy?: boolean; status_attachments?: boolean; status_current_beacon?: boolean };
   comments: Comment[];
   reactions: Reaction[];
   locations: LocationSession[];
@@ -648,7 +658,7 @@ export function normalizeData(value: Partial<Data> | null | undefined): Data {
   data.resolved_beacon_responses = undefined;
   data.beacon_supply_requests = Array.isArray(data.beacon_supply_requests) ? data.beacon_supply_requests : [];
   data.beacon_supply_claims = Array.isArray(data.beacon_supply_claims) ? data.beacon_supply_claims : [];
-  data.capabilities = { beacon_supplies: data.is_demo === true || data.capabilities?.beacon_supplies === true, status_privacy: data.is_demo === true || data.capabilities?.status_privacy === true, rsvp_decline: data.is_demo === true || data.capabilities?.rsvp_decline === true };
+  data.capabilities = { status_attachments: data.is_demo === true || data.capabilities?.status_attachments === true, beacon_supplies: data.is_demo === true || data.capabilities?.beacon_supplies === true, status_privacy: data.is_demo === true || data.capabilities?.status_privacy === true, status_current_beacon: data.is_demo === true || data.capabilities?.status_current_beacon === true, rsvp_decline: data.is_demo === true || data.capabilities?.rsvp_decline === true };
   data.dm_message_reads = Array.isArray(data.dm_message_reads) ? data.dm_message_reads : [];
   data.plan_members = Array.isArray(data.plan_members) ? data.plan_members : [];
   data.plan_routines = Array.isArray(data.plan_routines)
@@ -672,6 +682,11 @@ export function normalizeData(value: Partial<Data> | null | undefined): Data {
   data.activities = (Array.isArray(data.activities) ? data.activities : []).map(
     (activity) => ({
       ...activity,
+      status_attachment: activity.status_attachment ?? null,
+      status_presentation: activity.status_presentation ?? "text_only",
+      status_show_current_beacon: activity.status_show_current_beacon ?? false,
+      status_current_beacon_id: activity.status_current_beacon_id ?? null,
+      status_current_beacon: activity.status_current_beacon ?? null,
       plan_id: activity.plan_id ?? null,
       plan_step_index: activity.plan_step_index ?? null,
       aspiration_ids: Array.isArray(activity.aspiration_ids)

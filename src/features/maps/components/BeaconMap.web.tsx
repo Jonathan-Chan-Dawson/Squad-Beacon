@@ -10,7 +10,7 @@ import {
 import { useDesignTheme } from "@/src/theme";
 import { miniAvatarSvg, avatarSeed } from "@/src/features/profile/avatarArt";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Pressable, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { LocateFixed, SlidersHorizontal } from "lucide-react-native";
 import { pulseLayerPolicy } from "@/src/features/pulse/pulseLayerPolicy";
 import {
@@ -104,6 +104,8 @@ export default function BeaconMap(props: MapProps) {
   const configuredCartoKey = Constants.expoConfig?.extra?.cartoBasemapsApiKey;
   const cartoApiKey =
     typeof configuredCartoKey === "string" ? configuredCartoKey : undefined;
+  const [tileError, setTileError] = useState(false);
+  const [tileRetry, setTileRetry] = useState(0);
 
   const element = useRef<HTMLDivElement>(null),
     map = useRef<Leaflet.Map | null>(null),
@@ -341,12 +343,41 @@ export default function BeaconMap(props: MapProps) {
     const currentMap = map.current;
     if (!ready || !L || !currentMap) return;
     tiles.current?.remove();
-    tiles.current = L.tileLayer(cartoTileUrl(resolvedAppearance, cartoApiKey), {
+    setTileError(false);
+    let active = true;
+    const failed = new Set<string>();
+    let retry: ReturnType<typeof setTimeout> | undefined;
+    let retried = false;
+    const layer = L.tileLayer(cartoTileUrl(resolvedAppearance, cartoApiKey), {
       maxZoom: MAP_MAX_ZOOM,
       maxNativeZoom: 19,
       attribution: cartoAttribution,
-    }).addTo(currentMap);
-  }, [ready, resolvedAppearance, cartoApiKey]);
+    });
+    layer.on("tileerror", (event: Leaflet.TileErrorEvent) => {
+      failed.add(`${event.coords.z}/${event.coords.x}/${event.coords.y}`);
+      if (!active) return;
+      setTileError(true);
+      if (!retried) {
+        retried = true;
+        retry = setTimeout(() => {
+          if (active) layer.redraw();
+        }, 1500);
+      }
+    });
+    layer.on("tileload", (event: Leaflet.TileEvent) => {
+      failed.delete(`${event.coords.z}/${event.coords.x}/${event.coords.y}`);
+    });
+    layer.on("load", () => {
+      if (active) setTileError(failed.size > 0);
+    });
+    tiles.current = layer.addTo(currentMap);
+    return () => {
+      active = false;
+      clearTimeout(retry);
+      layer.off();
+      layer.remove();
+    };
+  }, [ready, resolvedAppearance, cartoApiKey, tileRetry]);
   useEffect(() => {
     const m = map.current;
     if (!ready || !m || !hasUsableMapViewport(m)) return;
@@ -1275,6 +1306,26 @@ export default function BeaconMap(props: MapProps) {
         popPlaceKey={props.pulsePopPlaceKey}
         calm={props.calm}
       />
+      {tileError && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Retry basemap"
+          onPress={() => setTileRetry((value) => value + 1)}
+          style={{
+            position: "absolute",
+            top: 12,
+            left: 12,
+            minHeight: 44,
+            padding: 10,
+            borderRadius: 12,
+            backgroundColor: colors.bg,
+          }}
+        >
+          <Text style={{ color: colors.ink }}>
+            Map tiles unavailable · Retry
+          </Text>
+        </Pressable>
+      )}
       {!onPick && !hideControls ? (
         <View
           style={{ position: "absolute", top: controlsTop, right: 16, gap: 8 }}

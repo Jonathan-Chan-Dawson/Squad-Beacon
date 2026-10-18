@@ -7,8 +7,12 @@ import { canReadBeaconActivity } from "./beaconModules";
 import { beaconSeatCount, isApprovedGoing } from "./permissions";
 import type { SafeFriendNowRow } from "./components/feed/FriendsNow";
 import { matchesSearch } from "@/src/shared/search";
+import { statusNoteText, visibleStatusAttachment } from "./statusAttachments";
+import { visibleCurrentBeacon } from "./currentStatusBeacon";
 
 export type SocialFriend = SafeFriendNowRow & {
+  attachment?: ReturnType<typeof visibleStatusAttachment>;
+  currentBeacon?: ReturnType<typeof visibleCurrentBeacon>;
   note?: ReturnType<typeof visibleSoloActivity>;
   beacon?: { id: string; title: string; label: string; category: Category; emoji?: string | null; goingCount: number };
   ping?: { id: string; title: string };
@@ -78,7 +82,9 @@ export function socialFriends(
           name: preview.profile?.name ?? "Friend",
           profile: preview.profile,
           availability: preview.availability,
-          statusText: note?.title ?? "",
+          statusText: statusNoteText(note),
+          attachment: visibleStatusAttachment(data, note, viewer, now),
+          currentBeacon: visibleCurrentBeacon(data, note, viewer, now),
           until: note?.ends_at,
           starred: preview.starred,
           hasFreshSharedLocation: false,
@@ -112,7 +118,7 @@ export function socialFriends(
         friend.availability === "available" ||
         friend.availability === "ending-soon"
           ? 4
-          : friend.beacon || friend.ping
+          : friend.currentBeacon || friend.beacon || friend.ping
             ? 3
             : friend.note
               ? 2

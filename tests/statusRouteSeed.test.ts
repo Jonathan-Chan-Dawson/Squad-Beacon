@@ -39,7 +39,9 @@ test("demo status edits preserve ID and reactions, failures roll back, future an
   data.activities=[source]; data.places=[{activity_id:source.id,label:"Desk",latitude:40,longitude:-90,online_url:null}];
   data.reactions=[{activity_id:source.id,user_id:DEMO_ID,emoji:String.fromCodePoint(0x1f64c)}];
   const original=structuredClone(data);
-  assert.throws(()=>demoAction(data,"save_status_note",{source_id:source.id,title:"",available:false}),/title|characters/i);
+  data=demoAction(data,"save_status_note",{source_id:source.id,title:"",available:false});
+  assert.ok(data.activities.some((item) => item.owner_id === DEMO_ID && item.mode === "solo" && item.title === ""), "blank Status is valid and does not insert a public placeholder");
+  data=original;
   assert.deepEqual(data,original);
   data=demoAction(data,"save_status_note",{source_id:source.id,title:"Updated note"});
   assert.equal(data.activities[0].id,source.id); assert.equal(data.reactions.length,1); assert.equal(data.places[0].latitude,40);

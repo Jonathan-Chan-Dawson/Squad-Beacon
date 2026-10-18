@@ -181,6 +181,7 @@ test("Friends filters, list position, detail/profile return and selection surviv
   await expect(
     page.getByRole("dialog", { name: "Status & activity", exact: true }),
   ).toBeVisible();
+  await page.getByRole("button", { name: "More Status actions", exact: true }).click();
   await page
     .getByRole("button", { name: "Select for planning", exact: true })
     .click();

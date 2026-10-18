@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Pressable, Switch, Text, View } from "react-native";
+import { Platform, Pressable, Switch, Text, View } from "react-native";
 import { Button, Sheet, useTheme } from "@/src/shared/ui";
 import { ActivityBadge } from "@/src/features/beacons/ActivityBadge";
 import type { MapStyle } from "./components/BeaconMap";
@@ -28,7 +28,16 @@ export function MapStyleControls({
           key={value}
           accessibilityRole="button"
           accessibilityLabel={`${value === "standard" ? "Standard" : "Satellite"} map`}
-          accessibilityState={{ selected: style === value }}
+          accessibilityState={{
+            selected: style === value,
+            disabled: Platform.OS === "web" && value === "satellite",
+          }}
+          disabled={Platform.OS === "web" && value === "satellite"}
+          accessibilityHint={
+            Platform.OS === "web" && value === "satellite"
+              ? "Satellite imagery is unavailable on web"
+              : undefined
+          }
           aria-selected={style === value}
           onPress={() => onStyle(value)}
           style={{
@@ -50,7 +59,11 @@ export function MapStyleControls({
               fontWeight: "600",
             }}
           >
-            {value === "standard" ? "Standard" : "Satellite"}
+            {value === "standard"
+              ? "Standard"
+              : Platform.OS === "web"
+                ? "Satellite · unavailable"
+                : "Satellite"}
           </Text>
         </Pressable>
       ))}

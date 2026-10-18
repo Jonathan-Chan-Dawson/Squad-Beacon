@@ -6,7 +6,15 @@ import {
   Text,
   View,
 } from "react-native";
-import { ArrowUpRight, CircleHelp, Shuffle, Vote } from "lucide-react-native";
+import {
+  ArrowUpRight,
+  Check,
+  CircleHelp,
+  Shuffle,
+  ThumbsUp,
+  Vote,
+  X,
+} from "lucide-react-native";
 import { useReducedMotion } from "@/src/shared/design-system";
 import { uiHaptics, useTheme } from "@/src/shared/ui";
 import { useNow } from "@/src/shared/useNow";
@@ -23,6 +31,8 @@ export interface PlanningCardAction {
 }
 
 interface PlanningCardBase {
+  showDeadline?: boolean;
+  embedded?: boolean;
   /** Original canonical thread identity. Counts and source must be authorized by the caller. */
   id: string;
   title: string;
@@ -64,7 +74,7 @@ function countdown(deadline: string | null | undefined, now: number) {
 }
 
 export function PlanningResponseCard(props: PlanningResponseCardProps) {
-  const { styles, colors } = useTheme();
+  const { styles, colors, semanticColors } = useTheme();
   const now = useNow();
   const reduceMotion = useReducedMotion();
   const [busy, setBusy] = useState(false);
@@ -144,37 +154,47 @@ export function PlanningResponseCard(props: PlanningResponseCardProps) {
     <Animated.View
       testID={`planning-response-${props.id}`}
       style={[
-        styles.card,
+        props.embedded ? undefined : styles.card,
         {
           gap: 10,
-          padding: props.compact ? 12 : 14,
+          padding: props.embedded ? 0 : props.compact ? 12 : 14,
           borderColor: success ? colors.green : colors.line,
           transform: [{ scale: pulse }],
         },
       ]}
     >
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`Open ${props.kind}: ${props.title}`}
-        onPress={props.onOpen}
-        style={[styles.row, { minHeight: 44 }]}
-      >
-        <Icon size={20} color={colors.green} />
-        <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
-          <Text style={[styles.body, { fontWeight: "700" }]} numberOfLines={2}>
-            {props.title}
-          </Text>
-          <Text style={styles.muted} numberOfLines={1}>
-            {props.sourceLabel}
-          </Text>
-        </View>
-        <ArrowUpRight size={17} color={colors.muted} />
-      </Pressable>
-      {remaining ? (
+      {!props.embedded && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Open ${props.kind}: ${props.title}`}
+          onPress={props.onOpen}
+          style={[styles.row, { minHeight: 44 }]}
+        >
+          <Icon size={20} color={colors.green} />
+          <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
+            <Text
+              style={[styles.body, { fontWeight: "700" }]}
+              numberOfLines={2}
+            >
+              {props.title}
+            </Text>
+            <Text style={styles.muted} numberOfLines={1}>
+              {props.sourceLabel}
+            </Text>
+          </View>
+          <ArrowUpRight size={17} color={colors.muted} />
+        </Pressable>
+      )}
+      {remaining && props.showDeadline !== false ? (
         <Text style={[styles.label, { color: colors.green }]}>{remaining}</Text>
       ) : null}
       {props.counts.length ? (
-        <Text style={styles.muted}>
+        <Text
+          style={[
+            styles.muted,
+            props.embedded && { fontSize: 12, lineHeight: 18 },
+          ]}
+        >
           {props.counts
             .map((count) => `${count.value} ${count.label}`)
             .join(" · ")}
@@ -187,11 +207,22 @@ export function PlanningResponseCard(props: PlanningResponseCardProps) {
               action.selected ||
               (props.kind !== "ping" &&
                 (successSelection ?? props.selected) === action.id);
+            const ResponseIcon =
+              props.kind === "ping"
+                ? action.id === "interested"
+                  ? ThumbsUp
+                  : action.id === "pass"
+                    ? X
+                    : CircleHelp
+                : null;
+            const ButtonIcon =
+              props.kind === "ping" && selected ? Check : ResponseIcon;
             return (
               <Pressable
                 key={action.id}
                 accessibilityRole="button"
                 accessibilityLabel={action.label}
+                aria-pressed={!!selected}
                 accessibilityState={{
                   selected: !!selected,
                   disabled: disabled || !!action.disabled,
@@ -201,21 +232,60 @@ export function PlanningResponseCard(props: PlanningResponseCardProps) {
                 onPress={() => void run(action)}
                 style={{
                   minHeight: 44,
+                  flexDirection: props.kind === "ping" ? "row" : undefined,
                   flexGrow: 1,
+                  flexBasis: props.kind === "ping" ? 0 : undefined,
+                  minWidth: props.kind === "ping" ? 76 : undefined,
                   alignItems: "center",
                   justifyContent: "center",
-                  paddingHorizontal: 9,
-                  borderRadius: 22,
+                  paddingHorizontal: props.kind === "ping" ? 6 : 9,
+                  borderRadius: props.kind === "ping" ? 11 : 22,
                   borderWidth: 1,
-                  borderColor: selected ? colors.green : colors.line,
-                  backgroundColor: selected ? colors.lime : colors.bg,
+                  borderColor: selected
+                    ? props.kind === "ping"
+                      ? semanticColors.accent
+                      : colors.green
+                    : props.kind === "ping"
+                      ? semanticColors.border
+                      : colors.line,
+                  backgroundColor:
+                    props.kind === "ping"
+                      ? selected
+                        ? semanticColors.accent
+                        : semanticColors.surfaceRaised
+                      : selected
+                        ? colors.lime
+                        : colors.bg,
                   opacity: disabled ? 0.65 : 1,
+                  ...(props.kind === "ping"
+                    ? { gap: 4, paddingVertical: 5 }
+                    : undefined),
                 }}
               >
+                {ButtonIcon ? (
+                  <ButtonIcon
+                    size={14}
+                    color={
+                      selected
+                        ? semanticColors.onAccent
+                        : semanticColors.textSecondary
+                    }
+                  />
+                ) : null}
                 <Text
                   style={[
                     styles.label,
-                    { color: selected ? colors.green : colors.ink },
+                    {
+                      color:
+                        props.kind === "ping"
+                          ? selected
+                            ? semanticColors.onAccent
+                            : semanticColors.textPrimary
+                          : selected
+                            ? colors.green
+                            : colors.ink,
+                      fontSize: props.kind === "ping" ? 12 : undefined,
+                    },
                   ]}
                 >
                   {action.label}

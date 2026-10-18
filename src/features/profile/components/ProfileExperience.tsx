@@ -26,6 +26,7 @@ import { selectProfileBeacon, type ProfileContentRow } from "../profileContent";
 import { useProfileContent } from "../useProfileContent";
 import { ProfileAlbums, openProfileBeacon } from "./ProfileAlbums";
 import { visibleSoloActivity } from "@/src/features/maps/soloActivity";
+import { StatusBubble, StatusViewer } from "@/src/features/beacons/components/feed/StatusViewer";
 import { SharedStatusControl } from "@/src/features/beacons/components/feed/SharedStatusControl";
 import {
   canViewBeaconMeetingDetails,
@@ -224,6 +225,7 @@ export function ProfileExperience({
     filter: "all",
     pageSize: 1,
   });
+  const [statusViewerOpen, setStatusViewerOpen] = useState(false);
   const status = visibleSoloActivity(data, profile.id, userId, now);
   const availability = friendAvailabilityState(status, now);
   const available = availability === "available";
@@ -301,6 +303,8 @@ export function ProfileExperience({
           <Rect width="100%" height="100%" fill="url(#profile-light)" />
         </Svg>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
+          <View style={{ alignItems: "center", gap: 6, maxWidth: "46%" }}>
+          <StatusBubble personId={profile.id} onPress={() => setStatusViewerOpen(true)} />
           <MotionPressable
             testID="profile-avatar"
             accessibilityRole="button"
@@ -318,6 +322,7 @@ export function ProfileExperience({
           >
             <ProfileAvatar profile={profile} size={88} status={availability} />
           </MotionPressable>
+          </View>
           <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
             <Text
               accessibilityRole="header"
@@ -362,7 +367,6 @@ export function ProfileExperience({
                       : availability === "ending-soon"
                         ? "Wrapping up soon"
                         : "Not available right now"}
-                    {status?.description ? ` · ${status.description}` : ""}
                   </Text>
                 </View>
               )
@@ -370,6 +374,7 @@ export function ProfileExperience({
           </View>
           {accessory}
         </View>
+        <StatusViewer personId={profile.id} visible={statusViewerOpen} onClose={() => setStatusViewerOpen(false)} />
         {!!profile.bio && (
           <MotionPressable
             accessibilityRole="button"

@@ -73,12 +73,19 @@ export function quickStatusDraft(
     throw new Error(
       "Choose valid start and end times and a duration from 5 to 1440 minutes.",
     );
+  const futureIndependent = !!source && Date.parse(source.starts_at) <= now && start > now;
   return {
-    title: source?.title || "Free to hang",
+    attachment: source?.status_attachment,
+    presentation: source?.status_presentation,
+    sharing: source?.status_sharing,
+    noteHidden: source?.status_note_hidden,
+    showCurrentBeacon: futureIndependent ? false : source?.status_show_current_beacon ?? false,
+    currentBeaconId: futureIndependent ? null : source?.status_current_beacon_id ?? null,
+    title: source?.title ?? "",
     description: source?.description,
     category: source?.category,
     available: true,
-    sourceId: source?.id,
+    sourceId: futureIndependent ? undefined : source?.id,
     audience: source?.audience ?? audience,
     audienceId: source ? source.audience_id : audienceId,
     startsAt: new Date(start).toISOString(),

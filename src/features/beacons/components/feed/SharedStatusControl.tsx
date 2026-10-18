@@ -278,7 +278,6 @@ function SharedStatusContent({
         confirm && interval ? ends : future ? source!.ends_at : undefined,
       );
       draft.available = available;
-      if (!source) draft.title = available ? "Free to hang" : "Busy";
       if (confirm) {
         draft.audience = choice.audience;
         draft.audienceId = choice.audienceId;
@@ -337,6 +336,13 @@ function SharedStatusContent({
           control.status
             ? {
                 id: control.status.id,
+                attachment: control.status.status_attachment,
+                presentation: control.status.status_presentation,
+                sharing: control.status.status_sharing,
+                noteHidden: control.status.status_note_hidden,
+                showCurrentBeacon: control.status.status_show_current_beacon,
+                currentBeaconId: control.status.status_current_beacon_id,
+                currentBeacon: control.status.status_current_beacon,
                 title: control.status.title,
                 available: control.status.available,
                 startsAt: control.status.starts_at,

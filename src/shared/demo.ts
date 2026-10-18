@@ -2,6 +2,8 @@ import { applyDemoSupplyAction, eligibleSupplyClaim } from "@/src/features/beaco
 import { validateCreationInvitees } from "@/src/features/beacons/createHandoff";
 import { applyDemoMessaging } from "@/src/features/messages/demoMessaging";
 import { statusReactionEmoji } from "@/src/features/beacons/statusReactions";
+import { eligibleStatusAttachments, type StatusAttachment, type StatusPresentation } from "@/src/features/beacons/statusAttachments";
+import { eligibleCurrentBeacons } from "@/src/features/beacons/currentStatusBeacon";
 import { canReactToSoloActivity } from "../features/maps/soloActivity";
 import { isSquadIconKey } from "@/src/features/people/squadIcons";
 import { validatePingAvailability, pingAvailabilityAllowsRsvp } from "@/src/features/planning/availability";
@@ -715,6 +717,16 @@ export function makeDemo(): Data {
   });
   addDemoMapFixtures(data, DEMO_ID, now);
   addDemoProfileFixtures(data, DEMO_ID, now);
+  // Feature existing, owned planning activities; this never creates responses.
+  for (const [owner, type, id] of [["maya", "vote", "demo-vote-weekend"], ["jordan", "ping", "demo-ping-jordan"]] as const) {
+    let note = data.activities.filter(row => row.owner_id === owner && row.mode === "solo" && row.status === "scheduled" && Date.parse(row.starts_at) <= now && Date.parse(row.ends_at) > now).sort((a,b) => b.starts_at.localeCompare(a.starts_at))[0];
+    if (!note) {
+      const base = data.activities.find(row => row.mode === "solo")!;
+      note = { ...base, id: `demo-featured-status-${owner}`, owner_id: owner, title: "Anyone down to join?", description: "", available: true, category: "Social", audience: "friends", audience_id: null, starts_at: new Date(now - 60000).toISOString(), ends_at: new Date(now + 7200000).toISOString(), status: "scheduled", goal_id: null, habit_id: null, plan_id: null, plan_step_index: null, aspiration_ids: [] };
+      data.activities.push(note);
+    }
+    if (note && data.planning_threads.some(thread => thread.id === id && thread.owner_id === owner)) { note.status_attachment = { type, id }; note.status_presentation = "text_activity"; }
+  }
   return data;
 }
 
@@ -1682,6 +1694,15 @@ function applyDemoSocialMembershipAction(
   }
 }
 
+function validateActivityWrite(p: Payload, allowBlankTitle = false) {
+  if (allowBlankTitle && typeof p.title === "string" && !p.title.trim() && p.title.length <= 120) {
+    // Reuse the common date and location checks without persisting a filler title.
+    validateActivity({ ...p, title: "_" });
+    return;
+  }
+  validateActivity(p);
+}
+
 function demoActionInner(previous: Data, action: string, p: Payload): Data {
   const d = structuredClone(previous),
     id = String(p.id ?? ""),
@@ -1708,14 +1729,30 @@ function demoActionInner(previous: Data, action: string, p: Payload): Data {
       current.forEach((item) => { item.status = "cancelled"; });
       return d;
     }
-    const source = p.source_id ? d.activities.find((item) => item.id === p.source_id && item.owner_id === uid && item.mode === "solo") : current.sort((a,b) => b.starts_at.localeCompare(a.starts_at))[0];
+    const requestedStart = p.starts_at == null ? NaN : Date.parse(String(p.starts_at));
+    const isFutureIndependent = !p.source_id && Number.isFinite(requestedStart) && requestedStart > now;
+    const source = p.source_id ? d.activities.find((item) => item.id === p.source_id && item.owner_id === uid && item.mode === "solo") : isFutureIndependent ? undefined : current.sort((a,b) => b.starts_at.localeCompare(a.starts_at))[0];
+    const futureIndependent = Number.isFinite(requestedStart) && requestedStart > now && (!source || Date.parse(source.starts_at) <= now);
     if (p.source_id && !source) throw new Error("Choose your own status note.");
+    const attachment = p.status_attachment === undefined ? source?.status_attachment ?? null : p.status_attachment as StatusAttachment | null;
+    const presentation = (p.status_presentation ?? source?.status_presentation ?? "text_only") as StatusPresentation;
+    if (!["text_only", "activity_only", "text_activity"].includes(presentation)) throw new Error("Choose a valid Status presentation.");
+    if (attachment && (attachment.id !== source?.status_attachment?.id || attachment.type !== source?.status_attachment?.type) && !eligibleStatusAttachments(d, uid, now).some(row => row.id === attachment.id && row.type === attachment.type)) throw new Error("Choose an eligible activity you own or cohost.");
+    const showCurrentBeacon = p.status_show_current_beacon === undefined ? futureIndependent ? false : source?.status_show_current_beacon ?? false : p.status_show_current_beacon;
+    if (typeof showCurrentBeacon !== "boolean") throw new Error("Choose whether to show a Current Beacon.");
+    const hasCurrentBeaconId = Object.hasOwn(p, "status_current_beacon_id");
+    const requestedCurrentBeaconId = hasCurrentBeaconId ? p.status_current_beacon_id : futureIndependent ? null : source?.status_current_beacon_id ?? null;
+    if (requestedCurrentBeaconId !== null && typeof requestedCurrentBeaconId !== "string") throw new Error("Choose a valid Current Beacon.");
+    const currentBeaconId = requestedCurrentBeaconId as string | null;
+    if (showCurrentBeacon && currentBeaconId && (futureIndependent || currentBeaconId !== source?.status_current_beacon_id) &&
+      !eligibleCurrentBeacons(d, uid, now).some((item) => item.id === currentBeaconId))
+      throw new Error("Choose a live Beacon you host, cohost, or are approved to attend.");
     const starts = p.starts_at ? Date.parse(String(p.starts_at)) : now;
     const ending = p.ends_at ? Date.parse(String(p.ends_at)) : starts <= now && source?.status === "scheduled" && Date.parse(source.ends_at) > now ? Date.parse(source.ends_at) : starts + 3600000;
     if (!Number.isFinite(starts) || !Number.isFinite(ending) || ending <= now || ending <= starts) throw new Error("Choose an end time in the future.");
     const sourcePlace = source ? d.places.find((item) => item.activity_id === source.id) : undefined;
     const value: Payload = {
-      title: source?.title ?? "Free to hang", description: source?.description ?? "", category: source?.category ?? "Social",
+      title: source?.title ?? "", description: source?.description ?? "", category: source?.category ?? "Social",
       available: source?.available ?? true, timezone: source?.timezone ?? d.profiles.find((item) => item.id === uid)?.timezone ?? "UTC",
       audience: source?.audience ?? "friends", audience_id: source?.audience_id ?? null, enable_reactions: source?.enable_reactions !== false,
       aspiration_ids: source?.aspiration_ids ?? [], label: sourcePlace?.label ?? "", latitude: sourcePlace?.latitude ?? null, longitude: sourcePlace?.longitude ?? null, online_url: sourcePlace?.online_url ?? null,
@@ -1726,7 +1763,18 @@ function demoActionInner(previous: Data, action: string, p: Payload): Data {
       value.audience === source.audience && value.audience_id === source.audience_id && value.enable_reactions === source.enable_reactions &&
       JSON.stringify(value.aspiration_ids) === JSON.stringify(source.aspiration_ids) && value.label === (sourcePlace?.label ?? "") &&
       value.latitude === (sourcePlace?.latitude ?? null) && value.longitude === (sourcePlace?.longitude ?? null) && value.online_url === (sourcePlace?.online_url ?? null);
-    let next = editable ? demoAction(d, "edit_activity", { id: source.id, title: value.title, starts_at: source.starts_at, ends_at: value.ends_at }) : demoAction(d, "create_activity", value);
+    const noteTitle = String(p.status_note_title ?? value.title ?? "");
+    if (noteTitle.length > 120) throw new Error("Keep your status title under 120 characters.");
+    const noteDescription = String(p.status_note_description ?? value.description ?? "");
+    const noteHidden = p.status_note_hidden ?? source?.status_note_hidden ?? false;
+    const statusSharing = p.status_sharing ?? source?.status_sharing ?? true;
+    const redactPublicNote = presentation === "activity_only" || noteHidden === true || statusSharing === false;
+    const safeValue = { ...value, title: redactPublicNote ? "" : noteTitle, status_note_title: noteTitle };
+    Object.assign(safeValue, { status_show_current_beacon: showCurrentBeacon, status_current_beacon_id: currentBeaconId });
+    let next = editable ? demoAction(d, "edit_activity", { id: source.id, title: safeValue.title, starts_at: source.starts_at, ends_at: value.ends_at }) : demoAction(d, "create_activity", safeValue);
+    const saved = editable ? next.activities.find(row => row.id === source.id) : next.activities.find(row => !d.activities.some(old => old.id === row.id));
+    if (!saved) throw new Error("Status could not be verified.");
+    Object.assign(saved, { title: noteTitle, description: noteDescription, status_attachment: attachment, status_presentation: presentation, status_sharing: statusSharing, status_note_hidden: noteHidden, status_show_current_beacon: showCurrentBeacon, status_current_beacon_id: currentBeaconId, own_status_note: { title: noteTitle, description: noteDescription } });
     if (starts <= now) for (const item of current.filter((item) => !editable || item.id !== source.id)) next = demoAction(next, "activity_status", { id: item.id, status: "cancelled" });
     return next;
   }
@@ -3204,7 +3252,7 @@ function demoActionInner(previous: Data, action: string, p: Payload): Data {
         d.blocks.some((row) => (row.blocker_id === uid && row.blocked_id === socialEntity?.owner_id) ||
           (row.blocked_id === uid && row.blocker_id === socialEntity?.owner_id))))
       throw new Error("Join the selected community before associating this Beacon.");
-    validateActivity(p);
+    validateActivityWrite(p, p.mode === "solo" && typeof p.status_note_title === "string");
     const defaults = defaultBeaconControlValues();
     const controls = validateBeaconControlValues({
       ...defaults,
@@ -3358,8 +3406,8 @@ function demoActionInner(previous: Data, action: string, p: Payload): Data {
   if (action === "activity_status")
     d.activities.find((x) => x.id === id)!.status = p.status as any;
   if (action === "edit_activity") {
-    validateActivity(p);
     const activity = d.activities.find((x) => x.id === id)!;
+    validateActivityWrite(p, activity.mode === "solo");
     Object.assign(activity, {
       title: p.title,
       starts_at: p.starts_at,

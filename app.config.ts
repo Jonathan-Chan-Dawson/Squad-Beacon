@@ -1,4 +1,5 @@
 import type { ConfigContext, ExpoConfig } from 'expo/config';
+
 export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: 'Squad Beacon',
@@ -12,7 +13,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
       'react-native-maps',
       {
         androidGoogleMapsApiKey:
-          process.env.GOOGLE_MAPS_ANDROID_API_KEY?.trim() ||
+          process.env.EXPO_PUBLIC_GOOGLE_MAPS_ANDROID_API_KEY?.trim() ||
           config.android?.config?.googleMaps?.apiKey,
       },
     ],
@@ -42,7 +43,8 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ],
   extra: {
     ...config.extra,
-    cartoBasemapsApiKey: process.env.CARTO_BASEMAPS_API_KEY?.trim() || undefined,
+    cartoBasemapsApiKey:
+      process.env.EXPO_PUBLIC_CARTO_BASEMAPS_API_KEY?.trim() || undefined,
     eas: { projectId: process.env.EXPO_PUBLIC_EAS_PROJECT_ID },
   },
 });

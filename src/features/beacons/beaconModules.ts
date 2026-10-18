@@ -1,6 +1,16 @@
 import { canChat } from "@/src/shared/browsing";
 import type { Activity, Data } from "@/src/shared/types";
 
+/** A readable activity need not grant access to participant tools. */
+export function canReadActivityPreview(data: Data, activity: Activity, userId: string) {
+  if (data.viewer_id != null && data.is_demo !== true) {
+    if (data.viewer_id !== userId) return false;
+    const current = data.activities.find(row => row.id === activity.id);
+    return current?.viewer_can_read ?? current?.viewer_can_access === true;
+  }
+  return canReadBeaconActivity(data, activity, userId);
+}
+
 export function beaconChecklistLabel(activity: Activity) {
   return /\bgrocer(?:y|ies)\b/i.test(activity.title)
     ? "Grocery List"
@@ -21,6 +31,7 @@ export function canReadBeaconActivity(
   activity: Activity,
   userId: string,
 ) {
+  if (activity.mode === "solo" && activity.owner_id !== userId && activity.status_sharing === false) return false;
   if (data.is_demo === true && data.viewer_id !== userId) return false;
   if (data.viewer_id != null && data.is_demo !== true) {
     if (data.viewer_id !== userId) return false;

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Platform, Pressable, Text, View } from "react-native";
+import { Platform, Pressable, ScrollView, Switch, Text, View } from "react-native";
 import {
   ChevronDown,
   Settings2,
@@ -8,8 +8,12 @@ import {
   Pencil,
   Sparkles,
   Trash2,
+  Radio,
+  CircleHelp,
+  Vote,
+  Dices,
 } from "lucide-react-native";
-import type { Audience, Category, Profile } from "@/src/shared/types";
+import type { Activity, Audience, Category, Profile } from "@/src/shared/types";
 import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
 import { useNow } from "@/src/shared/useNow";
 import {
@@ -24,8 +28,24 @@ import { AudiencePicker, Field, Sheet } from "@/src/shared/ui";
 import { radius, space, type } from "@/src/theme/data";
 import { statusEndAt, type StatusDraft } from "./statusActions";
 import { HomeAction } from "../HomeAction";
+import { NoteSpeechBubble } from "./StatusNoteBubble";
+import type {
+  StatusAttachment,
+  StatusPresentation,
+} from "../../statusAttachments";
+import { StatusAttachmentEditor } from "./StatusAttachmentEditor";
+import { useBeacon } from "@/src/shared/store";
+import { eligibleCurrentBeacons } from "../../currentStatusBeacon";
+import { BeaconIcon } from "../BeaconIcon";
 
 export type FeedStatus = {
+  attachment?: StatusAttachment | null;
+  presentation?: StatusPresentation;
+  sharing?: boolean;
+  noteHidden?: boolean;
+  showCurrentBeacon?: boolean;
+  currentBeaconId?: string | null;
+  currentBeacon?: { id: string; role: "hosting" | "cohosting" | "going" } | null;
   id: string;
   title: string;
   available?: boolean | null;
@@ -40,6 +60,164 @@ export type FeedStatus = {
 export type FeedStatusSave = StatusDraft;
 
 type DurationPreset = "hour" | "tonight" | "busy" | "custom";
+
+function CurrentBeaconStatusSetting({
+  show,
+  onShow,
+  beaconId,
+  onBeaconId,
+  chooseSpecific,
+  onChooseSpecific,
+  options,
+  disabled,
+}: {
+  show: boolean;
+  onShow(value: boolean): void;
+  beaconId: string | null;
+  onBeaconId(value: string | null): void;
+  chooseSpecific: boolean;
+  onChooseSpecific(value: boolean): void;
+  options: Activity[];
+  disabled: boolean;
+}) {
+  const { colors } = useDesignTheme();
+  const selected = options.find((activity) => activity.id === beaconId);
+  const stale = show && beaconId !== null && !selected;
+  const needsSelection =
+    show && options.length > 1 && chooseSpecific && beaconId === null;
+
+  return (
+    <View style={{ gap: 8 }}>
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 12,
+          minHeight: 48,
+        }}
+      >
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text style={{ color: colors.textPrimary }}>
+            Show My Current Beacon
+          </Text>
+          <Text style={{ color: colors.textSecondary, fontSize: 12 }}>
+            Share one Beacon you are hosting, co-hosting, or attending.
+          </Text>
+        </View>
+        <Switch
+          accessibilityLabel="Show My Current Beacon"
+          value={show}
+          disabled={disabled}
+          onValueChange={onShow}
+        />
+      </View>
+      {show ? (
+        <View style={{ gap: 8, paddingLeft: 4 }}>
+          {stale ? (
+            <View style={{ gap: 6 }}>
+              <Text style={{ color: colors.textSecondary, fontSize: 12 }}>
+                Your selected Beacon is no longer eligible. Reset it or choose an available Beacon.
+              </Text>
+              <SecondaryButton
+                compact
+                title="Use Automatically"
+                disabled={disabled}
+                onPress={() => {
+                  onBeaconId(null);
+                  onChooseSpecific(false);
+                }}
+              />
+            </View>
+          ) : null}
+          {options.length > 1 ? (
+            <>
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.xs }}>
+                <Chip
+                  label="Choose Automatically"
+                  selected={!chooseSpecific}
+                  disabled={disabled}
+                  onPress={() => {
+                    onChooseSpecific(false);
+                    onBeaconId(null);
+                  }}
+                />
+                <Chip
+                  label="Choose a Beacon"
+                  selected={chooseSpecific}
+                  disabled={disabled}
+                  onPress={() => onChooseSpecific(true)}
+                />
+              </View>
+              {chooseSpecific ? (
+                <ScrollView
+                  nestedScrollEnabled
+                  style={{ maxHeight: 184 }}
+                  contentContainerStyle={{ gap: 4 }}
+                >
+                  {options.map((activity) => {
+                    const isSelected = beaconId === activity.id;
+                    return (
+                      <Pressable
+                        key={activity.id}
+                        accessibilityRole="radio"
+                        accessibilityState={{ checked: isSelected, disabled }}
+                        accessibilityLabel={`Choose ${activity.title}`}
+                        disabled={disabled}
+                        onPress={() => onBeaconId(activity.id)}
+                        style={{
+                          minHeight: 48,
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: 8,
+                          paddingHorizontal: 8,
+                          borderRadius: 12,
+                          borderWidth: 1,
+                          borderColor: isSelected ? colors.accent : colors.border,
+                          backgroundColor: isSelected
+                            ? colors.accent + "10"
+                            : colors.surfaceRaised,
+                        }}
+                      >
+                        <BeaconIcon
+                          category={activity.category}
+                          emoji={activity.decoration_emoji}
+                          size={26}
+                        />
+                        <Text
+                          numberOfLines={1}
+                          style={{ flex: 1, color: colors.textPrimary, fontSize: 13 }}
+                        >
+                          {activity.title}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              ) : null}
+            </>
+          ) : options.length === 1 && selected ? (
+            <Text style={{ color: colors.textSecondary, fontSize: 12 }}>
+              Showing {selected.title} while you are there.
+            </Text>
+          ) : options.length === 1 && beaconId === null ? (
+            <Text style={{ color: colors.textSecondary, fontSize: 12 }}>
+              Automatically show {options[0].title} while you are there.
+            </Text>
+          ) : options.length === 0 && beaconId === null ? (
+            <Text style={{ color: colors.textSecondary, fontSize: 12 }}>
+              No eligible Beacon is happening right now.
+            </Text>
+          ) : null}
+          {needsSelection ? (
+            <Text accessibilityRole="alert" style={{ color: colors.textSecondary, fontSize: 12 }}>
+              Choose a Beacon from the list to continue.
+            </Text>
+          ) : null}
+        </View>
+      ) : null}
+    </View>
+  );
+}
 
 export type StatusPanelProps = {
   initialDraft?: StatusDraft;
@@ -93,9 +271,48 @@ export function StatusPanel({
   statusAccessory,
 }: StatusPanelProps) {
   const { colors, tokens } = useDesignTheme();
+  const { data, userId } = useBeacon();
+  const supportsAttachments =
+    data.is_demo || data.capabilities?.status_attachments === true;
+  const supportsCurrentBeacon =
+    data.is_demo || data.capabilities?.status_current_beacon === true;
   const tick = useNow();
   const now = Math.max(tick, observedNow ?? 0);
+  const currentBeaconOptions = supportsCurrentBeacon
+    ? eligibleCurrentBeacons(data, userId, now)
+    : [];
+  const seededSource = initialDraft?.sourceId
+    ? data.activities.find((activity) => activity.id === initialDraft.sourceId)
+    : undefined;
+  const seededSourceWasLive =
+    !!seededSource &&
+    Date.parse(seededSource.starts_at) <= now &&
+    Date.parse(seededSource.ends_at) > now;
+  const futureDraftFromLiveSource =
+    !status &&
+    seededSourceWasLive &&
+    !!initialDraft?.startsAt &&
+    Date.parse(initialDraft.startsAt) > now;
   const [title, setTitle] = useState(initialDraft?.title ?? "");
+  const [attachment, setAttachment] = useState<StatusAttachment | null>(
+    initialDraft?.attachment ?? null,
+  );
+  const [presentation, setPresentation] = useState<StatusPresentation>(
+    initialDraft?.presentation ?? "text_only",
+  );
+  const [sharing, setSharing] = useState(initialDraft?.sharing ?? true);
+  const [noteHidden, setNoteHidden] = useState(
+    initialDraft?.noteHidden ?? false,
+  );
+  const [showCurrentBeacon, setShowCurrentBeacon] = useState(
+    futureDraftFromLiveSource ? false : initialDraft?.showCurrentBeacon ?? false,
+  );
+  const [currentBeaconId, setCurrentBeaconId] = useState<string | null>(
+    futureDraftFromLiveSource ? null : initialDraft?.currentBeaconId ?? null,
+  );
+  const [chooseSpecificCurrentBeacon, setChooseSpecificCurrentBeacon] =
+    useState(!futureDraftFromLiveSource && !!initialDraft?.currentBeaconId);
+  const [picking, setPicking] = useState(false);
   const [description, setDescription] = useState(
     initialDraft?.description ?? "",
   );
@@ -108,7 +325,7 @@ export function StatusPanel({
   const [audienceId, setAudienceId] = useState<string | null>(
     initialDraft?.audienceId ?? null,
   );
-  const [noteOpen, setNoteOpen] = useState(true);
+  const [settingsOpen, setSettingsOpen] = useState(advanced);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [available, setAvailable] = useState(initialDraft?.available ?? true);
   const [preset, setPreset] = useState<DurationPreset>("custom");
@@ -116,9 +333,16 @@ export function StatusPanel({
   const [preservedEndsAt, setPreservedEndsAt] = useState<string | null>(
     initialDraft?.endsAt ?? null,
   );
-  const [titleTouched, setTitleTouched] = useState(!!initialDraft?.title);
   const [localError, setLocalError] = useState("");
   const [startsAt, setStartsAt] = useState(initialDraft?.startsAt ?? "");
+  const [sourceWasLiveAtEdit, setSourceWasLiveAtEdit] = useState(() => {
+    const sourceId = status?.id ?? initialDraft?.sourceId;
+    const source = data.activities.find((activity) => activity.id === sourceId);
+    const sourceStartsAt = status?.startsAt ?? source?.starts_at;
+    const sourceEndsAt = status?.endsAt ?? source?.ends_at;
+    return !!sourceStartsAt && !!sourceEndsAt &&
+      Date.parse(sourceStartsAt) <= now && Date.parse(sourceEndsAt) > now;
+  });
   const [timezone, setTimezone] = useState(initialDraft?.timezone ?? "UTC");
   const [placeLabel, setPlaceLabel] = useState(initialDraft?.label ?? "");
   const [latitude, setLatitude] = useState(
@@ -162,19 +386,58 @@ export function StatusPanel({
       : remainingPartMinutes === 0
         ? `${remainingHours} hr${remainingHours === 1 ? "" : "s"} remaining`
         : `${remainingHours} hr${remainingHours === 1 ? "" : "s"} ${remainingPartMinutes} min remaining`;
+  const noteText =
+    status &&
+    status.sharing !== false &&
+    !status.noteHidden &&
+    status.presentation !== "activity_only"
+      ? status.title.trim()
+      : "";
+  const selectedCurrentBeacon = currentBeaconOptions.find(
+    (activity) => activity.id === currentBeaconId,
+  );
+  const staleCurrentBeacon =
+    supportsCurrentBeacon &&
+    showCurrentBeacon &&
+    currentBeaconId !== null &&
+    !selectedCurrentBeacon;
+  const needsCurrentBeaconSelection =
+    supportsCurrentBeacon &&
+    showCurrentBeacon &&
+    currentBeaconOptions.length > 1 &&
+    chooseSpecificCurrentBeacon &&
+    currentBeaconId === null;
 
   const initializeEditor = (editingStatus: FeedStatus | null) => {
     const current = Date.now();
     setTitle(editingStatus?.title ?? "");
+    setAttachment(editingStatus?.attachment ?? null);
+    setPresentation(editingStatus?.presentation ?? "text_only");
+    setSharing(editingStatus?.sharing ?? true);
+    setNoteHidden(editingStatus?.noteHidden ?? false);
+    setShowCurrentBeacon(editingStatus?.showCurrentBeacon ?? false);
+    setCurrentBeaconId(editingStatus?.currentBeaconId ?? null);
+    setChooseSpecificCurrentBeacon(!!editingStatus?.currentBeaconId);
+    const sourceId = editingStatus?.id ?? initialDraft?.sourceId;
+    const source = data.activities.find((activity) => activity.id === sourceId);
+    const sourceStartsAt = editingStatus?.startsAt ?? source?.starts_at;
+    const sourceEndsAt = editingStatus?.endsAt ?? source?.ends_at;
+    setSourceWasLiveAtEdit(
+      !!sourceStartsAt &&
+        !!sourceEndsAt &&
+        Date.parse(sourceStartsAt) <= current &&
+        Date.parse(sourceEndsAt) > current,
+    );
+    setStartsAt(editingStatus?.startsAt ?? initialDraft?.startsAt ?? "");
+    setPicking(false);
     setDescription(editingStatus?.description ?? "");
     setCategory(editingStatus?.category ?? "Social");
     setAudience(editingStatus?.audience ?? "friends");
     setAudienceId(editingStatus?.audienceId ?? null);
-    setNoteOpen(true);
+    setSettingsOpen(advanced);
     setDetailsOpen(false);
     setAvailable(editingStatus?.available ?? true);
     setPreset("custom");
-    setTitleTouched(!!editingStatus?.title);
     const endAt = editingStatus ? Date.parse(editingStatus.endsAt) : NaN;
     const duration = Number.isFinite(endAt)
       ? Math.ceil((endAt - current) / 60_000)
@@ -186,6 +449,14 @@ export function StatusPanel({
         : null,
     );
     setLocalError("");
+  };
+
+  const beginAttach = () => {
+    initializeEditor(status);
+    setPicking(true);
+    if (status) onEdit();
+    else onCreate();
+    void uiHaptics.light();
   };
 
   const beginCreate = () => {
@@ -213,7 +484,6 @@ export function StatusPanel({
 
   const chooseAvailability = (next: boolean) => {
     setAvailable(next);
-    if (!titleTouched) setTitle(next ? "Free to hang" : "Busy");
     setLocalError("");
     void uiHaptics.light();
   };
@@ -221,9 +491,13 @@ export function StatusPanel({
   const save = async () => {
     setLocalError("");
     try {
-      const presetTitle = available ? "Free to hang" : "Busy";
       await onSave({
-        title: title.trim() || presetTitle,
+        title: title.trim(),
+        attachment,
+        presentation,
+        sharing,
+        noteHidden,
+        ...(supportsCurrentBeacon ? { showCurrentBeacon, currentBeaconId } : {}),
         available,
         endsAt: statusEndAt(
           preset,
@@ -309,7 +583,7 @@ export function StatusPanel({
             {saving
               ? "Saving…"
               : status
-                ? `${Date.parse(status.startsAt) > now ? "Scheduled" : Date.parse(status.endsAt) <= now ? "Ended" : status.available ? "Available" : "Unavailable"} · ${status.title}`
+                ? `${Date.parse(status.startsAt) > now ? "Scheduled" : Date.parse(status.endsAt) <= now ? "Ended" : status.available ? "Available" : "Unavailable"}`
                 : "Set your availability"}
           </Text>
           <ChevronDown size={13} color={colors.textSecondary} />
@@ -351,107 +625,154 @@ export function StatusPanel({
         <View
           testID="compact-own-status"
           style={{
-            minHeight: 64,
-            paddingHorizontal: 10,
-            paddingVertical: 6,
-            gap: 0,
+            padding: 10,
+            gap: 4,
             borderWidth: 1,
-            borderColor: status ? colors.border : colors.accent,
+            borderColor: colors.border,
             backgroundColor: colors.surface,
-            borderRadius: 14,
+            borderRadius: 16,
           }}
         >
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-            <HomeAction
-              label="Status settings"
-              disabled={saving}
-              onPress={onQuickOptions ?? beginEdit}
-              plain
-              icon={<Settings2 size={18} color={colors.textSecondary} />}
-            />
-            <Pressable
-              accessibilityRole="button"
-              disabled={saving}
-              accessibilityLabel={
-                status ? "Edit your status note" : "Add a status note"
-              }
-              onPress={status ? beginEdit : beginCreate}
+          <View
+            style={{
+              flexDirection: "row",
+              flexWrap: "wrap",
+              alignItems: "center",
+              gap: 6,
+            }}
+          >
+            <View
               style={{
                 flex: 1,
-                minWidth: 0,
-                minHeight: 44,
-                justifyContent: "center",
-                gap: 1,
+                minWidth: 140,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 6,
               }}
             >
-              <Text
-                style={{
-                  color: colors.textPrimary,
-                  fontSize: 13,
-                  lineHeight: 18,
-                  fontWeight: "500",
-                }}
-              >
-                Your Status
-              </Text>
-              <Text
-                numberOfLines={1}
-                style={{
-                  color: status ? colors.textSecondary : colors.accent,
-                  fontSize: 12,
-                  lineHeight: 16,
-                }}
-              >
-                {status?.title || "Add a note…"}
-              </Text>
-            </Pressable>
-            <View ref={availabilityAnchorRef} collapsable={false}>
               <HomeAction
-                title={
-                  saving
-                    ? "Saving…"
-                    : status
-                      ? Date.parse(status.startsAt) > now
-                        ? "Scheduled"
-                        : status.available
-                          ? "Available"
-                          : "Busy"
-                      : "Not sharing"
-                }
-                label="Availability choices"
-                primary={!!status?.available}
-                disabled={saving}
-                onPress={onAvailability ?? onQuick ?? beginCreate}
+                label="Attach Activity"
+                disabled={saving || !supportsAttachments}
+                onPress={beginAttach}
+                plain
                 icon={
-                  <ChevronDown
-                    size={14}
-                    color={
-                      status?.available ? colors.onAccent : colors.textSecondary
-                    }
-                  />
+                  status?.attachment?.type === "ping" ? (
+                    <CircleHelp size={22} color={colors.accent} />
+                  ) : status?.attachment?.type === "vote" ? (
+                    <Vote size={22} color={colors.accent} />
+                  ) : status?.attachment?.type === "draw" ? (
+                    <Dices size={22} color={colors.accent} />
+                  ) : (
+                    <Radio size={22} color={colors.accent} />
+                  )
                 }
-                testID="availability-dropdown"
+              />
+              <Pressable
+                accessibilityRole="button"
+                disabled={saving}
+                accessibilityLabel={
+                  status ? "Edit your status note" : "Add a status note"
+                }
+                onPress={status ? beginEdit : beginCreate}
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  minHeight: 44,
+                  alignItems: "center",
+                  gap: 3,
+                }}
+              >
+                {!noteText ? (
+                  <Text style={{ color: colors.textSecondary, fontSize: 12 }}>
+                    {status?.sharing === false ? "Sharing paused" : status?.noteHidden ? "Note hidden" : "Edit note"}
+                  </Text>
+                ) : <NoteSpeechBubble compact>
+                  <Text
+                    numberOfLines={2}
+                    style={{
+                      color: colors.textPrimary,
+                      fontSize: 13,
+                      lineHeight: 18,
+                    }}
+                  >
+                    {noteText}
+                  </Text>
+                </NoteSpeechBubble>}
+                {profile && <ProfileAvatar profile={profile} size={28} />}
+              </Pressable>
+            </View>
+            <View
+              style={{
+                flexDirection: "row",
+                flexWrap: "wrap",
+                alignItems: "center",
+                marginLeft: "auto",
+                gap: 4,
+              }}
+            >
+              <View ref={availabilityAnchorRef} collapsable={false}>
+                <HomeAction
+                  title={
+                    saving
+                      ? "Saving…"
+                      : status
+                        ? Date.parse(status.startsAt) > now
+                          ? "Scheduled"
+                          : status.sharing === false
+                            ? "Paused"
+                            : status.available
+                              ? "Available"
+                              : "Busy"
+                        : "Not sharing"
+                  }
+                  label="Availability choices"
+                  primary={!!status?.available && status.sharing !== false}
+                  disabled={saving}
+                  onPress={onAvailability ?? onQuick ?? beginCreate}
+                  icon={
+                    <ChevronDown
+                      size={14}
+                      color={
+                        status?.available
+                          ? colors.onAccent
+                          : colors.textSecondary
+                      }
+                    />
+                  }
+                  testID="availability-dropdown"
+                />
+              </View>
+              {statusAccessory}
+              <HomeAction
+                label="Status options"
+                disabled={saving}
+                onPress={status ? beginEdit : beginCreate}
+                plain
+                icon={<Settings2 size={18} color={colors.textSecondary} />}
               />
             </View>
           </View>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Text
-                style={{
-                  color: colors.textSecondary,
-                  fontSize: 11,
-                  lineHeight: 16,
-                  fontWeight: "400",
-                }}
-              >
-                {quickHint}
-                {status
-                  ? ` · ${Date.parse(status.startsAt) > now ? `From ${new Date(status.startsAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })} · Until ${new Date(status.endsAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}` : `Until ${timeLabel}`}`
-                  : ""}
-              </Text>
-            </View>
-            {statusAccessory}
-          </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Status settings"
+            onPress={onQuickOptions ?? beginEdit}
+            style={{ minHeight: 32, justifyContent: "center" }}
+            hitSlop={6}
+          >
+            <Text
+              numberOfLines={2}
+              style={{
+                color: colors.textSecondary,
+                fontSize: 11,
+                lineHeight: 16,
+              }}
+            >
+              {quickHint}
+              {status
+                ? ` · ${Date.parse(status.startsAt) > now ? `From ${new Date(status.startsAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })} · Until ${new Date(status.endsAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}` : `Until ${timeLabel}`}`
+                : ""}
+            </Text>
+          </Pressable>
         </View>
       ) : (
         <Card style={{ gap: space.md, padding: space.md }}>
@@ -485,12 +806,14 @@ export function StatusPanel({
                 numberOfLines={2}
                 style={{ color: colors.textPrimary, ...type.headline }}
               >
-                {status?.title ||
+                {noteText ||
                   (status
-                    ? status.available
-                      ? "Free to hang"
-                      : "Busy"
-                    : "What are you up to?")}
+                    ? status.sharing === false
+                      ? "Sharing paused"
+                      : status.noteHidden
+                        ? "Note hidden"
+                        : "No note shared"
+                    : "Share a note or Current Beacon")}
               </Text>
             </View>
             {status ? (
@@ -615,90 +938,193 @@ export function StatusPanel({
         centered={Platform.OS === "web"}
         maxHeightPercent={90}
         footer={
-          <PrimaryButton
-            title="Save Status"
-            loading={saving}
-            disabled={saving}
-            onPress={() => void save()}
-          />
+          !picking ? (
+            <PrimaryButton
+              title="Save Status"
+              loading={saving}
+              disabled={saving || staleCurrentBeacon || needsCurrentBeaconSelection}
+              onPress={() => void save()}
+            />
+          ) : undefined
         }
       >
         <View style={{ gap: space.md }}>
-          <View
-            accessibilityRole="radiogroup"
-            accessibilityLabel="Availability"
-            style={{ flexDirection: "row", gap: space.sm }}
-          >
-            {[true, false].map((choice) => {
-              const selected = available === choice;
-              const choiceToken =
-                tokens.availability[choice ? "available" : "unavailable"];
-              const Icon = choiceToken.icon;
-              return (
-                <Pressable
-                  key={String(choice)}
-                  accessibilityRole="radio"
-                  aria-checked={selected}
-                  accessibilityState={{ checked: selected, disabled: saving }}
-                  accessibilityLabel={choice ? "Available" : "Busy"}
-                  disabled={saving}
-                  onPress={() => chooseAvailability(choice)}
-                  style={({ pressed }) => ({
-                    flex: 1,
-                    minHeight: 76,
-                    borderRadius: radius.md,
-                    borderWidth: 1,
-                    borderColor: selected ? choiceToken.color : colors.border,
-                    backgroundColor: selected
-                      ? choiceToken.color + "15"
-                      : colors.surfaceRaised,
-                    padding: space.md,
-                    gap: 6,
-                    opacity: pressed ? 0.75 : 1,
-                  })}
-                >
-                  <Icon
-                    size={22}
-                    color={selected ? choiceToken.color : colors.textSecondary}
-                  />
-                  <Text style={{ color: colors.textPrimary, ...type.headline }}>
-                    {choice ? "Available" : "Busy"}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-          <SecondaryButton
-            compact
-            disabled={saving}
-            title={
-              noteOpen
-                ? "Hide Activity Note"
-                : status
-                  ? "Edit Activity Note"
-                  : "Add Activity Note"
-            }
-            onPress={() => setNoteOpen((current) => !current)}
-          />
-          {noteOpen ? (
-            <View style={{ gap: space.sm }}>
+          {!picking && (
+            <View style={{ gap: 6, alignItems: "center" }}>
+              <NoteSpeechBubble>
               <Field
                 label="Activity Note"
                 value={title}
-                onChangeText={(value) => {
-                  setTitle(value);
-                  setTitleTouched(true);
-                }}
-                placeholder={
-                  available
-                    ? "Free for a walk or coffee"
-                    : "Taking a quiet night"
-                }
+                onChangeText={setTitle}
                 maxLength={120}
                 multiline
                 style={{ minHeight: 92, fontSize: 19, lineHeight: 27 }}
                 editable={!saving}
               />
+              </NoteSpeechBubble>
+              {profile && <ProfileAvatar profile={profile} size={44} />}
+            </View>
+          )}
+          <StatusAttachmentEditor
+            attachment={attachment}
+            presentation={presentation}
+            disabled={saving}
+            picking={picking}
+            onPicking={setPicking}
+            onAttachment={(value) => {
+              setAttachment(value);
+              if (value && !attachment)
+                setPresentation(
+                  title.trim() ? "text_activity" : "activity_only",
+                );
+            }}
+            onPresentation={setPresentation}
+          />
+          {!picking && supportsCurrentBeacon ? (
+            <CurrentBeaconStatusSetting
+              show={showCurrentBeacon}
+              onShow={setShowCurrentBeacon}
+              beaconId={currentBeaconId}
+              onBeaconId={setCurrentBeaconId}
+              chooseSpecific={chooseSpecificCurrentBeacon}
+              onChooseSpecific={setChooseSpecificCurrentBeacon}
+              options={currentBeaconOptions}
+              disabled={saving}
+            />
+          ) : null}
+          {!picking && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Status audience, timing and privacy"
+              accessibilityState={{ expanded: settingsOpen }}
+              onPress={() => setSettingsOpen((value) => !value)}
+              style={{
+                minHeight: 44,
+                justifyContent: "center",
+                borderTopWidth: 1,
+                borderTopColor: colors.border,
+                paddingTop: 8,
+              }}
+            >
+              <Text style={{ color: colors.textSecondary, fontSize: 12 }}>
+                {available ? "Available" : "Busy"} ·{" "}
+                {audience === "friends"
+                  ? "Friends"
+                  : audience === "private"
+                    ? "Only me"
+                    : "Selected audience"}{" "}
+                ·{" "}
+                {preservedEndsAt
+                  ? `Until ${new Date(preservedEndsAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`
+                  : `${customMinutes} min`}{" "}
+                · {settingsOpen ? "Fewer settings" : "Settings"}
+              </Text>
+            </Pressable>
+          )}
+          <View
+            style={{
+              display: !picking && settingsOpen ? "flex" : "none",
+              gap: space.md,
+            }}
+          >
+            {supportsAttachments && (
+              <View style={{ gap: 8 }}>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 12,
+                    minHeight: 44,
+                  }}
+                >
+                  <Text style={{ flex: 1, color: colors.textPrimary }}>
+                    Share Status
+                  </Text>
+                  <Switch
+                    accessibilityLabel="Share Status"
+                    value={sharing}
+                    disabled={saving}
+                    onValueChange={setSharing}
+                  />
+                </View>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 12,
+                    minHeight: 44,
+                  }}
+                >
+                  <Text style={{ flex: 1, color: colors.textPrimary }}>
+                    Show Note & Featured Activity
+                  </Text>
+                  <Switch
+                    accessibilityLabel="Show Note and Featured Activity"
+                    value={!noteHidden}
+                    disabled={saving}
+                    onValueChange={(value) => setNoteHidden(!value)}
+                  />
+                </View>
+                <Text style={{ color: colors.textSecondary, fontSize: 12 }}>
+                  {!sharing
+                    ? "Sharing is paused. Your note, featured activity, and Current Beacon are hidden."
+                    : noteHidden
+                      ? showCurrentBeacon
+                        ? "Availability and Current Beacon stay shared. The note and featured activity are hidden."
+                        : "Availability stays shared. The note and featured activity are hidden."
+                      : "Preview updates here. Save publishes your changes."}
+                </Text>
+              </View>
+            )}
+            <View
+              accessibilityRole="radiogroup"
+              accessibilityLabel="Availability"
+              style={{ flexDirection: "row", gap: space.sm }}
+            >
+              {[true, false].map((choice) => {
+                const selected = available === choice;
+                const choiceToken =
+                  tokens.availability[choice ? "available" : "unavailable"];
+                const Icon = choiceToken.icon;
+                return (
+                  <Pressable
+                    key={String(choice)}
+                    accessibilityRole="radio"
+                    aria-checked={selected}
+                    accessibilityState={{ checked: selected, disabled: saving }}
+                    accessibilityLabel={choice ? "Available" : "Busy"}
+                    disabled={saving}
+                    onPress={() => chooseAvailability(choice)}
+                    style={({ pressed }) => ({
+                      flex: 1,
+                      minHeight: 76,
+                      borderRadius: radius.md,
+                      borderWidth: 1,
+                      borderColor: selected ? choiceToken.color : colors.border,
+                      backgroundColor: selected
+                        ? choiceToken.color + "15"
+                        : colors.surfaceRaised,
+                      padding: space.md,
+                      gap: 6,
+                      opacity: pressed ? 0.75 : 1,
+                    })}
+                  >
+                    <Icon
+                      size={22}
+                      color={
+                        selected ? choiceToken.color : colors.textSecondary
+                      }
+                    />
+                    <Text
+                      style={{ color: colors.textPrimary, ...type.headline }}
+                    >
+                      {choice ? "Available" : "Busy"}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <View style={{ gap: space.sm }}>
               <SecondaryButton
                 compact
                 title={
@@ -748,21 +1174,68 @@ export function StatusPanel({
                 </View>
               ) : null}
             </View>
-          ) : null}
-          <View style={{ gap: space.sm }}>
-            <Text style={{ color: colors.textSecondary, ...type.secondary }}>
-              Visibility
-            </Text>
-            {advanced ? (
-              <AudiencePicker
-                value={audience}
-                id={audienceId}
-                onChange={(value, id) => {
-                  setAudience(value);
-                  setAudienceId(id);
+            <View style={{ gap: space.sm }}>
+              <Text style={{ color: colors.textSecondary, ...type.secondary }}>
+                Visibility
+              </Text>
+              {advanced ? (
+                <AudiencePicker
+                  value={audience}
+                  id={audienceId}
+                  onChange={(value, id) => {
+                    setAudience(value);
+                    setAudienceId(id);
+                  }}
+                />
+              ) : (
+                <View
+                  style={{
+                    flexDirection: "row",
+                    flexWrap: "wrap",
+                    gap: space.xs,
+                  }}
+                >
+                  <Chip
+                    label="Friends"
+                    selected={audience === "friends"}
+                    onPress={() => {
+                      setAudience("friends");
+                      setAudienceId(null);
+                    }}
+                  />
+                  <Chip
+                    label="Only me"
+                    selected={audience === "private"}
+                    onPress={() => {
+                      setAudience("private");
+                      setAudienceId(null);
+                    }}
+                  />
+                  {status?.audience &&
+                  status.audience !== "friends" &&
+                  status.audience !== "private" ? (
+                    <Chip
+                      label="Existing audience"
+                      selected={audience === status.audience}
+                      onPress={() => {
+                        setAudience(status.audience!);
+                        setAudienceId(status.audienceId ?? null);
+                      }}
+                    />
+                  ) : null}
+                </View>
+              )}
+            </View>
+            <View style={{ gap: space.xs }}>
+              <Text
+                style={{
+                  color: colors.textSecondary,
+                  ...type.secondary,
+                  fontWeight: "600",
                 }}
-              />
-            ) : (
+              >
+                Duration
+              </Text>
               <View
                 style={{
                   flexDirection: "row",
@@ -771,183 +1244,154 @@ export function StatusPanel({
                 }}
               >
                 <Chip
-                  label="Friends"
-                  selected={audience === "friends"}
-                  onPress={() => {
-                    setAudience("friends");
-                    setAudienceId(null);
-                  }}
+                  label="1 Hour"
+                  selected={preset === "hour"}
+                  disabled={saving}
+                  onPress={() => choosePreset("hour")}
                 />
                 <Chip
-                  label="Only me"
-                  selected={audience === "private"}
-                  onPress={() => {
-                    setAudience("private");
-                    setAudienceId(null);
-                  }}
+                  label="Tonight"
+                  selected={preset === "tonight"}
+                  disabled={saving}
+                  onPress={() => choosePreset("tonight")}
                 />
-                {status?.audience &&
-                status.audience !== "friends" &&
-                status.audience !== "private" ? (
-                  <Chip
-                    label="Existing audience"
-                    selected={audience === status.audience}
-                    onPress={() => {
-                      setAudience(status.audience!);
-                      setAudienceId(status.audienceId ?? null);
-                    }}
-                  />
-                ) : null}
+                <Chip
+                  label="Custom"
+                  selected={preset === "custom"}
+                  disabled={saving}
+                  onPress={() => choosePreset("custom")}
+                />
               </View>
-            )}
-          </View>
-          <View style={{ gap: space.xs }}>
-            <Text
-              style={{
-                color: colors.textSecondary,
-                ...type.secondary,
-                fontWeight: "600",
-              }}
-            >
-              Duration
-            </Text>
-            <View
-              style={{ flexDirection: "row", flexWrap: "wrap", gap: space.xs }}
-            >
-              <Chip
-                label="1 Hour"
-                selected={preset === "hour"}
-                disabled={saving}
-                onPress={() => choosePreset("hour")}
-              />
-              <Chip
-                label="Tonight"
-                selected={preset === "tonight"}
-                disabled={saving}
-                onPress={() => choosePreset("tonight")}
-              />
-              <Chip
-                label="Custom"
-                selected={preset === "custom"}
-                disabled={saving}
-                onPress={() => choosePreset("custom")}
-              />
             </View>
-          </View>
-          {preset === "custom" ? (
-            <Field
-              label="Duration in minutes (5 to 1440)"
-              value={customMinutes}
-              onChangeText={(value) => {
-                setCustomMinutes(value);
-                setPreservedEndsAt(null);
-              }}
-              keyboardType="number-pad"
-              maxLength={4}
-            />
-          ) : null}
-          {advanced && detailsOpen ? (
-            <View style={{ gap: space.sm }}>
+            {preset === "custom" ? (
               <Field
-                label="Starts at (ISO date/time with offset)"
-                value={startsAt}
-                onChangeText={setStartsAt}
-                editable={!saving}
-              />
-              <Field
-                label="Ends at (ISO date/time with offset)"
-                value={preservedEndsAt ?? ""}
+                label="Duration in minutes (5 to 1440)"
+                value={customMinutes}
                 onChangeText={(value) => {
-                  setPreset("custom");
-                  setPreservedEndsAt(value);
+                  setCustomMinutes(value);
+                  setPreservedEndsAt(null);
                 }}
-                editable={!saving}
+                keyboardType="number-pad"
+                maxLength={4}
               />
-              <Field
-                label="Timezone"
-                value={timezone}
-                onChangeText={setTimezone}
-                editable={!saving}
-              />
-              <Field
-                label="Place label"
-                value={placeLabel}
-                onChangeText={setPlaceLabel}
-                editable={!saving}
-              />
-              <Field
-                label="Latitude (optional)"
-                value={latitude}
-                onChangeText={setLatitude}
-                editable={!saving}
-              />
-              <Field
-                label="Longitude (optional)"
-                value={longitude}
-                onChangeText={setLongitude}
-                editable={!saving}
-              />
-              <Field
-                label="Online destination (optional)"
-                value={onlineUrl}
-                onChangeText={setOnlineUrl}
-                editable={!saving}
-              />
-            </View>
-          ) : null}
-          {localError || error ? (
-            <Text
-              accessibilityRole="alert"
-              accessibilityLiveRegion="polite"
-              style={{ color: colors.danger, ...type.secondary }}
-            >
+            ) : null}
+            {advanced && detailsOpen ? (
+              <View style={{ gap: space.sm }}>
+                <Field
+                  label="Starts at (ISO date/time with offset)"
+                  value={startsAt}
+                    onChangeText={(value) => {
+                      setStartsAt(value);
+                      if (sourceWasLiveAtEdit && Date.parse(value) > Date.now()) {
+                        setShowCurrentBeacon(false);
+                        setCurrentBeaconId(null);
+                        setChooseSpecificCurrentBeacon(false);
+                      }
+                    }}
+                  editable={!saving}
+                />
+                <Field
+                  label="Ends at (ISO date/time with offset)"
+                  value={preservedEndsAt ?? ""}
+                  onChangeText={(value) => {
+                    setPreset("custom");
+                    setPreservedEndsAt(value);
+                  }}
+                  editable={!saving}
+                />
+                <Field
+                  label="Timezone"
+                  value={timezone}
+                  onChangeText={setTimezone}
+                  editable={!saving}
+                />
+                <Field
+                  label="Place label"
+                  value={placeLabel}
+                  onChangeText={setPlaceLabel}
+                  editable={!saving}
+                />
+                <Field
+                  label="Latitude (optional)"
+                  value={latitude}
+                  onChangeText={setLatitude}
+                  editable={!saving}
+                />
+                <Field
+                  label="Longitude (optional)"
+                  value={longitude}
+                  onChangeText={setLongitude}
+                  editable={!saving}
+                />
+                <Field
+                  label="Online destination (optional)"
+                  value={onlineUrl}
+                  onChangeText={setOnlineUrl}
+                  editable={!saving}
+                />
+              </View>
+            ) : null}
+            {localError || error ? (
+              <Text
+                accessibilityRole="alert"
+                accessibilityLiveRegion="polite"
+                style={{ color: colors.danger, ...type.secondary }}
+              >
+                {localError || error}
+              </Text>
+            ) : null}
+            {status ? (
+              <View style={{ flexDirection: "row", gap: space.sm }}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Clear Status"
+                  disabled={saving}
+                  onPress={() => void clear()}
+                  style={({ pressed }) => ({
+                    flex: 1,
+                    minHeight: 44,
+                    flexDirection: "row",
+                    gap: 7,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    opacity: saving || pressed ? 0.6 : 1,
+                  })}
+                >
+                  <Trash2 size={16} color={colors.textSecondary} />
+                  <Text
+                    style={{ color: colors.textSecondary, ...type.caption }}
+                  >
+                    Clear Status
+                  </Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Create Beacon from Status"
+                  disabled={saving}
+                  onPress={onConvert}
+                  style={({ pressed }) => ({
+                    flex: 1,
+                    minHeight: 44,
+                    flexDirection: "row",
+                    gap: 7,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    opacity: saving || pressed ? 0.6 : 1,
+                  })}
+                >
+                  <Sparkles size={16} color={colors.accent} />
+                  <Text style={{ color: colors.accent, ...type.caption }}>
+                    Create Beacon
+                  </Text>
+                </Pressable>
+              </View>
+            ) : null}
+          </View>
+          {!settingsOpen && !!(localError || error) && (
+            <Text accessibilityRole="alert" style={{ color: colors.danger }}>
               {localError || error}
             </Text>
-          ) : null}
-          {status ? (
-            <View style={{ flexDirection: "row", gap: space.sm }}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Clear Status"
-                disabled={saving}
-                onPress={() => void clear()}
-                style={({ pressed }) => ({
-                  flex: 1,
-                  minHeight: 44,
-                  flexDirection: "row",
-                  gap: 7,
-                  alignItems: "center",
-                  justifyContent: "center",
-                  opacity: saving || pressed ? 0.6 : 1,
-                })}
-              >
-                <Trash2 size={16} color={colors.textSecondary} />
-                <Text style={{ color: colors.textSecondary, ...type.caption }}>
-                  Clear Status
-                </Text>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Create Beacon from Status"
-                disabled={saving}
-                onPress={onConvert}
-                style={({ pressed }) => ({
-                  flex: 1,
-                  minHeight: 44,
-                  flexDirection: "row",
-                  gap: 7,
-                  alignItems: "center",
-                  justifyContent: "center",
-                  opacity: saving || pressed ? 0.6 : 1,
-                })}
-              >
-                <Sparkles size={16} color={colors.accent} />
-                <Text style={{ color: colors.accent, ...type.caption }}>
-                  Create Beacon
-                </Text>
-              </Pressable>
-            </View>
-          ) : null}
+          )}
         </View>
       </Sheet>
     </>

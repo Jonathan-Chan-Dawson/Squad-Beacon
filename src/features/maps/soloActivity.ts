@@ -1,5 +1,5 @@
 import type { Activity, Data } from "@/src/shared/types";
-import { canReadBeaconActivity } from "@/src/features/beacons/beaconModules";
+import { canReadActivityPreview } from "@/src/features/beacons/beaconModules";
 
 export function visibleSoloActivity(
   data: Data,
@@ -16,7 +16,7 @@ export function visibleSoloActivity(
         activity.status === "scheduled" &&
         Date.parse(activity.starts_at) <= now &&
         Date.parse(activity.ends_at) > now &&
-        canReadBeaconActivity(data, activity, viewerId),
+        canReadActivityPreview(data, activity, viewerId),
     )
     .sort((left, right) => right.starts_at.localeCompare(left.starts_at))[0];
 }
@@ -31,10 +31,12 @@ export function canReactToSoloActivity(
     !!viewerId &&
     data.viewer_id === viewerId &&
     activity.mode === "solo" &&
+    activity.status_sharing !== false &&
+    !activity.status_note_hidden &&
     activity.status === "scheduled" &&
     activity.enable_reactions !== false &&
     Date.parse(activity.starts_at) <= now &&
     Date.parse(activity.ends_at) > now &&
-    canReadBeaconActivity(data, activity, viewerId)
+    canReadActivityPreview(data, activity, viewerId)
   );
 }

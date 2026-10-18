@@ -4,7 +4,6 @@ import { router } from "expo-router";
 import {
   Check,
   Plus,
-  ChevronRight,
   Radio,
   Radar,
   X,
@@ -13,12 +12,12 @@ import {
 import { HomeAction } from "../HomeAction";
 import { BeaconIcon } from "../BeaconIcon";
 import { useDesignTheme } from "@/src/shared/design-system";
-import { Button, Field, Sheet, Txt } from "@/src/shared/ui";
+import { Button, Field, Txt } from "@/src/shared/ui";
 import { useBeacon } from "@/src/shared/store";
 import { usePreferences } from "@/src/shared/preferences";
 import { useNow } from "@/src/shared/useNow";
 import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
-import { StatusReactionPicker } from "./StatusReactionPicker";
+import { StatusViewer } from "./StatusViewer";
 import {
   availabilityLabel,
   filterSocialFriends,
@@ -40,7 +39,6 @@ export function useSocialFriendsController({
 } = {}) {
   const { colors, tokens } = useDesignTheme();
   const { data, userId, loading } = useBeacon();
-  const { showAvatars } = usePreferences();
   const now = useNow();
   const friends = useMemo(
     () => socialFriends(data, userId, now),
@@ -227,128 +225,9 @@ export function useSocialFriendsController({
     />
   );
   const detailSheet = (
-    <Sheet
-      title="Status & activity"
-      visible={!!detailId}
-      onClose={() => setDetailId(null)}
-      onDismiss={() => {
-        const action = afterDetail.current;
-        afterDetail.current = null;
-        action?.();
-      }}
-    >
-      {detail ? (
-        <View style={{ gap: 16 }}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`View ${detail.name}'s profile`}
-            onPress={() => openProfile(detail.id)}
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 12,
-              minHeight: 48,
-            }}
-          >
-            {showAvatars ? (
-              <ProfileAvatar profile={detail.profile} size={44} />
-            ) : null}
-            <View style={{ flex: 1 }}>
-              <Text
-                style={{
-                  color: colors.textPrimary,
-                  ...tokens.type.titleSmall,
-                }}
-              >
-                {detail.name}
-              </Text>
-              <Txt muted>{availabilityLabel(detail, now)}</Txt>
-            </View>
-            <ChevronRight size={18} color={colors.textSecondary} />
-          </Pressable>
-          {detail.note ? (
-            <View
-              style={{
-                padding: 16,
-                gap: 10,
-                backgroundColor: colors.surfaceRaised,
-                borderRadius: 18,
-              }}
-            >
-              <Text
-                style={{
-                  color: colors.textPrimary,
-                  ...tokens.type.titleSmall,
-                }}
-              >
-                {detail.note.title}
-              </Text>
-              {detail.note.description ? (
-                <Txt>{detail.note.description}</Txt>
-              ) : null}
-              {(detail.profile?.aspiration_goals ?? [])
-                .filter((goal) => detail.note!.aspiration_ids.includes(goal.id))
-                .map((goal) => (
-                  <Txt key={goal.id} muted>
-                    Goal · {goal.title}
-                  </Txt>
-                ))}
-              <Txt muted>
-                Shared until{" "}
-                {new Date(detail.note.ends_at).toLocaleTimeString([], {
-                  hour: "numeric",
-                  minute: "2-digit",
-                })}
-              </Txt>
-              <StatusReactionPicker activityId={detail.note.id} />
-            </View>
-          ) : (
-            <Txt muted>No status note shared right now.</Txt>
-          )}
-          {detail.beacon ? (
-            <Button
-              secondary
-              title={`${detail.beacon.label} · ${detail.beacon.title} →`}
-              onPress={() => {
-                navigate(() =>
-                  router.push({
-                    pathname: "/activity/[id]",
-                    params: { id: detail.beacon!.id },
-                  }),
-                );
-              }}
-            />
-          ) : null}
-          {detail.ping ? (
-            <Button
-              secondary
-              title={`Ping · ${detail.ping.title} →`}
-              onPress={() => {
-                navigate(() =>
-                  router.push({
-                    pathname: "/council/[id]",
-                    params: { id: detail.ping!.id },
-                  }),
-                );
-              }}
-            />
-          ) : null}
-          <Button
-            title={
-              selectedIds.includes(detail.id)
-                ? "Remove from plan"
-                : "Select for planning"
-            }
-            onPress={() => {
-              toggle(detail.id);
-              setDetailId(null);
-            }}
-          />
-        </View>
-      ) : (
-        <Txt muted>This shared status is no longer available.</Txt>
-      )}
-    </Sheet>
+    <StatusViewer personId={detailId} visible={!!detailId} onClose={() => setDetailId(null)} onDismiss={() => { const callback = afterDetail.current; afterDetail.current = null; callback?.(); }}>
+      {detail && <Button title={selectedIds.includes(detail.id) ? "Remove from plan" : "Select for planning"} onPress={() => { toggle(detail.id); setDetailId(null); }} />}
+    </StatusViewer>
   );
   return {
     friends,
@@ -386,6 +265,9 @@ export function SocialFriendRow({
     tokens.availability[
       friend.availability === "ending-soon" ? "endingSoon" : friend.availability
     ];
+  const mergedFeaturedCurrent =
+    friend.currentBeacon?.activity.id === friend.attachment?.id &&
+    friend.attachment?.type === "beacon";
   return (
     <View
       key={friend.id}
@@ -464,12 +346,12 @@ export function SocialFriendRow({
             >
               {friend.name}
             </Text>
-            {friend.beacon ? (
+            {friend.beacon && !friend.currentBeacon ? (
               <View accessible accessibilityLabel="In a Beacon">
                 <Radio size={12} color={colors.accent} />
               </View>
             ) : null}
-            {friend.ping ? (
+            {friend.ping && !friend.currentBeacon ? (
               <View accessible accessibilityLabel="Shared Ping">
                 <Radar size={12} color={colors.accent} />
               </View>
@@ -488,7 +370,21 @@ export function SocialFriendRow({
           >
             {availabilityLabel(friend, now)}
           </Text>
-          {friend.beacon ? (
+          {!!friend.statusText && (
+            <Text numberOfLines={1} style={{ color: colors.textSecondary, fontSize: 13, lineHeight: 18 }}>
+              {friend.statusText}
+            </Text>
+          )}
+          {friend.attachment && !mergedFeaturedCurrent ? (
+            <Text numberOfLines={1} style={{ color: colors.accent, fontSize: 11, lineHeight: 16 }}>
+              {friend.attachment.type === "vote" ? "Vote Council" : friend.attachment.type[0].toUpperCase() + friend.attachment.type.slice(1)} · {friend.attachment.title}
+            </Text>
+          ) : null}
+          {friend.currentBeacon ? (
+            <Text numberOfLines={1} style={{ color: colors.accent, fontSize: 11, lineHeight: 16 }}>
+              {mergedFeaturedCurrent ? "Featured · Happening now" : "Happening now"} · {friend.currentBeacon.activity.title}
+            </Text>
+          ) : !friend.attachment && !friend.statusText && friend.beacon ? (
             <View
               style={{ flexDirection: "row", gap: 5, alignItems: "center" }}
             >
@@ -523,7 +419,7 @@ export function SocialFriendRow({
                 </Text>
               }
             </View>
-          ) : friend.ping ? (
+          ) : !friend.attachment && !friend.statusText && friend.ping ? (
             <View
               style={{ flexDirection: "row", gap: 5, alignItems: "center" }}
             >
@@ -541,18 +437,6 @@ export function SocialFriendRow({
                 Ping · {friend.ping.title}
               </Text>
             </View>
-          ) : friend.note ? (
-            <Text
-              numberOfLines={1}
-              style={{
-                color: colors.textSecondary,
-                fontSize: 13,
-                lineHeight: 18,
-                fontWeight: "400",
-              }}
-            >
-              {friend.note.title}
-            </Text>
           ) : null}
         </View>
       </Pressable>

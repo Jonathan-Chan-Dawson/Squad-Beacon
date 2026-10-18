@@ -8,6 +8,7 @@ import {
   Dices,
   Vote,
 } from "lucide-react-native";
+import { useNow } from "@/src/shared/useNow";
 import { templates } from "@/src/shared/templates";
 import { canOpenSquadProfile } from "@/src/features/people/squadProfile";
 import { useBeacon } from "@/src/shared/store";
@@ -31,6 +32,8 @@ import {
   validatePlanningThreadDraft,
 } from "./domain";
 import type { PlanningThread, PlanningThreadKind } from "./types";
+import { PlanningResponseControls } from "./PlanningResponseControls";
+import { planningInteraction } from "./planningInteraction";
 
 const kinds = ["Ping", "Vote", "Draw"] as const;
 const deadlines = ["24 hours", "3 days"] as const;
@@ -48,8 +51,16 @@ const shortDate = (value: string) =>
   });
 
 export default function PlanningListScreen() {
+  const quickNow = useNow();
+  const [quickThreadId, setQuickThreadId] = useState<string | null>(null);
   const { data, userId, act } = useBeacon();
-  const { organizationId, squadId: squadIdParam, newPing, pingSeed, placeLabel } = useLocalSearchParams<{
+  const {
+    organizationId,
+    squadId: squadIdParam,
+    newPing,
+    pingSeed,
+    placeLabel,
+  } = useLocalSearchParams<{
     organizationId?: string;
     squadId?: string;
     newPing?: string;
@@ -62,8 +73,12 @@ export default function PlanningListScreen() {
   const createSquadPing = Array.isArray(newPing) ? newPing[0] : newPing;
   const pingSeedToken = Array.isArray(pingSeed) ? pingSeed[0] : pingSeed;
   const hasSquadPingRequest = createSquadPing === "yes" && !!requestedSquadId;
-  const placeName = (Array.isArray(placeLabel) ? placeLabel[0] : placeLabel)?.trim().slice(0, 120) ?? "";
-  const hasPlacePingRequest = createSquadPing === "yes" && !requestedSquadId && !!placeName;
+  const placeName =
+    (Array.isArray(placeLabel) ? placeLabel[0] : placeLabel)
+      ?.trim()
+      .slice(0, 120) ?? "";
+  const hasPlacePingRequest =
+    createSquadPing === "yes" && !requestedSquadId && !!placeName;
   const seedKey = `${userId ?? "signed-out"}:${requestedSquadId ?? placeName}:${pingSeedToken ?? "direct"}`;
   const seededSquad =
     requestedSquadId &&
@@ -90,8 +105,13 @@ export default function PlanningListScreen() {
   const [kindChoice, setKindChoice] = useState<(typeof kinds)[number]>("Ping");
   const [titleDraft, setTitleDraft] = useState({ key: "", value: "" });
   const [bodyDraft, setBodyDraft] = useState({ key: "", value: "" });
-  const [coownerDraft, setCoownerDraft] = useState({ key: "", value: [] as string[] });
-  const [audience, setAudience] = useState<Audience>(organization ? "organization" : "friends");
+  const [coownerDraft, setCoownerDraft] = useState({
+    key: "",
+    value: [] as string[],
+  });
+  const [audience, setAudience] = useState<Audience>(
+    organization ? "organization" : "friends",
+  );
   const [audienceId, setAudienceId] = useState<string | null>(
     organization?.id ?? null,
   );
@@ -107,8 +127,17 @@ export default function PlanningListScreen() {
     ? activeSeed
     : (hasPlacePingRequest && dismissedSeedKey !== seedKey) || manualCreateOpen;
   const placeSeed = hasPlacePingRequest && dismissedSeedKey !== seedKey;
-  const draftKey = activeSeed ? `squad:${seedKey}` : placeSeed ? `place:${seedKey}` : "normal";
-  const title = titleDraft.key === draftKey ? titleDraft.value : placeSeed ? `Meet at ${placeName}`.slice(0, 120) : "";
+  const draftKey = activeSeed
+    ? `squad:${seedKey}`
+    : placeSeed
+      ? `place:${seedKey}`
+      : "normal";
+  const title =
+    titleDraft.key === draftKey
+      ? titleDraft.value
+      : placeSeed
+        ? `Meet at ${placeName}`.slice(0, 120)
+        : "";
   const body = bodyDraft.key === draftKey ? bodyDraft.value : "";
   const coownerIds = coownerDraft.key === draftKey ? coownerDraft.value : [];
   const effectiveKindChoice = activeSeed || placeSeed ? "Ping" : kindChoice;
@@ -119,7 +148,11 @@ export default function PlanningListScreen() {
     setManualCreateOpen(false);
     if (hasSquadPingRequest || hasPlacePingRequest) {
       setDismissedSeedKey(seedKey);
-      router.setParams({ newPing: undefined, pingSeed: undefined, placeLabel: undefined });
+      router.setParams({
+        newPing: undefined,
+        pingSeed: undefined,
+        placeLabel: undefined,
+      });
     }
   }
 
@@ -184,11 +217,15 @@ export default function PlanningListScreen() {
   async function createThread() {
     if (
       hasSquadPingRequest &&
-      (!activeSeed || !requestedSquadId || !userId ||
+      (!activeSeed ||
+        !requestedSquadId ||
+        !userId ||
         !canOpenSquadProfile(data, requestedSquadId, userId))
     ) {
       closeCreate();
-      throw new Error("You’re no longer an active member of that Squad. No Ping was shared.");
+      throw new Error(
+        "You’re no longer an active member of that Squad. No Ping was shared.",
+      );
     }
     const deadlineAt = startDeadline();
     const payload = kind === "ping" ? pingDraft(deadlineAt) : undefined;
@@ -248,53 +285,110 @@ export default function PlanningListScreen() {
       ) : (
         threads.map((thread) => {
           const Icon = kindIcon(thread.kind);
-          const optionCount = planning.planning_proposals.filter(
-            (proposal) =>
-              proposal.thread_id === thread.id &&
-              proposal.approved &&
-              proposal.disqualified_at == null,
-          ).length;
+          const optionCount =
+            planningInteraction(data, userId, thread.id, quickNow)?.options
+              .length ?? 0;
           return (
-            <Pressable
+            <View
               key={thread.id}
-              accessibilityRole="button"
-              accessibilityLabel={`${thread.title}, ${kindName(thread.kind)}, ${thread.status}`}
-              onPress={() =>
-                router.push({
-                  pathname: "/council/[id]",
-                  params: { id: thread.id },
-                })
-              }
-              style={({ pressed }) => [
+              style={[
                 styles.card,
-                { opacity: pressed ? 0.78 : 1, gap: 10 },
+                { flexDirection: "row", gap: 10, alignItems: "center" },
               ]}
             >
-              <View style={styles.between}>
-                <View style={[styles.row, { flex: 1 }]}>
-                  <Icon size={19} color={colors.green} />
-                  <Text style={[styles.h2, { flex: 1 }]} numberOfLines={2}>
-                    {thread.title}
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`${thread.title}, ${kindName(thread.kind)}, ${thread.status}`}
+                onPress={() =>
+                  router.push({
+                    pathname: "/council/[id]",
+                    params: { id: thread.id },
+                  })
+                }
+                style={({ pressed }) => [
+                  { flex: 1, minWidth: 0, opacity: pressed ? 0.78 : 1, gap: 8 },
+                ]}
+              >
+                <View style={styles.between}>
+                  <View style={[styles.row, { flex: 1 }]}>
+                    <Icon size={19} color={colors.green} />
+                    <Text style={[styles.h2, { flex: 1 }]} numberOfLines={2}>
+                      {thread.title}
+                    </Text>
+                  </View>
+                  <ArrowUpRight size={18} color={colors.muted} />
+                </View>
+                <Text style={styles.muted}>
+                  {kindName(thread.kind)} · {thread.status.replace("_", " ")}
+                  {thread.kind !== "ping" ? ` · ${optionCount} approved` : ""}
+                </Text>
+                <View style={styles.row}>
+                  <CalendarClock size={15} color={colors.muted} />
+                  <Text
+                    style={[styles.muted, { flex: 1, minWidth: 0 }]}
+                    numberOfLines={2}
+                  >
+                    {thread.status === "open"
+                      ? `Decision by ${shortDate(thread.deadline_at)}`
+                      : `Updated ${shortDate(thread.resolved_at ?? thread.created_at)}`}
                   </Text>
                 </View>
-                <ArrowUpRight size={18} color={colors.muted} />
-              </View>
-              <Text style={styles.muted}>
-                {kindName(thread.kind)} · {thread.status.replace("_", " ")}
-                {thread.kind !== "ping" ? ` · ${optionCount} approved` : ""}
-              </Text>
-              <View style={styles.row}>
-                <CalendarClock size={15} color={colors.muted} />
-                <Text style={styles.muted}>
-                  {thread.status === "open"
-                    ? `Decision by ${shortDate(thread.deadline_at)}`
-                    : `Updated ${shortDate(thread.resolved_at ?? thread.created_at)}`}
-                </Text>
-              </View>
-            </Pressable>
+              </Pressable>
+              {thread.kind !== "draw" &&
+                !(thread.kind === "ping" && thread.owner_id === userId) && (
+                  <Button
+                    compact
+                    secondary
+                    title={
+                      thread.status !== "open" ||
+                      Date.parse(thread.deadline_at) <= quickNow
+                        ? "Closed"
+                        : thread.kind === "ping"
+                          ? (planning.planning_ping_responses.find(
+                              (row) =>
+                                row.thread_id === thread.id &&
+                                row.user_id === userId,
+                            )?.response ?? "Respond")
+                          : planning.planning_votes.some(
+                                (row) =>
+                                  row.thread_id === thread.id &&
+                                  row.user_id === userId,
+                              )
+                            ? "Voted"
+                            : "Vote"
+                    }
+                    disabled={
+                      thread.status !== "open" ||
+                      Date.parse(thread.deadline_at) <= quickNow
+                    }
+                    onPress={() => setQuickThreadId(thread.id)}
+                  />
+                )}
+            </View>
           );
         })
       )}
+      <Sheet
+        title="Quick response"
+        visible={!!quickThreadId}
+        onClose={() => setQuickThreadId(null)}
+      >
+        {quickThreadId && (
+          <Txt>
+            {
+              data.planning_threads.find(
+                (thread) => thread.id === quickThreadId,
+              )?.title
+            }
+          </Txt>
+        )}
+        {quickThreadId && (
+          <PlanningResponseControls
+            key={quickThreadId}
+            threadId={quickThreadId}
+          />
+        )}
+      </Sheet>
       <Sheet
         title="Start a ping or decision"
         visible={createOpen}
@@ -305,7 +399,9 @@ export default function PlanningListScreen() {
             <Text style={styles.h2}>Squad Ping</Text>
           </View>
         ) : placeSeed ? (
-          <Txt muted>Choose who to invite. Nearby interest stays anonymous.</Txt>
+          <Txt muted>
+            Choose who to invite. Nearby interest stays anonymous.
+          </Txt>
         ) : (
           <Chips options={kinds} value={kindChoice} onChange={setKindChoice} />
         )}
@@ -327,7 +423,10 @@ export default function PlanningListScreen() {
         {activeSeed && seededSquad ? (
           <View style={[styles.card, { gap: 4 }]}>
             <Text style={styles.h2}>Shared with {seededSquad.name}</Text>
-            <Txt muted>Only current members of this Squad can read or respond to this Ping.</Txt>
+            <Txt muted>
+              Only current members of this Squad can read or respond to this
+              Ping.
+            </Txt>
           </View>
         ) : (
           <AudiencePicker

@@ -1,5 +1,5 @@
 import type { Data, Payload } from "@/src/shared/types";
-import { canReadBeaconActivity } from "./beaconModules";
+import { canReadActivityPreview } from "./beaconModules";
 import { beaconCapacity, isApprovedGoing } from "./permissions";
 
 export type ParticipationIntent =
@@ -35,7 +35,7 @@ export function beaconParticipation(
     !viewer ||
     data.viewer_id !== viewer ||
     !activity ||
-    !canReadBeaconActivity(data, activity, viewer)
+    !canReadActivityPreview(data, activity, viewer)
   )
     return null;
   const row = data.rsvps.find(
