@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import React, { useRef, useState } from "react";
+import { Platform, Pressable, Text, View } from "react-native";
 import {
   Radio,
   CircleHelp,
@@ -20,14 +20,22 @@ import {
   type StatusPresentation,
 } from "../../statusAttachments";
 
+const presentationOptions = [
+  ["text_only", "Note"],
+  ["activity_only", "Activity"],
+  ["text_activity", "Both"],
+] as const;
+
 export function StatusAttachmentPreview({
   activity,
   onPress,
   embedded = false,
+  compact = false,
 }: {
   activity: ResolvedStatusAttachment;
   onPress?: () => void;
   embedded?: boolean;
+  compact?: boolean;
 }) {
   const { colors, tokens } = useTheme();
   const categoryStyle = tokens.categories[activity.category ?? "Social"];
@@ -39,6 +47,19 @@ export function StatusAttachmentPreview({
         : activity.type === "draw"
           ? Dices
           : Radio;
+  const typeLabel = activity.type[0].toUpperCase() + activity.type.slice(1);
+  const formattedTime = new Date(activity.time)
+    .toLocaleString([], {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    })
+    .replace(/\s(?=[AP]M$)/i, "\u00a0");
+  const compactTiming =
+    activity.type === "draw" && activity.state === "Awaiting draw"
+      ? "Awaiting draw"
+      : `${activity.type === "beacon" ? (activity.state === "Live" ? "Live" : "Starts") : "By"} ${formattedTime}`;
   return (
     <Pressable
       testID="status-attachment-preview"
@@ -49,19 +70,20 @@ export function StatusAttachmentPreview({
       style={{
         flexDirection: "row",
         alignItems: "center",
-        gap: 12,
-        padding: embedded ? 0 : 12,
+        gap: compact ? 8 : 12,
+        padding: embedded || compact ? 0 : 12,
         borderRadius: 16,
-        backgroundColor: embedded ? "transparent" : colors.green + "12",
-        borderWidth: embedded ? 0 : 1,
+        backgroundColor:
+          embedded || compact ? "transparent" : colors.green + "12",
+        borderWidth: embedded || compact ? 0 : 1,
         borderColor: colors.line,
-        minHeight: 64,
+        minHeight: compact ? 56 : 64,
       }}
     >
       <View
         style={{
-          width: embedded ? 48 : 40,
-          height: embedded ? 54 : 40,
+          width: compact ? 34 : embedded ? 48 : 40,
+          height: compact ? 34 : embedded ? 54 : 40,
           borderRadius: 12,
           backgroundColor: categoryStyle.tint,
           overflow: "hidden",
@@ -100,11 +122,16 @@ export function StatusAttachmentPreview({
       <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
         <Text
           numberOfLines={2}
-          style={{ color: colors.ink, fontSize: 15, fontWeight: "600" }}
+          style={{
+            color: colors.ink,
+            fontSize: compact ? 14 : 15,
+            lineHeight: compact ? 19 : undefined,
+            fontWeight: compact ? "500" : "600",
+          }}
         >
           {activity.title}
         </Text>
-        {!embedded && (
+        {!embedded && !compact && (
           <Txt muted>
             {activity.type === "vote"
               ? "Vote Council"
@@ -112,21 +139,26 @@ export function StatusAttachmentPreview({
             · {activity.state}
           </Txt>
         )}
-        <Text numberOfLines={1} style={{ color: colors.muted, fontSize: 12 }}>
-          {activity.type === "beacon"
-            ? activity.state === "Live"
-              ? "Started "
-              : "Starts "
-            : "Respond by "}
-          {new Date(activity.time).toLocaleString([], {
-            month: "short",
-            day: "numeric",
-            hour: "numeric",
-            minute: "2-digit",
-          })}
-        </Text>
+        {compact ? (
+          <Text style={{ color: colors.muted, fontSize: 11, lineHeight: 15 }}>
+            {typeLabel} · {compactTiming}
+          </Text>
+        ) : (
+          <Text numberOfLines={1} style={{ color: colors.muted, fontSize: 12 }}>
+            {activity.type === "draw" && activity.state === "Awaiting draw"
+              ? "Deadline "
+              : activity.type === "beacon"
+                ? activity.state === "Live"
+                  ? "Started "
+                  : "Starts "
+                : "Respond by "}
+            {formattedTime}
+          </Text>
+        )}
       </View>
-      {embedded && onPress && <ChevronRight size={16} color={colors.muted} />}
+      {(embedded || compact) && onPress && (
+        <ChevronRight size={16} color={colors.muted} />
+      )}
     </Pressable>
   );
 }
@@ -153,6 +185,7 @@ export function StatusAttachmentEditor({
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("All");
   const [limit, setLimit] = useState(20);
+  const modeRefs = useRef<(View | null)[]>([]);
   const { colors } = useTheme();
   if (!data.is_demo && data.capabilities?.status_attachments !== true)
     return (
@@ -272,38 +305,102 @@ export function StatusAttachmentEditor({
               </Pressable>
             )}
           </View>
-          {selected && presentation !== "text_only" ? (
-            <StatusAttachmentPreview activity={selected} />
-          ) : attachment && !selected ? (
+          {attachment && !selected ? (
             <Txt muted>Attached activity unavailable. Change or remove it.</Txt>
           ) : attachment && presentation === "text_only" ? (
-            <Txt muted>Activity retained · hidden in Text Only</Txt>
+            <Txt muted>Activity retained · hidden in Note mode</Txt>
           ) : null}
           {(attachment || presentation !== "text_only") && (
-            <Chips
-              options={["Text Only", "Activity Only", "Text + Activity"]}
-              value={
-                {
-                  text_only: "Text Only",
-                  activity_only: "Activity Only",
-                  text_activity: "Text + Activity",
-                }[presentation]
-              }
-              onChange={(label) => {
-                if (!disabled)
-                  onPresentation(
-                    (
-                      {
-                        "Text Only": "text_only",
-                        "Activity Only": "activity_only",
-                        "Text + Activity": "text_activity",
-                      } as const
-                    )[
-                      label as "Text Only" | "Activity Only" | "Text + Activity"
-                    ],
-                  );
+            <View
+              accessibilityRole="radiogroup"
+              accessibilityLabel="Status display mode"
+              style={{
+                flexDirection: "row",
+                padding: 3,
+                borderRadius: 12,
+                backgroundColor: colors.line + "60",
               }}
-            />
+            >
+              {presentationOptions.map(([value, label], index) => (
+                <Pressable
+                  key={value}
+                  ref={(node) => {
+                    modeRefs.current[index] = node;
+                  }}
+                  accessibilityRole="radio"
+                  accessibilityLabel={label}
+                  aria-checked={presentation === value}
+                  accessibilityState={{
+                    checked: presentation === value,
+                    disabled: !!disabled,
+                  }}
+                  disabled={disabled}
+                  tabIndex={presentation === value ? 0 : -1}
+                  {...(Platform.OS === "web"
+                    ? {
+                        onKeyDown: (
+                          event: React.KeyboardEvent<HTMLElement>,
+                        ) => {
+                          if (disabled) return;
+                          if (event.key === " ") {
+                            event.preventDefault();
+                            onPresentation(value);
+                            return;
+                          }
+                          const direction = [
+                            "ArrowRight",
+                            "ArrowDown",
+                          ].includes(event.key)
+                            ? 1
+                            : ["ArrowLeft", "ArrowUp"].includes(event.key)
+                              ? -1
+                              : 0;
+                          if (
+                            !direction &&
+                            event.key !== "Home" &&
+                            event.key !== "End"
+                          )
+                            return;
+                          event.preventDefault();
+                          const next =
+                            event.key === "Home"
+                              ? 0
+                              : event.key === "End"
+                                ? presentationOptions.length - 1
+                                : (index +
+                                    direction +
+                                    presentationOptions.length) %
+                                  presentationOptions.length;
+                          onPresentation(presentationOptions[next][0]);
+                          modeRefs.current[next]?.focus();
+                        },
+                      }
+                    : {})}
+                  onPress={() => onPresentation(value)}
+                  style={{
+                    flex: 1,
+                    minHeight: 44,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    borderRadius: 9,
+                    backgroundColor:
+                      presentation === value
+                        ? colors.green + "20"
+                        : "transparent",
+                  }}
+                >
+                  <Text
+                    style={{
+                      color:
+                        presentation === value ? colors.green : colors.muted,
+                      fontWeight: "500",
+                    }}
+                  >
+                    {label}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
           )}
         </>
       )}

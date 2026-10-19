@@ -98,9 +98,9 @@ export function useOwnStatusControl() {
           )
         : await clearOwnStatuses(data, userId, act, current, source?.id);
       setAcknowledged(Date.now());
-      selectStatus(null);
       setError(result.message);
       if (result.message) throw new Error(result.message);
+      selectStatus(null);
       setEditorVisible(false);
     } catch (failure) {
       setError(

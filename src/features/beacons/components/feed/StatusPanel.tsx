@@ -1,5 +1,14 @@
-import React, { useState } from "react";
-import { Platform, Pressable, ScrollView, Switch, Text, View } from "react-native";
+import React, { useRef, useState } from "react";
+import { router } from "expo-router";
+import {
+  Platform,
+  Pressable,
+  ScrollView,
+  Switch,
+  Text,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import {
   ChevronDown,
   Settings2,
@@ -8,10 +17,6 @@ import {
   Pencil,
   Sparkles,
   Trash2,
-  Radio,
-  CircleHelp,
-  Vote,
-  Dices,
 } from "lucide-react-native";
 import type { Activity, Audience, Category, Profile } from "@/src/shared/types";
 import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
@@ -33,10 +38,16 @@ import type {
   StatusAttachment,
   StatusPresentation,
 } from "../../statusAttachments";
-import { StatusAttachmentEditor } from "./StatusAttachmentEditor";
+import {
+  StatusAttachmentEditor,
+  StatusAttachmentPreview,
+} from "./StatusAttachmentEditor";
+import { resolveStatusAttachment } from "../../statusAttachments";
 import { useBeacon } from "@/src/shared/store";
 import { eligibleCurrentBeacons } from "../../currentStatusBeacon";
 import { BeaconIcon } from "../BeaconIcon";
+import { CurrentBeaconPreview } from "./CurrentBeaconPreview";
+import { beaconRoleFor } from "../../permissions";
 
 export type FeedStatus = {
   attachment?: StatusAttachment | null;
@@ -45,7 +56,10 @@ export type FeedStatus = {
   noteHidden?: boolean;
   showCurrentBeacon?: boolean;
   currentBeaconId?: string | null;
-  currentBeacon?: { id: string; role: "hosting" | "cohosting" | "going" } | null;
+  currentBeacon?: {
+    id: string;
+    role: "hosting" | "cohosting" | "going";
+  } | null;
   id: string;
   title: string;
   available?: boolean | null;
@@ -116,7 +130,8 @@ function CurrentBeaconStatusSetting({
           {stale ? (
             <View style={{ gap: 6 }}>
               <Text style={{ color: colors.textSecondary, fontSize: 12 }}>
-                Your selected Beacon is no longer eligible. Reset it or choose an available Beacon.
+                Your selected Beacon is no longer eligible. Reset it or choose
+                an available Beacon.
               </Text>
               <SecondaryButton
                 compact
@@ -131,7 +146,13 @@ function CurrentBeaconStatusSetting({
           ) : null}
           {options.length > 1 ? (
             <>
-              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space.xs }}>
+              <View
+                style={{
+                  flexDirection: "row",
+                  flexWrap: "wrap",
+                  gap: space.xs,
+                }}
+              >
                 <Chip
                   label="Choose Automatically"
                   selected={!chooseSpecific}
@@ -172,7 +193,9 @@ function CurrentBeaconStatusSetting({
                           paddingHorizontal: 8,
                           borderRadius: 12,
                           borderWidth: 1,
-                          borderColor: isSelected ? colors.accent : colors.border,
+                          borderColor: isSelected
+                            ? colors.accent
+                            : colors.border,
                           backgroundColor: isSelected
                             ? colors.accent + "10"
                             : colors.surfaceRaised,
@@ -185,7 +208,11 @@ function CurrentBeaconStatusSetting({
                         />
                         <Text
                           numberOfLines={1}
-                          style={{ flex: 1, color: colors.textPrimary, fontSize: 13 }}
+                          style={{
+                            flex: 1,
+                            color: colors.textPrimary,
+                            fontSize: 13,
+                          }}
                         >
                           {activity.title}
                         </Text>
@@ -209,7 +236,10 @@ function CurrentBeaconStatusSetting({
             </Text>
           ) : null}
           {needsSelection ? (
-            <Text accessibilityRole="alert" style={{ color: colors.textSecondary, fontSize: 12 }}>
+            <Text
+              accessibilityRole="alert"
+              style={{ color: colors.textSecondary, fontSize: 12 }}
+            >
               Choose a Beacon from the list to continue.
             </Text>
           ) : null}
@@ -271,6 +301,7 @@ export function StatusPanel({
   statusAccessory,
 }: StatusPanelProps) {
   const { colors, tokens } = useDesignTheme();
+  const { width: viewportWidth } = useWindowDimensions();
   const { data, userId } = useBeacon();
   const supportsAttachments =
     data.is_demo || data.capabilities?.status_attachments === true;
@@ -305,10 +336,12 @@ export function StatusPanel({
     initialDraft?.noteHidden ?? false,
   );
   const [showCurrentBeacon, setShowCurrentBeacon] = useState(
-    futureDraftFromLiveSource ? false : initialDraft?.showCurrentBeacon ?? false,
+    futureDraftFromLiveSource
+      ? false
+      : (initialDraft?.showCurrentBeacon ?? false),
   );
   const [currentBeaconId, setCurrentBeaconId] = useState<string | null>(
-    futureDraftFromLiveSource ? null : initialDraft?.currentBeaconId ?? null,
+    futureDraftFromLiveSource ? null : (initialDraft?.currentBeaconId ?? null),
   );
   const [chooseSpecificCurrentBeacon, setChooseSpecificCurrentBeacon] =
     useState(!futureDraftFromLiveSource && !!initialDraft?.currentBeaconId);
@@ -340,8 +373,12 @@ export function StatusPanel({
     const source = data.activities.find((activity) => activity.id === sourceId);
     const sourceStartsAt = status?.startsAt ?? source?.starts_at;
     const sourceEndsAt = status?.endsAt ?? source?.ends_at;
-    return !!sourceStartsAt && !!sourceEndsAt &&
-      Date.parse(sourceStartsAt) <= now && Date.parse(sourceEndsAt) > now;
+    return (
+      !!sourceStartsAt &&
+      !!sourceEndsAt &&
+      Date.parse(sourceStartsAt) <= now &&
+      Date.parse(sourceEndsAt) > now
+    );
   });
   const [timezone, setTimezone] = useState(initialDraft?.timezone ?? "UTC");
   const [placeLabel, setPlaceLabel] = useState(initialDraft?.label ?? "");
@@ -393,6 +430,40 @@ export function StatusPanel({
     status.presentation !== "activity_only"
       ? status.title.trim()
       : "";
+  const savedAttachment = supportsAttachments
+    ? resolveStatusAttachment(data, status?.attachment, userId, now)
+    : null;
+  const featuredAttachment =
+    status?.sharing !== false &&
+    !status?.noteHidden &&
+    status?.presentation !== "text_only"
+      ? savedAttachment
+      : null;
+  const draftAttachment =
+    supportsAttachments &&
+    sharing &&
+    !noteHidden &&
+    presentation !== "text_only"
+      ? resolveStatusAttachment(data, attachment, userId, now)
+      : null;
+  const draftNote =
+    sharing && !noteHidden && presentation !== "activity_only"
+      ? title.trim()
+      : "";
+  const draftStartsInFuture = Date.parse(startsAt) > now;
+  const draftCurrent =
+    sharing &&
+    showCurrentBeacon &&
+    supportsCurrentBeacon &&
+    !draftStartsInFuture
+      ? currentBeaconId === null
+        ? currentBeaconOptions[0]
+        : currentBeaconOptions.find((item) => item.id === currentBeaconId)
+      : undefined;
+  const draftSource = `${userId}:${status?.id ?? initialDraft?.sourceId ?? "new"}`;
+  const initializedDraft = useRef<string | null>(
+    editorVisible ? draftSource : null,
+  );
   const selectedCurrentBeacon = currentBeaconOptions.find(
     (activity) => activity.id === currentBeaconId,
   );
@@ -409,6 +480,10 @@ export function StatusPanel({
     currentBeaconId === null;
 
   const initializeEditor = (editingStatus: FeedStatus | null) => {
+    // Reopening the note, picker, or settings resumes this source's draft.
+    // A different account/source starts with its own saved values.
+    if (initializedDraft.current === draftSource) return;
+    initializedDraft.current = draftSource;
     const current = Date.now();
     setTitle(editingStatus?.title ?? "");
     setAttachment(editingStatus?.attachment ?? null);
@@ -461,14 +536,47 @@ export function StatusPanel({
 
   const beginCreate = () => {
     initializeEditor(null);
+    setPicking(false);
     onCreate();
     void uiHaptics.light();
   };
 
   const beginEdit = () => {
     initializeEditor(status);
+    setPicking(false);
     onEdit();
     void uiHaptics.light();
+  };
+
+  const beginSettings = () => {
+    initializeEditor(status);
+    setPicking(false);
+    setSettingsOpen(true);
+    if (status) onEdit();
+    else onCreate();
+  };
+
+  const openFeaturedActivity = () => {
+    // Recheck lifecycle and access immediately before opening the canonical destination.
+    const fresh = resolveStatusAttachment(
+      data,
+      status?.attachment,
+      userId,
+      Date.now(),
+    );
+    if (
+      !fresh ||
+      !status ||
+      status.sharing === false ||
+      status.noteHidden ||
+      status.presentation === "text_only"
+    )
+      return;
+    router.push(
+      fresh.type === "beacon"
+        ? { pathname: "/activity/[id]", params: { id: fresh.id } }
+        : { pathname: "/council/[id]", params: { id: fresh.id } },
+    );
   };
 
   const choosePreset = (next: DurationPreset) => {
@@ -491,13 +599,23 @@ export function StatusPanel({
   const save = async () => {
     setLocalError("");
     try {
+      if (
+        initializedDraft.current !== null &&
+        initializedDraft.current !== draftSource
+      ) {
+        throw new Error(
+          "Your Status changed while editing. Close and reopen the editor before saving.",
+        );
+      }
       await onSave({
         title: title.trim(),
         attachment,
         presentation,
         sharing,
         noteHidden,
-        ...(supportsCurrentBeacon ? { showCurrentBeacon, currentBeaconId } : {}),
+        ...(supportsCurrentBeacon
+          ? { showCurrentBeacon, currentBeaconId }
+          : {}),
         available,
         endsAt: statusEndAt(
           preset,
@@ -511,6 +629,7 @@ export function StatusPanel({
         audienceId,
         ...advancedValues,
       });
+      initializedDraft.current = null;
     } catch (failure) {
       setLocalError(
         failure instanceof Error && failure.message.trim()
@@ -524,6 +643,7 @@ export function StatusPanel({
     setLocalError("");
     try {
       await onClear();
+      initializedDraft.current = null;
     } catch (failure) {
       setLocalError(
         failure instanceof Error && failure.message.trim()
@@ -625,154 +745,220 @@ export function StatusPanel({
         <View
           testID="compact-own-status"
           style={{
-            padding: 10,
-            gap: 4,
+            padding: 12,
+            gap: 8,
             borderWidth: 1,
             borderColor: colors.border,
             backgroundColor: colors.surface,
-            borderRadius: 16,
+            borderRadius: 18,
           }}
         >
           <View
             style={{
               flexDirection: "row",
-              flexWrap: "wrap",
               alignItems: "center",
-              gap: 6,
+              justifyContent: "space-between",
+              marginTop: -8,
+              marginBottom: -4,
             }}
           >
-            <View
-              style={{
-                flex: 1,
-                minWidth: 140,
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 6,
-              }}
-            >
-              <HomeAction
-                label="Attach Activity"
-                disabled={saving || !supportsAttachments}
-                onPress={beginAttach}
-                plain
-                icon={
-                  status?.attachment?.type === "ping" ? (
-                    <CircleHelp size={22} color={colors.accent} />
-                  ) : status?.attachment?.type === "vote" ? (
-                    <Vote size={22} color={colors.accent} />
-                  ) : status?.attachment?.type === "draw" ? (
-                    <Dices size={22} color={colors.accent} />
-                  ) : (
-                    <Radio size={22} color={colors.accent} />
-                  )
-                }
-              />
-              <Pressable
-                accessibilityRole="button"
-                disabled={saving}
-                accessibilityLabel={
-                  status ? "Edit your status note" : "Add a status note"
-                }
-                onPress={status ? beginEdit : beginCreate}
-                style={{
-                  flex: 1,
-                  minWidth: 0,
-                  minHeight: 44,
-                  alignItems: "center",
-                  gap: 3,
-                }}
-              >
-                {!noteText ? (
-                  <Text style={{ color: colors.textSecondary, fontSize: 12 }}>
-                    {status?.sharing === false ? "Sharing paused" : status?.noteHidden ? "Note hidden" : "Edit note"}
-                  </Text>
-                ) : <NoteSpeechBubble compact>
-                  <Text
-                    numberOfLines={2}
-                    style={{
-                      color: colors.textPrimary,
-                      fontSize: 13,
-                      lineHeight: 18,
-                    }}
-                  >
-                    {noteText}
-                  </Text>
-                </NoteSpeechBubble>}
-                {profile && <ProfileAvatar profile={profile} size={28} />}
-              </Pressable>
-            </View>
-            <View
-              style={{
-                flexDirection: "row",
-                flexWrap: "wrap",
-                alignItems: "center",
-                marginLeft: "auto",
-                gap: 4,
-              }}
-            >
-              <View ref={availabilityAnchorRef} collapsable={false}>
-                <HomeAction
-                  title={
-                    saving
-                      ? "Saving…"
-                      : status
-                        ? Date.parse(status.startsAt) > now
-                          ? "Scheduled"
-                          : status.sharing === false
-                            ? "Paused"
-                            : status.available
-                              ? "Available"
-                              : "Busy"
-                        : "Not sharing"
-                  }
-                  label="Availability choices"
-                  primary={!!status?.available && status.sharing !== false}
-                  disabled={saving}
-                  onPress={onAvailability ?? onQuick ?? beginCreate}
-                  icon={
-                    <ChevronDown
-                      size={14}
-                      color={
-                        status?.available
-                          ? colors.onAccent
-                          : colors.textSecondary
-                      }
-                    />
-                  }
-                  testID="availability-dropdown"
-                />
-              </View>
-              {statusAccessory}
-              <HomeAction
-                label="Status options"
-                disabled={saving}
-                onPress={status ? beginEdit : beginCreate}
-                plain
-                icon={<Settings2 size={18} color={colors.textSecondary} />}
-              />
-            </View>
-          </View>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Status settings"
-            onPress={onQuickOptions ?? beginEdit}
-            style={{ minHeight: 32, justifyContent: "center" }}
-            hitSlop={6}
-          >
             <Text
-              numberOfLines={2}
+              accessibilityRole="header"
               style={{
                 color: colors.textSecondary,
                 fontSize: 11,
-                lineHeight: 16,
+                fontWeight: "600",
               }}
             >
-              {quickHint}
-              {status
-                ? ` · ${Date.parse(status.startsAt) > now ? `From ${new Date(status.startsAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })} · Until ${new Date(status.endsAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}` : `Until ${timeLabel}`}`
-                : ""}
+              MY STATUS
             </Text>
-          </Pressable>
+            <View style={{ flexDirection: "row" }}>
+              <HomeAction
+                label="Status settings"
+                onPress={onQuickOptions ?? beginSettings}
+                disabled={saving}
+                plain
+                icon={<Clock3 size={17} color={colors.textSecondary} />}
+              />
+              <HomeAction
+                label="Status options"
+                onPress={beginSettings}
+                disabled={saving}
+                plain
+                icon={<Settings2 size={17} color={colors.textSecondary} />}
+              />
+            </View>
+          </View>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+            <View testID="own-status-avatar">
+              {profile && <ProfileAvatar profile={profile} size={44} />}
+            </View>
+            <Pressable
+              testID="own-status-note"
+              accessibilityRole="button"
+              disabled={saving}
+              accessibilityLabel={
+                status ? "Edit your status note" : "Add a status note"
+              }
+              onPress={status ? beginEdit : beginCreate}
+              style={{
+                flex: 1,
+                minWidth: 0,
+                minHeight: 44,
+                paddingRight: 22,
+                justifyContent: "center",
+                gap: 4,
+              }}
+            >
+              <Text
+                numberOfLines={2}
+                style={{
+                  color: noteText ? colors.textPrimary : colors.textSecondary,
+                  fontSize: 15,
+                  lineHeight: 21,
+                  fontWeight: noteText ? "500" : "400",
+                }}
+              >
+                {noteText ||
+                  (status?.sharing === false
+                    ? "Sharing paused"
+                    : status?.noteHidden
+                      ? "Note hidden"
+                      : status?.presentation === "activity_only"
+                        ? "Activity only"
+                        : "Add a note")}
+              </Text>
+              <Text
+                style={{
+                  color: colors.textSecondary,
+                  fontSize: 11,
+                  lineHeight: 16,
+                }}
+              >
+                {quickHint}
+                {status
+                  ? ` · ${
+                      Date.parse(status.startsAt) > now
+                        ? `Scheduled ${new Date(status.startsAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })} · Until ${new Date(status.endsAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`
+                        : `Until ${timeLabel}`
+                    }`
+                  : ""}
+              </Text>
+              <Pencil
+                size={14}
+                color={colors.textSecondary}
+                pointerEvents="none"
+                style={{ position: "absolute", right: 0, top: 12 }}
+              />
+            </Pressable>
+          </View>
+          {featuredAttachment ? (
+            <View
+              testID="own-status-featured"
+              style={{
+                padding: 10,
+                borderRadius: 12,
+                gap: 8,
+                flexDirection: "row",
+                alignItems: "center",
+                backgroundColor: colors.surfaceRaised,
+              }}
+            >
+              <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+                <Text
+                  style={{
+                    color: colors.textSecondary,
+                    fontSize: 10,
+                    fontWeight: "500",
+                  }}
+                >
+                  FEATURED ACTIVITY
+                </Text>
+                <StatusAttachmentPreview
+                  activity={featuredAttachment}
+                  compact
+                  onPress={openFeaturedActivity}
+                />
+              </View>
+              <HomeAction
+                title="Change"
+                label="Change attached activity"
+                plain
+                disabled={saving}
+                onPress={beginAttach}
+              />
+            </View>
+          ) : supportsAttachments ? (
+            <Pressable
+              accessibilityRole="button"
+              disabled={saving}
+              accessibilityLabel={
+                status?.attachment
+                  ? "Change attached activity"
+                  : "Attach Activity"
+              }
+              onPress={beginAttach}
+              style={{ minHeight: 44, justifyContent: "center" }}
+            >
+              <Text style={{ color: colors.accent, fontSize: 13 }}>
+                {!status?.attachment
+                  ? "+ Attach activity"
+                  : !savedAttachment
+                    ? "Activity unavailable · Change"
+                    : status.sharing === false
+                      ? "Activity attached · sharing paused · Change"
+                      : status.noteHidden
+                        ? "Activity attached · hidden with note · Change"
+                        : "Activity attached · hidden · Change"}
+              </Text>
+            </Pressable>
+          ) : null}
+          <View
+            style={{
+              borderTopWidth: 1,
+              borderTopColor: colors.border,
+              paddingTop: 8,
+              flexDirection: "row",
+              flexWrap: "wrap",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 8,
+            }}
+          >
+            <View ref={availabilityAnchorRef} collapsable={false}>
+              <HomeAction
+                title={
+                  saving
+                    ? "Saving…"
+                    : status
+                      ? Date.parse(status.startsAt) > now
+                        ? "Scheduled"
+                        : status.sharing === false
+                          ? "Paused"
+                          : status.available
+                            ? "Available"
+                            : "Busy"
+                      : "Not sharing"
+                }
+                label="Availability choices"
+                primary={!!status?.available && status.sharing !== false}
+                disabled={saving}
+                onPress={onAvailability ?? onQuick ?? beginCreate}
+                icon={
+                  <ChevronDown
+                    size={14}
+                    color={
+                      status?.available && status.sharing !== false
+                        ? colors.onAccent
+                        : colors.textSecondary
+                    }
+                  />
+                }
+                testID="availability-dropdown"
+              />
+            </View>
+            {statusAccessory}
+          </View>
         </View>
       ) : (
         <Card style={{ gap: space.md, padding: space.md }}>
@@ -935,14 +1121,16 @@ export function StatusPanel({
         title={status ? "Edit your status" : "Share your status"}
         visible={editorVisible}
         onClose={onCloseEditor}
-        centered={Platform.OS === "web"}
+        centered={Platform.OS === "web" && viewportWidth >= 768}
         maxHeightPercent={90}
         footer={
           !picking ? (
             <PrimaryButton
               title="Save Status"
               loading={saving}
-              disabled={saving || staleCurrentBeacon || needsCurrentBeaconSelection}
+              disabled={
+                saving || staleCurrentBeacon || needsCurrentBeaconSelection
+              }
               onPress={() => void save()}
             />
           ) : undefined
@@ -952,17 +1140,22 @@ export function StatusPanel({
           {!picking && (
             <View style={{ gap: 6, alignItems: "center" }}>
               <NoteSpeechBubble>
-              <Field
-                label="Activity Note"
-                value={title}
-                onChangeText={setTitle}
-                maxLength={120}
-                multiline
-                style={{ minHeight: 92, fontSize: 19, lineHeight: 27 }}
-                editable={!saving}
-              />
+                <Field
+                  label="Activity Note"
+                  value={title}
+                  onChangeText={setTitle}
+                  maxLength={120}
+                  multiline
+                  style={{ minHeight: 92, fontSize: 19, lineHeight: 27 }}
+                  editable={!saving}
+                />
               </NoteSpeechBubble>
               {profile && <ProfileAvatar profile={profile} size={44} />}
+              {presentation === "activity_only" ? (
+                <Text style={{ color: colors.textSecondary, fontSize: 12 }}>
+                  Your note is retained, but hidden in Activity mode.
+                </Text>
+              ) : null}
             </View>
           )}
           <StatusAttachmentEditor
@@ -973,7 +1166,7 @@ export function StatusPanel({
             onPicking={setPicking}
             onAttachment={(value) => {
               setAttachment(value);
-              if (value && !attachment)
+              if (value && !attachment && presentation === "text_only")
                 setPresentation(
                   title.trim() ? "text_activity" : "activity_only",
                 );
@@ -992,6 +1185,107 @@ export function StatusPanel({
               disabled={saving}
             />
           ) : null}
+          {!picking && (
+            <View
+              testID="status-draft-preview"
+              style={{
+                padding: 12,
+                gap: 8,
+                borderRadius: 14,
+                borderWidth: 1,
+                borderColor: colors.border,
+                backgroundColor: colors.surfaceRaised,
+              }}
+            >
+              <Text
+                style={{
+                  color: colors.textSecondary,
+                  fontSize: 11,
+                  fontWeight: "600",
+                }}
+              >
+                PREVIEW
+              </Text>
+              {!sharing ? (
+                <Text style={{ color: colors.textSecondary, fontSize: 13 }}>
+                  Sharing paused. Nothing is shared.
+                </Text>
+              ) : (
+                <>
+                  {!!draftNote && (
+                    <Text
+                      testID="draft-preview-note"
+                      style={{
+                        color: colors.textPrimary,
+                        fontSize: 15,
+                        lineHeight: 21,
+                      }}
+                    >
+                      {draftNote}
+                    </Text>
+                  )}
+                  {draftAttachment && (
+                    <StatusAttachmentPreview
+                      activity={draftAttachment}
+                      compact
+                    />
+                  )}
+                  {draftCurrent &&
+                  !(
+                    draftAttachment?.type === "beacon" &&
+                    draftAttachment.id === draftCurrent.id
+                  ) ? (
+                    <CurrentBeaconPreview
+                      activity={draftCurrent}
+                      role={
+                        beaconRoleFor(data, draftCurrent, userId ?? "") ===
+                        "owner"
+                          ? "hosting"
+                          : beaconRoleFor(data, draftCurrent, userId ?? "") ===
+                              "coowner"
+                            ? "cohosting"
+                            : "going"
+                      }
+                      now={now}
+                      compact
+                    />
+                  ) : draftCurrent ? (
+                    <Text style={{ color: colors.textSecondary, fontSize: 11 }}>
+                      Featured · Happening now
+                    </Text>
+                  ) : null}
+                  {!draftNote && !draftAttachment && !draftCurrent && (
+                    <Text style={{ color: colors.textSecondary, fontSize: 13 }}>
+                      No note or activity to show.
+                    </Text>
+                  )}
+                  <Text style={{ color: colors.textSecondary, fontSize: 11 }}>
+                    {available ? "Available" : "Busy"} ·{" "}
+                    {audience === "private"
+                      ? "Only you"
+                      : "Your selected audience"}
+                  </Text>
+                  {(draftAttachment || draftCurrent) && (
+                    <Text style={{ color: colors.textSecondary, fontSize: 11 }}>
+                      Activity access still applies to each viewer.
+                    </Text>
+                  )}
+                  {showCurrentBeacon &&
+                    supportsCurrentBeacon &&
+                    draftStartsInFuture && (
+                      <Text
+                        style={{ color: colors.textSecondary, fontSize: 11 }}
+                      >
+                        Current Beacon will be checked when this Status starts.
+                      </Text>
+                    )}
+                </>
+              )}
+              <Text style={{ color: colors.textSecondary, fontSize: 11 }}>
+                Save Status publishes your changes.
+              </Text>
+            </View>
+          )}
           {!picking && (
             <Pressable
               accessibilityRole="button"
@@ -1038,13 +1332,13 @@ export function StatusPanel({
                   }}
                 >
                   <Text style={{ flex: 1, color: colors.textPrimary }}>
-                    Share Status
+                    Pause Status Sharing
                   </Text>
                   <Switch
-                    accessibilityLabel="Share Status"
-                    value={sharing}
+                    accessibilityLabel="Pause Status Sharing"
+                    value={!sharing}
                     disabled={saving}
-                    onValueChange={setSharing}
+                    onValueChange={(value) => setSharing(!value)}
                   />
                 </View>
                 <View
@@ -1056,13 +1350,13 @@ export function StatusPanel({
                   }}
                 >
                   <Text style={{ flex: 1, color: colors.textPrimary }}>
-                    Show Note & Featured Activity
+                    Hide Note
                   </Text>
                   <Switch
-                    accessibilityLabel="Show Note and Featured Activity"
-                    value={!noteHidden}
+                    accessibilityLabel="Hide Note"
+                    value={noteHidden}
                     disabled={saving}
-                    onValueChange={(value) => setNoteHidden(!value)}
+                    onValueChange={setNoteHidden}
                   />
                 </View>
                 <Text style={{ color: colors.textSecondary, fontSize: 12 }}>
@@ -1075,6 +1369,14 @@ export function StatusPanel({
                       : "Preview updates here. Save publishes your changes."}
                 </Text>
               </View>
+            )}
+            {supportsAttachments && (
+              <Text style={{ color: colors.textSecondary, fontSize: 12 }}>
+                Hide Note hides your note and featured activity. Availability
+                and separately enabled Current Beacon sharing stay on. Pause
+                Status Sharing hides everything and retains your settings.
+                Changes apply when you save.
+              </Text>
             )}
             <View
               accessibilityRole="radiogroup"
@@ -1280,14 +1582,14 @@ export function StatusPanel({
                 <Field
                   label="Starts at (ISO date/time with offset)"
                   value={startsAt}
-                    onChangeText={(value) => {
-                      setStartsAt(value);
-                      if (sourceWasLiveAtEdit && Date.parse(value) > Date.now()) {
-                        setShowCurrentBeacon(false);
-                        setCurrentBeaconId(null);
-                        setChooseSpecificCurrentBeacon(false);
-                      }
-                    }}
+                  onChangeText={(value) => {
+                    setStartsAt(value);
+                    if (sourceWasLiveAtEdit && Date.parse(value) > Date.now()) {
+                      setShowCurrentBeacon(false);
+                      setCurrentBeaconId(null);
+                      setChooseSpecificCurrentBeacon(false);
+                    }
+                  }}
                   editable={!saving}
                 />
                 <Field

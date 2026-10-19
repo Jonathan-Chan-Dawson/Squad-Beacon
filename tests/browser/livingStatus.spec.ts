@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { settleEditor } from "./statusHelpers";
 
 test("blank Current-only Status, independent note privacy, and paused preference continuity", async ({
   page,
@@ -27,7 +28,9 @@ test("blank Current-only Status, independent note privacy, and paused preference
   await current.check();
   for (const width of [320, 375, 430, 1024]) {
     await page.setViewportSize({ width, height: 900 });
-    await editor.screenshot({ path: `.expo/living-status/editor-${width}.png` });
+    await editor.screenshot({
+      path: `.expo/living-status/editor-${width}.png`,
+    });
   }
   await editor
     .getByRole("button", { name: "Save Status", exact: true })
@@ -70,12 +73,13 @@ test("blank Current-only Status, independent note privacy, and paused preference
       exact: true,
     })
     .click();
+  await settleEditor(page);
   await editor
     .getByRole("switch", {
-      name: "Show Note and Featured Activity",
+      name: "Hide Note",
       exact: true,
     })
-    .uncheck();
+    .check();
   await editor
     .getByRole("button", { name: "Save Status", exact: true })
     .click();
@@ -92,9 +96,11 @@ test("blank Current-only Status, independent note privacy, and paused preference
       exact: true,
     })
     .click();
+  await settleEditor(page);
+  await settleEditor(page);
   await editor
-    .getByRole("switch", { name: "Share Status", exact: true })
-    .uncheck();
+    .getByRole("switch", { name: "Pause Status Sharing", exact: true })
+    .check();
   await editor
     .getByRole("button", { name: "Save Status", exact: true })
     .click();
@@ -111,8 +117,8 @@ test("blank Current-only Status, independent note privacy, and paused preference
     })
     .click();
   await expect(
-    editor.getByRole("switch", { name: "Share Status", exact: true }),
-  ).not.toBeChecked();
+    editor.getByRole("switch", { name: "Pause Status Sharing", exact: true }),
+  ).toBeChecked();
 });
 
 test("matching featured and Current Beacon merge without a second activity row", async ({
@@ -130,6 +136,7 @@ test("matching featured and Current Beacon merge without a second activity row",
   await editor
     .getByRole("textbox", { name: "Activity Note", exact: true })
     .fill("Camera charged ☕");
+  await settleEditor(page);
   await editor
     .getByRole("switch", { name: "Show My Current Beacon", exact: true })
     .check();

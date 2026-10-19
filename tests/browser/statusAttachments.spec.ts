@@ -27,9 +27,7 @@ test("attachment draft, modes, retained text and save at phone widths", async ({
     await page.setViewportSize({ width, height: 900 });
     await page.screenshot({ path: `.expo/status-phase2/editor-${width}.png` });
   }
-  await editor
-    .getByRole("button", { name: "Activity Only", exact: true })
-    .click();
+  await editor.getByRole("radio", { name: "Activity", exact: true }).click();
   await editor
     .getByRole("button", { name: "Save Status", exact: true })
     .click();
@@ -40,15 +38,13 @@ test("attachment draft, modes, retained text and save at phone widths", async ({
   await expect(
     editor.getByRole("textbox", { name: "Activity Note", exact: true }),
   ).toHaveValue("Anyone down to join?");
-  await editor.getByRole("button", { name: "Text Only", exact: true }).click();
+  await editor.getByRole("radio", { name: "Note", exact: true }).click();
   await expect(
-    editor.getByText("Activity retained · hidden in Text Only", {
+    editor.getByText("Activity retained · hidden in Note mode", {
       exact: true,
     }),
   ).toBeVisible();
-  await editor
-    .getByRole("button", { name: "Text + Activity", exact: true })
-    .click();
+  await editor.getByRole("radio", { name: "Both", exact: true }).click();
   await expect(editor.getByTestId("status-attachment-preview")).toHaveCount(1);
   await editor
     .getByRole("button", { name: "Remove attached activity", exact: true })
@@ -118,7 +114,9 @@ test("friends respond and vote inside attached Status without leaving browsing",
     viewer.getByRole("button", { name: "Interested", exact: true }),
   ).toBeEnabled();
   await page.setViewportSize({ width: 375, height: 900 });
-  await page.screenshot({ path: ".expo/status-note-layout/ping-interested-375.png" });
+  await page.screenshot({
+    path: ".expo/status-note-layout/ping-interested-375.png",
+  });
   await viewer.getByRole("button", { name: "Pass", exact: true }).click();
   await expect(
     viewer.getByRole("button", { name: "Pass", exact: true }),
@@ -148,6 +146,12 @@ test("friends respond and vote inside attached Status without leaving browsing",
   await viewer.getByRole("button", { name: /Close/ }).click();
   await expect(search).toHaveValue("Maya");
   await expect(page).toHaveURL(/\/friends/);
+  await page
+    .getByRole("button", { name: /Open Maya.*shared status/ })
+    .first()
+    .click();
+  await viewer.getByRole("button", { name: /^Message Maya/ }).click();
+  await expect(page).toHaveURL(/\/messages\//);
 });
 
 test("compact attachment shortcut and quiet planning quick actions", async ({
@@ -181,7 +185,7 @@ test("compact attachment shortcut and quiet planning quick actions", async ({
     editor.getByRole("textbox", { name: "Activity Note", exact: true }),
   ).toBeVisible();
   await expect(
-    editor.getByRole("switch", { name: "Share Status", exact: true }),
+    editor.getByRole("switch", { name: "Pause Status Sharing", exact: true }),
   ).toBeHidden();
   await page.screenshot({ path: ".expo/status-phase5/composer.png" });
   await editor.getByRole("button", { name: /Close/ }).click();

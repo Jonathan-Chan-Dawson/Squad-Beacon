@@ -4,14 +4,17 @@ The note and person should draw attention first. Controls appear in the context 
 
 ## Compact Status
 
-- Keep the note bubble and avatar together.
-- Use small attachment, availability, Sonar, and settings controls instead of a row of large labeled buttons.
+- On the Beacons homepage, place the avatar left of the editable note, with audience and expiration beneath. Keep the existing Profile note-bubble presentation.
+- Show one optional featured activity row with a separate Change action. With no attachment, use a compact + Attach activity action. Availability and Sonar share the bottom row; scheduling and settings stay at the top.
 - Keep friend rows to one Status target and a separate planning-selection target. Responses and reactions belong in the expanded viewer.
 
 ## Composer
 
 - Initial view: written note, optional attachment, one Save action.
-- Show presentation choices only when an attachment or an existing Activity Only configuration makes them relevant.
+- Reuse the existing sheet with phone bottom-sheet sizing and a centered presentation from 768px. Keep Save Status in its existing footer.
+- Show Note / Activity / Both segments only when an attachment or an existing non-Note configuration makes them relevant. These labels retain the existing presentation values.
+- Keep retained text editable in Activity mode and exclude it from the shared-content preview. Unavailable or removed attachments never reveal it implicitly.
+- Reopening the note, picker, or settings resumes the same source's draft. Save failures retain it; an expired or replaced Status cannot redirect its save into a different source.
 - Put audience, duration, availability, privacy switches, and advanced fields behind one summary/settings row.
 - Use a quiet Change link and a small Remove icon for attachments.
 - While choosing an activity, show only the search, filters, eligible results, and Back action. Selection returns to the draft; it never publishes.
@@ -47,5 +50,5 @@ The note and person should draw attention first. Controls appear in the context 
 - Use quiet text, icons, and restrained surfaces for secondary actions.
 - Keep touch targets at least 44px, even when the visible icon is small.
 - Avoid duplicate note text, duplicate navigation buttons, glowing borders, and continuous decorative motion.
-- Use a softly shaded note bubble with a downward tail, category-tinted artwork, and quiet featured labels. Keep decoration away from response targets.
+- Keep softly shaded note bubbles with downward tails on Profile, in the editor, and in the shared viewer. The homepage uses plain note text beside the avatar. Use category-tinted artwork and quiet featured labels; keep decoration away from response targets.
 - Organize featured cards with type and deadline/state in one header, artwork beside the title and time, then canonical controls. Ping responses use equal-width rounded rectangles with defined borders, inline icons, and a mint selected state.
