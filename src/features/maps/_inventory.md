@@ -1,5 +1,8 @@
 Maps feature
 
+- myBeacons.ts: authorized unexpired Hosting/Joined navigation; explicit Beacon context preserves discovery filters and restores the prior camera on removal.
+- markerIdentity.ts: independent ownership badge and relationship identity, rose friend-host hearts, first-name freshness labels and deterministic label collision suppression.
+
 - screens/MapScreen.tsx: full-map tab; coordinates search, safe area/context, inline discovery, area/compass, previews, and map options.
 - Map side controls: direct pin-to-create action and a compact compass toolbar for location, overview, everywhere, and place search. Map type lives in a secondary display menu; additional map settings retain their existing sheet and device preferences.
 - MapExplorationHeader.tsx: compact accessible search, area/count row, quick-scope chips, reduced-motion inline filter tray, and Search this area action.

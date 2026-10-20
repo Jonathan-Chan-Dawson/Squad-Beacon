@@ -1,4 +1,4 @@
-import { categoryMarkerGlyphs } from "../markerIdentity";
+import { categoryMarkerGlyphs, visibleFriendLabels } from "../markerIdentity";
 import {
   clusterAreaSummary,
   mapClusterGroups,
@@ -28,11 +28,13 @@ import MapView, {
 } from "react-native-maps";
 import { friendAvailabilityState, locationIsFresh } from "@/src/shared/domain";
 import { isValidCoordinate } from "@/src/shared/exploration";
+import { useBeacon } from "@/src/shared/store";
 import { useTheme } from "@/src/shared/ui";
 import { usePreferences } from "@/src/shared/preferences";
 import { useDesignTheme } from "@/src/theme";
 import { googleMapStyles } from "@/src/theme/map";
 import { useNow } from "@/src/shared/useNow";
+import { useReducedMotion } from "@/src/shared/design-system";
 import type { MapProps } from "@/src/features/maps/components/BeaconMap";
 import {
   rankClusterMembers,
@@ -164,6 +166,7 @@ export default function BeaconMap({
   pulsePopPlaceKey,
   calm = false,
 }: MapProps) {
+  const { data: identityData, userId: identityViewer } = useBeacon();
   const { colors, resolvedAppearance } = useTheme();
   const { categories, availability } = useDesignTheme();
 
@@ -188,6 +191,7 @@ export default function BeaconMap({
   const { height } = useWindowDimensions();
   const { showAvatars } = usePreferences();
   const now = useNow();
+  const reducedMotion = useReducedMotion();
   const categoryColors = useMemo(
     () =>
       Object.fromEntries(
@@ -349,6 +353,14 @@ export default function BeaconMap({
       return;
     }
 
+    if (controlCommand.kind === "focus" && controlCommand.coordinates?.[0]) {
+      currentMap.animateCamera(
+        { center: controlCommand.coordinates[0], zoom: 16 },
+        { duration: reducedMotion ? 0 : 180 },
+      );
+      appliedControlRevision.current = controlCommand.revision;
+      return;
+    }
     if (controlCommand.kind === "restore" && controlCommand.camera) {
       const { center, bounds } = controlCommand.camera;
       currentMap.animateToRegion(
@@ -401,6 +413,7 @@ export default function BeaconMap({
     appliedControlRevision.current = controlCommand.revision;
   }, [
     controlCommand,
+    reducedMotion,
     coordinates,
     onPick,
     ready,
@@ -643,6 +656,16 @@ export default function BeaconMap({
       void pressCluster(group);
     };
   });
+  const friendLabelIds = visibleFriendLabels(
+    freshLocations
+      .filter((l) => renderedSingletonIds.has(`person:${l.owner_id}`))
+      .map((l) => ({
+        id: l.owner_id,
+        latitude: l.latitude!,
+        longitude: l.longitude!,
+      })),
+    nativeMapZoom(region.longitudeDelta, mapSize.width),
+  );
   const selectCluster = useCallback(
     (group: MapPointGroup) => latestClusterAction.current(group),
     [],
@@ -921,10 +944,19 @@ export default function BeaconMap({
           const overflow = clusterPreviewOverflow(group.members.length);
           const summary =
             clusterTier === "area"
-              ? clusterAreaSummary(group, activities, places, now, areaName)
+              ? clusterAreaSummary(
+                  group,
+                  activities,
+                  places,
+                  now,
+                  areaName,
+                  identityData.viewer_id === identityViewer
+                    ? identityViewer
+                    : null,
+                )
               : undefined;
           const accessibilityLabel = summary
-            ? `Explore ${summary.name}: ${summary.reason}`
+            ? `Explore ${summary.name}: ${summary.reason}${summary.ownedCount ? `, ${summary.ownedCount} yours` : ""}`
             : `Map cluster: ${beaconCount} beacons, ${peopleCount} people. Preview: ${previewLabels.join(", ")}${overflow ? `, plus ${overflow} more` : ""}.`;
           return (
             <ClusterMapPin
@@ -1012,6 +1044,7 @@ export default function BeaconMap({
                 profile={profile}
                 availabilityColor={availability[availabilityKey].color}
                 availabilityLabel={ownerAvailability.replace("-", " ")}
+                showLabel={friendLabelIds.has(profile.id)}
                 ageLabel={ageLabel}
                 appearanceKey={appearanceKey}
                 onPress={selectPerson}

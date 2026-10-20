@@ -640,9 +640,7 @@ export function Sheet({
     ],
   );
   const animationConfigs = useBottomSheetSpringConfigs({
-    damping: tokens.motion.spring.damping,
-    stiffness: tokens.motion.spring.stiffness,
-    mass: tokens.motion.spring.mass,
+    ...tokens.motion.sheetSpring,
   });
   const maxContentHeight = Math.max(
     240,

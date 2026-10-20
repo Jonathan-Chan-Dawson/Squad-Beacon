@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Pressable, Text, TextInput, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import {
   BookOpen,
   Check,
@@ -19,9 +19,9 @@ import {
 } from "lucide-react-native";
 import type { Category } from "@/src/shared/types";
 import type { ExplorationFilters } from "@/src/shared/exploration";
-import { Sheet, useTheme } from "@/src/shared/ui";
+import { Button, Field, Sheet, useTheme } from "@/src/shared/ui";
 import { useDesignTheme } from "@/src/theme";
-import { uiHaptics } from "@/src/shared/design-system";
+import { SecondaryButton, uiHaptics } from "@/src/shared/design-system";
 import { mapAdvancedFilterCount } from "@/src/features/maps/mapUIselectors";
 
 export type MapAudienceChoice = {
@@ -106,14 +106,7 @@ function ChoiceSection({
 }) {
   const { colors, styles } = useTheme();
   return (
-    <View
-      style={{
-        gap: 8,
-        paddingBottom: 14,
-        borderBottomWidth: 1,
-        borderColor: colors.line,
-      }}
-    >
+    <View style={[styles.card, { gap: 12 }]}>
       <View
         style={{
           minHeight: 28,
@@ -221,37 +214,14 @@ export function AdvancedMapFilters({
       maxHeightPercent={72}
       footer={
         <View style={{ flexDirection: "row", gap: 8 }}>
-          <Pressable
-            accessibilityRole="button"
+          <SecondaryButton
+            title={`Reset${activeCount ? ` · ${activeCount}` : ""}`}
             accessibilityLabel="Reset filters"
             onPress={reset}
-            style={{
-              minHeight: 48,
-              justifyContent: "center",
-              paddingHorizontal: 12,
-            }}
-          >
-            <Text style={[styles.label, { color: colors.green }]}>
-              Reset{activeCount ? ` · ${activeCount}` : ""}
-            </Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Show ${resultCount} Beacons`}
-            onPress={onClose}
-            style={{
-              flex: 1,
-              minHeight: 48,
-              borderRadius: 17,
-              alignItems: "center",
-              justifyContent: "center",
-              backgroundColor: colors.ink,
-            }}
-          >
-            <Text style={{ color: colors.white, fontWeight: "700" }}>
-              Show {resultCount} Beacons
-            </Text>
-          </Pressable>
+          />
+          <View style={{ flex: 1 }}>
+            <Button title={`Show ${resultCount} Beacons`} onPress={onClose} />
+          </View>
         </View>
       }
     >
@@ -437,35 +407,12 @@ export function AdvancedMapFilters({
                 icon={Users}
               />
               {audiences.length ? (
-                <View
-                  style={{
-                    minHeight: 44,
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 8,
-                    paddingHorizontal: 10,
-                    borderWidth: 1,
-                    borderColor: colors.line,
-                    borderRadius: 14,
-                  }}
-                >
-                  <Search size={17} color={colors.muted} />
-                  <TextInput
-                    accessibilityLabel="Search groups"
-                    placeholder="Search lists, Squads, and Organizations"
-                    placeholderTextColor={colors.muted}
-                    value={audienceQuery}
-                    onChangeText={setAudienceQuery}
-                    style={
-                      {
-                        flex: 1,
-                        color: colors.ink,
-                        paddingVertical: 9,
-                        outlineStyle: "none",
-                      } as never
-                    }
-                  />
-                </View>
+                <Field
+                  label="Search groups"
+                  placeholder="Search lists, Squads, and Organizations"
+                  value={audienceQuery}
+                  onChangeText={setAudienceQuery}
+                />
               ) : null}
               {visibleAudiences.map((choice) => (
                 <RowChoice
@@ -517,35 +464,12 @@ export function AdvancedMapFilters({
               </View>
               {planOptions.length ? (
                 <>
-                  <View
-                    style={{
-                      minHeight: 44,
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: 8,
-                      paddingHorizontal: 10,
-                      borderWidth: 1,
-                      borderColor: colors.line,
-                      borderRadius: 14,
-                    }}
-                  >
-                    <Search size={17} color={colors.muted} />
-                    <TextInput
-                      accessibilityLabel="Search plans"
-                      placeholder="Search plans"
-                      placeholderTextColor={colors.muted}
-                      value={planQuery}
-                      onChangeText={setPlanQuery}
-                      style={
-                        {
-                          flex: 1,
-                          color: colors.ink,
-                          paddingVertical: 9,
-                          outlineStyle: "none",
-                        } as never
-                      }
-                    />
-                  </View>
+                  <Field
+                    label="Search plans"
+                    placeholder="Search plans"
+                    value={planQuery}
+                    onChangeText={setPlanQuery}
+                  />
                   <RowChoice
                     label="Any plan"
                     selected={!filters.planId}

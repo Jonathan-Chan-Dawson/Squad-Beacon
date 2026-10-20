@@ -21,7 +21,9 @@ export function deriveMapPointPriorities(
       ).length + 1;
     priorities[`beacon:${activity.id}`] = {
       tier: beaconDiscoveryTier(data, activity, viewerId, now),
-      affinity: Number(beaconInterestMatch(data, activity, viewerId)),
+      affinity:
+        Number(beaconInterestMatch(data, activity, viewerId)) +
+        (activity.owner_id === viewerId ? 100 : 0),
       attendance,
     };
   }

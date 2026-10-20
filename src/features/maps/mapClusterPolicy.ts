@@ -95,6 +95,7 @@ export function clusterAreaSummary(
   places: readonly ActivityPlace[],
   now: number,
   areaName?: string,
+  viewerId?: string | null,
 ) {
   const ids = new Set(
     group.members
@@ -121,10 +122,11 @@ export function clusterAreaSummary(
   );
   return {
     name: (landmark?.label || areaName || "Nearby").slice(0, 32),
-    reason: live
-      ? `🔥 ${live} happening now`
-      : ids.size
-        ? `${ids.size} Beacon${ids.size === 1 ? "" : "s"}`
-        : `${group.members.length} Friend${group.members.length === 1 ? "" : "s"}`,
+    ownedCount: viewerId
+      ? beacons.filter((activity) => activity.owner_id === viewerId).length
+      : 0,
+    reason: ids.size
+      ? `${ids.size} Beacon${ids.size === 1 ? "" : "s"}${live ? ` · ${live} live` : ""}`
+      : `${group.members.length} Friend${group.members.length === 1 ? "" : "s"}`,
   };
 }

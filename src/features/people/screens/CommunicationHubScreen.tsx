@@ -73,7 +73,10 @@ type ListItem =
       person: ReturnType<typeof selectStartChatFriends>[number];
     }
   | { key: string; type: "community"; community: CommunityItem }
-  | { key: string; type: "discovery" | "search" | "empty" | "skeleton" };
+  | {
+      key: string;
+      type: "discovery" | "search" | "empty" | "skeleton" | "friends-divider";
+    };
 
 export function CommunicationHub({
   openSquad,
@@ -310,7 +313,9 @@ export function CommunicationHub({
     }
   }, [refresh]);
   const showStartFriends =
-    activeList || conversationFilter === "Friends" || conversationFilter === "All";
+    activeList ||
+    conversationFilter === "Friends" ||
+    conversationFilter === "All";
   const chatItems: ListItem[] =
     loading && !current
       ? Array.from({ length: 6 }, (_, index) => ({
@@ -323,9 +328,11 @@ export function CommunicationHub({
             type: "chat" as const,
             chat,
           })),
-          ...(!chats.length &&
-          !(startFriends.length && showStartFriends)
+          ...(!chats.length && !(startFriends.length && showStartFriends)
             ? [{ key: "empty", type: "empty" as const }]
+            : []),
+          ...(showStartFriends
+            ? [{ key: "friends-divider", type: "friends-divider" as const }]
             : []),
           ...(showStartFriends
             ? startFriends.map((person) => ({
@@ -344,6 +351,36 @@ export function CommunicationHub({
   const footerPadding = tokens.layout.scrollClearance + insets.bottom;
 
   function renderItem(item: ListItem) {
+    if (item.type === "friends-divider")
+      return (
+        <View
+          testID="chat-friends-divider"
+          style={{
+            borderTopWidth: 1,
+            borderTopColor: colors.line,
+            marginTop: chats.length ? 12 : 0,
+            paddingTop: 8,
+            paddingBottom: 4,
+          }}
+        >
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Find/Add Friends"
+            onPress={findFriends}
+            style={{
+              minHeight: 44,
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+            }}
+          >
+            <Text style={styles.muted}>Friends · start a chat</Text>
+            <Text style={[styles.label, { color: colors.green }]}>
+              Add Friends
+            </Text>
+          </Pressable>
+        </View>
+      );
     if (item.type === "skeleton") return <Skeleton height={72} />;
     if (item.type === "chat")
       return (

@@ -14,7 +14,10 @@ import {
 } from "@/src/features/planning/domain";
 import { isValidCoordinate, type Coordinate } from "@/src/shared/exploration";
 
-export type MapContextFilter = { kind: "plan" | "thread"; id: string };
+export type MapContextFilter = {
+  kind: "plan" | "thread" | "beacon";
+  id: string;
+};
 export const mapContextKey = (filter: MapContextFilter) =>
   `context:${filter.kind}:${filter.id}`;
 export type MapContextPoint = Coordinate & {
@@ -111,7 +114,13 @@ export function resolveMapContext(
         suggestion: true,
       });
   }
-  if (filter.kind === "plan") {
+  if (filter.kind === "beacon") {
+    const activity = data.activities.find((row) => row.id === filter.id);
+    if (!activity || !canReadBeaconActivity(data, activity, viewerId))
+      return null;
+    result.label = `Beacon: ${activity.title}`;
+    addActivity(activity.id, false);
+  } else if (filter.kind === "plan") {
     const plan = data.plans.find((row) => row.id === filter.id);
     if (!plan || !canReadMapPlan(data, plan, viewerId)) return null;
     result.label = `Plan: ${plan.title}`;

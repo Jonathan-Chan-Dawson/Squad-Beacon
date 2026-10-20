@@ -28,7 +28,7 @@ for (const example of [
     await expect(page.getByTestId("map-exploration-header")).toBeVisible();
     if (example.chip.startsWith("Draw:")) {
       const pin = page.locator(
-        'button[aria-label="Map: A surprise crew meetup"]',
+        'button[aria-label^="Map: A surprise crew meetup"]',
       );
       await expect(pin).toBeVisible();
       await pin.click();
@@ -39,22 +39,18 @@ for (const example of [
         .getByTestId("map-tooltip")
         .getByRole("button", { name: "See overview", exact: true })
         .click();
-      const panel = page.getByTestId("beacon-overview-sheet");
-      await panel
+      await expect(page).toHaveURL(/\/activity\//);
+      await page
         .getByRole("button", { name: "View Draw decision", exact: true })
         .click();
       await expect(
-        panel.getByText("Beacon options", { exact: true }),
+        page.getByText("Beacon options", { exact: true }).filter({ visible: true }),
       ).toBeVisible();
-      await expect(panel.getByText(/\d+ votes · APPROVED/)).toHaveCount(0);
-      await panel.getByRole("button", { name: "Back", exact: true }).click();
-      await page
-        .getByRole("button", {
-          name: "Dismiss Beacon panel by tapping the map",
-          exact: true,
-        })
-        .click();
-      await expect(panel).toHaveCount(0);
+      await expect(page.getByText(/\d+ votes · APPROVED/)).toHaveCount(0);
+      await page.goBack();
+      await expect(page).toHaveURL(/\/activity\//);
+      await page.goBack();
+      await expect(page.getByTestId("map-exploration-header")).toBeVisible();
       await expect(chip).toHaveCount(1);
     }
     await chip.click();

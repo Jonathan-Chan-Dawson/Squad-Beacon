@@ -1,3 +1,4 @@
+import { SocialSelector } from "@/src/features/people/components/SocialSelector";
 import { randomUUID } from "expo-crypto";
 import { usesSharedStatusEditor } from "../statusRouteSeed";
 import { LegacyStatusScreen } from "./LegacyStatusScreen";
@@ -287,7 +288,6 @@ function CreateEditor() {
   const [timing, setTiming] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [associationOpen, setAssociationOpen] = useState(false);
-  const [associationSearch, setAssociationSearch] = useState("");
   const [selectedRecipe, setSelectedRecipe] = usePlanningDraftState<BeaconTemplate | null>(userId, params.planSession, "selectedRecipe",
     null,
   );
@@ -968,37 +968,32 @@ function CreateEditor() {
             setAssociationOpen(false);
           }}
         />
-        <Field
-          label="Search communities you belong to"
-          placeholder="Squad, Space, or Organization"
-          value={associationSearch}
-          onChangeText={setAssociationSearch}
-        />
-        {associationCandidates
-          .filter((row) =>
-            `${row.name} ${row.entity_type}`
-              .toLowerCase()
-              .includes(associationSearch.trim().toLowerCase()),
-          )
-          .map((row) => (
-            <Button
-              key={`${row.entity_type}:${row.entity_id}`}
-              compact
-              secondary
-              title={`${row.entity_type === "organization" ? "Network" : row.entity_type === "space" ? "Organization" : "Squad"} · ${row.name}`}
-              onPress={() => {
-                setAssociationDraft({
-                  routeKey: associationRouteKey,
-                  value: {
-                    entity_type: row.entity_type,
-                    entity_id: row.entity_id,
+        <SocialSelector
+          supportedKinds={["squad", "space", "organization"]}
+          multiple={false}
+          selected={
+            selectedAssociation
+              ? [
+                  {
+                    kind: selectedAssociation.entity_type,
+                    id: selectedAssociation.entity_id,
                   },
-                });
-                setAssociationOpen(false);
-                setAssociationSearch("");
-              }}
-            />
-          ))}
+                ]
+              : []
+          }
+          eligibleGroupKeys={associationCandidates.map(
+            (row) => `${row.entity_type}:${row.entity_id}`,
+          )}
+          onChange={(rows) => {
+            const row = rows[0];
+            if (!row || row.kind === "friend") return;
+            setAssociationDraft({
+              routeKey: associationRouteKey,
+              value: { entity_type: row.kind, entity_id: row.id },
+            });
+            setAssociationOpen(false);
+          }}
+        />
         {!associationCandidates.length ? (
           <Empty
             title="No communities available"

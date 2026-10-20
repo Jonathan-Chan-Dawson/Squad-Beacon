@@ -391,6 +391,7 @@ test("city-scale summaries simplify density and retain every member", () => {
   assert.equal(CLUSTER_PREVIEW_LIMIT, 3);
   assert.deepEqual(clusterAreaSummary(far[0], [], [], Date.now(), "Lakeview"), {
     name: "Lakeview",
+    ownedCount: 0,
     reason: `${far[0].members.length} Friends`,
   });
 });

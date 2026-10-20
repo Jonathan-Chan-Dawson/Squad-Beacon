@@ -20,7 +20,7 @@ export type MapTouchPoint = {
   point: { x: number; y: number };
 };
 export type MapControlCommand = {
-  kind: "zoom-in" | "zoom-out" | "fit" | "restore" | "north";
+  kind: "zoom-in" | "zoom-out" | "fit" | "restore" | "north" | "focus";
   revision: number;
   camera?: MapViewport;
   coordinates?: { latitude: number; longitude: number }[];

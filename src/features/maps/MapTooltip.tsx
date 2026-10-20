@@ -212,7 +212,7 @@ export function MapTooltip({
       </View>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
         <View style={{ flex: 1, minWidth: 0 }}>
-          <MapBeaconRsvp activity={activity} compact tooltip />
+          <MapBeaconRsvp activity={activity} />
         </View>
         {allowed &&
           onFeature &&

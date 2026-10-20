@@ -1,14 +1,8 @@
+import { SocialSelector } from "@/src/features/people/components/SocialSelector";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { router } from "expo-router";
-import {
-  Check,
-  Plus,
-  Radio,
-  Radar,
-  X,
-  UsersRound,
-} from "lucide-react-native";
+import { Check, Plus, Radio, Radar, X, UsersRound } from "lucide-react-native";
 import { HomeAction } from "../HomeAction";
 import { BeaconIcon } from "../BeaconIcon";
 import { useDesignTheme } from "@/src/shared/design-system";
@@ -36,6 +30,7 @@ import {
 
 export function useSocialFriendsController({
   showSelectedPeople = false,
+  sharedSelector = false,
 } = {}) {
   const { colors, tokens } = useDesignTheme();
   const { data, userId, loading } = useBeacon();
@@ -66,11 +61,19 @@ export function useSocialFriendsController({
     data.viewer_id === userId
       ? data.lists.filter((list) => list.owner_id === userId)
       : [];
-  const filtered = filterSocialFriends(friends, data, userId, {
-    query,
-    filter,
-    listId,
-  });
+  const [visibleFriendIds, setVisibleFriendIds] = useState<string[] | null>(
+    null,
+  );
+  const filtered = sharedSelector
+    ? friends.filter(
+        (friend) =>
+          visibleFriendIds === null || visibleFriendIds.includes(friend.id),
+      )
+    : filterSocialFriends(friends, data, userId, {
+        query,
+        filter,
+        listId,
+      });
   const detail = friends.find((friend) => friend.id === detailId);
   const available = friends.filter((friend) =>
     ["available", "ending-soon"].includes(friend.availability),
@@ -112,7 +115,62 @@ export function useSocialFriendsController({
       <HomeAction title={label} selected={selected} onPress={onPress} plain />
     </View>
   );
-  const controls = (
+  const controls = sharedSelector ? (
+    <View style={{ gap: 8 }}>
+      <SocialSelector
+        friends={filterSocialFriends(friends, data, userId, {
+          query: "",
+          filter,
+          listId,
+        })}
+        query={query}
+        initialCategory={listId || filter === "Favorites" ? "Friends" : "All"}
+        list={
+          listId
+            ? `custom:${listId}`
+            : filter === "Favorites"
+              ? "favorites"
+              : "friends"
+        }
+        onListChange={(value) =>
+          updateBrowse({
+            listId: value.startsWith("custom:") ? value.slice(7) : null,
+            filter:
+              value === "favorites"
+                ? "Favorites"
+                : filter === "Favorites"
+                  ? "All"
+                  : filter,
+          })
+        }
+        onQueryChange={(query) => updateBrowse({ query })}
+        onCategoryChange={(category) => {
+          if (category === "All") updateBrowse({ filter: "All", listId: null });
+        }}
+        selected={selectedIds.map((id) => ({ kind: "friend", id }))}
+        onChange={(rows) =>
+          setSelectedIds(
+            rows.filter((row) => row.kind === "friend").map((row) => row.id),
+          )
+        }
+        supportedKinds={["friend"]}
+        bulk
+        renderFriendRows={false}
+        onVisibleFriendIdsChange={setVisibleFriendIds}
+      />
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={{ gap: 6 }}
+      >
+        {(["Available", "In a Beacon"] as FriendsFilter[]).map((value) =>
+          chip(value, filter === value, () =>
+            updateBrowse({ filter: filter === value ? "All" : value }),
+          ),
+        )}
+      </ScrollView>
+    </View>
+  ) : (
     <View style={{ gap: 8 }}>
       <Field
         label="Search all friends"
@@ -194,7 +252,8 @@ export function useSocialFriendsController({
             fontWeight: "500",
           }}
         >
-          {selectedIds.length} selected{showSelectedPeople ? "" : " for planning"}
+          {selectedIds.length} selected
+          {showSelectedPeople ? "" : " for planning"}
         </Text>
         <HomeAction
           label="Clear selection"
@@ -225,8 +284,29 @@ export function useSocialFriendsController({
     />
   );
   const detailSheet = (
-    <StatusViewer personId={detailId} visible={!!detailId} onClose={() => setDetailId(null)} onDismiss={() => { const callback = afterDetail.current; afterDetail.current = null; callback?.(); }}>
-      {detail && <Button title={selectedIds.includes(detail.id) ? "Remove from plan" : "Select for planning"} onPress={() => { toggle(detail.id); setDetailId(null); }} />}
+    <StatusViewer
+      personId={detailId}
+      visible={!!detailId}
+      onClose={() => setDetailId(null)}
+      onDismiss={() => {
+        const callback = afterDetail.current;
+        afterDetail.current = null;
+        callback?.();
+      }}
+    >
+      {detail && (
+        <Button
+          title={
+            selectedIds.includes(detail.id)
+              ? "Remove from plan"
+              : "Select for planning"
+          }
+          onPress={() => {
+            toggle(detail.id);
+            setDetailId(null);
+          }}
+        />
+      )}
     </StatusViewer>
   );
   return {
@@ -371,18 +451,38 @@ export function SocialFriendRow({
             {availabilityLabel(friend, now)}
           </Text>
           {!!friend.statusText && (
-            <Text numberOfLines={1} style={{ color: colors.textSecondary, fontSize: 13, lineHeight: 18 }}>
+            <Text
+              numberOfLines={1}
+              style={{
+                color: colors.textSecondary,
+                fontSize: 13,
+                lineHeight: 18,
+              }}
+            >
               {friend.statusText}
             </Text>
           )}
           {friend.attachment && !mergedFeaturedCurrent ? (
-            <Text numberOfLines={1} style={{ color: colors.accent, fontSize: 11, lineHeight: 16 }}>
-              {friend.attachment.type === "vote" ? "Vote Council" : friend.attachment.type[0].toUpperCase() + friend.attachment.type.slice(1)} · {friend.attachment.title}
+            <Text
+              numberOfLines={1}
+              style={{ color: colors.accent, fontSize: 11, lineHeight: 16 }}
+            >
+              {friend.attachment.type === "vote"
+                ? "Vote Council"
+                : friend.attachment.type[0].toUpperCase() +
+                  friend.attachment.type.slice(1)}{" "}
+              · {friend.attachment.title}
             </Text>
           ) : null}
           {friend.currentBeacon ? (
-            <Text numberOfLines={1} style={{ color: colors.accent, fontSize: 11, lineHeight: 16 }}>
-              {mergedFeaturedCurrent ? "Featured · Happening now" : "Happening now"} · {friend.currentBeacon.activity.title}
+            <Text
+              numberOfLines={1}
+              style={{ color: colors.accent, fontSize: 11, lineHeight: 16 }}
+            >
+              {mergedFeaturedCurrent
+                ? "Featured · Happening now"
+                : "Happening now"}{" "}
+              · {friend.currentBeacon.activity.title}
             </Text>
           ) : !friend.attachment && !friend.statusText && friend.beacon ? (
             <View

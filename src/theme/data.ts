@@ -51,6 +51,7 @@ export const shadow = {
 
 export const motion = {
   spring: { damping: 18, stiffness: 220, mass: 1 },
+  sheetSpring: { damping: 30, stiffness: 220, mass: 1, overshootClamping: true },
   pressScale: 0.97,
   pressDuration: 90,
   pressDurationMs: 90,

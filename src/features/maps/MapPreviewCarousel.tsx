@@ -308,7 +308,7 @@ function PreviewCard({
             />
           ) : null}
         </Pressable>
-        <MapBeaconRsvp activity={activity} compact />
+        <MapBeaconRsvp activity={activity} />
       </GlassBar>
     </Pressable>
   );

@@ -17,7 +17,10 @@ import type { SocialFriend } from "../socialFriends";
 export default function FriendsScreen() {
   const { colors, tokens } = useDesignTheme();
   const insets = useSafeAreaInsets();
-  const controller = useSocialFriendsController({ showSelectedPeople: true });
+  const controller = useSocialFriendsController({
+    showSelectedPeople: true,
+    sharedSelector: true,
+  });
   const { friends, filtered, available, loading, userId, selectedIds } =
     controller;
   const [browse] = useFriendsBrowseState(userId);
@@ -156,6 +159,10 @@ export default function FriendsScreen() {
               {friends.length} friends
             </Text>
           </View>
+          <HomeAction
+            title="Add Friends"
+            onPress={() => router.push("/find-friends")}
+          />
         </View>
       </View>
       <ChatKeyboardFrame compact>
@@ -224,6 +231,21 @@ export default function FriendsScreen() {
                   ? " matching"
                   : ""}
               </Text>
+            </View>
+          }
+          ListFooterComponent={
+            <View
+              style={{
+                marginTop: 12,
+                paddingTop: 8,
+                borderTopWidth: 1,
+                borderTopColor: colors.border,
+              }}
+            >
+              <HomeAction
+                title="Find/Add Friends"
+                onPress={() => router.push("/find-friends")}
+              />
             </View>
           }
           ListEmptyComponent={

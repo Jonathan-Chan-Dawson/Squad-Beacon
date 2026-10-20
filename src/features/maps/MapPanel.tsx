@@ -457,7 +457,7 @@ export function MapPanel({
           paddingBottom: 2,
         }}
       >
-        <MapBeaconRsvp activity={activity} compact tooltip />
+        <MapBeaconRsvp activity={activity} />
         {collapsed && (
           <Button
             title="Open Beacon overview"

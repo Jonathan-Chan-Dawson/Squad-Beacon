@@ -1,3 +1,4 @@
+import { selectMyMapBeacons } from "../myBeacons";
 import { discoveryActivities } from "@/src/features/beacons/discoverySelectors";
 import { mapTooltip } from "../tooltipConstants";
 import React, {
@@ -341,6 +342,8 @@ export default function MapScreen() {
   const [organizationPreviewId, setOrganizationPreviewId] = useState<
     string | null
   >(null);
+  const [myBeaconsOpen, setMyBeaconsOpen] = useState(false);
+  const myBeacons = selectMyMapBeacons(data, userId, now);
   const [compassBusy, setCompassBusy] = useState(false);
   const [compassMessage, setCompassMessage] = useState("");
   const [compassSheetOpen, setCompassSheetOpen] = useState(false);
@@ -1463,7 +1466,7 @@ export default function MapScreen() {
         setPerson(null);
         router.setParams({ person: undefined });
       }
-    }, [data, person, selected, snapshotReady, userId]),
+    }, [data, person, selected, snapshotReady, userId, setSelected, setPerson]),
   );
 
   useEffect(() => {
@@ -1553,7 +1556,21 @@ export default function MapScreen() {
     );
     setPickMode(true);
     setPlaceSearchOpen(false);
-  }, [clearRouteSelection]);
+  }, [
+    clearRouteSelection,
+    setDetailTab,
+    setCompassSheetOpen,
+    setPulseSelection,
+    setContextPoint,
+    setPublicSelection,
+    setClusterActivityIds,
+    setClusterPersonIds,
+    setSelected,
+    setPerson,
+    setPickedMapPoint,
+    setPickMode,
+    setPlaceSearchOpen,
+  ]);
 
   useEffect(() => {
     if (params.pickLocation !== "yes") return;
@@ -1703,7 +1720,20 @@ export default function MapScreen() {
           revision: (previous?.revision ?? 0) + 1,
         }));
     },
-    [data, userId, contextViews.length, viewport, clearRouteSelection],
+    [
+      data,
+      userId,
+      contextViews.length,
+      viewport,
+      clearRouteSelection,
+      setSelected,
+      setPerson,
+      setDetailTab,
+      setClusterActivityIds,
+      setClusterPersonIds,
+      setContextState,
+      setControlCommand,
+    ],
   );
 
   useEffect(() => {
@@ -2122,8 +2152,37 @@ export default function MapScreen() {
       />
     </View>
   );
+  function selectMyBeacon(id: string) {
+    const activity = data.activities.find((row) => row.id === id);
+    if (!activity || !userId || !canReadBeaconActivity(data, activity, userId))
+      return;
+    setMyBeaconsOpen(false);
+    const place = safePlaces.find(
+      (row) => row.activity_id === id && validPhysicalPlace(row),
+    );
+    if (!place) {
+      router.push({ pathname: "/activity/[id]", params: { id } });
+      return;
+    }
+    if (!activities.some((row) => row.id === id))
+      focusContext({ kind: "beacon", id });
+    chooseBeacon(id);
+    setControlCommand((previous) => ({
+      kind: "focus",
+      coordinates: [{ latitude: place.latitude!, longitude: place.longitude! }],
+      revision: (previous?.revision ?? 0) + 1,
+    }));
+  }
   const renderCompassActions = () => (
     <>
+      <MapNavigationRow
+        label="My Beacons"
+        icon={Radio}
+        onPress={() => {
+          closePopovers();
+          setMyBeaconsOpen(true);
+        }}
+      />
       <MapNavigationRow
         label="Center on Me"
         icon={LocateFixed}
@@ -2684,6 +2743,37 @@ export default function MapScreen() {
         </View>
       ) : null}
 
+      <Sheet
+        title="My Beacons"
+        visible={myBeaconsOpen}
+        onClose={() => setMyBeaconsOpen(false)}
+      >
+        {!myBeacons.hosting.length && !myBeacons.joined.length ? (
+          <Txt muted>
+            You aren’t hosting or attending any live or upcoming Beacons.
+          </Txt>
+        ) : null}
+        {(
+          [
+            ["Hosting", myBeacons.hosting],
+            ["Joined", myBeacons.joined],
+          ] as const
+        ).map(([title, rows]) =>
+          rows.length ? (
+            <View key={title} style={{ gap: 4 }}>
+              <Txt>{title}</Txt>
+              {rows.map((activity) => (
+                <MapNavigationRow
+                  key={activity.id}
+                  label={`${activity.title} · ${Date.parse(activity.starts_at) <= now ? "Live now" : new Date(activity.starts_at).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`}
+                  icon={Radio}
+                  onPress={() => selectMyBeacon(activity.id)}
+                />
+              ))}
+            </View>
+          ) : null,
+        )}
+      </Sheet>
       {(compassSheetOpen || mapControlSettingsOpen || weatherOpen) &&
         !pickMode &&
         !pickedMapPoint && (
@@ -2785,7 +2875,7 @@ export default function MapScreen() {
               style={{
                 minHeight: 44,
                 paddingHorizontal: 10,
-                maxWidth: Math.min(160, mapSize.width * 0.42),
+                minWidth: 102,
                 borderRadius: 22,
                 backgroundColor: colors.white,
                 borderWidth: 1,
@@ -2798,13 +2888,13 @@ export default function MapScreen() {
               <WeatherIcon size={16} color={colors.green} />
               <Text
                 numberOfLines={1}
-                style={{ color: colors.ink, fontSize: 12, flexShrink: 1 }}
+                style={{ color: colors.ink, fontSize: 12 }}
               >
                 {weather.value
-                  ? `${Math.round(weather.value.temperature)}° ${condition?.label}`
+                  ? `Weather ${Math.round(weather.value.temperature)}°`
                   : weather.loading
                     ? "Weather…"
-                    : "Unavailable"}
+                    : "Weather"}
               </Text>
             </Pressable>
           )}

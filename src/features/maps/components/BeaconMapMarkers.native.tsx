@@ -1,4 +1,9 @@
-import { markerIdentity } from "../markerIdentity";
+import {
+  markerIdentity,
+  ownsMapBeacon,
+  mapIdentityColors,
+  friendLocationLabel,
+} from "../markerIdentity";
 import {
   AvatarStatusBadge,
   avatarAvailability,
@@ -216,11 +221,12 @@ function BeaconMapPinComponent({
   dot?: boolean;
 }) {
   const { data, userId } = useBeacon();
-  const { colors } = useTheme();
+  const { colors, resolvedAppearance } = useTheme();
   const activity = data.activities.find((row) => row.id === id);
   const identity = activity ? markerIdentity(data, activity, userId) : null;
+  const owned = !!activity && ownsMapBeacon(data, activity, userId);
   const tracking = useMarkerTracking(
-    `${identity?.label}:${id}:${categoryColor}:${selected}:${dimmed}:${streetTime ?? ""}:${appearanceKey}:${dot}`,
+    `${owned}:${identity?.label}:${id}:${categoryColor}:${selected}:${dimmed}:${streetTime ?? ""}:${appearanceKey}:${dot}`,
   );
   const visualSize = markerVisualSize("beacon");
   if (dot)
@@ -229,7 +235,7 @@ function BeaconMapPinComponent({
         coordinate={coordinate}
         anchor={{ x: 0.5, y: 0.5 }}
         tracksViewChanges={tracking}
-        accessibilityLabel={`Map: ${title}${identity ? `, ${identity.label}` : ""}`}
+        accessibilityLabel={`Map: ${title}${owned ? ", Your Beacon" : ""}${identity ? `, ${identity.label}` : ""}`}
         onPress={(event) => {
           event.stopPropagation();
           if (!disabled) onPress(id);
@@ -262,7 +268,7 @@ function BeaconMapPinComponent({
       coordinate={coordinate}
       anchor={{ x: 0.5, y: streetTime ? 0.82 : 0.92 }}
       tracksViewChanges={tracking}
-      accessibilityLabel={`Map: ${title}${identity ? `, ${identity.label}` : ""}`}
+      accessibilityLabel={`Map: ${title}${owned ? ", Your Beacon" : ""}${identity ? `, ${identity.label}` : ""}`}
       onPress={(event) => {
         event.stopPropagation();
         if (!disabled) onPress(id);
@@ -298,21 +304,29 @@ function BeaconMapPinComponent({
               <View
                 style={{
                   position: "absolute",
-                  right: -7,
+                  ...(owned ? { left: -7 } : { right: -7 }),
                   bottom: -4,
                   width: 21,
                   height: 21,
                   borderRadius: identity.kind === "community" ? 6 : 11,
                   borderWidth: 2,
                   borderColor: colors.white,
-                  backgroundColor: colors.ink,
+                  backgroundColor:
+                    identity.glyph === "♥"
+                      ? resolvedAppearance === "dark"
+                        ? "#3D2430"
+                        : "#FFF0F5"
+                      : colors.ink,
                   alignItems: "center",
                   justifyContent: "center",
                 }}
               >
                 <Text
                   style={{
-                    color: colors.white,
+                    color:
+                      identity.glyph === "♥"
+                        ? mapIdentityColors.heart[resolvedAppearance]
+                        : colors.white,
                     fontSize: 12,
                     fontWeight: "700",
                   }}
@@ -321,6 +335,7 @@ function BeaconMapPinComponent({
                 </Text>
               </View>
             )}
+            {owned && <OwnershipStar />}
           </View>
           <View
             style={{
@@ -384,6 +399,7 @@ function FriendMapPinComponent({
   availabilityColor,
   availabilityLabel,
   ageLabel,
+  showLabel = true,
   appearanceKey,
   onPress,
 }: {
@@ -392,6 +408,7 @@ function FriendMapPinComponent({
   availabilityColor: string;
   availabilityLabel: string;
   ageLabel: string;
+  showLabel?: boolean;
   appearanceKey: string;
   onPress: (id: string) => void;
 }) {
@@ -399,7 +416,7 @@ function FriendMapPinComponent({
   const loadedAvatarKey = useRef<string | null>(null);
   const avatarKey = `${profile.id}:${profile.avatar_updated_at ?? ""}`;
   const tracking = useMarkerTracking(
-    `${location.id}:${avatarKey}:${profile.name}:${profile.avatar_seed ?? ""}:${profile.avatar_style ?? ""}:${availabilityColor}:${ageLabel}:${appearanceKey}:${avatarRevision}`,
+    `${location.id}:${avatarKey}:${profile.name}:${profile.avatar_seed ?? ""}:${profile.avatar_style ?? ""}:${availabilityColor}:${ageLabel}:${showLabel}:${appearanceKey}:${avatarRevision}`,
   );
   const avatarSize = markerVisualSize("person");
   return (
@@ -416,7 +433,7 @@ function FriendMapPinComponent({
         onPress(location.owner_id);
       }}
     >
-      <View style={{ width: 64, height: 54, alignItems: "center" }}>
+      <View style={{ width: 94, height: 54, alignItems: "center" }}>
         <View
           style={{
             width: avatarSize,
@@ -446,7 +463,7 @@ function FriendMapPinComponent({
             style={{
               position: "absolute",
               top: 0,
-              right: (64 - avatarSize) / 2,
+              right: (94 - avatarSize) / 2,
               width: 12,
               height: 12,
               borderRadius: 6,
@@ -458,20 +475,26 @@ function FriendMapPinComponent({
             }}
           />
         )}
-        <View
-          style={{
-            marginTop: 2,
-            paddingHorizontal: 5,
-            borderRadius: 8,
-            backgroundColor: "#FFFFFF",
-            borderWidth: 1,
-            borderColor: "#D5DEDB",
-          }}
-        >
-          <Text style={{ color: "#34434A", fontSize: 9, fontWeight: "700" }}>
-            {ageLabel}
-          </Text>
-        </View>
+        {showLabel && (
+          <View
+            style={{
+              maxWidth: 94,
+              marginTop: 2,
+              paddingHorizontal: 5,
+              borderRadius: 8,
+              backgroundColor: "#FFFFFF",
+              borderWidth: 1,
+              borderColor: "#D5DEDB",
+            }}
+          >
+            <Text
+              numberOfLines={1}
+              style={{ color: "#34434A", fontSize: 9, fontWeight: "700" }}
+            >
+              {friendLocationLabel(profile.name, ageLabel)}
+            </Text>
+          </View>
+        )}
       </View>
     </Marker>
   );
@@ -492,6 +515,7 @@ export const FriendMapPin = React.memo(
     left.availabilityColor === right.availabilityColor &&
     left.availabilityLabel === right.availabilityLabel &&
     left.ageLabel === right.ageLabel &&
+    left.showLabel === right.showLabel &&
     left.appearanceKey === right.appearanceKey &&
     left.onPress === right.onPress,
 );
@@ -533,7 +557,7 @@ function ClusterMapPinComponent({
 }: {
   profiles: Profile[];
   peopleCount?: number;
-  areaSummary?: { name: string; reason: string };
+  areaSummary?: { name: string; reason: string; ownedCount?: number };
   availabilityActivities?: Activity[];
   group: {
     id: string;
@@ -553,15 +577,16 @@ function ClusterMapPinComponent({
 }) {
   const [avatarRevision, setAvatarRevision] = useState(0);
   const now = useNow();
+  const { data, userId } = useBeacon();
   const preview = group.members.slice(0, CLUSTER_PREVIEW_LIMIT);
   const avatarKey = preview
     .map((member) => {
       const profile = profiles.find((row) => `person:${row.id}` === member.id);
-      return `${member.id}:${profile?.avatar_updated_at ?? ""}:${profile?.avatar_seed ?? ""}:${profile?.avatar_style ?? ""}:${avatarAvailability(availabilityActivities, profile?.id ?? "", now)}`;
+      return `${member.id}:${data.activities.some((activity) => `beacon:${activity.id}` === member.id && ownsMapBeacon(data, activity, userId))}:${profile?.avatar_updated_at ?? ""}:${profile?.avatar_seed ?? ""}:${profile?.avatar_style ?? ""}:${avatarAvailability(availabilityActivities, profile?.id ?? "", now)}`;
     })
     .join("|");
   const tracking = useMarkerTracking(
-    `${group.id}:${appearanceKey}:${areaSummary?.name}:${areaSummary?.reason}:${peopleCount}:${avatarKey}:${avatarRevision}:${CLUSTER_PREVIEW_ICON_SIZE}`,
+    `${group.id}:${appearanceKey}:${areaSummary?.name}:${areaSummary?.reason}:${areaSummary?.ownedCount}:${peopleCount}:${avatarKey}:${avatarRevision}:${CLUSTER_PREVIEW_ICON_SIZE}`,
   );
   const overflow = clusterPreviewOverflow(group.members.length);
   const columns = Math.min(CLUSTER_PREVIEW_LIMIT, preview.length);
@@ -603,6 +628,11 @@ function ClusterMapPinComponent({
           <Text numberOfLines={1} style={{ color: colors.green, fontSize: 10 }}>
             {areaSummary.reason}
           </Text>
+          {!!areaSummary.ownedCount && (
+            <Text style={{ color: mapIdentityColors.ownership, fontSize: 10 }}>
+              ★ {areaSummary.ownedCount} yours
+            </Text>
+          )}
         </View>
       ) : (
         <View
@@ -637,11 +667,18 @@ function ClusterMapPinComponent({
                 }}
               >
                 {member.kind === "beacon" ? (
-                  <ActivityBadge
-                    category={member.category ?? "Other"}
-                    size={iconSize}
-                    iconSize={22}
-                  />
+                  <View>
+                    <ActivityBadge
+                      category={member.category ?? "Other"}
+                      size={iconSize}
+                      iconSize={22}
+                    />
+                    {data.activities.some(
+                      (activity) =>
+                        `beacon:${activity.id}` === member.id &&
+                        ownsMapBeacon(data, activity, userId),
+                    ) && <OwnershipStar small />}
+                  </View>
                 ) : (
                   <View>
                     <ClusterPersonAvatar
@@ -683,6 +720,7 @@ export const ClusterMapPin = React.memo(
     left.availabilityActivities === right.availabilityActivities &&
     left.areaSummary?.name === right.areaSummary?.name &&
     left.areaSummary?.reason === right.areaSummary?.reason &&
+    left.areaSummary?.ownedCount === right.areaSummary?.ownedCount &&
     left.group.id === right.group.id &&
     left.group.latitude === right.group.latitude &&
     left.group.longitude === right.group.longitude &&
@@ -691,3 +729,27 @@ export const ClusterMapPin = React.memo(
     left.accessibilityLabel === right.accessibilityLabel &&
     left.onPress === right.onPress,
 );
+
+function OwnershipStar({ small = false }: { small?: boolean }) {
+  return (
+    <View
+      testID="beacon-ownership-star"
+      accessibilityLabel="Your Beacon"
+      style={{
+        position: "absolute",
+        right: small ? -2 : -6,
+        bottom: -4,
+        width: small ? 12 : 16,
+        height: small ? 12 : 16,
+        borderRadius: 9,
+        borderWidth: 1,
+        borderColor: "#FFFFFF",
+        backgroundColor: mapIdentityColors.ownership,
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <Text style={{ color: "#FFFFFF", fontSize: small ? 8 : 10 }}>★</Text>
+    </View>
+  );
+}

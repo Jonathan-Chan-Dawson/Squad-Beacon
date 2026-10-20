@@ -314,7 +314,7 @@ function ResultRow({
           label={`${capacity.count} of ${progressGoal} Beacon places`}
         />
       ) : null}
-      <MapBeaconRsvp activity={activity} compact />
+      <MapBeaconRsvp activity={activity} />
     </View>
   );
 }
