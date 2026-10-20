@@ -15,6 +15,7 @@ export function HomeAction({
   testID,
   stretch = false,
   outlined = false,
+  tone,
 }: {
   title?: string;
   label?: string;
@@ -27,6 +28,7 @@ export function HomeAction({
   testID?: string;
   stretch?: boolean;
   outlined?: boolean;
+  tone?: { color: string; tint: string };
 }) {
   const { colors } = useDesignTheme();
   return (
@@ -59,21 +61,25 @@ export function HomeAction({
           alignItems: "center",
           justifyContent: "center",
           gap: 5,
-          backgroundColor: primary
-            ? colors.accent
-            : plain
-              ? "transparent"
-              : colors.surfaceRaised,
+          backgroundColor:
+            tone?.tint ??
+            (primary
+              ? colors.accent
+              : plain
+                ? "transparent"
+                : colors.surfaceRaised),
           borderRadius: outlined ? 11 : stretch ? 9 : 15,
           borderWidth: outlined ? 1 : plain || primary ? 0 : 1,
-          borderColor: colors.border,
+          borderColor: tone?.color ?? colors.border,
         }}
       >
         {icon}
         {title ? (
           <Text
             style={{
-              color: primary ? colors.onAccent : colors.textSecondary,
+              color:
+                tone?.color ??
+                (primary ? colors.onAccent : colors.textSecondary),
               fontSize: 12,
               lineHeight: 18,
               fontWeight: "500",

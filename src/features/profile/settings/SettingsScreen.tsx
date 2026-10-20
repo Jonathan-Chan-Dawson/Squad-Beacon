@@ -4,7 +4,6 @@ import {
   Platform,
   Linking,
   Pressable,
-  ScrollView,
   Switch,
   Text,
   View,
@@ -20,7 +19,6 @@ import Animated, {
 import {
   Bell,
   BellOff,
-  Check,
   Clock3,
   Eye,
   FileText,
@@ -41,11 +39,7 @@ import { AvatarToggle } from "@/src/features/profile/AvatarToggle";
 import { useBeacon } from "@/src/shared/store";
 import { useNow } from "@/src/shared/useNow";
 import { usePreferences } from "@/src/shared/preferences";
-import {
-  themeNames,
-  themeVariants,
-  type AppearanceMode,
-} from "@/src/shared/themes";
+import { ThemePicker } from "./ThemePicker";
 import {
   stopDeviceLocation,
   enablePush,
@@ -53,7 +47,6 @@ import {
 } from "@/src/platform/device";
 import { supabase } from "@/src/shared/supabase";
 import {
-  SegmentedControl,
   Skeleton,
   uiHaptics,
   useReducedMotion,
@@ -573,7 +566,7 @@ function SettingsForm({ profile }: { profile: Profile }) {
     },
   ];
   const showAppearance = match(
-    "Appearance palette theme Mint Sunset Midnight Ocean Berry Light Dark Device avatars",
+    "Appearance palette theme Essential Mint Sunset Midnight Ocean Berry System Light Dark Device avatars",
   );
   const hasResults =
     showAppearance || groups.some((group) => group.items.length);
@@ -599,91 +592,7 @@ function SettingsForm({ profile }: { profile: Profile }) {
                 icon={Palette}
               />
               <View style={{ padding: 12, gap: 14 }}>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={{ gap: 10, paddingBottom: 2 }}
-                >
-                  {themeNames.map((name) => {
-                    const palette =
-                      themeVariants[name][preferences.resolvedAppearance];
-                    const selected = preferences.theme === name;
-                    return (
-                      <Pressable
-                        key={name}
-                        accessibilityRole="button"
-                        accessibilityLabel={`${name} palette`}
-                        aria-pressed={selected}
-                        accessibilityState={{
-                          selected,
-                          disabled: !preferences.ready,
-                        }}
-                        disabled={!preferences.ready}
-                        onPress={() => {
-                          preferences.setTheme(name);
-                          void uiHaptics.light();
-                        }}
-                        style={{
-                          width: 80,
-                          minHeight: 88,
-                          borderRadius: 16,
-                          borderColor: selected ? colors.green : colors.line,
-                          borderWidth: selected ? 2 : 1,
-                          backgroundColor: palette.bg,
-                          padding: 8,
-                          justifyContent: "space-between",
-                        }}
-                      >
-                        <View style={{ flexDirection: "row", gap: 3 }}>
-                          {[palette.green, palette.lime, palette.ink].map(
-                            (swatch, index) => (
-                              <View
-                                key={index}
-                                style={{
-                                  width: 16,
-                                  height: 22,
-                                  borderRadius: 5,
-                                  backgroundColor: swatch,
-                                }}
-                              />
-                            ),
-                          )}
-                        </View>
-                        <View
-                          style={{ flexDirection: "row", alignItems: "center" }}
-                        >
-                          <Text
-                            style={{
-                              color: palette.ink,
-                              fontSize: 12,
-                              fontWeight: "600",
-                              flex: 1,
-                            }}
-                          >
-                            {name}
-                          </Text>
-                          {selected ? (
-                            <Check size={13} color={palette.green} />
-                          ) : null}
-                        </View>
-                      </Pressable>
-                    );
-                  })}
-                </ScrollView>
-                <SegmentedControl<AppearanceMode>
-                  accessibilityLabel="Appearance"
-                  options={[
-                    { value: "light", label: "Light" },
-                    { value: "dark", label: "Dark" },
-                    { value: "system", label: "Device" },
-                  ]}
-                  value={preferences.appearanceMode}
-                  onChange={preferences.setAppearanceMode}
-                />
-                <Text style={styles.muted}>
-                  Device follows your phone or browser. Palette and avatar
-                  choices stay on this device.
-                </Text>
+                <ThemePicker />
                 <AvatarToggle description />
               </View>
             </SettingsGroup>

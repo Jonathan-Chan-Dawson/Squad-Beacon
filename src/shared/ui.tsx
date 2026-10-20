@@ -69,7 +69,7 @@ import {
   type ThemeName,
 } from "@/src/shared/themes";
 export { uiHaptics };
-export const colors = themes.Mint;
+export const colors = themes.Essential;
 let webSheetScrollLocks = 0;
 let previousWebBodyOverflow = "";
 const activeSheetStack: string[] = [];
@@ -291,7 +291,7 @@ const themedStyles = Object.fromEntries(
   ThemeName,
   Record<ResolvedAppearance, ReturnType<typeof makeStyles>>
 >;
-export const styles = themedStyles.Midnight.dark;
+export const styles = themedStyles.Essential.dark;
 export function useTheme() {
   const { theme, resolvedAppearance } = usePreferences();
   const design = useDesignTheme();
@@ -300,6 +300,7 @@ export function useTheme() {
     const semantic = getDesignTheme(theme, resolvedAppearance).colors;
     return {
       ...palette,
+      ...semantic,
       bg: semantic.bg,
       ink: semantic.textPrimary,
       muted: semantic.textSecondary,

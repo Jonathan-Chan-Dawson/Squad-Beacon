@@ -32,7 +32,7 @@ type PreferencesValue = {
   setShowAvatars: (value: boolean) => void;
 };
 const Preferences = createContext<PreferencesValue>({
-  theme: "Midnight",
+  theme: "Essential",
   setTheme: () => {},
   appearanceMode: "dark",
   resolvedAppearance: "dark",
@@ -48,7 +48,7 @@ export function PreferencesProvider({
   children: React.ReactNode;
 }) {
   const deviceAppearance = useDeviceAppearance();
-  const [theme, setThemeValue] = useState<ThemeName>("Midnight");
+  const [theme, setThemeValue] = useState<ThemeName>("Essential");
   const [appearanceMode, setAppearanceModeValue] =
     useState<AppearanceMode>("dark");
   const [showAvatars, setValue] = useState(true);
@@ -110,7 +110,11 @@ export function PreferencesProvider({
   const setTheme = (value: ThemeName) => {
     setThemeValue(value);
     setError("");
-    persist(themeKey, value, "Theme changed for now; this device could not save it.");
+    persist(
+      themeKey,
+      value,
+      "Theme changed for now; this device could not save it.",
+    );
     // Persist the resolved legacy mode too, so changing a legacy theme cannot
     // silently switch its appearance the next time preferences are loaded.
     persist(

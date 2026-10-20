@@ -197,7 +197,7 @@ test("Plan relationship closes the preview and preserves ordinary filters", asyn
   await expect(context).toBeVisible();
   await page.getByTestId("map-filter-toggle").click();
   const filters = page.getByRole("dialog", { name: "Filters", exact: true });
-  await filters.getByRole("button", { name: "Study", exact: true }).click();
+  await filters.getByRole("checkbox", { name: "Study", exact: true }).click();
   await filters.getByRole("button", { name: /^Show \d+ Beacons$/ }).click();
   await context.click();
   await expect(context).toHaveCount(0);

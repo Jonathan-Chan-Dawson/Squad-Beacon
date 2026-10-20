@@ -9,6 +9,7 @@ import type { SocialFriend } from "@/src/features/beacons/socialFriends";
 import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
 import { selectListPeople, type PeopleListSelection } from "../privateLists";
 import { PrivateListsSheet } from "./PrivateListsSheet";
+import { PrivateListAvatar } from "./PrivateListAvatar";
 import {
   addShownRecipients,
   recipientCategory,
@@ -138,25 +139,33 @@ export function SocialSelector({
           : [row],
     );
   };
-  const pill = (label: string, active: boolean, onPress: () => void) => (
+  const tab = (label: string, active: boolean, onPress: () => void) => (
     <Pressable
       key={label}
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ selected: active }}
+      aria-pressed={active}
       onPress={onPress}
       style={{
         flexShrink: 0,
         minHeight: 44,
+        minWidth: 44,
         paddingHorizontal: 12,
-        borderRadius: 22,
-        borderWidth: 1,
-        borderColor: active ? colors.green : colors.line,
-        backgroundColor: active ? colors.lime : colors.white,
+        borderBottomWidth: 2,
+        borderBottomColor: active ? colors.green : "transparent",
         justifyContent: "center",
       }}
     >
-      <Text style={{ color: colors.ink, fontSize: 14 }}>{label}</Text>
+      <Text
+        style={{
+          color: active ? colors.green : colors.muted,
+          fontSize: 14,
+          fontWeight: active ? "600" : "400",
+        }}
+      >
+        {label}
+      </Text>
     </Pressable>
   );
   const control = (row: SocialRecipient) => {
@@ -185,7 +194,7 @@ export function SocialSelector({
           }}
         >
           {checked ? (
-            <Check size={16} color={colors.white} />
+            <Check size={16} color={colors.onPrimary} />
           ) : (
             <Plus size={16} color={colors.muted} />
           )}
@@ -216,7 +225,7 @@ export function SocialSelector({
               layouts.current[value] = event.nativeEvent.layout;
             }}
           >
-            {pill(value, category === value, () => setCategory(value))}
+            {tab(value, category === value, () => setCategory(value))}
           </View>
         ))}
       </ScrollView>
@@ -227,24 +236,97 @@ export function SocialSelector({
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={{ gap: 6 }}
           >
-            {pill("All Friends", effectiveList === "friends", () =>
+            {tab("All Friends", effectiveList === "friends", () =>
               setList("friends"),
             )}
-            {pill("Favorites", effectiveList === "favorites", () =>
+            {tab("Favorites", effectiveList === "favorites", () =>
               setList("favorites"),
             )}
-            {lists.map((row) =>
-              pill(row.name, effectiveList === `custom:${row.id}`, () =>
-                setList(`custom:${row.id}`),
-              ),
-            )}
           </ScrollView>
-          <Button
-            compact
-            secondary
-            title="Manage Private Lists"
-            onPress={() => setManage(true)}
-          />
+          <View
+            testID="friends-private-lists"
+            style={{
+              borderTopWidth: 1,
+              borderTopColor: colors.line,
+              paddingTop: 4,
+              gap: 4,
+            }}
+          >
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+              }}
+            >
+              <Text style={styles.muted}>Private Lists</Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Manage Private Lists"
+                onPress={() => setManage(true)}
+                style={{
+                  minHeight: 44,
+                  minWidth: 44,
+                  justifyContent: "center",
+                  alignItems: "center",
+                }}
+              >
+                <Text style={{ color: colors.green, fontSize: 13 }}>
+                  Manage
+                </Text>
+              </Pressable>
+            </View>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              contentContainerStyle={{ gap: 16 }}
+            >
+              {lists.map((row) => (
+                <Pressable
+                  key={row.id}
+                  accessibilityRole="button"
+                  accessibilityLabel={row.name}
+                  accessibilityState={{
+                    selected: effectiveList === `custom:${row.id}`,
+                  }}
+                  aria-pressed={effectiveList === `custom:${row.id}`}
+                  onPress={() => setList(`custom:${row.id}`)}
+                  style={{
+                    minHeight: 44,
+                    minWidth: 44,
+                    flexShrink: 0,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 7,
+                    borderBottomWidth: 2,
+                    borderBottomColor:
+                      effectiveList === `custom:${row.id}`
+                        ? colors.green
+                        : "transparent",
+                  }}
+                >
+                  <PrivateListAvatar id={row.id} name={row.name} />
+                  <Text
+                    style={{
+                      color:
+                        effectiveList === `custom:${row.id}`
+                          ? colors.green
+                          : colors.ink,
+                      fontSize: 13,
+                    }}
+                  >
+                    {row.name}
+                  </Text>
+                </Pressable>
+              ))}
+              {!lists.length && (
+                <Text style={[styles.muted, { paddingVertical: 10 }]}>
+                  No private lists yet.
+                </Text>
+              )}
+            </ScrollView>
+          </View>
         </>
       )}
       {(category === "All" || groups.length > 0) && (

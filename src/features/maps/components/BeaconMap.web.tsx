@@ -37,7 +37,7 @@ import { usePreferences } from "@/src/shared/preferences";
 import { useTheme } from "@/src/shared/ui";
 import { useNow } from "@/src/shared/useNow";
 import { useReducedMotion } from "@/src/shared/design-system";
-import { cartoAttribution, cartoTileUrl } from "@/src/theme/map";
+import { cartoAttribution, cartoBasemapLayers } from "@/src/theme/map";
 import {
   markerVisualSize,
   CLUSTER_PREVIEW_ICON_SIZE,
@@ -355,34 +355,58 @@ export default function BeaconMap(props: MapProps) {
     const failed = new Set<string>();
     let retry: ReturnType<typeof setTimeout> | undefined;
     let retried = false;
-    const layer = L.tileLayer(cartoTileUrl(resolvedAppearance, cartoApiKey), {
+    const urls = cartoBasemapLayers(resolvedAppearance, cartoApiKey);
+    const layer = L.tileLayer(urls.base, {
       maxZoom: MAP_MAX_ZOOM,
       maxNativeZoom: 19,
       attribution: cartoAttribution,
     });
-    layer.on("tileerror", (event: Leaflet.TileErrorEvent) => {
-      failed.add(`${event.coords.z}/${event.coords.x}/${event.coords.y}`);
-      if (!active) return;
-      setTileError(true);
-      if (!retried) {
-        retried = true;
-        retry = setTimeout(() => {
-          if (active) layer.redraw();
-        }, 1500);
-      }
-    });
-    layer.on("tileload", (event: Leaflet.TileEvent) => {
-      failed.delete(`${event.coords.z}/${event.coords.x}/${event.coords.y}`);
-    });
-    layer.on("load", () => {
-      if (active) setTileError(failed.size > 0);
+    const labelPane =
+      currentMap.getPane("beacon-basemap-labels") ??
+      currentMap.createPane("beacon-basemap-labels");
+    labelPane.style.zIndex = "250";
+    labelPane.style.pointerEvents = "none";
+    const labels = urls.labels
+      ? L.tileLayer(urls.labels, {
+          maxZoom: MAP_MAX_ZOOM,
+          maxNativeZoom: 19,
+          pane: "beacon-basemap-labels",
+          className: "beacon-basemap-labels",
+        })
+      : null;
+    const layers = labels ? [layer, labels] : [layer];
+    layers.forEach((tileLayer, index) => {
+      tileLayer.on("tileerror", (event: Leaflet.TileErrorEvent) => {
+        failed.add(
+          `${index}:${event.coords.z}/${event.coords.x}/${event.coords.y}`,
+        );
+        if (!active) return;
+        setTileError(true);
+        if (!retried) {
+          retried = true;
+          retry = setTimeout(() => {
+            if (active) layers.forEach((item) => item.redraw());
+          }, 1500);
+        }
+      });
+      tileLayer.on("tileload", (event: Leaflet.TileEvent) => {
+        failed.delete(
+          `${index}:${event.coords.z}/${event.coords.x}/${event.coords.y}`,
+        );
+      });
+      tileLayer.on("load", () => {
+        if (active) setTileError(failed.size > 0);
+      });
     });
     tiles.current = layer.addTo(currentMap);
+    labels?.addTo(currentMap);
     return () => {
       active = false;
       clearTimeout(retry);
-      layer.off();
-      layer.remove();
+      layers.forEach((item) => {
+        item.off();
+        item.remove();
+      });
     };
   }, [ready, resolvedAppearance, cartoApiKey, tileRetry]);
   useEffect(() => {
@@ -578,8 +602,7 @@ export default function BeaconMap(props: MapProps) {
         node.append(frame);
         const age = document.createElement("span");
         age.textContent = ageLabel;
-        age.style.cssText =
-          "position:relative;margin-top:2px;padding:0 5px;border:1px solid #d5dedb;border-radius:8px;background:#fff;color:#34434a;font:700 9px system-ui;white-space:nowrap;max-width:94px;overflow:hidden;text-overflow:ellipsis;";
+        age.style.cssText = `position:relative;margin-top:2px;padding:0 5px;border:1px solid ${colors.line};border-radius:8px;background:${colors.white};color:${colors.ink};font:700 9px system-ui;white-space:nowrap;max-width:94px;overflow:hidden;text-overflow:ellipsis;`;
         if (ageLabel) node.append(age);
       } else {
         const face = document.createElement("span");

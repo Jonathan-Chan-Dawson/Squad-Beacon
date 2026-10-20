@@ -26,7 +26,10 @@ import { selectProfileBeacon, type ProfileContentRow } from "../profileContent";
 import { useProfileContent } from "../useProfileContent";
 import { ProfileAlbums, openProfileBeacon } from "./ProfileAlbums";
 import { visibleSoloActivity } from "@/src/features/maps/soloActivity";
-import { StatusBubble, StatusViewer } from "@/src/features/beacons/components/feed/StatusViewer";
+import {
+  StatusBubble,
+  StatusViewer,
+} from "@/src/features/beacons/components/feed/StatusViewer";
 import { SharedStatusControl } from "@/src/features/beacons/components/feed/SharedStatusControl";
 import {
   canViewBeaconMeetingDetails,
@@ -206,7 +209,7 @@ export function ProfileExperience({
   onTabChange: (tab: ProfileTab) => void;
 }) {
   const { data, userId } = useBeacon();
-  const { styles, semanticColors: colors } = useTheme();
+  const { styles, semanticColors: colors, tokens } = useTheme();
   const reduced = useReducedMotion();
   const fade = useSharedValue(1);
   useEffect(() => {
@@ -229,6 +232,10 @@ export function ProfileExperience({
   const status = visibleSoloActivity(data, profile.id, userId, now);
   const availability = friendAvailabilityState(status, now);
   const available = availability === "available";
+  const availabilityColor =
+    tokens.availability[
+      availability === "ending-soon" ? "endingSoon" : availability
+    ].color;
   const featured = selectProfileBeacon(data, profile, userId, now);
   const meetingLabel =
     featured && userId && canViewBeaconMeetingDetails(data, featured.id, userId)
@@ -304,24 +311,34 @@ export function ProfileExperience({
         </Svg>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
           <View style={{ alignItems: "center", gap: 6, maxWidth: "46%" }}>
-          <StatusBubble personId={profile.id} onPress={() => setStatusViewerOpen(true)} />
-          <MotionPressable
-            testID="profile-avatar"
-            accessibilityRole="button"
-            accessibilityLabel={
-              own ? "Edit profile photo" : `${profile.name}'s avatar`
-            }
-            onPress={own ? () => edit() : undefined}
-            disabled={!own}
-            style={{
-              padding: 3,
-              borderRadius: 50,
-              borderWidth: 1.5,
-              borderColor: available ? colors.accent : colors.border,
-            }}
-          >
-            <ProfileAvatar profile={profile} size={88} status={availability} />
-          </MotionPressable>
+            <StatusBubble
+              personId={profile.id}
+              onPress={() => setStatusViewerOpen(true)}
+            />
+            <MotionPressable
+              testID="profile-avatar"
+              accessibilityRole="button"
+              accessibilityLabel={
+                own ? "Edit profile photo" : `${profile.name}'s avatar`
+              }
+              onPress={own ? () => edit() : undefined}
+              disabled={!own}
+              style={{
+                padding: 3,
+                borderRadius: 50,
+                borderWidth: 1.5,
+                borderColor:
+                  availability !== "unknown"
+                    ? availabilityColor
+                    : colors.border,
+              }}
+            >
+              <ProfileAvatar
+                profile={profile}
+                size={88}
+                status={availability}
+              />
+            </MotionPressable>
           </View>
           <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
             <Text
@@ -348,9 +365,7 @@ export function ProfileExperience({
                       width: 7,
                       height: 7,
                       borderRadius: 4,
-                      backgroundColor: available
-                        ? colors.accent
-                        : colors.textSecondary,
+                      backgroundColor: availabilityColor,
                     }}
                   />
                   <Text
@@ -358,7 +373,7 @@ export function ProfileExperience({
                       styles.muted,
                       {
                         flex: 1,
-                        color: available ? colors.accent : colors.textSecondary,
+                        color: availabilityColor,
                       },
                     ]}
                   >
@@ -374,7 +389,11 @@ export function ProfileExperience({
           </View>
           {accessory}
         </View>
-        <StatusViewer personId={profile.id} visible={statusViewerOpen} onClose={() => setStatusViewerOpen(false)} />
+        <StatusViewer
+          personId={profile.id}
+          visible={statusViewerOpen}
+          onClose={() => setStatusViewerOpen(false)}
+        />
         {!!profile.bio && (
           <MotionPressable
             accessibilityRole="button"

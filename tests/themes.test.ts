@@ -41,14 +41,38 @@ test("legacy theme palettes keep their public shape", () => {
     assert.ok(contrast(palette.ink, palette.bg) >= 4.5, `${name} primary text`);
     assert.ok(contrast(palette.ink, palette.white) >= 4.5, `${name} card text`);
     assert.ok(contrast(palette.muted, palette.bg) >= 4.5, `${name} muted text`);
-    assert.ok(contrast(palette.muted, palette.white) >= 4.5, `${name} muted card text`);
-    assert.ok(contrast(palette.green, palette.bg) >= 4.5, `${name} accent text`);
-    assert.ok(contrast(palette.green, palette.white) >= 4.5, `${name} accent on cards`);
-    assert.ok(contrast(palette.white, palette.ink) >= 4.5, `${name} primary button text`);
-    assert.ok(contrast(palette.ink, palette.lime) >= 4.5, `${name} compact action text`);
-    assert.ok(contrast(palette.heroText, palette.heroBg) >= 4.5, `${name} Auth hero text`);
-    assert.ok(contrast(palette.heroAccent, palette.heroBg) >= 3, `${name} Auth hero icon`);
-    assert.ok(contrast(palette.green, palette.lime) >= 3, `${name} accent icon on lime`);
+    assert.ok(
+      contrast(palette.muted, palette.white) >= 4.5,
+      `${name} muted card text`,
+    );
+    assert.ok(
+      contrast(palette.green, palette.bg) >= 4.5,
+      `${name} accent text`,
+    );
+    assert.ok(
+      contrast(palette.green, palette.white) >= 4.5,
+      `${name} accent on cards`,
+    );
+    assert.ok(
+      contrast(palette.white, palette.ink) >= 4.5,
+      `${name} primary button text`,
+    );
+    assert.ok(
+      contrast(palette.ink, palette.lime) >= 4.5,
+      `${name} compact action text`,
+    );
+    assert.ok(
+      contrast(palette.heroText, palette.heroBg) >= 4.5,
+      `${name} Auth hero text`,
+    );
+    assert.ok(
+      contrast(palette.heroAccent, palette.heroBg) >= 3,
+      `${name} Auth hero icon`,
+    );
+    assert.ok(
+      contrast(palette.green, palette.lime) >= 3,
+      `${name} accent icon on lime`,
+    );
   }
 });
 
@@ -57,24 +81,57 @@ test("every theme has readable light and dark variants", () => {
     for (const appearance of ["light", "dark"] as const) {
       const palette = themeVariants[name][appearance];
       const label = `${name} ${appearance}`;
-      assert.ok(contrast(palette.ink, palette.bg) >= 4.5, `${label} primary text`);
-      assert.ok(contrast(palette.ink, palette.white) >= 4.5, `${label} card text`);
-      assert.ok(contrast(palette.muted, palette.bg) >= 4.5, `${label} muted text`);
-      assert.ok(contrast(palette.muted, palette.white) >= 4.5, `${label} muted card text`);
-      assert.ok(contrast(palette.green, palette.bg) >= 4.5, `${label} accent text`);
-      assert.ok(contrast(palette.green, palette.white) >= 4.5, `${label} accent on cards`);
-      assert.ok(contrast(palette.white, palette.ink) >= 4.5, `${label} primary button text`);
-      assert.ok(contrast(palette.ink, palette.lime) >= 4.5, `${label} compact action text`);
-      assert.ok(contrast(palette.heroText, palette.heroBg) >= 4.5, `${label} hero text`);
-      assert.ok(contrast(palette.heroAccent, palette.heroBg) >= 3, `${label} hero icon`);
-      assert.ok(contrast(palette.green, palette.lime) >= 3, `${label} accent icon on lime`);
+      assert.ok(
+        contrast(palette.ink, palette.bg) >= 4.5,
+        `${label} primary text`,
+      );
+      assert.ok(
+        contrast(palette.ink, palette.white) >= 4.5,
+        `${label} card text`,
+      );
+      assert.ok(
+        contrast(palette.muted, palette.bg) >= 4.5,
+        `${label} muted text`,
+      );
+      assert.ok(
+        contrast(palette.muted, palette.white) >= 4.5,
+        `${label} muted card text`,
+      );
+      assert.ok(
+        contrast(palette.green, palette.bg) >= 4.5,
+        `${label} accent text`,
+      );
+      assert.ok(
+        contrast(palette.green, palette.white) >= 4.5,
+        `${label} accent on cards`,
+      );
+      assert.ok(
+        contrast(palette.white, palette.ink) >= 4.5,
+        `${label} primary button text`,
+      );
+      assert.ok(
+        contrast(palette.ink, palette.lime) >= 4.5,
+        `${label} compact action text`,
+      );
+      assert.ok(
+        contrast(palette.heroText, palette.heroBg) >= 4.5,
+        `${label} hero text`,
+      );
+      assert.ok(
+        contrast(palette.heroAccent, palette.heroBg) >= 3,
+        `${label} hero icon`,
+      );
+      assert.ok(
+        contrast(palette.green, palette.lime) >= 3,
+        `${label} accent icon on lime`,
+      );
     }
   }
 });
 
 test("appearance preference defaults dark and migrates saved legacy themes", () => {
   assert.deepEqual(getInitialThemePreferences(null, null), {
-    theme: "Midnight",
+    theme: "Essential",
     appearanceMode: "dark",
   });
   assert.deepEqual(getInitialThemePreferences("Mint", null), {
@@ -99,4 +156,46 @@ test("system appearance follows the device and has a safe dark fallback", () => 
   assert.equal(resolveAppearanceMode("system", "unspecified"), "dark");
   assert.equal(resolveAppearanceMode("light", "dark"), "light");
   assert.equal(resolveAppearanceMode("dark", "light"), "dark");
+});
+
+test("original theme IDs stay unchanged and every saved explicit appearance survives", () => {
+  assert.deepEqual(themeNames, [
+    "Essential",
+    "Midnight",
+    "Ocean",
+    "Mint",
+    "Sunset",
+    "Berry",
+  ]);
+  for (const theme of themeNames) {
+    for (const appearanceMode of ["light", "dark", "system"] as const) {
+      assert.deepEqual(getInitialThemePreferences(theme, appearanceMode), {
+        theme,
+        appearanceMode,
+      });
+    }
+    assert.equal(
+      getInitialThemePreferences(theme, null).appearanceMode,
+      theme === "Essential" || theme === "Midnight" ? "dark" : "light",
+    );
+  }
+  for (const renamed of ["Aurora", "Coast", "Grove", "Golden Hour", "Orchid"])
+    assert.equal(isThemeName(renamed), false);
+});
+
+test("new and invalid preferences use Essential while preserving a saved valid appearance", () => {
+  for (const invalid of [undefined, null, "removed-theme", "Aurora"]) {
+    assert.deepEqual(getInitialThemePreferences(invalid, undefined), {
+      theme: "Essential",
+      appearanceMode: "dark",
+    });
+    assert.deepEqual(getInitialThemePreferences(invalid, "system"), {
+      theme: "Essential",
+      appearanceMode: "system",
+    });
+    assert.deepEqual(getInitialThemePreferences(invalid, "light"), {
+      theme: "Essential",
+      appearanceMode: "light",
+    });
+  }
 });

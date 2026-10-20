@@ -37,14 +37,14 @@ test("advanced map filters keep multi-category selection and reset cleanly", asy
       filters.getByText(section.toUpperCase(), { exact: true }),
     ).toBeVisible();
 
-  await filters.getByRole("button", { name: "Study", exact: true }).click();
-  await filters.getByRole("button", { name: "Gaming", exact: true }).click();
+  await filters.getByRole("checkbox", { name: "Study", exact: true }).click();
+  await filters.getByRole("checkbox", { name: "Gaming", exact: true }).click();
   await expect(
-    filters.getByRole("button", { name: "Study", exact: true }),
-  ).toHaveAttribute("aria-pressed", "true");
+    filters.getByRole("checkbox", { name: "Study", exact: true }),
+  ).toHaveAttribute("aria-checked", "true");
   await expect(
-    filters.getByRole("button", { name: "Gaming", exact: true }),
-  ).toHaveAttribute("aria-pressed", "true");
+    filters.getByRole("checkbox", { name: "Gaming", exact: true }),
+  ).toHaveAttribute("aria-checked", "true");
   const showResults = filters.getByRole("button", {
     name: /^Show \d+ Beacons$/,
   });
@@ -73,11 +73,11 @@ test("advanced map filters keep multi-category selection and reset cleanly", asy
   await expect(reset).toContainText("2");
   await reset.click();
   await expect(
-    filters.getByRole("button", { name: "Study", exact: true }),
-  ).toHaveAttribute("aria-pressed", "false");
+    filters.getByRole("checkbox", { name: "Study", exact: true }),
+  ).toHaveAttribute("aria-checked", "false");
   await expect(
-    filters.getByRole("button", { name: "Gaming", exact: true }),
-  ).toHaveAttribute("aria-pressed", "false");
+    filters.getByRole("checkbox", { name: "Gaming", exact: true }),
+  ).toHaveAttribute("aria-checked", "false");
   await expect(reset).not.toContainText("2");
   await reopened.getByRole("button", { name: /^Show \d+ Beacons$/ }).click();
   await expect(reopened).toHaveCount(0);

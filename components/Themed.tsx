@@ -4,9 +4,7 @@
  */
 import { Text as DefaultText, View as DefaultView } from "react-native";
 
-import { useColorScheme } from "./useColorScheme";
-
-import Colors from "@/constants/Colors";
+import { useDesignTheme } from "@/src/theme";
 
 type ThemeProps = {
   lightColor?: string;
@@ -18,15 +16,22 @@ export type ViewProps = ThemeProps & DefaultView["props"];
 
 export function useThemeColor(
   props: { light?: string; dark?: string },
-  colorName: keyof typeof Colors.light & keyof typeof Colors.dark,
+  colorName:
+    "text" | "background" | "tint" | "tabIconDefault" | "tabIconSelected",
 ) {
-  const theme = useColorScheme();
-  const colorFromProps = props[theme];
+  const { colors, appearance } = useDesignTheme();
+  const colorFromProps = props[appearance];
 
   if (colorFromProps) {
     return colorFromProps;
   } else {
-    return Colors[theme][colorName];
+    return {
+      text: colors.textPrimary,
+      background: colors.background,
+      tint: colors.primary,
+      tabIconDefault: colors.textSecondary,
+      tabIconSelected: colors.primary,
+    }[colorName];
   }
 }
 

@@ -36,7 +36,7 @@ export function MapPersonPreview({
   onBeacon(id: string): void;
 }) {
   const { data, userId, act } = useBeacon();
-  const { styles, colors } = useTheme();
+  const { styles, colors, tokens } = useTheme();
   const now = useNow();
   const selection = selectPersonPreview(data, personId, userId, now);
   // Solo statuses use the existing activity storage, but are not linked Beacon cards.
@@ -58,6 +58,12 @@ export function MapPersonPreview({
   if (!selection.canViewFullProfile || !selection.profile || !userId)
     return null;
   const profile = selection.profile;
+  const availabilityToken =
+    tokens.availability[
+      selection.availability === "ending-soon"
+        ? "endingSoon"
+        : selection.availability
+    ];
   const location = selectFreshVisiblePersonLocation(
     data,
     personId,
@@ -99,7 +105,9 @@ export function MapPersonPreview({
             borderRadius: 24,
             borderWidth: 1,
             borderColor:
-              selection.availability === "unknown" ? colors.line : colors.green,
+              selection.availability === "unknown"
+                ? colors.line
+                : availabilityToken.color,
           }}
         >
           <ProfileAvatar profile={profile} size={mapTooltip.avatarSize} />
@@ -118,7 +126,7 @@ export function MapPersonPreview({
               backgroundColor: colors.white,
             }}
           >
-            <StatusIcon size={13} color={colors.green} />
+            <StatusIcon size={13} color={availabilityToken.color} />
           </View>
         </View>
         <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
@@ -165,19 +173,19 @@ export function MapPersonPreview({
           alignItems: "center",
           alignSelf: "flex-start",
           gap: 5,
-          backgroundColor: colors.green + "20",
+          backgroundColor: availabilityToken.tint,
           paddingHorizontal: 8,
           paddingVertical: 4,
           borderRadius: 12,
           maxWidth: "100%",
         }}
       >
-        <StatusIcon size={14} color={colors.green} />
+        <StatusIcon size={14} color={availabilityToken.color} />
         <Text
           numberOfLines={1}
           style={[
             styles.label,
-            { flexShrink: 1, fontSize: 12, color: colors.green },
+            { flexShrink: 1, fontSize: 12, color: availabilityToken.color },
           ]}
         >
           {status}

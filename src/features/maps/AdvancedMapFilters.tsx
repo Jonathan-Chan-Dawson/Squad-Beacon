@@ -9,11 +9,9 @@ import {
   Dumbbell,
   Gamepad2,
   Palette,
-  Search,
   Sparkles,
   Users,
   CalendarDays,
-  MapPin,
   UserRoundCheck,
   ListChecks,
 } from "lucide-react-native";
@@ -91,6 +89,70 @@ function RowChoice({
         {description ? <Text style={styles.muted}>{description}</Text> : null}
       </View>
       {selected ? <Check size={17} color={colors.green} /> : null}
+    </Pressable>
+  );
+}
+
+function FilterRadio({
+  label,
+  selected,
+  onPress,
+}: {
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  const { colors, styles } = useTheme();
+  return (
+    <Pressable
+      accessibilityRole="radio"
+      accessibilityLabel={label}
+      accessibilityState={{ checked: selected }}
+      aria-checked={selected}
+      onPress={onPress}
+      style={{
+        minHeight: 44,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 10,
+        borderBottomWidth: 1,
+        borderBottomColor: colors.line,
+      }}
+    >
+      <View
+        style={{
+          width: 18,
+          height: 18,
+          borderRadius: 9,
+          borderWidth: 1.5,
+          borderColor: selected ? colors.green : colors.muted,
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        {selected && (
+          <View
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: 4,
+              backgroundColor: colors.green,
+            }}
+          />
+        )}
+      </View>
+      <Text
+        style={[
+          styles.body,
+          {
+            flex: 1,
+            fontSize: 14,
+            color: selected ? colors.green : colors.ink,
+          },
+        ]}
+      >
+        {label}
+      </Text>
     </Pressable>
   );
 }
@@ -227,51 +289,36 @@ export function AdvancedMapFilters({
     >
       <View testID="advanced-map-filters" style={{ gap: 14, paddingBottom: 8 }}>
         <ChoiceSection title="When" icon={CalendarDays}>
-          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 7 }}>
-            {whens.map((when) => {
-              const selected = currentWhen === when;
-              return (
-                <Pressable
-                  key={when}
-                  accessibilityRole="button"
-                  accessibilityLabel={when}
-                  accessibilityState={{ selected }}
-                  onPress={() =>
-                    patch({
-                      when,
-                      time:
-                        when === "Any" || filters.time === "Now"
-                          ? "All"
-                          : filters.time,
-                    })
-                  }
-                  style={{
-                    minHeight: 44,
-                    justifyContent: "center",
-                    paddingHorizontal: 13,
-                    borderRadius: 22,
-                    borderWidth: 1,
-                    borderColor: selected ? colors.ink : colors.line,
-                    backgroundColor: selected ? colors.ink : colors.white,
-                  }}
-                >
-                  <Text
-                    style={{
-                      color: selected ? colors.white : colors.ink,
-                      fontSize: 13,
-                      fontWeight: "700",
-                    }}
-                  >
-                    {when}
-                  </Text>
-                </Pressable>
-              );
-            })}
+          <View accessibilityRole="radiogroup" accessibilityLabel="When">
+            {whens.map((when) => (
+              <FilterRadio
+                key={when}
+                label={when}
+                selected={currentWhen === when}
+                onPress={() =>
+                  patch({
+                    when,
+                    time:
+                      when === "Any" || filters.time === "Now"
+                        ? "All"
+                        : filters.time,
+                  })
+                }
+              />
+            ))}
           </View>
         </ChoiceSection>
 
         <ChoiceSection title="Category" icon={Sparkles}>
-          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 7 }}>
+          <View
+            testID="filter-category-grid"
+            style={{
+              flexDirection: "row",
+              flexWrap: "wrap",
+              justifyContent: "space-between",
+              rowGap: 8,
+            }}
+          >
             {categories.map((category) => {
               const Icon = categoryIcons[category];
               const tone = categoryTokens[category];
@@ -279,33 +326,49 @@ export function AdvancedMapFilters({
               return (
                 <Pressable
                   key={category}
-                  accessibilityRole="button"
+                  accessibilityRole="checkbox"
                   accessibilityLabel={category}
-                  accessibilityState={{ selected }}
-                  aria-pressed={selected}
+                  accessibilityState={{ checked: selected }}
+                  aria-checked={selected}
                   onPress={() => toggleCategory(category)}
                   style={{
-                    minHeight: 44,
+                    width: "48.5%",
+                    minHeight: 56,
                     flexDirection: "row",
                     alignItems: "center",
                     gap: 6,
-                    paddingHorizontal: 11,
-                    borderRadius: 22,
-                    backgroundColor: selected ? tone.tint : colors.white,
+                    paddingHorizontal: 8,
+                    borderRadius: 8,
+                    backgroundColor: selected ? tone.tint : "transparent",
                     borderWidth: 1,
                     borderColor: selected ? tone.color : colors.line,
                   }}
                 >
-                  <Icon size={15} color={tone.color} />
+                  <Icon size={14} color={tone.color} />
                   <Text
                     style={{
-                      color: tone.color,
+                      flex: 1,
+                      color: colors.ink,
                       fontSize: 13,
-                      fontWeight: "700",
+                      fontWeight: "500",
                     }}
                   >
                     {category}
                   </Text>
+                  <View
+                    style={{
+                      width: 16,
+                      height: 16,
+                      borderRadius: 3,
+                      borderWidth: 1,
+                      borderColor: selected ? tone.color : colors.muted,
+                      backgroundColor: selected ? tone.color : "transparent",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    {selected && <Check size={12} color={tone.onColor} />}
+                  </View>
                 </Pressable>
               );
             })}
@@ -313,38 +376,15 @@ export function AdvancedMapFilters({
         </ChoiceSection>
 
         <ChoiceSection title="Join" icon={UserRoundCheck}>
-          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 7 }}>
-            {joins.map((join) => {
-              const selected = currentJoin === join;
-              return (
-                <Pressable
-                  key={join}
-                  accessibilityRole="button"
-                  accessibilityLabel={join}
-                  accessibilityState={{ selected }}
-                  onPress={() => patch({ join })}
-                  style={{
-                    minHeight: 44,
-                    justifyContent: "center",
-                    paddingHorizontal: 13,
-                    borderRadius: 22,
-                    borderWidth: 1,
-                    borderColor: selected ? colors.ink : colors.line,
-                    backgroundColor: selected ? colors.ink : colors.white,
-                  }}
-                >
-                  <Text
-                    style={{
-                      color: selected ? colors.white : colors.ink,
-                      fontSize: 13,
-                      fontWeight: "700",
-                    }}
-                  >
-                    {join}
-                  </Text>
-                </Pressable>
-              );
-            })}
+          <View accessibilityRole="radiogroup" accessibilityLabel="Join">
+            {joins.map((join) => (
+              <FilterRadio
+                key={join}
+                label={join}
+                selected={currentJoin === join}
+                onPress={() => patch({ join })}
+              />
+            ))}
           </View>
         </ChoiceSection>
 
@@ -451,16 +491,51 @@ export function AdvancedMapFilters({
                   );
                 })}
               </View>
-              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 7 }}>
-                {formats.map((format) => (
-                  <RowChoice
-                    key={format}
-                    label={format === "Any" ? "Any place" : format}
-                    selected={(filters.format ?? "Any") === format}
-                    onPress={() => patch({ format })}
-                    icon={format === "Virtual" ? Search : MapPin}
-                  />
-                ))}
+              <View
+                accessibilityRole="radiogroup"
+                accessibilityLabel="Format"
+                style={{
+                  flexDirection: "row",
+                  borderWidth: 1,
+                  borderColor: colors.line,
+                  borderRadius: 8,
+                  padding: 3,
+                }}
+              >
+                {formats.map((format) => {
+                  const selected = (filters.format ?? "Any") === format;
+                  return (
+                    <Pressable
+                      key={format}
+                      accessibilityRole="radio"
+                      accessibilityLabel={
+                        format === "Any" ? "Any place" : format
+                      }
+                      accessibilityState={{ checked: selected }}
+                      aria-checked={selected}
+                      onPress={() => patch({ format })}
+                      style={{
+                        flex: 1,
+                        minHeight: 44,
+                        borderRadius: 5,
+                        alignItems: "center",
+                        justifyContent: "center",
+                        backgroundColor: selected ? colors.lime : "transparent",
+                        paddingHorizontal: 3,
+                      }}
+                    >
+                      <Text
+                        style={{
+                          fontSize: 13,
+                          textAlign: "center",
+                          color: selected ? colors.green : colors.muted,
+                        }}
+                      >
+                        {format === "Any" ? "Any place" : format}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
               </View>
               {planOptions.length ? (
                 <>
@@ -489,14 +564,13 @@ export function AdvancedMapFilters({
               ) : null}
               <Text style={styles.label}>ADDITIONAL JOIN OPTIONS</Text>
               {moreJoins.map((join) => (
-                <RowChoice
+                <FilterRadio
                   key={join}
                   label={join}
                   selected={currentJoin === join}
                   onPress={() =>
                     patch({ join: currentJoin === join ? "Any" : join })
                   }
-                  icon={UserRoundCheck}
                 />
               ))}
             </View>

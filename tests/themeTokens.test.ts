@@ -29,11 +29,23 @@ test("semantic foreground colors meet contrast on every palette and soft tint", 
       );
       const context = `${name} ${appearance}`;
       for (const background of [colors.bg, colors.surface]) {
-        assert.ok(contrast(colors.textPrimary, background) >= 4.5, `${context} body text`);
-        assert.ok(contrast(colors.textSecondary, background) >= 4.5, `${context} supporting text`);
-        assert.ok(contrast(colors.danger, background) >= 4.5, `${context} destructive row text`);
+        assert.ok(
+          contrast(colors.textPrimary, background) >= 4.5,
+          `${context} body text`,
+        );
+        assert.ok(
+          contrast(colors.textSecondary, background) >= 4.5,
+          `${context} supporting text`,
+        );
+        assert.ok(
+          contrast(colors.danger, background) >= 4.5,
+          `${context} destructive row text`,
+        );
       }
-      assert.ok(contrast(colors.bg, colors.danger) >= 4.5, `${context} destructive button text`);
+      assert.ok(
+        contrast(colors.bg, colors.danger) >= 4.5,
+        `${context} destructive button text`,
+      );
       assert.ok(
         contrast(colors.onAccent, colors.accent) >= 4.5,
         `${context} button text`,
@@ -69,4 +81,90 @@ test("the pure design palette builder caches stable theme objects", () => {
   const second = getDesignColorTheme("Midnight", "dark");
   assert.strictEqual(first, second);
   assert.notStrictEqual(first, getDesignColorTheme("Midnight", "light"));
+});
+
+test("Essential uses the specified neutral hierarchy and primary button contrast", () => {
+  const expected = {
+    dark: [
+      "#0D0E10",
+      "#191A1E",
+      "#25272C",
+      "#F5F5F7",
+      "#A6A8B0",
+      "#303137",
+      "#D9DDE2",
+      "#17191D",
+    ],
+    light: [
+      "#FAFAFB",
+      "#FFFFFF",
+      "#F0F1F3",
+      "#181A1F",
+      "#666973",
+      "#E4E5E8",
+      "#343A40",
+      "#FFFFFF",
+    ],
+  };
+  for (const appearance of ["light", "dark"] as const) {
+    const { colors } = getDesignColorTheme("Essential", appearance);
+    assert.deepEqual(
+      [
+        colors.background,
+        colors.surface,
+        colors.surfaceRaised,
+        colors.textPrimary,
+        colors.textSecondary,
+        colors.outline,
+        colors.primary,
+        colors.onPrimary,
+      ],
+      expected[appearance],
+    );
+  }
+});
+
+test("semantic roles stay compatible and selected/raised surfaces remain readable", () => {
+  for (const name of themeNames)
+    for (const appearance of ["light", "dark"] as const) {
+      const { colors, categories, availability } = getDesignColorTheme(
+        name,
+        appearance,
+      );
+      assert.equal(colors.background, colors.bg);
+      assert.equal(colors.primary, colors.accent);
+      assert.equal(colors.onPrimary, colors.onAccent);
+      assert.equal(colors.outline, colors.border);
+      assert.equal(colors.success, availability.available.color);
+      assert.equal(colors.warning, availability.endingSoon.color);
+      assert.ok(contrast(colors.onPrimary, colors.primary) >= 4.5);
+      assert.ok(contrast(colors.onDanger, colors.danger) >= 4.5);
+      for (const surface of [
+        colors.surfaceRaised,
+        colors.surfaceSelected,
+        colors.primaryContainer,
+      ]) {
+        assert.ok(
+          contrast(colors.textPrimary, surface) >= 4.5,
+          `${name} ${appearance} primary text`,
+        );
+        assert.ok(
+          contrast(colors.textSecondary, surface) >= 4.5,
+          `${name} ${appearance} secondary text`,
+        );
+        assert.ok(
+          contrast(colors.primary, surface) >= 3,
+          `${name} ${appearance} selected icon`,
+        );
+      }
+      const reference = getDesignColorTheme("Essential", appearance);
+      assert.deepEqual(
+        Object.values(categories).map((token) => token.color),
+        Object.values(reference.categories).map((token) => token.color),
+      );
+      assert.deepEqual(
+        Object.values(availability).map((token) => token.color),
+        Object.values(reference.availability).map((token) => token.color),
+      );
+    }
 });

@@ -8,3 +8,5 @@ Cross-feature shared code
 - exploration.tsx: account-scoped Map/Upcoming search, audience/category/time plus optional date/join/place filters, selected-area state, and coordinate/bounds helpers; never requests GPS automatically.
 
 Feature-specific business rules belong under src/features/; keep only true cross-feature contracts here.
+
+- Theme compatibility retains existing family IDs and legacy color aliases. Essential Dark initializes new preferences; saved families and explicit appearances are retained, including legacy implicit light/dark choices.

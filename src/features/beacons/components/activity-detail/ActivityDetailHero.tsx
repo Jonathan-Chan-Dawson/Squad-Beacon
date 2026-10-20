@@ -27,16 +27,6 @@ export type ActivityDetailHeroProps = {
   onChat?: () => void;
 };
 
-const stateColors: Record<
-  ActivityDetailHeroProps["stateTone"],
-  { background: string; foreground: string }
-> = {
-  open: { background: "#DDF5A1", foreground: "#173D32" },
-  pending: { background: "#FFE2A8", foreground: "#543900" },
-  closed: { background: "#E6E9E6", foreground: "#3F4A43" },
-  ended: { background: "#E6E9E6", foreground: "#3F4A43" },
-};
-
 export function ActivityDetailHero({
   title,
   category,
@@ -51,9 +41,11 @@ export function ActivityDetailHero({
   onChat,
 }: ActivityDetailHeroProps) {
   const { height: screenHeight, width: screenWidth } = useWindowDimensions();
-  const { categories, tokens, theme, appearance } = useDesignTheme();
+  const { categories, availability, tokens, theme, appearance } =
+    useDesignTheme();
   const reducedMotion = useReducedMotion();
-  const [collapsedForAccessibility, setCollapsedForAccessibility] = useState(false);
+  const [collapsedForAccessibility, setCollapsedForAccessibility] =
+    useState(false);
   const collapsedForAccessibilityRef = useRef(false);
   const categoryToken = categories[category];
   const CategoryIcon = categoryToken.icon;
@@ -75,23 +67,23 @@ export function ActivityDetailHero({
     extrapolate: "clamp",
   });
   const expandedContentStyle = {
-        opacity: scrollY.interpolate({
-          inputRange: [0, 48, collapseDistance],
-          outputRange: [1, 0.78, 0],
-          extrapolate: "clamp" as const,
-        }),
-        transform: reducedMotion
-          ? undefined
-          : [
-              {
-                translateY: scrollY.interpolate({
-                  inputRange: [0, collapseDistance],
-                  outputRange: [0, -28],
-                  extrapolate: "clamp" as const,
-                }),
-              },
-            ],
-      };
+    opacity: scrollY.interpolate({
+      inputRange: [0, 48, collapseDistance],
+      outputRange: [1, 0.78, 0],
+      extrapolate: "clamp" as const,
+    }),
+    transform: reducedMotion
+      ? undefined
+      : [
+          {
+            translateY: scrollY.interpolate({
+              inputRange: [0, collapseDistance],
+              outputRange: [0, -28],
+              extrapolate: "clamp" as const,
+            }),
+          },
+        ],
+  };
   const collapsedTitleStyle = {
     opacity: scrollY.interpolate({
       inputRange: [collapseDistance * 0.45, collapseDistance],
@@ -99,7 +91,18 @@ export function ActivityDetailHero({
       extrapolate: "clamp" as const,
     }),
   };
-  const stateStyle = stateColors[stateTone];
+  const stateToken =
+    availability[
+      stateTone === "open"
+        ? "available"
+        : stateTone === "pending"
+          ? "endingSoon"
+          : "unknown"
+    ];
+  const stateStyle = {
+    background: stateToken.tint,
+    foreground: stateToken.color,
+  };
   const palette = themeVariants[theme][appearance];
   const heroBackground = palette.heroBg;
   const heroText = palette.heroText;
@@ -133,11 +136,21 @@ export function ActivityDetailHero({
         <Defs>
           <LinearGradient id="activityHeroGradient" x1="0" y1="0" x2="1" y2="1">
             <Stop offset="0" stopColor={heroBackground} />
-            <Stop offset="1" stopColor={categoryToken.color} stopOpacity="0.82" />
+            <Stop
+              offset="1"
+              stopColor={categoryToken.color}
+              stopOpacity="0.82"
+            />
           </LinearGradient>
         </Defs>
         <Circle cx="400" cy="12" r="174" fill="url(#activityHeroGradient)" />
-        <Circle cx="355" cy="178" r="105" fill={categoryToken.tint} opacity="0.22" />
+        <Circle
+          cx="355"
+          cy="178"
+          r="105"
+          fill={categoryToken.tint}
+          opacity="0.22"
+        />
       </Svg>
 
       <View
@@ -197,24 +210,41 @@ export function ActivityDetailHero({
         >
           {title}
         </Animated.Text>
-        <View style={{flexDirection:"row",gap:6}}>
-        {onChat && <Pressable accessibilityRole="button" accessibilityLabel="Open Chatroom" onPress={onChat} style={({pressed})=>({width:44,height:44,borderRadius:22,alignItems:"center",justifyContent:"center",backgroundColor:"rgba(255,255,255,0.16)",opacity:pressed?0.7:1})}><MessagesSquare size={20} color={heroText}/></Pressable>}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="More activity options"
-          onPress={onOverflow}
-          style={({ pressed }) => ({
-            width: 44,
-            height: 44,
-            borderRadius: 22,
-            alignItems: "center",
-            justifyContent: "center",
-            backgroundColor: "rgba(255,255,255,0.16)",
-            opacity: pressed ? 0.72 : 1,
-          })}
-        >
-          <Ellipsis size={22} color={heroText} />
-        </Pressable>
+        <View style={{ flexDirection: "row", gap: 6 }}>
+          {onChat && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Open Chatroom"
+              onPress={onChat}
+              style={({ pressed }) => ({
+                width: 44,
+                height: 44,
+                borderRadius: 22,
+                alignItems: "center",
+                justifyContent: "center",
+                backgroundColor: "rgba(255,255,255,0.16)",
+                opacity: pressed ? 0.7 : 1,
+              })}
+            >
+              <MessagesSquare size={20} color={heroText} />
+            </Pressable>
+          )}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="More activity options"
+            onPress={onOverflow}
+            style={({ pressed }) => ({
+              width: 44,
+              height: 44,
+              borderRadius: 22,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: "rgba(255,255,255,0.16)",
+              opacity: pressed ? 0.72 : 1,
+            })}
+          >
+            <Ellipsis size={22} color={heroText} />
+          </Pressable>
         </View>
       </View>
 
@@ -246,14 +276,22 @@ export function ActivityDetailHero({
             <CategoryIcon size={14} color={categoryToken.color} />
             <Text
               maxFontSizeMultiplier={tokens.type.denseMaxMultiplier}
-              style={{ color: categoryToken.color, ...type.caption, fontWeight: type.weight.bold }}
+              style={{
+                color: categoryToken.color,
+                ...type.caption,
+                fontWeight: type.weight.bold,
+              }}
             >
               {category}
             </Text>
           </View>
           <Text
             numberOfLines={1}
-            style={{ color: heroText, ...type.caption, fontWeight: type.weight.semibold }}
+            style={{
+              color: heroText,
+              ...type.caption,
+              fontWeight: type.weight.semibold,
+            }}
           >
             {"\u00b7"} {modeLabel}
           </Text>
@@ -268,7 +306,11 @@ export function ActivityDetailHero({
           >
             <Text
               maxFontSizeMultiplier={tokens.type.denseMaxMultiplier}
-              style={{ color: stateStyle.foreground, ...type.caption, fontWeight: type.weight.bold }}
+              style={{
+                color: stateStyle.foreground,
+                ...type.caption,
+                fontWeight: type.weight.bold,
+              }}
             >
               {stateLabel}
             </Text>
@@ -283,7 +325,13 @@ export function ActivityDetailHero({
                 paddingHorizontal: 10,
               }}
             >
-              <Text style={{ color: heroText, ...type.caption, fontWeight: type.weight.bold }}>
+              <Text
+                style={{
+                  color: heroText,
+                  ...type.caption,
+                  fontWeight: type.weight.bold,
+                }}
+              >
                 Demo
               </Text>
             </View>
@@ -303,7 +351,14 @@ export function ActivityDetailHero({
         >
           {title}
         </Text>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 8,
+            flexWrap: "wrap",
+          }}
+        >
           {chips.slice(0, 3).map((chip) => (
             <View
               key={chip}
@@ -315,7 +370,10 @@ export function ActivityDetailHero({
                 paddingHorizontal: 9,
               }}
             >
-              <Text numberOfLines={1} style={{ color: heroText, ...type.caption }}>
+              <Text
+                numberOfLines={1}
+                style={{ color: heroText, ...type.caption }}
+              >
                 {chip}
               </Text>
             </View>

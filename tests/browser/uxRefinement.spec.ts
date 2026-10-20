@@ -1,15 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
 import { openConversation } from "./chatHelpers";
-import { getDesignColorTheme } from "@/src/theme/data";
-
-function accentCss(appearance: "light" | "dark") {
-  const accent = getDesignColorTheme("Midnight", appearance).colors.accent;
-  const channels = accent
-    .slice(1)
-    .match(/.{2}/g)!
-    .map((channel) => parseInt(channel, 16));
-  return `rgb(${channels.join(", ")})`;
-}
 
 test("Chats uses a compact response row and opens the canonical inbox", async ({
   page,
@@ -93,28 +83,34 @@ test("worldwide search is explicit and demo results are clearly local examples",
   ).toBeVisible();
 });
 
-test("Midnight starts dark and Device appearance follows live system changes", async ({
+test("Essential starts dark and System appearance follows live device changes", async ({
   page,
 }) => {
   await page.emulateMedia({ colorScheme: "light" });
   await demo(page);
   await page.getByRole("tab", { name: "Profile", exact: true }).click();
   await page.getByRole("button", { name: "Settings", exact: true }).click();
-  const midnight = page.getByRole("button", { name: "Midnight", exact: true });
-  await expect(midnight).toHaveAttribute("aria-selected", "true");
+  const dark = page.getByRole("button", {
+    name: "Essential Dark palette",
+    exact: true,
+  });
+  const light = page.getByRole("button", {
+    name: "Essential Light palette",
+    exact: true,
+  });
+  await expect(dark).toHaveAttribute("aria-pressed", "true");
   await expect(
     page.getByRole("button", { name: "Dark", exact: true }),
   ).toHaveAttribute("aria-selected", "true");
-  await expect(midnight).toHaveCSS("background-color", accentCss("dark"));
-  await page.getByRole("button", { name: "Device", exact: true }).click();
-  await expect(midnight).toHaveCSS("background-color", accentCss("light"));
+  await page.getByRole("button", { name: "System", exact: true }).click();
+  await expect(light).toHaveAttribute("aria-pressed", "true");
   await page.emulateMedia({ colorScheme: "dark" });
-  await expect(midnight).toHaveCSS("background-color", accentCss("dark"));
+  await expect(dark).toHaveAttribute("aria-pressed", "true");
   await page.getByRole("button", { name: "Light", exact: true }).click();
-  await expect(midnight).toHaveCSS("background-color", accentCss("light"));
-  expect(
-    await page.evaluate(() => localStorage.getItem("beacon.appearance")),
-  ).toBe("light");
+  await expect(light).toHaveAttribute("aria-pressed", "true");
+  await expect
+    .poll(() => page.evaluate(() => localStorage.getItem("beacon.appearance")))
+    .toBe("light");
 });
 
 test("a Routine pauses, resumes and creates a fresh ordered Plan", async ({
@@ -227,20 +223,22 @@ test("Profile is identity first and Appearance is in Settings", async ({
     page.getByRole("button", { name: "Edit profile", exact: true }),
   ).toBeInViewport();
   await expect(
-    page.getByRole("button", { name: "Midnight", exact: true }),
+    page.getByRole("button", { name: "Midnight palette", exact: true }),
   ).toHaveCount(0);
   await page.screenshot({ path: "test-results/refined-profile-320.png" });
   await page.getByRole("button", { name: "Settings", exact: true }).click();
-  await page.getByRole("button", { name: "Midnight", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Midnight palette", exact: true })
+    .click();
   await expect(
-    page.getByRole("button", { name: "Midnight", exact: true }),
-  ).toHaveAttribute("aria-selected", "true");
+    page.getByRole("button", { name: "Midnight palette", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
   await page.getByRole("button", { name: "Back", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "Edit profile", exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Midnight", exact: true }),
+    page.getByRole("button", { name: "Midnight palette", exact: true }),
   ).toHaveCount(0);
   await page.screenshot({
     path: "test-results/refined-profile-midnight-320.png",

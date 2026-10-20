@@ -1,12 +1,6 @@
 import React, { useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import {
-  List,
-  MoreVertical,
-  Star,
-  Users,
-  ChevronRight,
-} from "lucide-react-native";
+import { MoreVertical, Star, Users, ChevronRight } from "lucide-react-native";
 import { useBeacon } from "@/src/shared/store";
 import {
   Action,
@@ -19,6 +13,7 @@ import {
 } from "@/src/shared/ui";
 import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
 import { canViewProfile } from "@/src/features/profile/privacy";
+import { PrivateListAvatar } from "./PrivateListAvatar";
 import {
   privateListName,
   selectListPeople,
@@ -66,8 +61,7 @@ export function PrivateListsSheet({
     title: string,
     automatic = false,
   ) {
-    const Icon =
-      selection === "favorites" ? Star : selection === "friends" ? Users : List;
+    const Icon = selection === "favorites" ? Star : Users;
     return (
       <View
         key={selection}
@@ -91,7 +85,11 @@ export function PrivateListsSheet({
             gap: 12,
           }}
         >
-          <Icon size={23} color={colors.green} />
+          {automatic ? (
+            <Icon size={23} color={colors.green} />
+          ) : (
+            <PrivateListAvatar id={selection.slice(7)} name={title} size={32} />
+          )}
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text numberOfLines={1} style={styles.body}>
               {title}
@@ -131,8 +129,19 @@ export function PrivateListsSheet({
         </Txt>
         {row("favorites", "Favorites", true)}
         {row("friends", "Friends", true)}
-        <View style={styles.between}>
-          <Text style={styles.label}>MY LISTS</Text>
+        <View
+          testID="private-lists-divider"
+          style={[
+            styles.between,
+            {
+              borderTopWidth: 1,
+              borderTopColor: colors.line,
+              marginTop: 8,
+              paddingTop: 8,
+            },
+          ]}
+        >
+          <Text style={styles.label}>PRIVATE LISTS</Text>
           <Button
             compact
             secondary

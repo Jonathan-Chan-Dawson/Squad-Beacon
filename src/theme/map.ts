@@ -75,5 +75,19 @@ export function cartoTileUrl(appearance: ResolvedAppearance, apiKey?: string) {
   return `https://{s}.basemaps.cartocdn.com/${style}/{z}/{x}/{y}{r}.png${key ? `?key=${encodeURIComponent(key)}` : ""}`;
 }
 
+/** Separate dark labels so their contrast can improve without altering map markers. */
+export function cartoBasemapLayers(
+  appearance: ResolvedAppearance,
+  apiKey?: string,
+): { base: string; labels?: string } {
+  const url = cartoTileUrl(appearance, apiKey);
+  return appearance === "dark"
+    ? {
+        base: url.replace("/dark_all/", "/dark_nolabels/"),
+        labels: url.replace("/dark_all/", "/dark_only_labels/"),
+      }
+    : { base: url };
+}
+
 export const cartoAttribution =
   '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>';

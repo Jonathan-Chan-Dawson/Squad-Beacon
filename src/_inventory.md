@@ -5,3 +5,5 @@ src source guide
 - platform/: platform service adapters for contacts, device identity, and notifications. Native/web sibling filenames are kept together for Expo resolution.
 
 There are no feature implementation files at the src/ root. Add new product code to its owning feature, shared infrastructure to shared/, and platform adapters to platform/.
+
+- theme/palettes.ts and theme/data.ts: six paired light/dark families, neutral Essential default, stable original family names and legacy aliases, semantic surface/primary/status roles, and independent category/availability colors.

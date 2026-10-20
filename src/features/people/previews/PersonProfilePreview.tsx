@@ -32,7 +32,7 @@ export function PersonProfilePreview({
   onClose: () => void;
 }) {
   const { data, userId, act } = useBeacon();
-  const { styles, colors } = useTheme();
+  const { styles, colors, tokens } = useTheme();
   const now = useNow();
   const [savingStar, setSavingStar] = useState(false);
   const [error, setError] = useState("");
@@ -45,6 +45,12 @@ export function PersonProfilePreview({
     onClose();
   };
   const selection = selectPersonPreview(data, personId, userId, now);
+  const availabilityToken =
+    tokens.availability[
+      selection.availability === "ending-soon"
+        ? "endingSoon"
+        : selection.availability
+    ];
   const request = data.friendships.find(
     (row) =>
       row.status === "pending" &&
@@ -204,8 +210,18 @@ export function PersonProfilePreview({
               <Text style={styles.body}>{profile.bio}</Text>
             ) : null}
             {profile && selection.availability !== "unknown" ? (
-              <View style={[styles.chip, { alignSelf: "flex-start" }]}>
-                <Text style={styles.chipText}>
+              <View
+                style={[
+                  styles.chip,
+                  {
+                    alignSelf: "flex-start",
+                    backgroundColor: availabilityToken.tint,
+                  },
+                ]}
+              >
+                <Text
+                  style={[styles.chipText, { color: availabilityToken.color }]}
+                >
                   {selection.availability === "available"
                     ? "Available now"
                     : selection.availability === "ending-soon"

@@ -177,7 +177,7 @@ test("a full action row opens template-first creation with the exact held coordi
   const session = await demo(page);
   await page.getByRole("button", { name: "Filters", exact: true }).tap();
   const filters = page.getByRole("dialog", { name: "Filters", exact: true });
-  await filters.getByRole("button", { name: "Study", exact: true }).tap();
+  await filters.getByRole("checkbox", { name: "Study", exact: true }).tap();
   await filters.getByRole("button", { name: /^Show \d+ Beacons$/ }).tap();
   await expect(filters).toHaveCount(0);
   const coordinate = await hold(page, session);
@@ -306,7 +306,7 @@ test("closing a temporary selection preserves filters, Plan context and the came
   await expect(context).toBeVisible();
   await page.getByTestId("map-filter-toggle").tap();
   const filters = page.getByRole("dialog", { name: "Filters", exact: true });
-  await filters.getByRole("button", { name: "Study", exact: true }).tap();
+  await filters.getByRole("checkbox", { name: "Study", exact: true }).tap();
   await filters.getByRole("button", { name: /^Show \d+ Beacons$/ }).tap();
   await expect(filters).toHaveCount(0);
   await hold(page, session);

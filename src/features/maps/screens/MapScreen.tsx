@@ -1,3 +1,4 @@
+import { MyBeaconsSheet } from "../MyBeaconsSheet";
 import { selectMyMapBeacons } from "../myBeacons";
 import { discoveryActivities } from "@/src/features/beacons/discoverySelectors";
 import { mapTooltip } from "../tooltipConstants";
@@ -2095,7 +2096,7 @@ export default function MapScreen() {
   const headerTop = insets.top + 7;
   const mapBottomClearance = 24;
   // An expanded sheet leaves only its exposed map available for floating controls.
-  const controlsTop = headerTop + headerHeight - 44;
+  const controlsTop = headerTop + headerHeight - 44 + 12;
   const availableControlHeight = Math.max(
     0,
     (detailTab
@@ -2743,37 +2744,15 @@ export default function MapScreen() {
         </View>
       ) : null}
 
-      <Sheet
-        title="My Beacons"
+      <MyBeaconsSheet
         visible={myBeaconsOpen}
         onClose={() => setMyBeaconsOpen(false)}
-      >
-        {!myBeacons.hosting.length && !myBeacons.joined.length ? (
-          <Txt muted>
-            You aren’t hosting or attending any live or upcoming Beacons.
-          </Txt>
-        ) : null}
-        {(
-          [
-            ["Hosting", myBeacons.hosting],
-            ["Joined", myBeacons.joined],
-          ] as const
-        ).map(([title, rows]) =>
-          rows.length ? (
-            <View key={title} style={{ gap: 4 }}>
-              <Txt>{title}</Txt>
-              {rows.map((activity) => (
-                <MapNavigationRow
-                  key={activity.id}
-                  label={`${activity.title} · ${Date.parse(activity.starts_at) <= now ? "Live now" : new Date(activity.starts_at).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`}
-                  icon={Radio}
-                  onPress={() => selectMyBeacon(activity.id)}
-                />
-              ))}
-            </View>
-          ) : null,
-        )}
-      </Sheet>
+        hosting={myBeacons.hosting}
+        joined={myBeacons.joined}
+        places={safePlaces}
+        now={now}
+        onSelect={selectMyBeacon}
+      />
       {(compassSheetOpen || mapControlSettingsOpen || weatherOpen) &&
         !pickMode &&
         !pickedMapPoint && (

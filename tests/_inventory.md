@@ -24,3 +24,5 @@ Test map
 - README.md: test setup and execution notes.
 
 Tests should exercise product flows through public routes/actions and preserve existing suites when adding coverage.
+
+- browser/themeRefinement.spec.ts: all six families in Light/Dark across Map, Beacons, Create, Squads, Friends and Profile at mobile widths; neutral preview persistence and live System appearance. themes/themeTokens tests cover legacy defaults, exact neutral colors and readable semantic roles.

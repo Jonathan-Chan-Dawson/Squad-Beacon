@@ -54,7 +54,7 @@ function QuickChip({
     >
       <Text
         style={{
-          color: selected ? colors.white : colors.ink,
+          color: selected ? colors.onPrimary : colors.ink,
           fontSize: 13,
           fontWeight: "700",
         }}
@@ -234,7 +234,7 @@ export function MapExplorationHeader({
         style={{
           flexDirection: "row",
           alignItems: "center",
-          gap: 7,
+          gap: 12,
           opacity: calm ? 0.65 : 1,
           transform: reducedMotion ? [] : [{ scaleY: calm ? 0.92 : 1 }],
         }}
@@ -390,7 +390,7 @@ export function MapExplorationHeader({
               }}
             >
               <Text
-                style={{ color: colors.white, fontSize: 10, fontWeight: "800" }}
+                style={{ color: colors.onPrimary, fontSize: 10, fontWeight: "800" }}
               >
                 {activeFilterCount}
               </Text>

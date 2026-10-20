@@ -61,12 +61,12 @@ export default function LocationScreen() {
       create={false}
     >
       <View style={styles.hero}>
-        <Text style={[styles.h2, { color: "white" }]}>
+        <Text style={styles.h2}>
           {session
             ? "Your location sharing is on."
             : "Your location sharing is off."}
         </Text>
-        <Text style={{ color: "#C7D8CC", lineHeight: 23 }}>
+        <Text style={{ color: colors.textSecondary, lineHeight: 23 }}>
           Only selected, accepted friends can see you. No location history is
           kept. Sharing ends automatically.
         </Text>
@@ -82,7 +82,7 @@ export default function LocationScreen() {
                 )
                 .join(", ")}
             </Txt>
-            <Text style={{ color: colors.lime }}>
+            <Text style={{ color: colors.textPrimary }}>
               Ends {new Date(session.expires_at).toLocaleTimeString()}
             </Text>
             <Txt muted>

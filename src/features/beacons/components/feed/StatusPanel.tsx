@@ -405,6 +405,12 @@ export function StatusPanel({
   const availability = status?.available ? "available" : "unavailable";
   const token = tokens.availability[availability];
   const AvailabilityIcon = token.icon;
+  const statusIsLive =
+    !!status &&
+    Date.parse(status.startsAt) <= now &&
+    Date.parse(status.endsAt) > now &&
+    status.sharing !== false;
+  const liveStatusColor = statusIsLive ? token.color : colors.textSecondary;
   const expiry = status ? Date.parse(status.endsAt) : NaN;
   const remainingMinutes = Number.isFinite(expiry)
     ? Math.max(0, Math.ceil((expiry - now) / 60_000))
@@ -678,24 +684,14 @@ export function StatusPanel({
               width: 7,
               height: 7,
               borderRadius: 4,
-              backgroundColor:
-                status?.available &&
-                Date.parse(status.startsAt) <= now &&
-                Date.parse(status.endsAt) > now
-                  ? colors.accent
-                  : colors.textSecondary,
+              backgroundColor: liveStatusColor,
             }}
           />
           <Text
             numberOfLines={2}
             style={{
               flex: 1,
-              color:
-                status?.available &&
-                Date.parse(status.startsAt) <= now &&
-                Date.parse(status.endsAt) > now
-                  ? colors.accent
-                  : colors.textSecondary,
+              color: liveStatusColor,
               fontSize: 12,
               lineHeight: 17,
             }}
@@ -942,15 +938,18 @@ export function StatusPanel({
                 }
                 label="Availability choices"
                 primary={!!status?.available && status.sharing !== false}
+                tone={statusIsLive ? token : undefined}
                 disabled={saving}
                 onPress={onAvailability ?? onQuick ?? beginCreate}
                 icon={
                   <ChevronDown
                     size={14}
                     color={
-                      status?.available && status.sharing !== false
-                        ? colors.onAccent
-                        : colors.textSecondary
+                      statusIsLive
+                        ? token.color
+                        : status?.available && status.sharing !== false
+                          ? colors.onAccent
+                          : colors.textSecondary
                     }
                   />
                 }
@@ -1035,6 +1034,12 @@ export function StatusPanel({
                 <Chip
                   label={status.available ? "Available" : "Busy"}
                   icon={<AvailabilityIcon size={15} color={token.color} />}
+                  style={{
+                    backgroundColor: token.tint,
+                    borderColor: token.color,
+                    opacity: 1,
+                  }}
+                  textStyle={{ color: token.color }}
                   selected
                   onPress={() => undefined}
                   accessibilityRole="text"

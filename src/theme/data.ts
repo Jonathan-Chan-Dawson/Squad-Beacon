@@ -51,7 +51,12 @@ export const shadow = {
 
 export const motion = {
   spring: { damping: 18, stiffness: 220, mass: 1 },
-  sheetSpring: { damping: 30, stiffness: 220, mass: 1, overshootClamping: true },
+  sheetSpring: {
+    damping: 30,
+    stiffness: 220,
+    mass: 1,
+    overshootClamping: true,
+  },
   pressScale: 0.97,
   pressDuration: 90,
   pressDurationMs: 90,
@@ -100,6 +105,15 @@ export const tokens = {
 } as const;
 
 export type SemanticColors = {
+  background: string;
+  primary: string;
+  onPrimary: string;
+  primaryContainer: string;
+  surfaceSelected: string;
+  outline: string;
+  success: string;
+  warning: string;
+  onDanger: string;
   bg: string;
   surface: string;
   surfaceRaised: string;
@@ -242,9 +256,9 @@ function contrast(a: string, b: string) {
 }
 
 function onColor(color: string) {
-  return contrast(color, "#FFFFFF") >= contrast(color, "#14221D")
+  return contrast(color, "#FFFFFF") >= contrast(color, "#17191D")
     ? "#FFFFFF"
-    : "#14221D";
+    : "#17191D";
 }
 
 const colorThemeCache = new Map<string, DesignColorTheme>();
@@ -259,18 +273,23 @@ export function getDesignColorTheme(
 
   const palette = themeVariants[name][appearance];
   const colors: SemanticColors = {
+    background: palette.bg,
+    primary: palette.green,
+    onPrimary: palette.onPrimary,
+    primaryContainer: palette.lime,
+    surfaceSelected: palette.lime,
+    outline: palette.line,
+    success: availabilityColors[appearance].available,
+    warning: availabilityColors[appearance].endingSoon,
+    onDanger: onColor(palette.red),
     bg: palette.bg,
     surface: palette.white,
-    surfaceRaised: blend(
-      palette.ink,
-      palette.white,
-      appearance === "dark" ? 0.07 : 0.035,
-    ),
+    surfaceRaised: palette.surfaceRaised,
     border: palette.line,
     textPrimary: palette.ink,
     textSecondary: palette.muted,
     accent: palette.green,
-    onAccent: onColor(palette.green),
+    onAccent: palette.onPrimary,
     danger: palette.red,
     scrim: "rgba(0, 0, 0, 0.48)",
     transparent: "transparent",
