@@ -65,7 +65,9 @@ test("social directory and canonical actions preserve membership boundaries and 
     "202610040003_plan_routines.sql", "202610040005_places_search_budget.sql", "202610040006_spaces.sql",
     "202610040007_social_architecture.sql",
     "202610090001_profile_settings_unblock.sql",
+    "202610110001_map_discovery.sql",
     "202610140004_community_profiles.sql",
+    "20261021165125_beacon_community_discovery.sql",
   ]) await migration(file);
 
   await root();
@@ -395,4 +397,295 @@ test("social directory and canonical actions preserve membership boundaries and 
     assert.deepEqual(exact.rows, discovered.rows, `${type} exact lookup matches the safe directory projection`);
     assert.equal(exact.rows[0].membership_status, null);
   }
+
+  // Community projections merge explicit, audience, and visible hierarchy
+  // context while preserving the existing exact community summary payload.
+  await actor("owner");
+  const discoverySquad = await createSquad("Community Discovery", "public", "open");
+  const discoverySpace = await action("create_space", {
+    name: "Visible Discovery Space", discoverability: "public", join_mode: "open",
+  });
+  const hiddenSpace = await action("create_space", { name: "Hidden Discovery Space" });
+  const visibleChild = await createSquad("Visible Discovery Child", "public", "open");
+  const hiddenPathChild = await createSquad("Public Child Through Hidden Space", "public", "open");
+  const hiddenSource = await createSquad("Hidden Discovery Source");
+  const discoveryOrganization = await action("create_organization", { name: "Public Discovery Network" });
+  await action("set_social_policy", {
+    entity_type: "organization", entity_id: discoveryOrganization.organization_id,
+    discoverability: "public", join_mode: "open", invite_policy: "members",
+  });
+  await action("attach_organization_space", {
+    organization_id: discoveryOrganization.organization_id, space_id: discoverySpace.space_id,
+  });
+  await action("attach_organization_space", {
+    organization_id: discoveryOrganization.organization_id, space_id: hiddenSpace.space_id,
+  });
+  await action("attach_space_squad", { space_id: discoverySpace.space_id, squad_id: visibleChild });
+  await action("attach_space_squad", { space_id: hiddenSpace.space_id, squad_id: hiddenPathChild });
+  await action("attach_space_squad", { space_id: discoverySpace.space_id, squad_id: hiddenSource });
+
+  async function addPublishedBeacon(
+    title: string,
+    entityType: "squad" | "space" | "organization",
+    entityId: string,
+    options: { audience?: "private" | "squad" | "organization"; audienceId?: string; creatorId?: string } = {},
+  ) {
+    await root();
+    const activityId = crypto.randomUUID();
+    await db.query(
+      `insert into public.activities(id,owner_id,title,category,mode,starts_at,ends_at,timezone,audience,audience_id)
+       values($1,$2,$3,'Social','squad',now()+interval '2 hours',now()+interval '3 hours','UTC',$4::public.audience_kind,$5)`,
+      [activityId, ids.owner, title, options.audience ?? "private", options.audienceId ?? null],
+    );
+    await db.query(
+      "insert into public.activity_social_links(activity_id,entity_type,entity_id,created_by) values($1,$2,$3,$4)",
+      [activityId, entityType, entityId, options.creatorId ?? ids.owner],
+    );
+    await actor("owner");
+    await db.query("select public.set_beacon_discovery($1,true,'Chicago',41.88,-87.63)", [activityId]);
+    return activityId;
+  }
+
+  const duplicateAssociationBeacon = await addPublishedBeacon(
+    "Community audience and link", "squad", discoverySquad,
+    { audience: "squad", audienceId: discoverySquad },
+  );
+  const pageBeaconTwo = await addPublishedBeacon("Second discovery page", "squad", discoverySquad);
+  const pageBeaconThree = await addPublishedBeacon("Third discovery page", "squad", discoverySquad);
+  const networkBeacon = await addPublishedBeacon(
+    "Network context", "organization", discoveryOrganization.organization_id,
+  );
+  const hiddenSourceBeacon = await addPublishedBeacon("Hidden source", "squad", hiddenSource);
+
+  await actor("owner");
+  const summaryRows = await db.query<Record<string, any>>(
+    "select * from public.beacon_community_summaries(array[$1::uuid,$1::uuid])",
+    [duplicateAssociationBeacon],
+  );
+  assert.equal(summaryRows.rows.length, 1, "duplicate inputs and overlapping seeds deduplicate by activity and community");
+  assert.equal(summaryRows.rows[0].relationship, "associated");
+  assert.equal(summaryRows.rows[0].priority, 0, "the direct association wins over its audience seed");
+  const canonicalSummary = (await db.query(
+    "select to_jsonb(summary_row) summary from public.community_profile_summary('squad',$1) summary_row",
+    [discoverySquad],
+  )).rows[0].summary;
+  assert.deepEqual(summaryRows.rows[0].summary, canonicalSummary,
+    "the packed payload is exactly the current authorized community summary row");
+  assert.deepEqual(Object.keys(summaryRows.rows[0].summary).sort(), [
+    "action", "child_count", "description", "discoverability", "entity_id", "entity_type",
+    "join_mode", "member_count", "membership_status", "name", "parent_id", "parent_name", "parent_type",
+  ].sort());
+  await assert.rejects(
+    db.query("select * from public.beacon_community_summaries(array_fill($1::uuid,array[51]))", [duplicateAssociationBeacon]),
+    /at most 50/i,
+  );
+
+  await actor("stranger");
+  const visibleNetworkSummaries = await db.query<Record<string, any>>(
+    "select * from public.beacon_community_summaries(array[$1::uuid,$2::uuid])",
+    [networkBeacon, hiddenSourceBeacon],
+  );
+  const networkContextIds = visibleNetworkSummaries.rows
+    .filter((row) => row.activity_id === networkBeacon)
+    .map((row) => `${row.summary.entity_type}:${row.summary.entity_id}`);
+  assert.deepEqual(networkContextIds, [
+    `organization:${discoveryOrganization.organization_id}`,
+    `space:${discoverySpace.space_id}`,
+    `squad:${visibleChild}`,
+  ], "visible parent and child context is returned in stable priority/type/id order");
+  assert.equal(visibleNetworkSummaries.rows.some(
+    (row) => row.activity_id === networkBeacon && row.summary.entity_id === hiddenSpace.space_id,
+  ), false, "a hidden intermediate Space is never returned");
+  assert.equal(visibleNetworkSummaries.rows.some(
+    (row) => row.activity_id === networkBeacon && row.summary.entity_id === hiddenPathChild,
+  ), false, "a public child cannot be reached through its hidden intermediate Space");
+  assert.equal(visibleNetworkSummaries.rows.some(
+    (row) => row.activity_id === hiddenSourceBeacon,
+  ), false, "a hidden source community cannot expose a visible parent");
+
+  const networkPage = await db.query<Record<string, any>>(
+    "select * from public.community_public_beacons('organization',$1,20,0)",
+    [discoveryOrganization.organization_id],
+  );
+  assert.deepEqual(networkPage.rows.map((row) => row.activity_id), [networkBeacon]);
+  const visibleChildPage = await db.query<Record<string, any>>(
+    "select * from public.community_public_beacons('squad',$1,20,0)", [visibleChild],
+  );
+  assert.deepEqual(visibleChildPage.rows.map((row) => row.activity_id), [networkBeacon],
+    "the same resolver supports a visible hierarchy association in the public feed");
+  const hiddenPathPage = await db.query(
+    "select * from public.community_public_beacons('squad',$1,20,0)", [hiddenPathChild],
+  );
+  assert.deepEqual(hiddenPathPage.rows, [], "public visibility of a child does not expose a hidden path");
+  assert.deepEqual(Object.keys(networkPage.rows[0]).sort(), [
+    "activity_id", "title", "category", "interest_tags", "starts_at", "ends_at", "area_label",
+    "coarse_lat", "coarse_lng", "requires_approval", "capacity_limit", "capacity_policy",
+    "accepted_seat_count", "closed", "viewer_response",
+  ].sort(), "community discovery keeps the public Beacon card projection");
+
+  // The public feed pages over every authorized association and filters each
+  // candidate through current Beacon discovery state.
+  const firstPage = await db.query<Record<string, any>>(
+    "select * from public.community_public_beacons('squad',$1,1,0)", [discoverySquad],
+  );
+  const secondPage = await db.query<Record<string, any>>(
+    "select * from public.community_public_beacons('squad',$1,1,1)", [discoverySquad],
+  );
+  const thirdPage = await db.query<Record<string, any>>(
+    "select * from public.community_public_beacons('squad',$1,1,2)", [discoverySquad],
+  );
+  const allPages = [firstPage, secondPage, thirdPage].flatMap((page) => page.rows.map((row) => row.activity_id));
+  assert.equal(new Set(allPages).size, 3, "page boundaries neither repeat nor omit associations");
+  assert.deepEqual(new Set(allPages), new Set([duplicateAssociationBeacon, pageBeaconTwo, pageBeaconThree]));
+  await assert.rejects(
+    db.query("select * from public.community_public_beacons('squad',$1,0,0)", [discoverySquad]),
+    /page size/i,
+  );
+  await assert.rejects(
+    db.query("select * from public.community_public_beacons('squad',$1,20,5001)", [discoverySquad]),
+    /offset/i,
+  );
+
+  // Ordinary attendance in an open Beacon is confirmed even when the legacy
+  // approval flag is false; reading this status never grants community membership.
+  await root();
+  await db.query("insert into public.rsvps(activity_id,user_id,status,approved) values($1,$2,'going',false)", [pageBeaconTwo, ids.stranger]);
+  await actor("stranger");
+  const confirmedPublicPage = await db.query<Record<string, any>>("select * from public.community_public_beacons('squad',$1,20,0)", [discoverySquad]);
+  assert.equal(confirmedPublicPage.rows.find((row) => row.activity_id === pageBeaconTwo)?.viewer_response, "going");
+  assert.equal((await db.query("select * from public.squad_members where squad_id=$1 and user_id=$2", [discoverySquad, ids.stranger])).rows.length, 0);
+  await root();
+  await db.query("delete from public.rsvps where activity_id=$1 and user_id=$2", [pageBeaconTwo, ids.stranger]);
+
+  // Direct audience candidates remain private unless the viewer is currently
+  // allowed to read the Beacon. Explicit associations also expire with either
+  // the host's or the link creator's membership.
+  await actor("owner");
+  const audienceOnlySquad = await createSquad("Audience Only", "private", "invite");
+  await root();
+  await db.query(
+    "insert into public.squad_members(squad_id,user_id,role) values($1,$2,'member')",
+    [audienceOnlySquad, ids.admin],
+  );
+  const audienceOnlyBeacon = await addPublishedBeacon(
+    "Audience only", "squad", audienceOnlySquad,
+    { audience: "squad", audienceId: audienceOnlySquad },
+  );
+  await root();
+  await db.query("delete from public.activity_social_links where activity_id=$1", [audienceOnlyBeacon]);
+  await actor("admin");
+  assert.equal((await db.query(
+    "select * from public.community_profile_summary('squad',$1)", [audienceOnlySquad],
+  )).rows.length, 1, "the viewer remains an active member of the audience community");
+  const audienceSummary = await db.query<Record<string, any>>(
+    "select * from public.beacon_community_summaries(array[$1::uuid])", [audienceOnlyBeacon],
+  );
+  assert.equal(audienceSummary.rows.length, 1);
+  assert.equal(audienceSummary.rows[0].priority, 1);
+  assert.equal(audienceSummary.rows[0].relationship, "associated");
+  await actor("stranger");
+  assert.deepEqual((await db.query(
+    "select * from public.beacon_community_summaries(array[$1::uuid])", [audienceOnlyBeacon],
+  )).rows, [], "an unauthorized viewer cannot infer a private audience association");
+
+  await actor("owner");
+  const creatorRevokedSquad = await createSquad("Creator Revocation", "public", "open");
+  await root();
+  await db.query(
+    "insert into public.squad_members(squad_id,user_id,role) values($1,$2,'member')",
+    [creatorRevokedSquad, ids.admin],
+  );
+  const creatorRevokedBeacon = await addPublishedBeacon(
+    "Creator membership expires", "squad", creatorRevokedSquad, { creatorId: ids.admin },
+  );
+  const hostRevokedSquad = await createSquad("Host Revocation", "public", "open");
+  const hostRevokedBeacon = await addPublishedBeacon("Host membership expires", "squad", hostRevokedSquad);
+  await actor("stranger");
+  assert.equal((await db.query(
+    "select * from public.community_public_beacons('squad',$1,20,0)", [creatorRevokedSquad],
+  )).rows.length, 1);
+  assert.equal((await db.query(
+    "select * from public.community_public_beacons('squad',$1,20,0)", [hostRevokedSquad],
+  )).rows.length, 1);
+  await root();
+  await db.query("delete from public.squad_members where squad_id=$1 and user_id=$2", [creatorRevokedSquad, ids.admin]);
+  await db.query("delete from public.squad_members where squad_id=$1 and user_id=$2", [hostRevokedSquad, ids.owner]);
+  await actor("stranger");
+  assert.deepEqual((await db.query(
+    "select * from public.beacon_community_summaries(array[$1::uuid,$2::uuid])",
+    [creatorRevokedBeacon, hostRevokedBeacon],
+  )).rows, [], "revoked creator or host membership invalidates the explicit association immediately");
+  assert.equal((await db.query(
+    "select * from public.community_public_beacons('squad',$1,20,0)", [creatorRevokedSquad],
+  )).rows.length, 0);
+  assert.equal((await db.query(
+    "select * from public.community_public_beacons('squad',$1,20,0)", [hostRevokedSquad],
+  )).rows.length, 0);
+
+  // Exclusions, blocks, status, expiry, and removal of the discovery opt-in
+  // revoke both public and summary discovery on the next read.
+  await actor("owner");
+  const stateSquad = await createSquad("Discovery State", "public", "open");
+  const stateBeacon = await addPublishedBeacon("Discovery state", "squad", stateSquad);
+  await actor("stranger");
+  assert.equal((await db.query(
+    "select * from public.community_public_beacons('squad',$1,20,0)", [stateSquad],
+  )).rows.length, 1);
+  await root();
+  await db.query("insert into private.activity_exclusions(activity_id,user_id) values($1,$2)", [stateBeacon, ids.stranger]);
+  await actor("stranger");
+  assert.deepEqual((await db.query(
+    "select * from public.community_public_beacons('squad',$1,20,0)", [stateSquad],
+  )).rows, []);
+  assert.deepEqual((await db.query(
+    "select * from public.beacon_community_summaries(array[$1::uuid])", [stateBeacon],
+  )).rows, []);
+  await root();
+  await db.query("delete from private.activity_exclusions where activity_id=$1 and user_id=$2", [stateBeacon, ids.stranger]);
+  await db.query("update public.activities set status='cancelled' where id=$1", [stateBeacon]);
+  await actor("stranger");
+  assert.deepEqual((await db.query(
+    "select * from public.community_public_beacons('squad',$1,20,0)", [stateSquad],
+  )).rows, [], "cancelled Beacons are never discoverable");
+  await root();
+  await db.query("update public.activities set status='scheduled',starts_at=now()-interval '2 hours',ends_at=now()-interval '1 hour' where id=$1", [stateBeacon]);
+  await actor("stranger");
+  assert.deepEqual((await db.query(
+    "select * from public.community_public_beacons('squad',$1,20,0)", [stateSquad],
+  )).rows, [], "expired Beacons are never discoverable");
+  await root();
+  await db.query("update public.activities set starts_at=now()+interval '2 hours',ends_at=now()+interval '3 hours' where id=$1", [stateBeacon]);
+  await db.query("insert into public.blocks(blocker_id,blocked_id) values($1,$2)", [ids.owner, ids.stranger]);
+  await actor("stranger");
+  assert.deepEqual((await db.query(
+    "select * from public.community_public_beacons('squad',$1,20,0)", [stateSquad],
+  )).rows, [], "blocks invalidate public discovery immediately");
+  await root();
+  await db.query("delete from public.blocks where blocker_id=$1 and blocked_id=$2", [ids.owner, ids.stranger]);
+  await actor("owner");
+  await db.query("select public.set_beacon_discovery($1,false)", [stateBeacon]);
+  await actor("stranger");
+  assert.deepEqual((await db.query(
+    "select * from public.community_public_beacons('squad',$1,20,0)", [stateSquad],
+  )).rows, [], "removing the opt-in immediately removes the public card");
+  assert.deepEqual((await db.query(
+    "select * from public.beacon_community_summaries(array[$1::uuid])", [stateBeacon],
+  )).rows, [], "an outsider cannot read a private Beacon after opt-in removal");
+  await actor("owner");
+  assert.equal((await db.query(
+    "select * from public.beacon_community_summaries(array[$1::uuid])", [stateBeacon],
+  )).rows.length, 1, "the host can still read a private Beacon's community summary");
+  assert.deepEqual((await db.query(
+    "select * from public.community_public_beacons('squad',$1,20,0)", [stateSquad],
+  )).rows, [], "the public feed always requires an active discovery opt-in");
+
+  await db.exec("reset role; set role anon;");
+  await assert.rejects(
+    db.query("select * from public.beacon_community_summaries(array[]::uuid[])", []),
+    /permission denied/i,
+  );
+  await assert.rejects(
+    db.query("select * from public.community_public_beacons('squad',$1,20,0)", [discoverySquad]),
+    /permission denied/i,
+  );
 });

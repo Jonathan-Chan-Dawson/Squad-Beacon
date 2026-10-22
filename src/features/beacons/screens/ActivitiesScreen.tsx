@@ -1,3 +1,4 @@
+import { LivingActivityHighlights } from "../components/feed/LivingActivitySection";
 import { discoveryActivities } from "../discoverySelectors";
 import React, { useCallback, useMemo, useState } from "react";
 import {
@@ -544,22 +545,28 @@ export default function ActivitiesScreen() {
           {hubHeading("Your Activity", "My Activity →", () =>
             router.push("/your-activity" as Href),
           )}
-          <View style={{ borderRadius: 12, overflow: "hidden" }}>
-            {personalPreview.length ? (
-              personalPreview.map((activity) => (
-                <BeaconFeedCard
-                  key={activity.id}
-                  presentation="personal-preview"
-                  compact
-                  {...buildCardProps(activity)}
-                />
-              ))
-            ) : (
-              <Txt muted>
-                {loading ? "Loading your activity…" : "No confirmed plans yet."}
-              </Txt>
-            )}
-          </View>
+          {(data.is_demo || data.capabilities?.living_activity) && userId ? (
+            <LivingActivityHighlights personId={userId} />
+          ) : (
+            <View style={{ borderRadius: 12, overflow: "hidden" }}>
+              {personalPreview.length ? (
+                personalPreview.map((activity) => (
+                  <BeaconFeedCard
+                    key={activity.id}
+                    presentation="personal-preview"
+                    compact
+                    {...buildCardProps(activity)}
+                  />
+                ))
+              ) : (
+                <Txt muted>
+                  {loading
+                    ? "Loading your activity…"
+                    : "No confirmed plans yet."}
+                </Txt>
+              )}
+            </View>
+          )}
         </View>
         <SocialFriendsSection key={userId ?? "signed-out"} />
         <View

@@ -6,3 +6,11 @@ Documentation guide
 - spec-review.md: implemented requirements, scope decisions, and remaining gaps.
 
 - theme-refinement.md: six families under stable original names, neutral Essential defaults, saved preference compatibility, semantic role refinements, Appearance previews, and validation boundaries.
+
+- MOBILE_UI_POLISH_VALIDATION.md: mobile location, chat, Profile, navigation/sheet/system-UI changes; automated verification and outstanding native device acceptance.
+
+- COMMUNITY_DISCOVERY_VALIDATION.md: Pass 2 community projections, additive migration release, verification results, and native device boundaries.
+
+- ADAPTIVE_BEACON_CARD_VALIDATION.md: shared Browse/Map card shell, canonical capacity and Plan metadata, verification status, screenshots, and native acceptance boundaries.
+
+- LIVING_ACTIVITY_VALIDATION.md: Pass 3 profile order, independent presence, creation and privacy behavior, additive migration rollout, and verification boundaries.

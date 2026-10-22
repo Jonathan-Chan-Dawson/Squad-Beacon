@@ -20,6 +20,10 @@ import { canOpenSquadProfile } from "@/src/features/people/squadProfile";
 import { canManageSpace, canReadSpace } from "@/src/features/spaces/domain";
 import { VirtualizedCommunityDirectory } from "@/src/features/people/VirtualizedCommunityDirectory";
 import { OrganizationRelatedPreview } from "./OrganizationRelatedPreview";
+import { CommunityPublicBeacons } from "@/src/features/discovery/CommunityPublicBeacons";
+import { CommunityPublicProfile } from "@/src/features/discovery/CommunityPublicProfile";
+import { communityProfileMode } from "@/src/features/discovery/communityPublicProfileAccess";
+import { communityTypeLabel } from "@/src/features/social/communityPresentation";
 import {
   ProfileActions,
   ProfileLink,
@@ -117,13 +121,20 @@ export default function OrganizationScreen() {
     section?: string;
   }>();
   const { data, userId, act } = useBeacon();
-  const { summary: safeSummary, loading: summaryLoading } =
+  const { summary: safeSummary, loading: summaryLoading, refresh: refreshSummary } =
     useCommunitySummary("organization", id);
   const now = useNow();
-  const organization = (data.organizations.find((item) => item.id === id)) ??
-    (safeSummary
-      ?
-      ({
+  const memberOrganizationRecord = data.organizations.find((item) => item.id === id);
+  const hasReadableMemberRecord = !!(
+    safeSummary?.membership_status === "active" &&
+    memberOrganizationRecord && userId &&
+    canReadOrganization(data, memberOrganizationRecord.id, userId)
+  );
+  const profileMode = communityProfileMode(safeSummary, hasReadableMemberRecord, summaryLoading);
+  const organization = profileMode === "member"
+    ? memberOrganizationRecord
+    : safeSummary
+      ? ({
         id: safeSummary.entity_id,
         owner_id: "",
         name: safeSummary.name,
@@ -133,7 +144,7 @@ export default function OrganizationScreen() {
         discoverability: safeSummary.discoverability,
         join_mode: safeSummary.join_mode,
       } satisfies Organization)
-      : undefined);
+      : undefined;
   const legacyTab = queryTab ?? queryView;
   const tab: OrganizationTab =
     legacyTab === "manage" || legacyTab === "members" || legacyTab === "chat" || legacyTab === "directSquads" || legacyTab === "direct-squads"
@@ -184,7 +195,7 @@ export default function OrganizationScreen() {
   const members = data.organization_members.filter(
     (member) => member.organization_id === organization?.id,
   );
-  const currentMemberAccess = summaryLoading || safeSummary?.membership_status === "active";
+  const currentMemberAccess = profileMode === "member";
   const role =
     organization && userId && currentMemberAccess && canReadOrganization(data, organization.id, userId)
       ? activeOrganizationRole(
@@ -312,26 +323,15 @@ export default function OrganizationScreen() {
     setDiscardOpen(true);
   });
 
-  if (summaryLoading && !organization)
+  if (profileMode === "loading")
     return (
       <Screen title="Loading Network" eyebrow="">
         <Txt muted>Loading the safe Network profile.</Txt>
       </Screen>
     );
 
-  const profileSummary = safeSummary ?? (
-    organization && userId && canReadOrganization(data, organization.id, userId) && summaryLoading
-      ? {
-          description: organization.description,
-          member_count: organization.member_count ?? organizationActiveMemberCount(
-            organization.id,
-            organization.owner_id,
-            members,
-          ),
-        }
-      : null
-  );
-  if (!organization || !profileSummary) {
+  const profileSummary = safeSummary;
+  if (profileMode === "unavailable" || !organization || !profileSummary) {
     return (
       <Screen
         title="Network unavailable"
@@ -348,6 +348,17 @@ export default function OrganizationScreen() {
       </Screen>
     );
   }
+  if (profileMode === "summary")
+    return (
+      <Screen
+        title={communityTypeLabel("organization")}
+        eyebrow={safeSummary?.name}
+        showDemoNotice={false}
+        create={false}
+      >
+        <CommunityPublicProfile summary={profileSummary} onSummaryChanged={refreshSummary} />
+      </Screen>
+    );
 
   const canManage = !!role && canManageOrganization(organization, members, userId ?? "");
   const canManageSquads = !!role && canManageOrganizationSquads(
@@ -946,6 +957,13 @@ export default function OrganizationScreen() {
           ) : null}
         </View>
       )}
+      {tab === "overview" ? (
+        <CommunityPublicBeacons
+          type="organization"
+          entityId={organization.id}
+          excludeActivityIds={organizationActivities.map((activity) => activity.id)}
+        />
+      ) : null}
 
       {tab === "members" && !canReadMembers ? (
         <Empty

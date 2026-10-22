@@ -7,6 +7,7 @@ import {
   type PlanningThread,
 } from "../src/shared/types";
 import { resolveMapContext } from "../src/features/maps/contextFilters";
+import { readablePlanForActivity } from "../src/features/beacons/screens/discoveryPlan";
 import { showBeaconOnMap } from "../src/features/maps/mapDiscovery";
 
 const activity = (id: string, index = 0): Activity => ({
@@ -137,6 +138,24 @@ test("context rechecks viewer and Plan access on every resolution", () => {
     resolveMapContext(data, "viewer", { kind: "plan", id: "plan" }),
     null,
   );
+});
+
+test("discovery Plan context requires the Beacon's exact linked, readable Plan", () => {
+  const data = fixture();
+  const beacon = data.activities[0];
+  assert.equal(
+    readablePlanForActivity(data, beacon, "viewer"),
+    data.plans[0],
+  );
+
+  beacon.plan_id = "unrelated-plan";
+  assert.equal(readablePlanForActivity(data, beacon, "viewer"), undefined);
+  beacon.plan_id = data.plans[0].id;
+  data.plans[0].owner_id = "stranger";
+  assert.equal(readablePlanForActivity(data, beacon, "viewer"), undefined);
+  data.plans[0].owner_id = "viewer";
+  data.viewer_id = "another-viewer";
+  assert.equal(readablePlanForActivity(data, beacon, "viewer"), undefined);
 });
 for (const kind of ["vote", "draw"] as const)
   test(`${kind} suggestions retain draft identity and independent Beacon privacy`, () => {

@@ -1,11 +1,21 @@
+import { activityNoteSeed } from "../livingActivity";
+import { CreationLocationInput } from "../components/CreationLocationInput";
 import { SocialSelector } from "@/src/features/people/components/SocialSelector";
 import { randomUUID } from "expo-crypto";
 import { usesSharedStatusEditor } from "../statusRouteSeed";
 import { LegacyStatusScreen } from "./LegacyStatusScreen";
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Text, View } from "react-native";
+import { Platform, Text, View } from "react-native";
 import { router, useLocalSearchParams, type Href } from "expo-router";
-import { usePlanningDraftState, usePlanningInvitees, planningDraftObject, hasPlanningDraftField, completePlanningDraft } from "../socialPlanningSession";
+import {
+  startCreationDraft,
+  beginCreationLocationPick,
+  usePlanningDraftState,
+  usePlanningInvitees,
+  planningDraftObject,
+  hasPlanningDraftField,
+  completePlanningDraft,
+} from "../socialPlanningSession";
 import { CreationInvitees } from "../components/feed/CreationInvitees";
 import { CreateHome } from "@/src/features/beacons/CreateHome";
 import { canReadPlanningThread } from "@/src/features/planning/domain";
@@ -26,7 +36,17 @@ import { readViewerDeviceDefaults } from "@/src/features/profile/settings/device
 import { resolveDefaultAudience } from "@/src/features/profile/settings/beaconDefaults";
 import { canOpenSquadProfile } from "@/src/features/people/squadProfile";
 import { canViewProfile } from "@/src/features/profile/privacy";
-import { atomicCreateAndInvite, createAndInvite, creationHandoffParams, creationStatusSeed, mergeCreationStatusSeed, newCreationInviteSession, parseCreationInvitees, validateCreationInvitees, type CreationInviteSession } from "@/src/features/beacons/createHandoff";
+import {
+  atomicCreateAndInvite,
+  createAndInvite,
+  creationHandoffParams,
+  creationStatusSeed,
+  mergeCreationStatusSeed,
+  newCreationInviteSession,
+  parseCreationInvitees,
+  validateCreationInvitees,
+  type CreationInviteSession,
+} from "@/src/features/beacons/createHandoff";
 import { canReadSpace, activeSpaceRole } from "@/src/features/spaces/domain";
 import {
   canReadOrganization,
@@ -87,7 +107,8 @@ function moduleDefaultsFromControls(
 export default function CreateActivity() {
   const params = useLocalSearchParams();
   const { userId } = useBeacon();
-  if (usesSharedStatusEditor(params)) return <LegacyStatusScreen params={params} />;
+  if (usesSharedStatusEditor(params))
+    return <LegacyStatusScreen params={params} />;
   return <CreateEditor key={userId + JSON.stringify(params)} />;
 }
 
@@ -114,36 +135,86 @@ function CreateEditor() {
     savedChecklist?: string;
     inviteeIds?: string;
     planSession?: string;
+    activityNoteId?: string;
+    featureAfter?: string;
     statusSourceId?: string;
     startsAt?: string;
     fromMap?: string;
     timezone?: string;
   }>();
-  let creationTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  const [draftToken] = useState(
+    () =>
+      params.planSession ??
+      (Platform.OS !== "web" ? startCreationDraft(userId) : undefined),
+  );
+  let creationTimezone =
+    Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
   if (typeof params.timezone === "string" && params.timezone) {
-    try { new Intl.DateTimeFormat("en-US", { timeZone: params.timezone }); creationTimezone = params.timezone; }
-    catch { /* Invalid route zones retain the normal creation default. */ }
+    try {
+      new Intl.DateTimeFormat("en-US", { timeZone: params.timezone });
+      creationTimezone = params.timezone;
+    } catch {
+      /* Invalid route zones retain the normal creation default. */
+    }
   }
   const parsedInvitees = parseCreationInvitees(params.inviteeIds);
-  const [inviteeIds, setInviteeIds] = usePlanningInvitees(userId, params.planSession, parsedInvitees.ids);
+  const [inviteeIds, setInviteeIds] = usePlanningInvitees(
+    userId,
+    draftToken,
+    parsedInvitees.ids,
+  );
   const [inviteeError, setInviteeError] = useState(parsedInvitees.error);
-  const [statusSourceDismissed, setStatusSourceDismissed] = usePlanningDraftState(userId, params.planSession, "statusSourceDismissed", false);
-  const statusSourceId = statusSourceDismissed ? undefined : params.statusSourceId;
-  const statusSeed = creationStatusSeed(data, userId, statusSourceId, currentTime);
+  const [statusSourceDismissed, setStatusSourceDismissed] =
+    usePlanningDraftState(userId, draftToken, "statusSourceDismissed", false);
+  const statusSourceId = statusSourceDismissed
+    ? undefined
+    : params.statusSourceId;
+  const statusSeed = params.activityNoteId
+    ? activityNoteSeed(data, userId, params.activityNoteId, currentTime)
+    : creationStatusSeed(data, userId, statusSourceId, currentTime);
   const dataRef = useRef(data);
-  useLayoutEffect(() => { dataRef.current = data; }, [data]);
-  const [initialInvitationSession] = useState(() => planningDraftObject(userId, params.planSession, "invitationSession", newCreationInviteSession));
+  useLayoutEffect(() => {
+    dataRef.current = data;
+  }, [data]);
+  const [initialInvitationSession] = useState(() =>
+    planningDraftObject(
+      userId,
+      draftToken,
+      "invitationSession",
+      newCreationInviteSession,
+    ),
+  );
   const invitationSession = useRef(initialInvitationSession);
-  const [createdSession, setCreatedSession] = useState<CreationInviteSession | null>(() => initialInvitationSession.atomicAttempt || initialInvitationSession.createdId || initialInvitationSession.creationUnverified ? { ...initialInvitationSession } : null);
+  const [createdSession, setCreatedSession] =
+    useState<CreationInviteSession | null>(() =>
+      initialInvitationSession.atomicAttempt ||
+      initialInvitationSession.createdId ||
+      initialInvitationSession.creationUnverified
+        ? { ...initialInvitationSession }
+        : null,
+    );
   const [retryBusy, setRetryBusy] = useState(false);
   const retryBusyRef = useRef(false);
   const [templateNotice, setTemplateNotice] = useState("");
   const [workflowError, setWorkflowError] = useState("");
-  const sourceError = statusSourceId && !statusSeed ? "This status is no longer available. Clear the status source to continue with a new Beacon." : "";
-  const handoff = creationHandoffParams({ ...params, inviteeIds: inviteeError ? params.inviteeIds : JSON.stringify(inviteeIds), statusSourceId });
+  const sourceError =
+    statusSourceId && !statusSeed
+      ? "This status is no longer available. Clear the status source to continue with a new Beacon."
+      : "";
+  const handoff = creationHandoffParams({
+    ...params,
+    inviteeIds: inviteeError ? params.inviteeIds : JSON.stringify(inviteeIds),
+    statusSourceId,
+  });
   const inviteeLabel = (id: string) => {
     const profile = data.profiles.find((person) => person.id === id);
-    return userId && data.viewer_id === userId && (!createdSession || createdSession.viewerId === userId) && profile && canViewProfile(data, profile, userId) ? profile.name : "Unavailable friend";
+    return userId &&
+      data.viewer_id === userId &&
+      (!createdSession || createdSession.viewerId === userId) &&
+      profile &&
+      canViewProfile(data, profile, userId)
+      ? profile.name
+      : "Unavailable friend";
   };
   const controlsRouteKey = JSON.stringify([
     params.kind ?? null,
@@ -160,7 +231,9 @@ function CreateEditor() {
   );
   const templateEditor =
     params.editTemplate === "yes" || params.saveTemplate === "yes";
-  const previous = statusSourceId ? undefined : data.activities.find((a) => a.id === params.repeat);
+  const previous = statusSourceId
+    ? undefined
+    : data.activities.find((a) => a.id === params.repeat);
   const associationCandidates =
     userId && data.viewer_id === userId
       ? [
@@ -214,7 +287,10 @@ function CreateEditor() {
   const [associationDraft, setAssociationDraft] = usePlanningDraftState<{
     routeKey: string;
     value: { entity_type: SocialEntityType; entity_id: string } | null;
-  }>(userId, params.planSession, "associationDraft", () => ({ routeKey: associationRouteKey, value: associationRouteSeed }));
+  }>(userId, draftToken, "associationDraft", () => ({
+    routeKey: associationRouteKey,
+    value: associationRouteSeed,
+  }));
   const selectedAssociation =
     associationDraft.routeKey === associationRouteKey
       ? associationDraft.value
@@ -244,13 +320,18 @@ function CreateEditor() {
             )
             .map((item) => Date.parse(item.ends_at)),
         )
-      : params.startsAt && Number.isFinite(Date.parse(params.startsAt)) ? Date.parse(params.startsAt) : currentTime;
+      : params.startsAt && Number.isFinite(Date.parse(params.startsAt))
+        ? Date.parse(params.startsAt)
+        : currentTime;
   const aspirations =
     data.profiles.find((p) => p.id === userId)?.aspiration_goals ?? [];
   const currentAspirationIds = new Set(
     aspirations.map((aspiration) => aspiration.id),
   );
-  const [home, setHome] = usePlanningDraftState(userId, params.planSession, "home",
+  const [home, setHome] = usePlanningDraftState(
+    userId,
+    draftToken,
+    "home",
     !params.editor &&
       !params.template &&
       !params.repeat &&
@@ -264,14 +345,42 @@ function CreateEditor() {
       !params.organizationId &&
       (!params.kind || params.kind === "beacon"),
   );
-  const [addTo, setAddTo] = usePlanningDraftState(userId, params.planSession, "addTo",
+  const [addTo, setAddTo] = usePlanningDraftState(
+    userId,
+    draftToken,
+    "addTo",
     params.threadId ? "Vote / Draw" : params.planId ? "Plan" : "Standalone",
   );
-  const [decisionKind, setDecisionKind] = usePlanningDraftState(userId, params.planSession, "decisionKind", "Vote");
-  const [decisionTitle, setDecisionTitle] = usePlanningDraftState(userId, params.planSession, "decisionTitle", "");
-  const [decisionId, setDecisionId] = usePlanningDraftState(userId, params.planSession, "decisionId", params.threadId ?? "");
-  const [selectedPlanId, setSelectedPlanId] = usePlanningDraftState(userId, params.planSession, "selectedPlanId", params.planId ?? "");
-  const [planPosition, setPlanPosition] = usePlanningDraftState(userId, params.planSession, "planPosition", "End");
+  const [decisionKind, setDecisionKind] = usePlanningDraftState(
+    userId,
+    draftToken,
+    "decisionKind",
+    "Vote",
+  );
+  const [decisionTitle, setDecisionTitle] = usePlanningDraftState(
+    userId,
+    draftToken,
+    "decisionTitle",
+    "",
+  );
+  const [decisionId, setDecisionId] = usePlanningDraftState(
+    userId,
+    draftToken,
+    "decisionId",
+    params.threadId ?? "",
+  );
+  const [selectedPlanId, setSelectedPlanId] = usePlanningDraftState(
+    userId,
+    draftToken,
+    "selectedPlanId",
+    params.planId ?? "",
+  );
+  const [planPosition, setPlanPosition] = usePlanningDraftState(
+    userId,
+    draftToken,
+    "planPosition",
+    "End",
+  );
   const decisions = data.planning_threads.filter(
     (thread) =>
       thread.kind !== "ping" &&
@@ -288,41 +397,103 @@ function CreateEditor() {
   const [timing, setTiming] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [associationOpen, setAssociationOpen] = useState(false);
-  const [selectedRecipe, setSelectedRecipe] = usePlanningDraftState<BeaconTemplate | null>(userId, params.planSession, "selectedRecipe",
-    null,
+  const [selectedRecipe, setSelectedRecipe] =
+    usePlanningDraftState<BeaconTemplate | null>(
+      userId,
+      draftToken,
+      "selectedRecipe",
+      null,
+    );
+  const [prepAnswers, setPrepAnswers] = usePlanningDraftState<string[]>(
+    userId,
+    draftToken,
+    "prepAnswers",
+    [],
   );
-  const [prepAnswers, setPrepAnswers] = usePlanningDraftState<string[]>(userId, params.planSession, "prepAnswers", []);
-  const [view, setView] = usePlanningDraftState(userId, params.planSession, "view", "Normal");
-  const [kind, setKind] = usePlanningDraftState(userId, params.planSession, "kind",
+  const [view, setView] = usePlanningDraftState(
+    userId,
+    draftToken,
+    "view",
+    "Normal",
+  );
+  const [kind, setKind] = usePlanningDraftState(
+    userId,
+    draftToken,
+    "kind",
     params.kind === "status"
       ? "Status"
       : params.kind === "squad"
         ? "Squad"
         : "Beacon",
   );
-  const [title, setTitle] = usePlanningDraftState(userId, params.planSession, "title", statusSeed?.title ?? saved?.title ?? previous?.title ?? "");
-  const [description, setDescription] = usePlanningDraftState(userId, params.planSession, "description",
-    statusSeed?.description ?? saved?.description ?? previous?.description ?? "",
+  const [title, setTitle] = usePlanningDraftState(
+    userId,
+    draftToken,
+    "title",
+    statusSeed?.title ?? saved?.title ?? previous?.title ?? "",
   );
-  const [templateName, setTemplateName] = usePlanningDraftState(userId, params.planSession, "templateName",
+  const [description, setDescription] = usePlanningDraftState(
+    userId,
+    draftToken,
+    "description",
+    statusSeed?.description ??
+      saved?.description ??
+      previous?.description ??
+      "",
+  );
+  const [templateName, setTemplateName] = usePlanningDraftState(
+    userId,
+    draftToken,
+    "templateName",
     saved?.name ?? previous?.title ?? "",
   );
-  const [available, setAvailable] = usePlanningDraftState(userId, params.planSession, "available", false);
-  const [category, setCategory] = usePlanningDraftState<Category>(userId, params.planSession, "category",
+  const [available, setAvailable] = usePlanningDraftState(
+    userId,
+    draftToken,
+    "available",
+    false,
+  );
+  const [category, setCategory] = usePlanningDraftState<Category>(
+    userId,
+    draftToken,
+    "category",
     statusSeed?.category ?? saved?.category ?? previous?.category ?? "Social",
   );
   const sourceHydrated = useRef(!!statusSeed);
-  const textEdited = useRef({ title: false, description: false, category: false });
+  const textEdited = useRef({
+    title: false,
+    description: false,
+    category: false,
+  });
   useEffect(() => {
     if (!statusSeed || sourceHydrated.current) return;
-    const seeded = mergeCreationStatusSeed({ title, description, category }, statusSeed, textEdited.current);
-    setTitle(seeded.title); setDescription(seeded.description); setCategory(seeded.category as Category);
+    const seeded = mergeCreationStatusSeed(
+      { title, description, category },
+      statusSeed,
+      textEdited.current,
+    );
+    setTitle(seeded.title);
+    setDescription(seeded.description);
+    setCategory(seeded.category as Category);
     sourceHydrated.current = true;
-  }, [statusSeed, title, description, category, setTitle, setDescription, setCategory]);
-  const audienceEdited = useRef(hasPlanningDraftField(userId, params.planSession, "audience"));
+  }, [
+    statusSeed,
+    title,
+    description,
+    category,
+    setTitle,
+    setDescription,
+    setCategory,
+  ]);
+  const audienceEdited = useRef(
+    hasPlanningDraftField(userId, draftToken, "audience"),
+  );
   const appliedDeviceDefault = useRef<string | null>(null);
   const [defaultNotice, setDefaultNotice] = useState("");
-  const [audience, setAudienceValue] = usePlanningDraftState<Audience>(userId, params.planSession, "audience",
+  const [audience, setAudienceValue] = usePlanningDraftState<Audience>(
+    userId,
+    draftToken,
+    "audience",
     routeDecision
       ? routeDecision.audience
       : routePlan
@@ -336,7 +507,10 @@ function CreateEditor() {
             : (data.profiles.find((p) => p.id === userId)?.default_audience ??
               "friends"),
   );
-  const [audienceId, setAudienceId] = usePlanningDraftState<string | null>(userId, params.planSession, "audienceId",
+  const [audienceId, setAudienceId] = usePlanningDraftState<string | null>(
+    userId,
+    draftToken,
+    "audienceId",
     routeDecision?.audience_id ??
       routePlan?.squad_id ??
       params.organizationId ??
@@ -405,31 +579,63 @@ function CreateEditor() {
     setAudienceValue,
     setAudienceId,
   ]);
-  const [target, setTarget] = usePlanningDraftState(userId, params.planSession, "target",
+  const [target, setTarget] = usePlanningDraftState(
+    userId,
+    draftToken,
+    "target",
     saved?.target_count ? String(saved.target_count) : "",
   );
-  const [approval, setApproval] = usePlanningDraftState(userId, params.planSession, "approval",
+  const [approval, setApproval] = usePlanningDraftState(
+    userId,
+    draftToken,
+    "approval",
     saved?.approval_required ? "Host approval" : "Open joining",
   );
-  const [when, setWhen] = usePlanningDraftState(userId, params.planSession, "when",
-      params.threadId || params.planId || params.startsAt && Number.isFinite(Date.parse(params.startsAt)) ? "Pick time" : "Now",
+  const [when, setWhen] = usePlanningDraftState(
+      userId,
+      draftToken,
+      "when",
+      params.threadId ||
+        params.planId ||
+        (params.startsAt && Number.isFinite(Date.parse(params.startsAt)))
+        ? "Pick time"
+        : "Now",
     ),
-    [duration, setDuration] = usePlanningDraftState(userId, params.planSession, "duration",
+    [duration, setDuration] = usePlanningDraftState(
+      userId,
+      draftToken,
+      "duration",
       formatDurationLabel(saved?.minutes ?? 60),
     );
-  const [starts, setStarts] = usePlanningDraftState(userId, params.planSession, "starts", () =>
-    new Date(routeStart).toISOString(),
+  const [starts, setStarts] = usePlanningDraftState(
+    userId,
+    draftToken,
+    "starts",
+    () => new Date(routeStart).toISOString(),
   );
-  const [ends, setEnds] = usePlanningDraftState(userId, params.planSession, "ends", () =>
-    new Date(routeStart + (saved?.minutes ?? 60) * 60000).toISOString(),
+  const [ends, setEnds] = usePlanningDraftState(
+    userId,
+    draftToken,
+    "ends",
+    () => new Date(routeStart + (saved?.minutes ?? 60) * 60000).toISOString(),
   );
-  const [label, setLabel] = usePlanningDraftState(userId, params.planSession, "label", params.placeLabel ?? saved?.label ?? "");
-  const [placeType, setPlaceType] = usePlanningDraftState(userId, params.planSession, "placeType", "In person"),
-    [url, setUrl] = usePlanningDraftState(userId, params.planSession, "url", "");
+  const [label, setLabel] = usePlanningDraftState(
+    userId,
+    draftToken,
+    "label",
+    params.placeLabel ?? saved?.label ?? "",
+  );
+  const [placeType, setPlaceType] = usePlanningDraftState(
+      userId,
+      draftToken,
+      "placeType",
+      "In person",
+    ),
+    [url, setUrl] = usePlanningDraftState(userId, draftToken, "url", "");
   const [pin, setPin] = usePlanningDraftState<{
     latitude: number;
     longitude: number;
-  } | null>(userId, params.planSession, "pin", () => {
+  } | null>(userId, draftToken, "pin", () => {
     if (params.latitude == null || params.longitude == null) return null;
     const latitude = Number(params.latitude),
       longitude = Number(params.longitude);
@@ -444,7 +650,7 @@ function CreateEditor() {
   const [beaconControlDraft, setBeaconControlDraft] = usePlanningDraftState<{
     routeKey: string;
     value: BeaconControlValues;
-  }>(userId, params.planSession, "beaconControlDraft", () => ({
+  }>(userId, draftToken, "beaconControlDraft", () => ({
     routeKey: controlsRouteKey,
     value: saved?.module_defaults
       ? { ...defaultBeaconControlValues(), ...saved.module_defaults }
@@ -458,13 +664,17 @@ function CreateEditor() {
       : defaultBeaconControlValues();
   const setBeaconControls = (value: BeaconControlValues) =>
     setBeaconControlDraft({ routeKey: controlsRouteKey, value });
-  const [aspirationIds, setAspirationIds] = usePlanningDraftState<string[]>(userId, params.planSession, "aspirationIds", () =>
-    (previous?.aspiration_ids ?? []).filter((id) =>
-      currentAspirationIds.has(id),
-    ),
+  const [aspirationIds, setAspirationIds] = usePlanningDraftState<string[]>(
+    userId,
+    draftToken,
+    "aspirationIds",
+    () =>
+      (previous?.aspiration_ids ?? []).filter((id) =>
+        currentAspirationIds.has(id),
+      ),
   );
   function applyTemplate(t: BeaconTemplate) {
-    if (!statusSourceId) {
+    if (!statusSeed) {
       setTitle(t.title);
       setCategory(t.category);
       setDescription(t.description ?? "");
@@ -531,17 +741,29 @@ function CreateEditor() {
       module_defaults: moduleDefaultsFromControls(beaconControls),
     });
     if (inviteeIds.length || inviteeError || statusSourceId) {
-      setTemplateNotice("Template saved. Your Beacon draft and selected friends are still here.");
+      setTemplateNotice(
+        "Template saved. Your Beacon draft and selected friends are still here.",
+      );
       return;
     }
     router.replace("/your-activity?historyExpanded=yes" as Href);
   }
   async function publish() {
-    if (invitationSession.current.createdId || invitationSession.current.creationUnverified) throw new Error("This Beacon has already been created. Use Retry invitations or Open Beacon.");
+    if (
+      invitationSession.current.createdId ||
+      invitationSession.current.creationUnverified
+    )
+      throw new Error(
+        "This Beacon has already been created. Use Retry invitations or Open Beacon.",
+      );
     if (inviteeError) throw new Error(inviteeError);
     if (sourceError) throw new Error(sourceError);
-    if (inviteeIds.length && (kind === "Status" || addTo === "Vote / Draw")) throw new Error("Selected friends can be invited to a Beacon. Clear the selected friends before sharing a status or submitting a Vote / Draw proposal.");
-    if (inviteeIds.length) validateCreationInvitees(dataRef.current, userId, inviteeIds);
+    if (inviteeIds.length && (kind === "Status" || addTo === "Vote / Draw"))
+      throw new Error(
+        "Selected friends can be invited to a Beacon. Clear the selected friends before sharing a status or submitting a Vote / Draw proposal.",
+      );
+    if (inviteeIds.length)
+      validateCreationInvitees(dataRef.current, userId, inviteeIds);
     const start = effectiveStartAt();
     const finalDescription = descriptionWithPrep();
     const controls =
@@ -652,87 +874,256 @@ function CreateEditor() {
       const count = data.activities.filter(
         (item) => item.plan_id === plan.id,
       ).length;
-      const create = () => act("create_plan_beacon", { ...payload, plan_id: plan.id, position: planPosition === "End" ? count : Number(planPosition) - 1 });
-      const result = inviteeIds.length ? await publishAtomic("create_plan_beacon_with_invitees", { ...payload, plan_id: plan.id, position: planPosition === "End" ? count : Number(planPosition) - 1 }) : await create();
+      const create = () =>
+        act("create_plan_beacon", {
+          ...payload,
+          plan_id: plan.id,
+          position: planPosition === "End" ? count : Number(planPosition) - 1,
+        });
+      const result = inviteeIds.length
+        ? await publishAtomic("create_plan_beacon_with_invitees", {
+            ...payload,
+            plan_id: plan.id,
+            position: planPosition === "End" ? count : Number(planPosition) - 1,
+          })
+        : await create();
       if (invitationSession.current.pendingIds.length) return;
       if (!result.id)
         throw new Error("The Beacon could not be added to this Plan.");
-      completePlanningDraft(userId, params.planSession);
+      completePlanningDraft(userId, draftToken);
       router.replace({ pathname: "/plan/[id]", params: { id: plan.id } });
       return;
     }
     const create = () => act("create_activity", payload);
-    const result = inviteeIds.length ? await publishAtomic("create_activity_with_invitees", payload) : await create();
+    const result = inviteeIds.length
+      ? await publishAtomic("create_activity_with_invitees", payload)
+      : {
+          id: (
+            await createAndInvite(
+              invitationSession.current,
+              [],
+              () => dataRef.current,
+              userId,
+              create,
+              act,
+            )
+          ).createdId,
+        };
     if (invitationSession.current.pendingIds.length) return;
-    completePlanningDraft(userId, params.planSession);
-    router.replace({
-      pathname: "/(tabs)",
-      params: {
-        ...(typeof result.id === "string" ? { beacon: result.id } : {}),
-        created: "yes",
-      },
-    });
+    completePlanningDraft(userId, draftToken);
+    if (typeof result.id === "string")
+      router.replace({
+        pathname: "/activity-created",
+        params: { id: result.id, type: "beacon" },
+      });
+    else throw new Error("The Beacon publication could not be verified.");
   }
-  async function publishAtomic(action: "create_activity_with_invitees" | "create_plan_beacon_with_invitees", payload: Record<string, unknown>) {
+  async function publishAtomic(
+    action:
+      "create_activity_with_invitees" | "create_plan_beacon_with_invitees",
+    payload: Record<string, unknown>,
+  ) {
     try {
-      const session=await atomicCreateAndInvite(invitationSession.current,inviteeIds,()=>dataRef.current,userId,action,payload,act,randomUUID);
+      const session = await atomicCreateAndInvite(
+        invitationSession.current,
+        inviteeIds,
+        () => dataRef.current,
+        userId,
+        action,
+        payload,
+        act,
+        randomUUID,
+      );
       setCreatedSession(session);
-      completePlanningDraft(userId, params.planSession);
-      return {id:session.createdId};
+      completePlanningDraft(userId, draftToken);
+      return { id: session.createdId };
     } finally {
-      setCreatedSession(invitationSession.current.atomicAttempt || invitationSession.current.createdId || invitationSession.current.creationUnverified ? {...invitationSession.current} : null);
+      setCreatedSession(
+        invitationSession.current.atomicAttempt ||
+          invitationSession.current.createdId ||
+          invitationSession.current.creationUnverified
+          ? { ...invitationSession.current }
+          : null,
+      );
     }
   }
   async function confirmPublication() {
-    const attempt=invitationSession.current.atomicAttempt;
+    const attempt = invitationSession.current.atomicAttempt;
     if (!attempt || retryBusyRef.current) return;
-    retryBusyRef.current=true; setRetryBusy(true); setWorkflowError("");
+    retryBusyRef.current = true;
+    setRetryBusy(true);
+    setWorkflowError("");
     try {
-      const result=await publishAtomic(attempt.action,attempt.payload);
-      if (result.id) router.replace({pathname:"/activity/[id]",params:{id:result.id}});
-    } catch (failure) { setWorkflowError(failure instanceof Error ? failure.message : "Could not confirm publication. Try again."); }
-    finally { retryBusyRef.current=false; setRetryBusy(false); }
+      const result = await publishAtomic(attempt.action, attempt.payload);
+      if (result.id)
+        router.replace({
+          pathname: "/activity/[id]",
+          params: { id: result.id },
+        });
+    } catch (failure) {
+      setWorkflowError(
+        failure instanceof Error
+          ? failure.message
+          : "Could not confirm publication. Try again.",
+      );
+    } finally {
+      retryBusyRef.current = false;
+      setRetryBusy(false);
+    }
   }
-  async function publishWithInvitees(create: () => Promise<Record<string, unknown>>) {
+  async function publishWithInvitees(
+    create: () => Promise<Record<string, unknown>>,
+  ) {
     try {
-      const session = await createAndInvite(invitationSession.current, inviteeIds, () => dataRef.current, userId, create, act);
+      const session = await createAndInvite(
+        invitationSession.current,
+        inviteeIds,
+        () => dataRef.current,
+        userId,
+        create,
+        act,
+      );
       setCreatedSession(session);
       return { id: session.createdId };
     } finally {
-      if (invitationSession.current.createdId || invitationSession.current.creationUnverified) setCreatedSession({ ...invitationSession.current });
+      if (
+        invitationSession.current.createdId ||
+        invitationSession.current.creationUnverified
+      )
+        setCreatedSession({ ...invitationSession.current });
     }
   }
   async function retryInvitations() {
     if (retryBusyRef.current) return;
     retryBusyRef.current = true;
     setRetryBusy(true);
-    try { await publishWithInvitees(async () => { throw new Error("This Beacon has already been created."); }); }
-    finally { retryBusyRef.current = false; setRetryBusy(false); }
+    try {
+      await publishWithInvitees(async () => {
+        throw new Error("This Beacon has already been created.");
+      });
+    } finally {
+      retryBusyRef.current = false;
+      setRetryBusy(false);
+    }
   }
-  if (createdSession && (createdSession.viewerId !== userId || data.viewer_id !== userId)) return <Screen title={createdSession.createdId ? "Beacon created" : "Your Beacon draft"} eyebrow="MAKE TIME TOGETHER" create={false}><Txt muted>Return to the account that started this Beacon to review or retry publication.</Txt></Screen>;
-  if (createdSession?.atomicAttempt && !createdSession.createdId) return <Screen title="Confirm publication" eyebrow="" create={false}>
-    <Text style={styles.h2}>{String(createdSession.atomicAttempt.payload.title ?? title)}</Text>
-    <Txt muted>The publication response was not confirmed. Your saved draft and selected invitations will be retried with the same request, preventing a second Beacon.</Txt>
-    {!!workflowError && <Text accessibilityRole="alert" style={styles.error}>{workflowError}</Text>}
-    <Txt muted>{(createdSession.atomicAttempt.payload.invitee_ids as string[]).length} selected invitation recipients remain in this saved attempt.</Txt>
-    <Action title="Retry confirmation" disabled={retryBusy} run={confirmPublication} />
-  </Screen>;
-  if (createdSession?.createdId || createdSession?.creationUnverified) return <Screen title="Beacon created" eyebrow="MAKE TIME TOGETHER" create={false}>
-    <Text style={styles.h2}>{title}</Text>
-    <Txt muted>{createdSession.invitedIds.length} invitation{createdSession.invitedIds.length === 1 ? "" : "s"} sent or already active.</Txt>
-    {createdSession.creationUnverified ? <Txt muted>The Beacon was created, but its ID could not be verified. Refresh before continuing.</Txt> : null}
-    {!!createdSession.pendingIds.length && <Text accessibilityRole="alert" style={styles.error}>{createdSession.pendingIds.length} invitation{createdSession.pendingIds.length === 1 ? "" : "s"} still need to be sent.</Text>}
-    {createdSession.pendingIds.map((id) => <View key={id} style={{ gap: 4 }}><Txt>{inviteeLabel(id)}</Txt><Txt muted>{createdSession.errors[id]}</Txt>
-      <Button compact secondary disabled={retryBusy} title={`Remove ${inviteeLabel(id)} from pending invitations`} onPress={() => {
-        if (retryBusyRef.current) return;
-        setInviteeIds((ids) => ids.filter((item) => item !== id));
-        invitationSession.current.pendingIds = invitationSession.current.pendingIds.filter((item) => item !== id);
-        delete invitationSession.current.errors[id];
-        setCreatedSession({ ...invitationSession.current });
-      }} /></View>)}
-    {!!createdSession.pendingIds.length && <Action title="Retry invitations" disabled={retryBusy} run={retryInvitations} />}
-    {createdSession.createdId ? <Button title="Open Beacon" disabled={retryBusy} onPress={() => { if (!retryBusyRef.current) router.replace({ pathname: "/activity/[id]", params: { id: createdSession.createdId! } }); }} /> : null}
-  </Screen>;
+  if (
+    createdSession &&
+    (createdSession.viewerId !== userId || data.viewer_id !== userId)
+  )
+    return (
+      <Screen
+        title={
+          createdSession.createdId ? "Beacon created" : "Your Beacon draft"
+        }
+        eyebrow="MAKE TIME TOGETHER"
+        create={false}
+      >
+        <Txt muted>
+          Return to the account that started this Beacon to review or retry
+          publication.
+        </Txt>
+      </Screen>
+    );
+  if (createdSession?.atomicAttempt && !createdSession.createdId)
+    return (
+      <Screen title="Confirm publication" eyebrow="" create={false}>
+        <Text style={styles.h2}>
+          {String(createdSession.atomicAttempt.payload.title ?? title)}
+        </Text>
+        <Txt muted>
+          The publication response was not confirmed. Your saved draft and
+          selected invitations will be retried with the same request, preventing
+          a second Beacon.
+        </Txt>
+        {!!workflowError && (
+          <Text accessibilityRole="alert" style={styles.error}>
+            {workflowError}
+          </Text>
+        )}
+        <Txt muted>
+          {
+            (createdSession.atomicAttempt.payload.invitee_ids as string[])
+              .length
+          }{" "}
+          selected invitation recipients remain in this saved attempt.
+        </Txt>
+        <Action
+          title="Retry confirmation"
+          disabled={retryBusy}
+          run={confirmPublication}
+        />
+      </Screen>
+    );
+  if (createdSession?.createdId || createdSession?.creationUnverified)
+    return (
+      <Screen
+        title="Beacon created"
+        eyebrow="MAKE TIME TOGETHER"
+        create={false}
+      >
+        <Text style={styles.h2}>{title}</Text>
+        <Txt muted>
+          {createdSession.invitedIds.length} invitation
+          {createdSession.invitedIds.length === 1 ? "" : "s"} sent or already
+          active.
+        </Txt>
+        {createdSession.creationUnverified ? (
+          <Txt muted>
+            The Beacon was created, but its ID could not be verified. Refresh
+            before continuing.
+          </Txt>
+        ) : null}
+        {!!createdSession.pendingIds.length && (
+          <Text accessibilityRole="alert" style={styles.error}>
+            {createdSession.pendingIds.length} invitation
+            {createdSession.pendingIds.length === 1 ? "" : "s"} still need to be
+            sent.
+          </Text>
+        )}
+        {createdSession.pendingIds.map((id) => (
+          <View key={id} style={{ gap: 4 }}>
+            <Txt>{inviteeLabel(id)}</Txt>
+            <Txt muted>{createdSession.errors[id]}</Txt>
+            <Button
+              compact
+              secondary
+              disabled={retryBusy}
+              title={`Remove ${inviteeLabel(id)} from pending invitations`}
+              onPress={() => {
+                if (retryBusyRef.current) return;
+                setInviteeIds((ids) => ids.filter((item) => item !== id));
+                invitationSession.current.pendingIds =
+                  invitationSession.current.pendingIds.filter(
+                    (item) => item !== id,
+                  );
+                delete invitationSession.current.errors[id];
+                setCreatedSession({ ...invitationSession.current });
+              }}
+            />
+          </View>
+        ))}
+        {!!createdSession.pendingIds.length && (
+          <Action
+            title="Retry invitations"
+            disabled={retryBusy}
+            run={retryInvitations}
+          />
+        )}
+        {createdSession.createdId ? (
+          <Button
+            title="Open Beacon"
+            disabled={retryBusy}
+            onPress={() => {
+              if (!retryBusyRef.current)
+                router.replace({
+                  pathname: "/activity/[id]",
+                  params: { id: createdSession.createdId! },
+                });
+            }}
+          />
+        ) : null}
+      </Screen>
+    );
   const standardDurations = ["30 min", "1 hour", "2 hours"];
   const durationOptions = [
     ...(standardDurations.includes(duration) || duration === "Custom"
@@ -743,11 +1134,22 @@ function CreateEditor() {
   if (home)
     return (
       <CreateHome
-        inviteeControl={<CreationInvitees ids={inviteeIds} onChange={setInviteeIds} />}
-        context={handoff} selectedFriends={inviteeIds.map((id) => ({ id, name: inviteeLabel(id) }))}
+        inviteeControl={
+          <CreationInvitees ids={inviteeIds} onChange={setInviteeIds} />
+        }
+        context={handoff}
+        selectedFriends={inviteeIds.map((id) => ({
+          id,
+          name: inviteeLabel(id),
+        }))}
         contextError={inviteeError || sourceError}
-        onRemoveInvitee={(id) => setInviteeIds((ids) => ids.filter((item) => item !== id))}
-        onClearInvitees={() => { setInviteeIds([]); setInviteeError(""); }}
+        onRemoveInvitee={(id) =>
+          setInviteeIds((ids) => ids.filter((item) => item !== id))
+        }
+        onClearInvitees={() => {
+          setInviteeIds([]);
+          setInviteeError("");
+        }}
         onClearStatusSource={() => setStatusSourceDismissed(true)}
         onBlank={() => setHome(false)}
         onTemplate={(recipe) => {
@@ -784,11 +1186,26 @@ function CreateEditor() {
         />
       }
     >
-      {inviteeError || sourceError ? <Text accessibilityRole="alert" style={styles.error}>{inviteeError || sourceError}</Text> : null}
-      {workflowError ? <Text accessibilityRole="alert" style={styles.error}>{workflowError}</Text> : null}
+      {inviteeError || sourceError ? (
+        <Text accessibilityRole="alert" style={styles.error}>
+          {inviteeError || sourceError}
+        </Text>
+      ) : null}
+      {workflowError ? (
+        <Text accessibilityRole="alert" style={styles.error}>
+          {workflowError}
+        </Text>
+      ) : null}
       {templateNotice ? <Txt muted>{templateNotice}</Txt> : null}
       <CreationInvitees ids={inviteeIds} onChange={setInviteeIds} />
-      {statusSourceId ? <Button compact secondary title="Clear status source" onPress={() => setStatusSourceDismissed(true)} /> : null}
+      {statusSourceId ? (
+        <Button
+          compact
+          secondary
+          title="Clear status source"
+          onPress={() => setStatusSourceDismissed(true)}
+        />
+      ) : null}
       {!templateEditor && kind === "Beacon" && (
         <Button
           compact
@@ -816,7 +1233,10 @@ function CreateEditor() {
         label="Title / Activity"
         placeholder="A tiny adventure with your people"
         value={title}
-        onChangeText={(value) => { textEdited.current.title = true; setTitle(value); }}
+        onChangeText={(value) => {
+          textEdited.current.title = true;
+          setTitle(value);
+        }}
         maxLength={120}
       />
       {view === "Advanced" && !!selectedRecipe?.prepPrompts?.length && (
@@ -863,13 +1283,53 @@ function CreateEditor() {
             </Txt>
           </View>
         )}
-      <Field
-        label="Where? (optional)"
-        placeholder="Your usual spot, or decide together"
-        value={label}
-        onChangeText={setLabel}
-        maxLength={160}
-      />
+      {Platform.OS !== "web" && placeType === "In person" ? (
+        <CreationLocationInput
+          value={label}
+          selected={!!pin}
+          onChange={(value) => {
+            setLabel(value);
+            setPin(null);
+          }}
+          onChoose={(place) => {
+            setLabel(place.label);
+            setPin(place.coordinate);
+          }}
+          onPickMap={() => {
+            const returnParams = Object.fromEntries(
+              Object.entries(params).filter(
+                (entry): entry is [string, string] =>
+                  typeof entry[1] === "string",
+              ),
+            );
+            returnParams.planSession = draftToken!;
+            if (!beginCreationLocationPick(userId, draftToken, returnParams))
+              return;
+            router.push({
+              pathname: "/",
+              params: {
+                ...creationHandoffParams({
+                  ...handoff,
+                  planSession: draftToken,
+                  latitude: pin ? String(pin.latitude) : undefined,
+                  longitude: pin ? String(pin.longitude) : undefined,
+                  placeLabel: label,
+                }),
+                pickLocation: "yes",
+                locationPicker: "editor",
+              },
+            });
+          }}
+        />
+      ) : (
+        <Field
+          label="Where? (optional)"
+          placeholder="Your usual spot, or decide together"
+          value={label}
+          onChangeText={setLabel}
+          maxLength={160}
+        />
+      )}
       <Text style={styles.label}>TIME</Text>
       <View style={styles.row}>
         <View style={{ flex: 1 }}>
@@ -1034,8 +1494,17 @@ function CreateEditor() {
             options={["Standalone", "Vote / Draw", "Plan"]}
             value={addTo}
             onChange={(next) => {
-              if (next === "Vote / Draw" && (inviteeIds.length || inviteeError)) { setWorkflowError("Clear selected friends before adding a Vote / Draw proposal. Invitations apply to the created Beacon."); return; }
-              setWorkflowError(""); setAddTo(next);
+              if (
+                next === "Vote / Draw" &&
+                (inviteeIds.length || inviteeError)
+              ) {
+                setWorkflowError(
+                  "Clear selected friends before adding a Vote / Draw proposal. Invitations apply to the created Beacon.",
+                );
+                return;
+              }
+              setWorkflowError("");
+              setAddTo(next);
             }}
             showSelectedCheckmark={false}
           />
@@ -1090,7 +1559,13 @@ function CreateEditor() {
           )}
           {addTo === "Plan" && (
             <>
-              {!!inviteeIds.length && <Txt muted>Choose an existing Plan to invite these friends to the new Beacon. Clear selected friends before creating a new Plan from this draft.</Txt>}
+              {!!inviteeIds.length && (
+                <Txt muted>
+                  Choose an existing Plan to invite these friends to the new
+                  Beacon. Clear selected friends before creating a new Plan from
+                  this draft.
+                </Txt>
+              )}
               <Button
                 compact
                 secondary
@@ -1214,7 +1689,15 @@ function CreateEditor() {
             options={["Beacon", "Status", "Squad"]}
             value={kind}
             onChange={(k) => {
-              if (k === "Status" && (inviteeIds.length || inviteeError || statusSourceId)) { setWorkflowError("Clear selected friends and the status source before sharing a separate status."); return; }
+              if (
+                k === "Status" &&
+                (inviteeIds.length || inviteeError || statusSourceId)
+              ) {
+                setWorkflowError(
+                  "Clear selected friends and the status source before sharing a separate status.",
+                );
+                return;
+              }
               setWorkflowError("");
               setKind(k);
               setAudience(k === "Squad" ? "squad" : "friends");
@@ -1243,7 +1726,10 @@ function CreateEditor() {
               ] as const
             }
             value={category}
-            onChange={(value) => { textEdited.current.category = true; setCategory(value); }}
+            onChange={(value) => {
+              textEdited.current.category = true;
+              setCategory(value);
+            }}
           />
           {kind !== "Status" && (
             <BeaconSettings
@@ -1258,7 +1744,7 @@ function CreateEditor() {
               }
             />
           )}
-          {placeType === "In person" && (
+          {placeType === "In person" && Platform.OS === "web" && (
             <>
               <Button
                 secondary
@@ -1305,7 +1791,10 @@ function CreateEditor() {
           <Field
             label="A little more detail (optional)"
             value={description}
-            onChangeText={(value) => { textEdited.current.description = true; setDescription(value); }}
+            onChangeText={(value) => {
+              textEdited.current.description = true;
+              setDescription(value);
+            }}
             multiline
             maxLength={2000}
           />

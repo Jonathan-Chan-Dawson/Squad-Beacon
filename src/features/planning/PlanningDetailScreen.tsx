@@ -272,6 +272,7 @@ export default function PlanningDetailScreen({
         </Txt>
       </View>
 
+      {manages&&currentActivity&&thread.materialized_activity_id&&<Button compact secondary title="Feature resulting Beacon" onPress={()=>router.push({pathname:"/activity-created",params:{id:thread.materialized_activity_id!,type:"beacon",intent:"feature"}})}/>}
       {thread.kind === "ping" && thread.payload && (
         <View style={styles.card}>
           <Text style={styles.label}>IF CONVERTED TO A BEACON</Text>

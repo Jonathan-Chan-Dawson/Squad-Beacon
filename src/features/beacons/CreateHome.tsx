@@ -98,6 +98,8 @@ export function CreateHome({
     placeLabel?: string;
     inviteeIds?: string;
     statusSourceId?: string;
+    activityNoteId?: string;
+    featureAfter?: string;
     startsAt?: string;
     fromMap?: string;
     timezone?: string;
@@ -110,7 +112,8 @@ export function CreateHome({
   const [query, setQuery] = useState("");
   const [family, setFamily] = useState<TemplateFamily | null>(null);
   const [launcherError, setLauncherError] = useState("");
-  const hasSelectedContext = selectedFriends.length > 0 || !!context.statusSourceId || !!contextError;
+  const hasSelectedContext =
+    selectedFriends.length > 0 || !!context.statusSourceId || !!contextError;
   const own =
     data.viewer_id === userId
       ? data.templates.filter((item) => item.owner_id === userId)
@@ -322,12 +325,62 @@ export function CreateHome({
       eyebrow="MAKE TIME TOGETHER"
       create={false}
     >
+      {(data.is_demo || data.capabilities?.living_activity) && (
+        <View style={{ gap: 8 }}>
+          <Text style={styles.label}>WHAT I’M DOING</Text>
+          {card(
+            "activity-note",
+            "Activity Note",
+            "Share what you’re doing",
+            () => router.push("/activity-note"),
+            <Pencil size={20} color={colors.green} />,
+          )}
+          <Text style={styles.label}>WHAT I’M PLANNING</Text>
+          {card("ping", "Ping", "See who’s interested", () => {
+            if (
+              selectedFriends.length ||
+              (context.inviteeIds && context.inviteeIds !== "[]")
+            ) {
+              setLauncherError(
+                "Pings use one audience. Clear selected individual invitations before choosing a Ping audience.",
+              );
+              return;
+            }
+            router.push({
+              pathname: "/councils",
+              params: { ...context, newPing: "yes", creationKind: "ping" },
+            });
+          })}
+          {card("council", "Council", "Decide together · Vote or Draw", () => {
+            if (
+              selectedFriends.length ||
+              (context.inviteeIds && context.inviteeIds !== "[]")
+            ) {
+              setLauncherError(
+                "Councils use one audience. Clear selected individual invitations before choosing a Council audience.",
+              );
+              return;
+            }
+            router.push({
+              pathname: "/councils",
+              params: { ...context, newPing: "yes", creationKind: "council" },
+            });
+          })}
+          <Text style={styles.label}>BEACON · INVITE PEOPLE TO JOIN</Text>
+        </View>
+      )}
       <Chips
         options={["Beacon", "Plan", "Routine"]}
         value={tab}
         onChange={(next) => {
-          if (next !== "Beacon" && hasSelectedContext) { setLauncherError("Clear selected friends and the status source before switching to a Plan or Routine. They apply to the new Beacon."); return; }
-          setLauncherError(""); setTab(next);
+          if (next !== "Beacon" && hasSelectedContext) {
+            setLauncherError(
+              "Clear selected friends and the status source before switching to a Plan or Routine. They apply to the new Beacon.",
+            );
+            return;
+          }
+          setLauncherError("");
+          setTab(next);
         }}
         showSelectedCheckmark={false}
       />
@@ -338,17 +391,71 @@ export function CreateHome({
             ? "Arrange Beacons into a simple itinerary."
             : "Save a Plan to reuse or repeat."}
       </Txt>
-      {!!(contextError || launcherError) && <Text accessibilityRole="alert" style={styles.error}>{contextError || launcherError}</Text>}
-      {inviteeControl ?? ((selectedFriends.length > 0 || contextError && context.inviteeIds !== "[]") && <View style={{ gap: 8 }}>
-        <Txt muted>{selectedFriends.length} friends selected for this Beacon</Txt>
-        <View style={[styles.row, { flexWrap: "wrap" }]}>{selectedFriends.map((friend) => <Button key={friend.id} compact secondary title={`Remove ${friend.name}`} onPress={() => onRemoveInvitee?.(friend.id)} />)}</View>
-        <Button compact secondary title="Clear selected friends" onPress={() => { onClearInvitees?.(); setLauncherError(""); }} />
-      </View>)}
-      {!!context.statusSourceId && <View style={{ gap: 4 }}><Txt muted>Starting from your status note. Your status stays as it is.</Txt>
-        <Button compact secondary title="Clear status source" onPress={() => { onClearStatusSource?.(); setLauncherError(""); }} /></View>}
+      {!!(contextError || launcherError) && (
+        <Text accessibilityRole="alert" style={styles.error}>
+          {contextError || launcherError}
+        </Text>
+      )}
+      {inviteeControl ??
+        ((selectedFriends.length > 0 ||
+          (contextError && context.inviteeIds !== "[]")) && (
+          <View style={{ gap: 8 }}>
+            <Txt muted>
+              {selectedFriends.length} friends selected for this Beacon
+            </Txt>
+            <View style={[styles.row, { flexWrap: "wrap" }]}>
+              {selectedFriends.map((friend) => (
+                <Button
+                  key={friend.id}
+                  compact
+                  secondary
+                  title={`Remove ${friend.name}`}
+                  onPress={() => onRemoveInvitee?.(friend.id)}
+                />
+              ))}
+            </View>
+            <Button
+              compact
+              secondary
+              title="Clear selected friends"
+              onPress={() => {
+                onClearInvitees?.();
+                setLauncherError("");
+              }}
+            />
+          </View>
+        ))}
+      {!!context.statusSourceId && (
+        <View style={{ gap: 4 }}>
+          <Txt muted>
+            Starting from your status note. Your status stays as it is.
+          </Txt>
+          <Button
+            compact
+            secondary
+            title="Clear status source"
+            onPress={() => {
+              onClearStatusSource?.();
+              setLauncherError("");
+            }}
+          />
+        </View>
+      )}
       {tab === "Beacon" ? (
         <>
-          {context.fromMap === "yes" ? card("map-location", "Create Beacon on Map", "Choose a physical meeting point, then a template", () => router.push({ pathname: "/(tabs)", params: { ...context, pickLocation: "yes" } }), <MapPin size={22} color={colors.green} />) : null}
+          {context.fromMap === "yes"
+            ? card(
+                "map-location",
+                "Create Beacon on Map",
+                "Choose a physical meeting point, then a template",
+                () =>
+                  router.push({
+                    pathname: "/(tabs)",
+                    params: { ...context, pickLocation: "yes" },
+                  }),
+                <MapPin size={22} color={colors.green} />,
+              )
+            : null}
           {card(
             "blank",
             "Create Blank Template",
@@ -490,8 +597,16 @@ export function CreateHome({
           secondary
           title="Share a status"
           onPress={() => {
-            if (hasSelectedContext) { setLauncherError("Clear selected friends and the status source before sharing a separate status."); return; }
-            router.push({ pathname: "/create", params: { ...context, kind: "status" } });
+            if (hasSelectedContext) {
+              setLauncherError(
+                "Clear selected friends and the status source before sharing a separate status.",
+              );
+              return;
+            }
+            router.push({
+              pathname: "/create",
+              params: { ...context, kind: "status" },
+            });
           }}
         />
         <Button
@@ -499,7 +614,10 @@ export function CreateHome({
           secondary
           title="Beacon for a Squad"
           onPress={() =>
-            router.push({ pathname: "/create", params: { ...context, kind: "squad" } })
+            router.push({
+              pathname: "/create",
+              params: { ...context, kind: "squad" },
+            })
           }
         />
       </View>

@@ -1,3 +1,7 @@
+import {
+  LivingStatusHeader,
+  LivingActivitySection,
+} from "./LivingActivitySection";
 import { Check, Circle, EyeOff } from "lucide-react-native";
 import { ActionRow, ContextMenu } from "@/src/shared/ContextMenu";
 import React, { useEffect, useRef, useState } from "react";
@@ -55,6 +59,7 @@ export function useOwnStatusControl() {
             (item) =>
               item.owner_id === userId &&
               item.mode === "solo" &&
+              item.solo_purpose !== "activity_note" &&
               item.status === "scheduled" &&
               Date.parse(item.starts_at) > now &&
               Date.parse(item.ends_at) > Date.parse(item.starts_at) &&
@@ -64,7 +69,10 @@ export function useOwnStatusControl() {
       : [];
   const liveStatus = liveOwnedStatuses(data, userId, now)[0];
   const owned = [...liveOwnedStatuses(data, userId, now), ...scheduled];
-  const status = owned.find((item) => item.id === selectedStatusId) ?? owned[0];
+  const status =
+    selectedStatusId === "new-current"
+      ? liveStatus
+      : (owned.find((item) => item.id === selectedStatusId) ?? owned[0]);
   const profile =
     userId && data.viewer_id === userId
       ? data.profiles.find((item) => item.id === userId)
@@ -124,6 +132,10 @@ export function useOwnStatusControl() {
     editorVisible,
     saving,
     error,
+    openCurrent: () => {
+      selectStatus("new-current");
+      setEditorVisible(true);
+    },
     open: () => setEditorVisible(true),
     close: () => {
       if (!saving) setEditorVisible(false);
@@ -147,23 +159,30 @@ export function SharedStatusControl({
   compact = false,
   avatarControl = false,
   profilePill = false,
+  livingLayout = false,
 }: {
   compact?: boolean;
   avatarControl?: boolean;
   profilePill?: boolean;
+  livingLayout?: boolean;
 }) {
-  const { userId } = useBeacon();
+  const { userId, data } = useBeacon();
+  const living =
+    (data.is_demo || data.capabilities?.living_activity === true) &&
+    (livingLayout || compact);
   return (
     <SharedStatusContent
       key={userId ?? "signed-out"}
       compact={compact}
       avatarControl={avatarControl}
       profilePill={profilePill}
+      livingLayout={living}
     />
   );
 }
 
 function SharedStatusContent({
+  livingLayout,
   compact,
   avatarControl,
   profilePill,
@@ -171,6 +190,7 @@ function SharedStatusContent({
   compact: boolean;
   avatarControl: boolean;
   profilePill: boolean;
+  livingLayout: boolean;
 }) {
   const control = useOwnStatusControl();
   const { colors, tokens } = useDesignTheme();
@@ -327,6 +347,14 @@ function SharedStatusContent({
   return (
     <View>
       <StatusPanel
+        headerOverride={
+          livingLayout ? (
+            <View style={{ gap: 16 }}>
+              <LivingStatusHeader onEditStatus={control.openCurrent} />
+              <LivingActivitySection personId={userId!} showLower={false} />
+            </View>
+          ) : undefined
+        }
         observedNow={control.now}
         compact={compact}
         avatarControl={avatarControl}

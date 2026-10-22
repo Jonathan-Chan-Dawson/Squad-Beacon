@@ -17,14 +17,14 @@ export const socialCategories = [
   "Friends",
   "Squads",
   "Organizations",
-  "Super-Organizations",
+  "Networks",
 ] as const;
 export type SocialCategory = (typeof socialCategories)[number];
 export const recipientCategory = {
   friend: "Friends",
   squad: "Squads",
   space: "Organizations",
-  organization: "Super-Organizations",
+  organization: "Networks",
 } as const;
 
 export function selectableSocialGroups(data: Data, viewerId: string | null) {

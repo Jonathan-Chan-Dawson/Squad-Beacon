@@ -103,9 +103,9 @@ function visibleSource(
   return { activity, role };
 }
 
-function projectedOwnerRelationshipIsCurrent(
+export function projectedOwnerRelationshipIsCurrent(
   data: Data,
-  status: Activity,
+  status: Pick<Activity,"owner_id">,
   source: Activity,
   role: CurrentBeaconRole,
 ): boolean {

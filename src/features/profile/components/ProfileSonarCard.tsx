@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import { Check, Radio } from "lucide-react-native";
+import { Check, ChevronRight, Radio } from "lucide-react-native";
 import Animated, {
   cancelAnimation,
   useAnimatedStyle,
@@ -33,7 +33,13 @@ const minuteDurations = {
   "4 hours": 240,
 } as const;
 
-export function ProfileSonarCard({ compact = false }: { compact?: boolean }) {
+export function ProfileSonarCard({
+  compact = false,
+  row = false,
+}: {
+  compact?: boolean;
+  row?: boolean;
+}) {
   const { data, userId, demo, act } = useBeacon();
   const { styles, semanticColors: colors, tokens } = useTheme();
   const reducedMotion = useReducedMotion();
@@ -64,12 +70,12 @@ export function ProfileSonarCard({ compact = false }: { compact?: boolean }) {
       : undefined;
   useEffect(() => {
     pulse.set(
-      session && !reducedMotion
+      session && !reducedMotion && !row
         ? withRepeat(withTiming(0.45, { duration: 900 }), -1, true)
         : 1,
     );
     return () => cancelAnimation(pulse);
-  }, [session, reducedMotion, pulse]);
+  }, [session, reducedMotion, pulse, row]);
   const accepted = userId
     ? friendIds(data, userId).filter(
         (id) =>
@@ -148,11 +154,38 @@ export function ProfileSonarCard({ compact = false }: { compact?: boolean }) {
       style={compact ? { gap: 0 } : [styles.card, { gap: 12 }]}
       testID={compact ? "home-sonar-control" : "profile-sonar-card"}
     >
-      {compact ? (
+      {row ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={session ? "Manage active Sonar" : "Open Sonar"}
+          disabled={busy}
+          onPress={openConfirmation}
+          style={{
+            minHeight: 48,
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 10,
+          }}
+        >
+          <Radio
+            size={18}
+            color={session ? colors.accent : colors.textSecondary}
+          />
+          <Text style={{ flex: 1, color: colors.textPrimary, fontSize: 14 }}>
+            Sonar
+          </Text>
+          <Text style={{ color: colors.textSecondary, fontSize: 12 }}>
+            {session
+              ? `Active · ${sonarMinutesRemaining(session.expires_at, now)}m`
+              : "Off"}
+          </Text>
+          <ChevronRight size={16} color={colors.textSecondary} />
+        </Pressable>
+      ) : compact ? (
         <HomeAction
           title={
             session
-              ? `Sonar � ${sonarMinutesRemaining(session.expires_at, now)}m`
+              ? `Sonar · ${sonarMinutesRemaining(session.expires_at, now)}m`
               : "Sonar"
           }
           label={session ? "Manage active Sonar" : "Open Sonar"}

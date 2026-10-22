@@ -7,12 +7,12 @@ export function visibleSoloActivity(
   viewerId: string | null,
   now: number,
 ): Activity | undefined {
-  if (!viewerId || data.viewer_id !== viewerId) return undefined;
+  if (!viewerId || data.viewer_id !== viewerId || viewerId !== personId && data.presence?.some(p=>p.owner_id===personId&&!p.sharing)) return undefined;
   return data.activities
     .filter(
       (activity) =>
         activity.owner_id === personId &&
-        activity.mode === "solo" &&
+        activity.mode === "solo" && activity.solo_purpose !== "activity_note" &&
         activity.status === "scheduled" &&
         Date.parse(activity.starts_at) <= now &&
         Date.parse(activity.ends_at) > now &&
@@ -30,7 +30,7 @@ export function canReactToSoloActivity(
   return (
     !!viewerId &&
     data.viewer_id === viewerId &&
-    activity.mode === "solo" &&
+    activity.mode === "solo" && activity.solo_purpose !== "activity_note" &&
     activity.status_sharing !== false &&
     !activity.status_note_hidden &&
     activity.status === "scheduled" &&

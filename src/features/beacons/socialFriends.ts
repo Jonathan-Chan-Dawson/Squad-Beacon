@@ -1,3 +1,4 @@
+import { currentActivity } from "./livingActivity";
 import type { Category, Data } from "@/src/shared/types";
 import { friendIds } from "@/src/shared/domain";
 import { selectPersonPreview } from "@/src/features/people/previews/personPreview";
@@ -35,7 +36,7 @@ export function socialFriends(
             .filter(
               (item) =>
                 item.owner_id === id &&
-                item.mode === "solo" &&
+                item.mode === "solo" && item.solo_purpose !== "activity_note" &&
                 item.status === "scheduled" &&
                 Date.parse(item.starts_at) > now &&
                 Date.parse(item.ends_at) > Date.parse(item.starts_at) &&
@@ -43,7 +44,7 @@ export function socialFriends(
             )
             .sort((a, b) => a.starts_at.localeCompare(b.starts_at))[0])
         : undefined;
-      const activity = preview.canViewFullProfile
+      const legacyActivity = preview.canViewFullProfile
         ? data.activities.find(
             (item) =>
               item.mode !== "solo" &&
@@ -61,6 +62,8 @@ export function socialFriends(
               canReadBeaconActivity(data, item, viewer),
           )
         : undefined;
+      const sharedCurrent=currentActivity(data,id,viewer,now);
+      const activity=(data.is_demo||data.capabilities?.living_activity)?(sharedCurrent?.type==="beacon"?sharedCurrent.activity:undefined):legacyActivity;
       const attendance =
         activity &&
         data.beacon_attendance.find(
@@ -82,9 +85,9 @@ export function socialFriends(
           name: preview.profile?.name ?? "Friend",
           profile: preview.profile,
           availability: preview.availability,
-          statusText: statusNoteText(note),
+          statusText: currentActivity(data,id,viewer,now)?.activity.title || statusNoteText(note),
           attachment: visibleStatusAttachment(data, note, viewer, now),
-          currentBeacon: visibleCurrentBeacon(data, note, viewer, now),
+          currentBeacon: (()=>{const current=currentActivity(data,id,viewer,now);return current?.type==="beacon"?{activity:current.activity,role:current.role??"going"}:visibleCurrentBeacon(data,note,viewer,now);})(),
           until: note?.ends_at,
           starred: preview.starred,
           hasFreshSharedLocation: false,

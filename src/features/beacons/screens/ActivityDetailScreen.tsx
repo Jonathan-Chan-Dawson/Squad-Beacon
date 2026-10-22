@@ -1,3 +1,4 @@
+import { pageAnimation } from "@/src/shared/mobilePresentation";
 import { BeaconSupplies, BeaconReadiness } from "../components/BeaconSupplies";
 import { BeaconCardEngagement } from "../components/BeaconCardEngagement";
 import {
@@ -11,6 +12,7 @@ import {
 } from "@/src/features/beacons/activityToolEntry";
 import {
   Animated,
+  I18nManager,
   KeyboardAvoidingView,
   Linking,
   Platform,
@@ -230,7 +232,7 @@ export default function ActivityDetail() {
   }>();
   const reducedMotion = useReducedMotion();
   const detailAnimation =
-    from === "map" ? (reducedMotion ? "none" : "fade") : undefined;
+    Platform.OS !== "web" ? pageAnimation(reducedMotion, I18nManager.isRTL) : from === "map" ? (reducedMotion ? "none" : "fade") : undefined;
   const { data, userId, demo, loading, error, refresh, act } = useBeacon();
   const activityId = Array.isArray(id) ? id[0] : id;
   const activity = data.activities.find((item) => item.id === activityId);
@@ -564,6 +566,13 @@ export default function ActivityDetail() {
         )
         .sort((left, right) => left.created_at.localeCompare(right.created_at))
     : [];
+  function scrollToComments() {
+    const scroll = detailScrollRef.current;
+    if (!canReadComments || !scroll || !commentsSectionRef.current) return;
+    commentsSectionRef.current.measureLayout(scroll.getInnerViewNode(), (_x, y) => {
+      scroll.scrollTo({ y: Math.max(0, y - 68), animated: !reducedMotion });
+    }, () => {});
+  }
   function focusComments() {
     if (
       initialTab !== "comments" ||
@@ -661,6 +670,10 @@ export default function ActivityDetail() {
     selectedTab.activityId === activity.id ? selectedTab.tab : "Overview";
   const visibleTab = requestedTab === "Chat" && canAccess && (chatEnabled || hasChatHistory) ? "Chat" : options.includes(requestedTab) ? requestedTab : "Overview";
   const selectTab = (tab: DetailTab) => {
+    if (Platform.OS !== "web" && tab === "Chat") {
+      router.push({ pathname: "/activity/[id]/chat", params: { id: activity.id } });
+      return;
+    }
     setSelectedTab({ activityId: activity.id, tab });
   };
   const canShareHost = !!(
@@ -904,30 +917,6 @@ export default function ActivityDetail() {
     if (tool === "music") return isBeaconModuleEnabled(activity, "music");
     return isBeaconModuleEnabled(activity, tool);
   };
-  const hasToolHistory = (tool: ToolId) => {
-    if (!userId) return false;
-    if (tool === "checklist")
-      return data.beacon_checklist_items.some(
-        (item) =>
-          item.activity_id === activity.id &&
-          canReadBeaconModuleEntry(data, activity, item.author_id, userId),
-      );
-    if (tool === "journal")
-      return data.beacon_notes.some(
-        (note) =>
-          note.activity_id === activity.id &&
-          canReadBeaconNote(data, note, userId),
-      );
-    if (tool === "experiences")
-      return mediaForActivity(data, activity.id).some((memory) =>
-        canReadMemoryHistory(memory),
-      );
-    if (tool === "scoreboard")
-      return data.beacon_teams.some((team) => team.activity_id === activity.id);
-    if (tool === "music") return !!activity.music_url;
-    if (tool === "chat") return hasChatHistory;
-    return false;
-  };
   const toolOrder: ToolId[] = activity.category === "Fitness" ? ["scoreboard","checklist","focus","journal","music"] : activity.category === "Study" ? ["focus","journal","checklist","music","scoreboard"] : ["checklist","journal","focus","music","scoreboard"];
   const checklistHistory = data.beacon_checklist_items
     .filter(
@@ -1169,6 +1158,11 @@ export default function ActivityDetail() {
               />
             ) : null}
 
+            <View style={Platform.OS !== "web" ? { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 6 } : undefined}>
+            {Platform.OS !== "web" && canAccess && <>
+              {chatEnabled && <Button title="Chat" compact secondary icon={<MessagesSquare size={16} color={colors.primary} />} onPress={() => selectTab("Chat")} />}
+              {canReadComments && <Button title={`Comments · ${comments.length}`} compact secondary icon={<MessageCircle size={16} color={colors.primary} />} onPress={scrollToComments} />}
+            </>}
             {activity.enable_reactions !== false && canAccess ? (
               <ReactionPicker
                 selectedEmoji={selectedReaction?.emoji}
@@ -1192,6 +1186,7 @@ export default function ActivityDetail() {
                       styles.card,
                       styles.row,
                       { minHeight: 48, padding: 12 },
+                      Platform.OS !== "web" ? { minHeight: 44, paddingHorizontal: 10, paddingVertical: 8 } : undefined,
                     ]}
                   >
                     <Text style={styles.body}>
@@ -1230,6 +1225,7 @@ export default function ActivityDetail() {
                 }
               />
             ) : null}
+            </View>
 
               <BeaconReadiness activity={activity} onNavigate={selectTab} />
             </> : null}

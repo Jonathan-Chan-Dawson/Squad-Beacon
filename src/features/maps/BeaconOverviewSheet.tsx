@@ -1,3 +1,4 @@
+import { sheetSurface } from "@/src/shared/mobilePresentation";
 import React, { useEffect, useRef, useState } from "react";
 import {
   Platform,
@@ -6,14 +7,17 @@ import {
   useWindowDimensions,
   type ViewStyle,
 } from "react-native";
-import BottomSheet from "@gorhom/bottom-sheet";
+import BottomSheet, { useBottomSheetSpringConfigs } from "@gorhom/bottom-sheet";
 import Animated, {
+  ReduceMotion,
   useAnimatedStyle,
   useSharedValue,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTheme } from "@/src/shared/ui";
 import { MapPanel } from "./MapPanel";
+import { useBeacon } from "@/src/shared/store";
+import { communityReturnSheetIndex, rememberCommunityReturnSheet } from "./communityReturnState";
 
 /** One map-owned sheet; secondary features replace its content rather than opening a modal. */
 export function BeaconOverviewSheet(
@@ -23,8 +27,11 @@ export function BeaconOverviewSheet(
 ) {
   const { colors, tokens } = useTheme();
   const insets = useSafeAreaInsets();
+  const animationConfigs = useBottomSheetSpringConfigs(tokens.motion.sheetSpring);
+  const close = () => Platform.OS === "web" ? props.onClose() : ref.current?.close();
   const ref = useRef<BottomSheet>(null);
-  const [index, setIndex] = useState(1);
+  const { userId } = useBeacon();
+  const [index, setIndex] = useState(() => communityReturnSheetIndex(userId, props.beaconId));
   const { width, height } = useWindowDimensions();
   const [containerHeight, setContainerHeight] = useState(height);
   const { onMapSpaceChange } = props;
@@ -68,8 +75,10 @@ export function BeaconOverviewSheet(
       <BottomSheet
         ref={ref}
         animatedPosition={position}
-        index={1}
-        animateOnMount={false}
+        index={communityReturnSheetIndex(userId, props.beaconId)}
+        animateOnMount={Platform.OS !== "web"}
+        animationConfigs={Platform.OS !== "web" ? animationConfigs : undefined}
+        overrideReduceMotion={ReduceMotion.System}
         snapPoints={[208 + insets.bottom, "70%", "94%"]}
         enableDynamicSizing={false}
         enablePanDownToClose
@@ -77,11 +86,15 @@ export function BeaconOverviewSheet(
         // Gorhom's hosting container forces overflow:hidden unless detached.
         // Web clips at our outer frame so focus cannot scroll that container.
         detached={Platform.OS === "web"}
+        bottomInset={0}
         topInset={insets.top}
         keyboardBehavior="interactive"
         keyboardBlurBehavior="restore"
         android_keyboardInputMode="adjustResize"
-        onChange={setIndex}
+        onChange={(next) => {
+          setIndex(next);
+          rememberCommunityReturnSheet(userId, props.beaconId, next);
+        }}
         onClose={props.onClose}
         handleComponent={() => (
           <Pressable
@@ -113,7 +126,7 @@ export function BeaconOverviewSheet(
           marginHorizontal: (width - sheetWidth) / 2,
         }}
         backgroundStyle={{
-          backgroundColor: colors.white,
+          ...(Platform.OS !== "web" ? sheetSurface(colors.white, tokens.radius.sheet) : { backgroundColor: colors.white }),
           borderWidth: 1,
           borderColor: colors.line,
           borderTopLeftRadius: tokens.radius.sheet,
@@ -124,6 +137,7 @@ export function BeaconOverviewSheet(
         <Animated.View style={contentStyle}>
           <MapPanel
             {...props}
+            onClose={close}
             collapsed={index === 0}
             expanded={index === 2}
             onResize={() => ref.current?.snapToIndex(index === 2 ? 1 : 2)}
@@ -141,7 +155,7 @@ export function BeaconOverviewSheet(
           testID="beacon-sheet-dismiss-area"
           accessibilityRole="button"
           accessibilityLabel="Dismiss Beacon panel by tapping the map"
-          onPress={props.onClose}
+          onPress={close}
           style={{ flex: 1 }}
         />
       </Animated.View>

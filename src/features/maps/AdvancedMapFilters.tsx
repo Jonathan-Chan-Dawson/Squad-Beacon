@@ -25,7 +25,7 @@ import { mapAdvancedFilterCount } from "@/src/features/maps/mapUIselectors";
 export type MapAudienceChoice = {
   id: string;
   label: string;
-  kind: "List" | "Squad" | "Organization";
+  kind: "List" | "Squad" | "Organization" | "Network";
 };
 
 const categories: Category[] = [
@@ -449,7 +449,7 @@ export function AdvancedMapFilters({
               {audiences.length ? (
                 <Field
                   label="Search groups"
-                  placeholder="Search lists, Squads, and Organizations"
+                  placeholder="Search lists, Squads, and Networks"
                   value={audienceQuery}
                   onChangeText={setAudienceQuery}
                 />

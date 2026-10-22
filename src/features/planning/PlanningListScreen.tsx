@@ -1,3 +1,13 @@
+import { randomUUID } from "expo-crypto";
+import DateField from "./PlanningTimeField";
+import { activityNoteSeed } from "@/src/features/beacons/livingActivity";
+import {
+  publishPlanningSession,
+  planningDraftValue,
+  storePlanningDraft,
+  clearPlanningDraft,
+  type PlanningCreationSession,
+} from "./creationSession";
 import React, { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
@@ -30,8 +40,9 @@ import {
   makeBeaconDraft,
   normalizePlanningData,
   validatePlanningThreadDraft,
+  validateBeaconDraft,
 } from "./domain";
-import type { PlanningThread, PlanningThreadKind } from "./types";
+import type { BeaconDraft, PlanningThread, PlanningThreadKind } from "./types";
 import { PlanningResponseControls } from "./PlanningResponseControls";
 import { planningInteraction } from "./planningInteraction";
 
@@ -50,10 +61,62 @@ const shortDate = (value: string) =>
     minute: "2-digit",
   });
 
+function useSessionField<T>(
+  key: string,
+  field: string,
+  initial: T,
+): [T, (value: T) => void] {
+  const [local, setLocal] = useState(() => ({
+    key,
+    value: planningDraftValue(key, field, () => initial),
+  }));
+  const value =
+    local.key === key
+      ? local.value
+      : planningDraftValue(key, field, () => initial);
+  return [
+    value,
+    (next) => {
+      storePlanningDraft(key, field, next);
+      setLocal({ key, value: next });
+    },
+  ];
+}
 export default function PlanningListScreen() {
   const quickNow = useNow();
+  const [advancedPlanning, setAdvancedPlanning] = useState(false);
   const [quickThreadId, setQuickThreadId] = useState<string | null>(null);
-  const { data, userId, act } = useBeacon();
+  const { data, userId, act, getViewerEpoch } = useBeacon();
+  const route = useLocalSearchParams<{
+    activityNoteId?: string;
+    creationKind?: string;
+    featureAfter?: string;
+    inviteeIds?: string;
+  }>();
+  const source = activityNoteSeed(data, userId, route.activityNoteId, quickNow);
+  const sessionKey = `${userId}:${route.activityNoteId ?? "new"}:${route.creationKind ?? "planning"}`;
+  const [proposedStart, setProposedStart] = useSessionField(
+    sessionKey,
+    "start",
+    new Date(quickNow + 3 * 86400000).toISOString(),
+  );
+  const [responseDeadline, setResponseDeadline] = useSessionField(
+    sessionKey,
+    "deadline",
+    new Date(quickNow + 86400000).toISOString(),
+  );
+  const [duration, setDuration] = useSessionField(sessionKey, "duration", "60");
+  const [secondOption, setSecondOption] = useSessionField(
+    sessionKey,
+    "second",
+    "",
+  );
+  const [sourceOption, setSourceOption] = useSessionField(
+    sessionKey,
+    "first",
+    source?.title ?? "",
+  );
+
   const {
     organizationId,
     squadId: squadIdParam,
@@ -100,19 +163,35 @@ export default function PlanningListScreen() {
   );
   const { colors, styles } = useTheme();
   const planning = normalizePlanningData(data);
-  const [manualCreateOpen, setManualCreateOpen] = useState(!!organization);
+  const [manualCreateOpen, setManualCreateOpen] = useState(
+    !!organization || newPing === "yes" || !!route.creationKind,
+  );
   const [dismissedSeedKey, setDismissedSeedKey] = useState<string | null>(null);
-  const [kindChoice, setKindChoice] = useState<(typeof kinds)[number]>("Ping");
-  const [titleDraft, setTitleDraft] = useState({ key: "", value: "" });
-  const [bodyDraft, setBodyDraft] = useState({ key: "", value: "" });
+  const [kindChoice, setKindChoice] = useSessionField<(typeof kinds)[number]>(
+    sessionKey,
+    "kind",
+    route.creationKind === "council" ? "Vote" : "Ping",
+  );
+  const [titleDraft, setTitleDraft] = useSessionField(sessionKey, "title", {
+    key: "",
+    value: "",
+  });
+  const [bodyDraft, setBodyDraft] = useSessionField(sessionKey, "body", {
+    key: "",
+    value: "",
+  });
   const [coownerDraft, setCoownerDraft] = useState({
     key: "",
     value: [] as string[],
   });
-  const [audience, setAudience] = useState<Audience>(
+  const [audience, setAudience] = useSessionField<Audience>(
+    sessionKey,
+    "audience",
     organization ? "organization" : "friends",
   );
-  const [audienceId, setAudienceId] = useState<string | null>(
+  const [audienceId, setAudienceId] = useSessionField<string | null>(
+    sessionKey,
+    "audienceId",
     organization?.id ?? null,
   );
   const [deadlineChoice, setDeadlineChoice] =
@@ -137,8 +216,11 @@ export default function PlanningListScreen() {
       ? titleDraft.value
       : placeSeed
         ? `Meet at ${placeName}`.slice(0, 120)
-        : "";
-  const body = bodyDraft.key === draftKey ? bodyDraft.value : "";
+        : (source?.title ?? "");
+  const body =
+    bodyDraft.key === draftKey
+      ? bodyDraft.value
+      : (source?.description.slice(0, 500) ?? "");
   const coownerIds = coownerDraft.key === draftKey ? coownerDraft.value : [];
   const effectiveKindChoice = activeSeed || placeSeed ? "Ping" : kindChoice;
   const effectiveAudience: Audience = activeSeed ? "squad" : audience;
@@ -196,6 +278,7 @@ export default function PlanningListScreen() {
     );
 
   function startDeadline() {
+    if (route.creationKind || route.activityNoteId) return responseDeadline;
     return new Date(
       Date.now() + (deadlineChoice === "24 hours" ? 24 : 72) * 60 * 60 * 1000,
     ).toISOString();
@@ -206,8 +289,15 @@ export default function PlanningListScreen() {
       quickRecipes.find((item) => item.id === recipeId) ?? quickRecipes[0];
     const startAt = new Date(Date.parse(deadlineAt) + 24 * 60 * 60 * 1000);
     const draft = makeBeaconDraft(startAt, recipe.minutes);
-    draft.title = recipe.title;
-    draft.category = recipe.category;
+    draft.title = title.trim() || source?.title || recipe.title;
+    draft.description = source?.description ?? body;
+    draft.category = source?.category ?? recipe.category;
+    if (route.creationKind || route.activityNoteId) {
+      draft.starts_at = proposedStart;
+      draft.ends_at = new Date(
+        Date.parse(proposedStart) + Number(duration) * 60000,
+      ).toISOString();
+    }
     draft.audience = effectiveAudience;
     draft.audience_id = effectiveAudienceId;
     if (placeSeed) draft.label = placeName;
@@ -227,6 +317,10 @@ export default function PlanningListScreen() {
         "You’re no longer an active member of that Squad. No Ping was shared.",
       );
     }
+    if (route.inviteeIds && route.inviteeIds !== "[]")
+      throw new Error(
+        "Individual invitations cannot be used as a Planning audience. Return to creation and choose a supported audience.",
+      );
     const deadlineAt = startDeadline();
     const payload = kind === "ping" ? pingDraft(deadlineAt) : undefined;
     validatePlanningThreadDraft(
@@ -239,19 +333,63 @@ export default function PlanningListScreen() {
       Date.now(),
       payload,
     );
-    const result = await act("create_planning_thread", {
-      kind,
-      title: title.trim(),
-      body: body.trim(),
-      audience: effectiveAudience,
-      audience_id: effectiveAudienceId,
-      deadline_at: deadlineAt,
-      coowner_ids: kind === "ping" ? [] : coownerIds,
-      ...(payload ? { payload } : {}),
-    });
+    const options: BeaconDraft[] = [];
+    if (kind !== "ping" && (source || route.creationKind === "council")) {
+      if (!sourceOption.trim() || !secondOption.trim())
+        throw new Error(
+          "Add at least two actual options before finishing your Council.",
+        );
+      for (const optionTitle of [sourceOption, secondOption]) {
+        const option = makeBeaconDraft(
+          new Date(proposedStart),
+          Number(duration),
+        );
+        Object.assign(option, {
+          title: optionTitle,
+          description: source?.description ?? "",
+          category: source?.category ?? "Social",
+          audience: effectiveAudience,
+          audience_id: effectiveAudienceId,
+        });
+        validateBeaconDraft(option);
+        if (Date.parse(option.starts_at) <= Date.parse(deadlineAt))
+          throw new Error("Each option must start after responses close.");
+        options.push(option);
+      }
+    }
+    const epoch = getViewerEpoch();
+    const publication = planningDraftValue<PlanningCreationSession>(
+      sessionKey,
+      "publication",
+      () => ({}),
+    );
+    storePlanningDraft(sessionKey, "publication", publication);
+    const id = await publishPlanningSession(
+      publication,
+      {
+        kind,
+        title: title.trim(),
+        body: body.trim(),
+        audience: effectiveAudience,
+        audience_id: effectiveAudienceId,
+        deadline_at: deadlineAt,
+        coowner_ids: kind === "ping" ? [] : coownerIds,
+        ...(payload ? { payload } : {}),
+      },
+      options,
+      async (action, value, requestId) => {
+        if (epoch !== getViewerEpoch())
+          throw new Error(
+            "Your account changed. Return to the original account to finish.",
+          );
+        return act(action, value, requestId);
+      },
+      randomUUID,
+    );
+    if (epoch !== getViewerEpoch()) return;
+    clearPlanningDraft(sessionKey);
     closeCreate();
-    const id = typeof result.id === "string" ? result.id : "";
-    if (id) router.push({ pathname: "/council/[id]", params: { id } });
+    router.push({ pathname: "/activity-created", params: { id, type: kind } });
   }
 
   return (
@@ -447,7 +585,46 @@ export default function PlanningListScreen() {
             onChange={setDeadlineChoice}
           />
         </View>
-        {kind === "ping" && (
+        {(route.creationKind || route.activityNoteId) && (
+          <View style={{ gap: 10 }}>
+            <DateField
+              label="When would we do it?"
+              value={proposedStart}
+              onChange={setProposedStart}
+            />
+            <Field
+              label="Duration · minutes"
+              value={duration}
+              keyboardType="numeric"
+              onChangeText={setDuration}
+            />
+            <DateField
+              label="Responses close"
+              value={responseDeadline}
+              onChange={setResponseDeadline}
+            />
+            {kind !== "ping" &&
+              (source || route.creationKind === "council") && (
+                <>
+                  <Field
+                    label="First activity option"
+                    value={sourceOption}
+                    onChangeText={setSourceOption}
+                  />
+                  <Field
+                    label="Another activity option"
+                    value={secondOption}
+                    onChangeText={setSecondOption}
+                  />
+                  <Txt muted>
+                    Options use the time and audience above. Review additional
+                    settings in the Council.
+                  </Txt>
+                </>
+              )}
+          </View>
+        )}
+        {kind === "ping" && !source && (
           <View style={{ gap: 7 }}>
             <Text style={styles.muted}>
               Beacon if you turn this into a plan
@@ -472,29 +649,42 @@ export default function PlanningListScreen() {
           </View>
         )}
         {kind !== "ping" && coownerCandidates.length > 0 && (
-          <View style={{ gap: 8 }}>
-            <Text style={styles.muted}>Option hosts (optional)</Text>
-            {coownerCandidates.map((profile) => {
-              const selected = coownerIds.includes(profile.id);
-              return (
-                <Button
-                  key={profile.id}
-                  title={`${selected ? "✓ " : "＋ "}${profile.name}`}
-                  secondary={!selected}
-                  onPress={() =>
-                    setCoownerDraft({
-                      key: draftKey,
-                      value: selected
-                        ? coownerIds.filter((id) => id !== profile.id)
-                        : [...coownerIds, profile.id],
-                    })
-                  }
-                />
-              );
-            })}
-          </View>
+          <Button
+            compact
+            secondary
+            title={advancedPlanning ? "Fewer settings" : "More settings"}
+            onPress={() => setAdvancedPlanning(!advancedPlanning)}
+          />
         )}
-        <Action title="Create ping or decision" run={createThread} />
+        {advancedPlanning &&
+          kind !== "ping" &&
+          coownerCandidates.length > 0 && (
+            <View style={{ gap: 8 }}>
+              <Text style={styles.muted}>Option hosts (optional)</Text>
+              {coownerCandidates.map((profile) => {
+                const selected = coownerIds.includes(profile.id);
+                return (
+                  <Button
+                    key={profile.id}
+                    title={`${selected ? "✓ " : "＋ "}${profile.name}`}
+                    secondary={!selected}
+                    onPress={() =>
+                      setCoownerDraft({
+                        key: draftKey,
+                        value: selected
+                          ? coownerIds.filter((id) => id !== profile.id)
+                          : [...coownerIds, profile.id],
+                      })
+                    }
+                  />
+                );
+              })}
+            </View>
+          )}
+        <Action
+          title={kind === "ping" ? "Create Ping" : "Create Council"}
+          run={createThread}
+        />
       </Sheet>
     </Screen>
   );

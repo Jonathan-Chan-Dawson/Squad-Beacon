@@ -146,6 +146,8 @@ test("atomic own status save/clear preserve history, scope, rollback and request
   assert.equal(replacement.replaced_scheduled,true);
   assert.equal((await snapshot()).activities.find((a:any)=>a.id===replacement.id).status_presentation,'activity_only');
   await root(); await db.query("update public.activities set starts_at=now()-interval '1 minute',ends_at=now()+interval '1 hour' where id=$1",[replacement.id]);
+  await actor('member'); assert.ok(!(await snapshot()).activities.some((a:any)=>a.id===replacement.id),'global pause also suppresses a scheduled note when it becomes active');
+  await actor('owner'); await action('update_presence',{sharing:true});
   await actor('member'); projected=(await snapshot()).activities.find((a:any)=>a.id===replacement.id);
   assert.equal(projected.title,''); assert.equal(projected.status_attachment,null);
   await root(); await db.query('insert into public.blocks(blocker_id,blocked_id) values($1,$2)',[ids.owner,ids.member]);

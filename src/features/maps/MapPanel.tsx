@@ -1,3 +1,5 @@
+import { BeaconCommunityRow } from "@/src/features/discovery/BeaconCommunityRow";
+import { BeaconLocationPreview } from "./components/BeaconLocationPreview";
 import PlanningDetailScreen from "@/src/features/planning/PlanningDetailScreen";
 import { router } from "expo-router";
 import { BeaconMusicLink } from "@/src/features/beacons/BeaconMusicLink";
@@ -21,7 +23,7 @@ import { MapBeaconRsvp } from "./MapBeaconRsvp";
 import { MapPersonPreview } from "./MapPersonPreview";
 import { ReactionPicker } from "@/src/features/beacons/components/feed/ReactionPicker";
 import { physicalDirectionsUrl } from "./directions";
-import { MoreHorizontal } from "lucide-react-native";
+import { MoreHorizontal, MessagesSquare, MessageCircle, Smile } from "lucide-react-native";
 import {
   BeaconToolContent,
   BeaconPanelTabs,
@@ -75,6 +77,7 @@ import { clusterPeople } from "./mapDiscovery";
 export function MapPanel({
   beaconId,
   onShowContext,
+  onFocusLocation,
   initialTab = "overview",
   onClose,
   onBeacon,
@@ -88,6 +91,7 @@ export function MapPanel({
   onResize?: () => void;
   onCollapse?: () => void;
   onShowContext?: (filter: MapContextFilter) => void;
+  onFocusLocation?: (id: string) => void;
   beaconId: string;
   initialTab?: MapBeaconFeature;
   onClose(): void;
@@ -166,6 +170,10 @@ export function MapPanel({
       );
   };
   const changeTab = (next: BeaconSheetTab) => {
+    if (Platform.OS !== "web" && next === "chat") {
+      router.push({ pathname: "/activity/[id]/chat", params: { id: beaconId } });
+      return;
+    }
     setFocused(null);
     setFocusedPerson(null);
     setTab(next);
@@ -411,7 +419,7 @@ export function MapPanel({
           {activity.title}
         </Text>
         <IconButton
-          label="Beacon menu"
+          label={Platform.OS !== "web" ? "More options" : "Beacon menu"}
           selected={menuOpen}
           onPress={() => setMenuOpen((open) => !open)}
         >
@@ -420,6 +428,7 @@ export function MapPanel({
       </View>
       {menuOpen && (
         <View style={{ paddingHorizontal: 12, gap: 4 }}>
+          {Platform.OS !== "web" && <Button title="View full Beacon" compact secondary onPress={() => onBeacon(activity.id)} />}
           {manage && (
             <Button
               title="Host controls"
@@ -458,9 +467,10 @@ export function MapPanel({
         }}
       >
         <MapBeaconRsvp activity={activity} />
+        {activeTab === "overview" && !collapsed ? <BeaconCommunityRow activityId={activity.id} /> : null}
         {collapsed && (
           <Button
-            title="Open Beacon overview"
+            title={Platform.OS !== "web" ? "Expand overview" : "Open Beacon overview"}
             compact
             secondary
             onPress={onResize!}
@@ -532,7 +542,7 @@ export function MapPanel({
               keyboardShouldPersistTaps="handled"
               contentContainerStyle={{
                 padding: 12,
-                paddingBottom: tokens.space.xxl + insets.bottom,
+                paddingBottom: tokens.space.xxl + (onCollapse ? 0 : insets.bottom),
                 gap: 10,
               }}
             >
@@ -548,9 +558,12 @@ export function MapPanel({
               )}
               {activeFeature === "overview" && !focusedPerson && (
                 <View style={{ gap: tokens.space.md }}>
-                  <Text style={styles.muted}>
-                    {activityWhen(activity, new Date(now))}
-                  </Text>
+                  <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                    {Platform.OS !== "web" && place && !place.online_url && place.latitude != null && place.longitude != null && <BeaconLocationPreview latitude={place.latitude} longitude={place.longitude} label={place.label} compact onPress={() => onFocusLocation?.(activity.id)} />}
+                    <View style={{ flex: 1, minWidth: 0 }}><Text style={styles.muted}>{activityWhen(activity, new Date(now))}</Text>
+                      {Platform.OS !== "web" && !!place?.label && <Text numberOfLines={2} style={styles.body}>{place.label}</Text>}
+                    </View>
+                  </View>
                   <Text style={styles.body}>
                     {activity.description || "A little time together."}
                   </Text>
@@ -623,6 +636,11 @@ export function MapPanel({
                       }}
                     />
                   )}
+                  {allowed && Platform.OS !== "web" && <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+                    {activity.enable_chat !== false && <Button title={`Chat · ${data.messages.filter(row => row.activity_id === activity.id).length}`} compact secondary icon={<MessagesSquare size={16} color={colors.primary} />} onPress={() => router.push({ pathname: "/activity/[id]/chat", params: { id: activity.id } })} />}
+                    {activity.enable_comments !== false && <Button title={`Comments · ${comments.length}`} compact secondary icon={<MessageCircle size={16} color={colors.primary} />} onPress={() => setFocused("comments")} />}
+                    {activity.enable_reactions !== false && <Button title={`React · ${reactionRows.length}`} compact secondary icon={<Smile size={16} color={colors.primary} />} onPress={() => setFocused("reactions")} />}
+                  </View>}
                   {allowed && (
                     <View style={[styles.card, { gap: 8 }]}>
                       <Txt>
@@ -651,7 +669,7 @@ export function MapPanel({
                             .join(" \u00b7 ")}
                         </Txt>
                       )}
-                      {activity.enable_comments !== false && (
+                      {activity.enable_comments !== false && Platform.OS === "web" && (
                         <Button
                           title={`Comments \u00b7 ${comments.length}`}
                           compact
@@ -659,7 +677,7 @@ export function MapPanel({
                           onPress={() => setFocused("comments")}
                         />
                       )}
-                      {activity.enable_reactions !== false && (
+                      {activity.enable_reactions !== false && Platform.OS === "web" && (
                         <Button
                           title="Reactions"
                           compact
@@ -897,7 +915,7 @@ export function MapPanel({
                       : "none",
                   flex: 1,
                   minHeight: 0,
-                  paddingBottom: insets.bottom,
+                  paddingBottom: onCollapse ? 0 : insets.bottom,
                   paddingHorizontal: 12,
                 }}
               >
@@ -925,7 +943,8 @@ export function MapPanel({
             accessibilityLabel="Collapse Beacon sheet"
             onPress={onCollapse}
             style={{
-              minHeight: 44,
+              minHeight: 44 + insets.bottom,
+              paddingBottom: insets.bottom,
               alignItems: "center",
               justifyContent: "center",
               borderTopWidth: 1,

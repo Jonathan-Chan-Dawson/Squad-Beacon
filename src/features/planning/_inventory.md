@@ -6,3 +6,5 @@ Planning feature
 - PlanningInbox.tsx: reusable actionable decision previews and canonical inline Ping responses; Chats home now uses the compact Responses & Invitations entry.
 - PingAvailabilityEditor.tsx and availability.ts: optional Interested availability; existing platform date picker, UTC storage and approval-aware Auto-RSVP constraint.
 - domain.ts and types.ts: pure audience/deadline/draft logic and planning contracts.
+
+- creationSession.ts and PlanningTimeField(.web).tsx: account-scoped session drafts, resumable Council publication steps, and platform-native local date/time entry.

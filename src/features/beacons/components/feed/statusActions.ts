@@ -30,7 +30,7 @@ export type StatusMutationResult = { savedId?: string; failedIds: string[]; mess
 
 export function liveOwnedStatuses(data: Data, userId: string | null, now: number) {
   if (!userId || data.viewer_id !== userId) return [];
-  return data.activities.filter((activity) => activity.owner_id === userId && activity.mode === "solo" &&
+  return data.activities.filter((activity) => activity.owner_id === userId && activity.mode === "solo" && activity.solo_purpose !== "activity_note" &&
     activity.status === "scheduled" && Date.parse(activity.starts_at) <= now && Date.parse(activity.ends_at) > now &&
     canReadBeaconActivity(data, activity, userId))
     .sort((left, right) => right.starts_at.localeCompare(left.starts_at));
@@ -66,7 +66,7 @@ export function statusCreatePayload(value: StatusDraft, source: Activity | undef
   const audience = value.audience ?? source?.audience ?? "friends";
   const audienceId = audience === "friends" || audience === "private" ? null : value.audienceId ?? source?.audience_id ?? null;
   const retainOnly = (value.presentation ?? source?.status_presentation) === "activity_only" || (value.noteHidden ?? source?.status_note_hidden) || (value.sharing ?? source?.status_sharing) === false;
-  const futureIndependent = !!source && source.mode === "solo" && Date.parse(source.starts_at) <= now && start > now;
+  const futureIndependent = !!source && source.mode === "solo" && source.solo_purpose !== "activity_note" && Date.parse(source.starts_at) <= now && start > now;
   const showCurrentBeacon = futureIndependent
     ? value.showCurrentBeacon ?? false
     : value.showCurrentBeacon ?? source?.status_show_current_beacon ?? false;
@@ -101,7 +101,7 @@ export async function saveOwnStatus(data: Data, userId: string | null, value: St
   requireViewer(data, userId);
   if (!data.is_demo && data.capabilities?.status_attachments !== true && (value.attachment || value.presentation === "activity_only" || value.presentation === "text_activity" || value.sharing === false || value.noteHidden)) throw new Error("This server needs the Status attachment update before saving these settings.");
   const startsInFuture = value.startsAt !== undefined && Date.parse(value.startsAt) > now;
-  const source = value.sourceId ? data.activities.find((item) => item.id === value.sourceId && item.owner_id === userId && item.mode === "solo") : startsInFuture ? undefined : liveOwnedStatuses(data, userId, now)[0];
+  const source = value.sourceId ? data.activities.find((item) => item.id === value.sourceId && item.owner_id === userId && item.mode === "solo" && item.solo_purpose !== "activity_note") : startsInFuture ? undefined : liveOwnedStatuses(data, userId, now)[0];
   if (value.sourceId && !source) throw new Error("Choose your own status note.");
   const futureIndependent = startsInFuture && (!source || Date.parse(source.starts_at) <= now);
   const showCurrentBeacon = futureIndependent
@@ -120,6 +120,11 @@ export async function saveOwnStatus(data: Data, userId: string | null, value: St
     delete payload.status_show_current_beacon;
     delete payload.status_current_beacon_id;
   }
+  if(data.capabilities?.living_activity) {
+    delete payload.status_show_current_beacon;
+    delete payload.status_current_beacon_id;
+    payload.status_sharing=data.presence?.find(p=>p.owner_id===userId)?.sharing ?? source?.status_sharing ?? true;
+  }
   const result = await act("save_status_note", payload);
   if (result.event !== "save_status_note" || typeof result.id !== "string" || !Number.isInteger(result.cleared_count)) throw new Error("Your status could not be verified. Refresh before trying again.");
   // The atomic writer intentionally lets scheduled statuses coexist. Replace the
@@ -133,7 +138,7 @@ export async function saveOwnStatus(data: Data, userId: string | null, value: St
 
 export async function clearOwnStatuses(data: Data, userId: string | null, act: StatusAction, _now: number, sourceId?: string): Promise<StatusMutationResult> {
   requireViewer(data, userId);
-  const source = sourceId ? data.activities.find((item) => item.id === sourceId && item.owner_id === userId && item.mode === "solo" && item.status === "scheduled" && Date.parse(item.starts_at) > _now) : undefined;
+  const source = sourceId ? data.activities.find((item) => item.id === sourceId && item.owner_id === userId && item.mode === "solo" && item.solo_purpose !== "activity_note" && item.status === "scheduled" && Date.parse(item.starts_at) > _now) : undefined;
   if (source) {
     await act("activity_status", { id: source.id, status: "cancelled" });
     return { failedIds: [], message: "" };

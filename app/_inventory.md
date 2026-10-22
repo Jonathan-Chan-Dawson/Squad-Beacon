@@ -19,3 +19,7 @@ Expo Router map
 - modal.tsx: modal route.
 
 Keep route paths stable; move reusable screens and feature logic into src/features rather than growing route files.
+
+- activity/[id]/chat.tsx: dedicated permission-gated Beacon chat route around the existing ChatThread; native Overview and tool actions use this screen.
+
+- activity-note.tsx and activity-created.tsx: shared Activity Note editor/history route and post-publication optional linking without republishing.

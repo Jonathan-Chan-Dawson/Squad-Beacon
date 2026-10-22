@@ -85,12 +85,12 @@ export function MapSearchOverlay({
     id: string;
     name: string;
     description?: string;
-    kind: "Squads" | "Spaces" | "Organizations";
+    kind: "Squads" | "Organizations" | "Networks";
   }[];
   onSelectPulsePlace?: (place: PulsePlace) => void;
   onSelectCommunity?: (
     id: string,
-    kind: "Squads" | "Spaces" | "Organizations",
+    kind: "Squads" | "Organizations" | "Networks",
   ) => void;
   onChooseWorldPlace?: (place: WorldwidePlace) => void;
   onStartPickingLocation: () => void;
@@ -330,7 +330,7 @@ export function MapSearchOverlay({
             })}
           </SearchSection>
         ) : null}
-        {(["Squads", "Spaces", "Organizations"] as const).map((kind) => {
+        {(["Squads", "Organizations", "Networks"] as const).map((kind) => {
           const rows = communities.filter((row) => row.kind === kind);
           return rows.length ? (
             <SearchSection key={kind} title={kind}>

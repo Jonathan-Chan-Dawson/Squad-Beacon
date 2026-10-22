@@ -61,7 +61,8 @@ function historyLabel(status: ActivityHistorySummary["status"]): ActivityHistory
 }
 
 function canReadHistoryActivity(data: Data, activity: Data["activities"][number], viewerId: ID) {
-  if (activity.mode === "solo" || !canReadBeaconActivity(data, activity, viewerId)) return false;
+  if (activity.mode === "solo") return activity.solo_purpose === "activity_note" && activity.owner_id === viewerId && canReadBeaconActivity(data,activity,viewerId);
+  if (!canReadBeaconActivity(data, activity, viewerId)) return false;
   if (activity.plan_id && activity.plan_step && !activity.plan_started_at && activity.status === "scheduled") return false;
   if (activity.owner_id === viewerId) return true;
   const rsvp = data.rsvps.find(

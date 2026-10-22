@@ -31,7 +31,7 @@ export function canReadBeaconActivity(
   activity: Activity,
   userId: string,
 ) {
-  if (activity.mode === "solo" && activity.owner_id !== userId && activity.status_sharing === false) return false;
+  if (activity.mode === "solo" && activity.owner_id !== userId && (activity.status_sharing === false || data.presence?.some(p=>p.owner_id===activity.owner_id && !p.sharing))) return false;
   if (data.is_demo === true && data.viewer_id !== userId) return false;
   if (data.viewer_id != null && data.is_demo !== true) {
     if (data.viewer_id !== userId) return false;

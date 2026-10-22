@@ -1,8 +1,12 @@
 import { useNotificationHandling } from "@/src/platform/notifications";
-import React from "react";
-import { PreferencesProvider, usePreferences } from "@/src/shared/preferences";
-import { Stack, useSegments } from "expo-router";
-import { StatusBar } from "expo-status-bar";
+import React, { useEffect } from "react";
+import { setCreationDraftAccount } from "@/src/features/beacons/socialPlanningSession";
+import { PreferencesProvider } from "@/src/shared/preferences";
+import { useSegments } from "expo-router";
+import { Platform } from "react-native";
+import { AppSystemBars, SystemBarsProvider } from "@/src/shared/SystemBars";
+import { DemoNoticeProvider } from "@/src/shared/design-system";
+import { AppNavigation } from "@/src/shared/AppNavigation";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
@@ -12,16 +16,11 @@ import { BeaconProvider, useBeacon } from "@/src/shared/store";
 import { Auth, Onboard } from "@/src/features/auth/Auth";
 import { ProfileSurvey } from "@/src/features/profile/ProfileSurvey";
 import { Loading, Screen, Action, SheetIsolation, Txt } from "@/src/shared/ui";
-import { DemoNoticeProvider } from "@/src/shared/design-system";
 import { WidgetPreferencesProvider } from "@/src/features/widgets/preferences";
 import { WidgetSync } from "@/src/features/widgets/WidgetRuntime";
 import { ExplorationProvider } from "@/src/shared/exploration";
 import { ChatKeyboardProvider } from "@/src/features/messages/ChatKeyboard";
 export { ErrorBoundary } from "expo-router";
-function ThemedStatusBar() {
-  const { resolvedAppearance } = usePreferences();
-  return <StatusBar style={resolvedAppearance === "dark" ? "light" : "dark"} />;
-}
 function Navigation() {
   const { userId, loading, data, error, refresh } = useBeacon(),
     segments = useSegments();
@@ -51,16 +50,13 @@ function Navigation() {
     if (profile.onboarding_survey_status === "pending")
       return <ProfileSurvey profile={profile} activities={data.activities} />;
   }
-  return (
-    <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Screen name="(tabs)" />
-      <Stack.Screen name="create" options={{ presentation: "modal" }} />
-      <Stack.Screen name="profile/edit" options={{ presentation: "fullScreenModal" }} />
-    </Stack>
-  );
+  return <AppNavigation />;
 }
 function AppRuntime() {
   const { userId, demo } = useBeacon();
+  useEffect(() => {
+    if (Platform.OS !== "web") setCreationDraftAccount(userId);
+  }, [userId]);
   return (
     <DemoNoticeProvider
       sessionKey={`${userId ?? "signed-out"}:${demo ? "demo" : "live"}`}
@@ -69,7 +65,7 @@ function AppRuntime() {
         <WidgetPreferencesProvider accountId={userId}>
           <BottomSheetModalProvider>
             <WidgetSync />
-            <ThemedStatusBar />
+            <AppSystemBars />
             <SheetIsolation>
               <Navigation />
             </SheetIsolation>
@@ -85,9 +81,11 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <ChatKeyboardProvider>
           <PreferencesProvider>
-            <BeaconProvider>
-              <AppRuntime />
-            </BeaconProvider>
+            <SystemBarsProvider>
+              <BeaconProvider>
+                <AppRuntime />
+              </BeaconProvider>
+            </SystemBarsProvider>
           </PreferencesProvider>
         </ChatKeyboardProvider>
       </SafeAreaProvider>

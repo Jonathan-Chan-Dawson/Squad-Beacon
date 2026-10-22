@@ -1,21 +1,27 @@
 import React from "react";
-import { View } from "react-native";
+import { I18nManager, View } from "react-native";
 import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import { useTheme } from "@/src/shared/ui";
 
 export function NoteSpeechBubble({
   children,
   compact = false,
+  tailTowardIdentity = false,
 }: {
   children: React.ReactNode;
   compact?: boolean;
+  tailTowardIdentity?: boolean;
 }) {
   const { colors } = useTheme();
   const gradientId = React.useId().replace(/:/g, "");
   return (
     <View
       testID="status-note-speech-bubble"
-      style={{ paddingBottom: 9, alignSelf: "stretch" }}
+      style={{
+        paddingTop: tailTowardIdentity ? 9 : 0,
+        paddingBottom: tailTowardIdentity ? 0 : 9,
+        alignSelf: "stretch",
+      }}
     >
       <View
         style={{
@@ -46,14 +52,15 @@ export function NoteSpeechBubble({
         pointerEvents="none"
         style={{
           position: "absolute",
-          bottom: 0,
-          alignSelf: "center",
+          ...(tailTowardIdentity ? { top: 0 } : { bottom: 0 }),
+          ...(I18nManager.isRTL ? { right: 24 } : { left: 24 }),
           borderLeftWidth: 9,
           borderRightWidth: 9,
-          borderTopWidth: 10,
+          ...(tailTowardIdentity
+            ? { borderBottomWidth: 10, borderBottomColor: colors.green + "18" }
+            : { borderTopWidth: 10, borderTopColor: colors.green + "18" }),
           borderLeftColor: "transparent",
           borderRightColor: "transparent",
-          borderTopColor: colors.green + "18",
         }}
       />
     </View>

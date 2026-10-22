@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import {
   Animated,
+  Platform,
   Pressable,
   Text,
   View,
@@ -231,7 +232,7 @@ export function ActivityDetailHero({
           )}
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="More activity options"
+            accessibilityLabel={Platform.OS !== "web" ? "More options" : "More activity options"}
             onPress={onOverflow}
             style={({ pressed }) => ({
               width: 44,

@@ -1,3 +1,4 @@
+import { applyDemoLivingActivity } from "@/src/features/beacons/demoLivingActivity";
 import { applyDemoSupplyAction, eligibleSupplyClaim } from "@/src/features/beacons/supplies";
 import { validateCreationInvitees } from "@/src/features/beacons/createHandoff";
 import { applyDemoMessaging } from "@/src/features/messages/demoMessaging";
@@ -719,9 +720,9 @@ export function makeDemo(): Data {
   addDemoProfileFixtures(data, DEMO_ID, now);
   // Feature existing, owned planning activities; this never creates responses.
   for (const [owner, type, id] of [["maya", "vote", "demo-vote-weekend"], ["jordan", "ping", "demo-ping-jordan"]] as const) {
-    let note = data.activities.filter(row => row.owner_id === owner && row.mode === "solo" && row.status === "scheduled" && Date.parse(row.starts_at) <= now && Date.parse(row.ends_at) > now).sort((a,b) => b.starts_at.localeCompare(a.starts_at))[0];
+    let note = data.activities.filter(row => row.owner_id === owner && row.mode === "solo" && row.solo_purpose !== "activity_note" && row.status === "scheduled" && Date.parse(row.starts_at) <= now && Date.parse(row.ends_at) > now).sort((a,b) => b.starts_at.localeCompare(a.starts_at))[0];
     if (!note) {
-      const base = data.activities.find(row => row.mode === "solo")!;
+      const base = data.activities.find(row => row.mode === "solo" && row.solo_purpose !== "activity_note")!;
       note = { ...base, id: `demo-featured-status-${owner}`, owner_id: owner, title: "Anyone down to join?", description: "", available: true, category: "Social", audience: "friends", audience_id: null, starts_at: new Date(now - 60000).toISOString(), ends_at: new Date(now + 7200000).toISOString(), status: "scheduled", goal_id: null, habit_id: null, plan_id: null, plan_step_index: null, aspiration_ids: [] };
       data.activities.push(note);
     }
@@ -1724,14 +1725,14 @@ function demoActionInner(previous: Data, action: string, p: Payload): Data {
   if (action === "save_status_note" || action === "clear_status_notes") {
     if (d.viewer_id !== uid) throw new Error("Refresh your profile before editing a status.");
     const now = Date.now();
-    const current = d.activities.filter((item) => item.owner_id === uid && item.mode === "solo" && item.status === "scheduled" && Date.parse(item.starts_at) <= now && Date.parse(item.ends_at) > now);
+    const current = d.activities.filter((item) => item.owner_id === uid && item.mode === "solo" && item.solo_purpose !== "activity_note" && item.status === "scheduled" && Date.parse(item.starts_at) <= now && Date.parse(item.ends_at) > now);
     if (action === "clear_status_notes") {
       current.forEach((item) => { item.status = "cancelled"; });
       return d;
     }
     const requestedStart = p.starts_at == null ? NaN : Date.parse(String(p.starts_at));
     const isFutureIndependent = !p.source_id && Number.isFinite(requestedStart) && requestedStart > now;
-    const source = p.source_id ? d.activities.find((item) => item.id === p.source_id && item.owner_id === uid && item.mode === "solo") : isFutureIndependent ? undefined : current.sort((a,b) => b.starts_at.localeCompare(a.starts_at))[0];
+    const source = p.source_id ? d.activities.find((item) => item.id === p.source_id && item.owner_id === uid && item.mode === "solo" && item.solo_purpose !== "activity_note") : isFutureIndependent ? undefined : current.sort((a,b) => b.starts_at.localeCompare(a.starts_at))[0];
     const futureIndependent = Number.isFinite(requestedStart) && requestedStart > now && (!source || Date.parse(source.starts_at) <= now);
     if (p.source_id && !source) throw new Error("Choose your own status note.");
     const attachment = p.status_attachment === undefined ? source?.status_attachment ?? null : p.status_attachment as StatusAttachment | null;
@@ -3689,4 +3690,4 @@ function demoActionInner(previous: Data, action: string, p: Payload): Data {
   return d;
 }
 
-export function demoAction(previous: Data, action: string, payload: Payload): Data { const next = demoActionInner(previous, action, payload); next.beacon_supply_claims = next.beacon_supply_claims.filter(row => eligibleSupplyClaim(next,row)); return next; }
+export function demoAction(previous: Data, action: string, payload: Payload): Data { const next = applyDemoLivingActivity(previous, DEMO_ID, action, payload) ?? demoActionInner(previous, action, payload); next.beacon_supply_claims = next.beacon_supply_claims.filter(row => eligibleSupplyClaim(next,row)); return next; }

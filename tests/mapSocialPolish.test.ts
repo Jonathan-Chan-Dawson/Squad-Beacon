@@ -195,6 +195,6 @@ test("bulk selection deduplicates and undo preserves previous and later selectio
     [...initial, { kind: "friend", id: "c" }],
   );
   assert.equal(recipientCategory.space, "Organizations");
-  assert.equal(recipientCategory.organization, "Super-Organizations");
+  assert.equal(recipientCategory.organization, "Networks");
   assert.deepEqual(selectableSocialGroups(makeDemo(), "wrong-viewer"), []);
 });

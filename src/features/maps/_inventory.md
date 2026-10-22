@@ -14,7 +14,7 @@ Maps feature
 - BeaconPanelNavigation.tsx, beaconToolPreference.ts: fixed text tabs with animated underline, single-row icon tool pills with overflow fades, touch swipe content frame, reduced-motion support, and device-local last tool selection scoped to viewer/Beacon. Preserve map-panel, beacon-activity-subtabs and beacon-sheet-content testIDs.
 - BeaconSheetPeople.tsx: reuses ActivityDetailPeople, profile previews, canonical invitations/admission actions, and inline removal confirmation with existing permissions.
 - MapRelationshipActions.tsx: shared Plan/decision context entry; Overview shows permitted stop progress and next scheduled stop. Suggested Beacon detail uses MapScreen's existing focus callback. Context removal retains ordinary filters and restores the prior camera.
-- Overview retains the external BeaconMusicLink and canonical Repeat creation route. Chat expands through the same sheet resize action; author previews swap into MapPersonPreview and keep the mounted conversation/draft.
+- Overview retains the external BeaconMusicLink and canonical Repeat creation route. Web chat expands through the same sheet resize action; native chat opens the dedicated activity chat screen. Author previews retain existing permissions.
 - components/BeaconMap.tsx, BeaconMap.native.tsx, BeaconMap.web.tsx: platform variants; keep these siblings together. MapScreen owns overlay controls via `hideControls`; `viewportInsets` reserves overlay-safe camera space on native and web. Native `mapPadding` is attached only after `onMapReady`, then tracks current inset values.
 - cluster.ts: pure Web Mercator/screen-pixel grouping shared by native and web markers.
 - relevance.ts: shared entity ranking for cluster previews.
@@ -31,3 +31,10 @@ Maps feature
 - Web basemaps retain CARTO light/dark styling and attribution; app config forwards the exact CARTO_BASEMAPS_API_KEY environment value to the web tile URL via Expo extra. BeaconMap.web.tsx centers active Beacon ripple spans in the real badge face across dots/chips/selection while preserving Leaflet anchors and reduced motion. tests/browser/mapRipple.spec.ts exercises actual factory/CSS geometry without tile requests.
 
 - Web dark basemap separates CARTO dark_nolabels and dark_only_labels tiles, brightens only the label layer, and shares retry/attribution behavior.
+
+- components/BeaconLocationPreview.native.tsx: shared noninteractive, permission-gated physical-location mini map used by native detail and Overview; caller controls Map focus.
+
+- nativeMapPresentation.ts: native petal stacks (ten previews, explorer at six), hysteretic density modes, entity deduplication, priority, ownership anchors and conservative rendering budget; friend positions never feed Beacon density.
+- components/LivingMapMarkers.native.tsx: original-artwork native constellation stacks, accessible expanded touch targets, static geographic atmosphere and ownership anchors.
+
+- Community discovery: Map previews and Beacon Overview use BeaconCommunityRow, batched viewer-authorized associations and canonical profile routes. communityReturnState.ts retains viewer/Beacon sheet position; camera, filters and contextual selection remain Map-owned.

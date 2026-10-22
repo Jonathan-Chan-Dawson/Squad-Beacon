@@ -1,3 +1,5 @@
+import { currentActivity } from "../../livingActivity";
+import { LivingActivitySection } from "./LivingActivitySection";
 import React, { useEffect, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { router } from "expo-router";
@@ -53,8 +55,14 @@ export function StatusBubble({
     ? visibleSoloActivity(data, personId, userId, now)
     : undefined;
   const text = statusNoteText(status);
-  const attachment = visibleStatusAttachment(data, status, userId, now);
-  const currentBeacon = visibleCurrentBeacon(data, status, userId, now);
+  const attachment =
+    data.capabilities?.living_activity || data.is_demo
+      ? null
+      : visibleStatusAttachment(data, status, userId, now);
+  const currentBeacon =
+    data.capabilities?.living_activity || data.is_demo
+      ? null
+      : visibleCurrentBeacon(data, status, userId, now);
   const mergedFeaturedCurrent =
     currentBeacon?.activity.id === attachment?.id &&
     attachment?.type === "beacon";
@@ -143,7 +151,18 @@ export function StatusViewer({
       ? visibleSoloActivity(data, personId, userId, now)
       : undefined;
   const attachment = visibleStatusAttachment(data, status, userId, now);
-  const currentBeacon = visibleCurrentBeacon(data, status, userId, now);
+  const sharedCurrent = personId
+    ? currentActivity(data, personId, userId, now)
+    : null;
+  const currentBeacon =
+    sharedCurrent?.type === "beacon"
+      ? {
+          activity: sharedCurrent.activity,
+          role: sharedCurrent.role ?? "going",
+        }
+      : data.is_demo || data.capabilities?.living_activity
+        ? null
+        : visibleCurrentBeacon(data, status, userId, now);
   const mergedFeaturedCurrent =
     currentBeacon?.activity.id === attachment?.id &&
     attachment?.type === "beacon";
@@ -177,12 +196,19 @@ export function StatusViewer({
         snapshot.userId,
         checkedAt,
       );
-      const freshCurrent = visibleCurrentBeacon(
-        snapshot.data,
-        freshStatus,
-        snapshot.userId,
-        checkedAt,
-      );
+      const freshCurrent =
+        currentActivity(
+          snapshot.data,
+          requestedPersonId,
+          snapshot.userId,
+          checkedAt,
+        ) ??
+        visibleCurrentBeacon(
+          snapshot.data,
+          freshStatus,
+          snapshot.userId,
+          checkedAt,
+        );
       if (freshCurrent?.activity.id !== expectedId) return;
       router.push({
         pathname: "/activity/[id]",
@@ -387,7 +413,13 @@ export function StatusViewer({
               </Pressable>
             )}
           </View>
-          {currentBeacon && !mergedFeaturedCurrent ? (
+          {sharedCurrent?.type === "activity_note" && personId ? (
+            <LivingActivitySection
+              personId={personId}
+              showLower={false}
+              sonar={false}
+            />
+          ) : currentBeacon && !mergedFeaturedCurrent ? (
             <CurrentBeaconPreview
               activity={currentBeacon.activity}
               role={currentBeacon.role}

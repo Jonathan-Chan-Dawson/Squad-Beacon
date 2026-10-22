@@ -15,7 +15,7 @@ export const mapTooltip = {
   actionTextSize: 13,
   actionPadding: 9,
   actionRadius: 11,
-  closeWidth: 32,
+  closeWidth: 44,
   iconSize: 18,
   controlRailWidth: 64,
   controlRailHeight: 160,

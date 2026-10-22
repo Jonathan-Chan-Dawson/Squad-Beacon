@@ -1,3 +1,4 @@
+import { sheetSurface } from "@/src/shared/mobilePresentation";
 import React, {
   forwardRef,
   useCallback,
@@ -10,8 +11,10 @@ import React, {
 import { Platform, Pressable, Text, View } from "react-native";
 import BottomSheet, {
   useBottomSheetScrollableCreator,
+  useBottomSheetSpringConfigs,
   type SNAP_POINT_TYPE,
 } from "@gorhom/bottom-sheet";
+import { ReduceMotion } from "react-native-reanimated";
 import { FlashList, type FlashListRef } from "@shopify/flash-list";
 import {
   ArrowUpRight,
@@ -406,6 +409,7 @@ function SheetList({
   onSelectPlace?: (place: PulsePlace) => void;
 }) {
   const renderScrollComponent = useBottomSheetScrollableCreator();
+  const insets = useSafeAreaInsets();
   const { colors } = useDesignTheme();
   const renderItem = useCallback(
     ({ item }: { item: MapResultItem }) =>
@@ -485,7 +489,7 @@ function SheetList({
       contentContainerStyle={{
         paddingHorizontal: 16,
         paddingTop: 8,
-        paddingBottom: 20,
+        paddingBottom: 20 + (Platform.OS === "web" ? 0 : insets.bottom),
       }}
       keyboardShouldPersistTaps="handled"
     />
@@ -525,6 +529,7 @@ export const MapResultsSheet = forwardRef<
   const listRef = useRef<FlashListRef<MapResultItem>>(null);
   const { data, userId } = useBeacon();
   const { colors, tokens } = useDesignTheme();
+  const animationConfigs = useBottomSheetSpringConfigs(tokens.motion.sheetSpring);
   const insets = useSafeAreaInsets();
   const [snapIndex, setSnapIndex] = useState(0);
   const pendingScrollId = useRef<ID | null>(null);
@@ -810,6 +815,8 @@ export const MapResultsSheet = forwardRef<
     <BottomSheet
       ref={sheetRef}
       index={0}
+      animationConfigs={Platform.OS !== "web" ? animationConfigs : undefined}
+      overrideReduceMotion={ReduceMotion.System}
       snapPoints={snapPoints}
       animateOnMount={Platform.OS === "web" ? undefined : false}
       enableDynamicSizing={false}
@@ -821,7 +828,7 @@ export const MapResultsSheet = forwardRef<
       }
       onChange={onSheetChange}
       backgroundStyle={{
-        backgroundColor: colors.surface,
+        ...(Platform.OS !== "web" ? sheetSurface(colors.surface, tokens.radius.sheet) : { backgroundColor: colors.surface }),
         borderColor: colors.border,
         borderWidth: 1,
         borderTopLeftRadius: tokens.radius.sheet,

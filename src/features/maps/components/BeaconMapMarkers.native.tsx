@@ -123,7 +123,7 @@ export function NowBeaconHalo({
   );
 }
 
-function FriendMapAvatar({
+export function FriendMapAvatar({
   profile,
   size,
   onImageLoad,
@@ -193,87 +193,17 @@ function FriendMapAvatar({
   );
 }
 
-function BeaconMapPinComponent({
-  id,
-  title,
-  coordinate,
-  category,
-  categoryColor,
-  selected,
-  dimmed,
-  streetTime,
-  appearanceKey,
-  onPress,
-  disabled = false,
-  dot = false,
-}: {
-  id: string;
-  title: string;
-  coordinate: { latitude: number; longitude: number };
-  category: Category;
-  categoryColor: string;
-  selected: boolean;
-  dimmed: boolean;
-  streetTime?: string;
-  appearanceKey: string;
-  onPress: (id: string) => void;
-  disabled?: boolean;
-  dot?: boolean;
+/** Original Beacon artwork shared by singleton pins and native constellation stacks. */
+export function BeaconMarkerArtwork({ id, category, categoryColor, selected = false, dimmed = false, streetTime }: {
+  id: string; category: Category; categoryColor: string; selected?: boolean; dimmed?: boolean; streetTime?: string;
 }) {
   const { data, userId } = useBeacon();
   const { colors, resolvedAppearance } = useTheme();
   const activity = data.activities.find((row) => row.id === id);
   const identity = activity ? markerIdentity(data, activity, userId) : null;
   const owned = !!activity && ownsMapBeacon(data, activity, userId);
-  const tracking = useMarkerTracking(
-    `${owned}:${identity?.label}:${id}:${categoryColor}:${selected}:${dimmed}:${streetTime ?? ""}:${appearanceKey}:${dot}`,
-  );
   const visualSize = markerVisualSize("beacon");
-  if (dot)
-    return (
-      <Marker
-        coordinate={coordinate}
-        anchor={{ x: 0.5, y: 0.5 }}
-        tracksViewChanges={tracking}
-        accessibilityLabel={`Map: ${title}${owned ? ", Your Beacon" : ""}${identity ? `, ${identity.label}` : ""}`}
-        onPress={(event) => {
-          event.stopPropagation();
-          if (!disabled) onPress(id);
-        }}
-      >
-        <View
-          style={{
-            width: 24,
-            height: 24,
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <View
-            style={{
-              width: 10,
-              height: 10,
-              borderRadius: 5,
-              backgroundColor: categoryColor,
-              borderWidth: 1,
-              borderColor: "#FFFFFF",
-            }}
-          />
-        </View>
-      </Marker>
-    );
   return (
-    <Marker
-      key={id}
-      coordinate={coordinate}
-      anchor={{ x: 0.5, y: streetTime ? 0.82 : 0.92 }}
-      tracksViewChanges={tracking}
-      accessibilityLabel={`Map: ${title}${owned ? ", Your Beacon" : ""}${identity ? `, ${identity.label}` : ""}`}
-      onPress={(event) => {
-        event.stopPropagation();
-        if (!disabled) onPress(id);
-      }}
-    >
       <MarkerContent selected={selected} dimmed={dimmed}>
         <View
           style={{
@@ -299,6 +229,7 @@ function BeaconMapPinComponent({
               shadowOffset: { width: 0, height: 3 },
             }}
           >
+            {owned && !selected && <View pointerEvents="none" style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, borderWidth: 1.5, borderColor: mapIdentityColors.ownership, borderRadius: visualSize / 2 }} />}
             <ActivityBadge category={category} size={26} />
             {identity && (
               <View
@@ -371,6 +302,90 @@ function BeaconMapPinComponent({
           ) : null}
         </View>
       </MarkerContent>
+  );
+}
+
+function BeaconMapPinComponent({
+  id,
+  title,
+  coordinate,
+  category,
+  categoryColor,
+  selected,
+  dimmed,
+  streetTime,
+  appearanceKey,
+  onPress,
+  disabled = false,
+  dot = false,
+}: {
+  id: string;
+  title: string;
+  coordinate: { latitude: number; longitude: number };
+  category: Category;
+  categoryColor: string;
+  selected: boolean;
+  dimmed: boolean;
+  streetTime?: string;
+  appearanceKey: string;
+  onPress: (id: string) => void;
+  disabled?: boolean;
+  dot?: boolean;
+}) {
+  const { data, userId } = useBeacon();
+  const activity = data.activities.find((row) => row.id === id);
+  const identity = activity ? markerIdentity(data, activity, userId) : null;
+  const owned = !!activity && ownsMapBeacon(data, activity, userId);
+  const tracking = useMarkerTracking(
+    `${owned}:${identity?.label}:${id}:${categoryColor}:${selected}:${dimmed}:${streetTime ?? ""}:${appearanceKey}:${dot}`,
+  );
+  if (dot)
+    return (
+      <Marker
+        coordinate={coordinate}
+        anchor={{ x: 0.5, y: 0.5 }}
+        tracksViewChanges={tracking}
+        accessibilityLabel={`Map: ${title}${owned ? ", Your Beacon" : ""}${identity ? `, ${identity.label}` : ""}`}
+        onPress={(event) => {
+          event.stopPropagation();
+          if (!disabled) onPress(id);
+        }}
+      >
+        <View
+          style={{
+            width: 24,
+            height: 24,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <View
+            style={{
+              width: 10,
+              height: 10,
+              borderRadius: 5,
+              backgroundColor: categoryColor,
+              borderWidth: 1,
+              borderColor: "#FFFFFF",
+            }}
+          />
+        </View>
+      </Marker>
+    );
+  return (
+    <Marker
+      key={id}
+      coordinate={coordinate}
+      anchor={{ x: 0.5, y: streetTime ? 0.82 : 0.92 }}
+      tracksViewChanges={tracking}
+      accessibilityLabel={`Map: ${title}${owned ? ", Your Beacon" : ""}${identity ? `, ${identity.label}` : ""}`}
+      onPress={(event) => {
+        event.stopPropagation();
+        if (!disabled) onPress(id);
+      }}
+    >
+      <BeaconMarkerArtwork id={id} category={category} categoryColor={categoryColor}
+        selected={selected} dimmed={dimmed} streetTime={streetTime} />
     </Marker>
   );
 }
@@ -730,7 +745,7 @@ export const ClusterMapPin = React.memo(
     left.onPress === right.onPress,
 );
 
-function OwnershipStar({ small = false }: { small?: boolean }) {
+export function OwnershipStar({ small = false }: { small?: boolean }) {
   return (
     <View
       testID="beacon-ownership-star"

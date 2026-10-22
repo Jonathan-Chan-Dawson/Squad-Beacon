@@ -10,3 +10,7 @@ Cross-feature shared code
 Feature-specific business rules belong under src/features/; keep only true cross-feature contracts here.
 
 - Theme compatibility retains existing family IDs and legacy color aliases. Essential Dark initializes new preferences; saved families and explicit appearances are retained, including legacy implicit light/dark choices.
+
+- mobilePresentation.ts, SystemBars.tsx: shared native page/sheet presentation and focus-scoped immersive status-bar requests; status icon style follows the active appearance.
+
+- AppNavigation.tsx / AppNavigation.native.tsx and SystemBars.tsx / SystemBars.native.tsx: preserve web presentation while native opts into themed push/modal transitions and focused system-bar requests.

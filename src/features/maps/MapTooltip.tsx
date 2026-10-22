@@ -1,56 +1,45 @@
-import React from "react";
-import { Pressable, Text, View } from "react-native";
 import {
-  ChevronRight,
-  MessageCircle,
-  Music,
-  Smile,
-  Trophy,
-} from "lucide-react-native";
+  BeaconCommunityRow,
+  useBeaconCommunityAssociations,
+} from "@/src/features/discovery/BeaconCommunityRow";
+import { browseEntryReason } from "@/src/features/discovery/domain";
+import { discoveryContextLabel } from "@/src/features/discovery/discoveryCardPresentation";
+import { BeaconFeedCard } from "@/src/features/beacons/components/BeaconFeedCard";
+import { activityFeedCardProps } from "@/src/features/beacons/screens/activityFeedCard";
+import { readablePlanForActivity } from "@/src/features/beacons/screens/discoveryPlan";
+import { canReadBeaconActivity } from "@/src/features/beacons/beaconModules";
 import { useBeacon } from "@/src/shared/store";
 import { useNow } from "@/src/shared/useNow";
-import { IconButton, useTheme } from "@/src/shared/ui";
-import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
-import { canViewProfile } from "@/src/features/profile/privacy";
-import { crew } from "@/src/shared/browsing";
-import { isBeaconModuleEnabled } from "@/src/features/beacons/permissions";
-import {
-  canReadBeaconActivity,
-  canUseBeaconModules,
-} from "@/src/features/beacons/beaconModules";
-import { ActivityBadge } from "@/src/features/beacons/ActivityBadge";
-import { MapBeaconRsvp } from "./MapBeaconRsvp";
-import { canReadBeaconMeetingDetails } from "./filtering";
-import { beaconPreviewWhen } from "./discoveryRanking";
-import { MapRelationshipActions } from "./MapRelationshipActions";
+import { useTheme } from "@/src/shared/ui";
+import { router } from "expo-router";
+import * as ExpoLinking from "expo-linking";
+import React from "react";
+import { Share, Text, View } from "react-native";
+import { MapTooltipClose } from "./MapTooltipShell";
 import type { MapContextFilter } from "./contextFilters";
 import type { MapBeaconFeature } from "./mapBeaconFeatures";
-import { MapTooltipShell, MapTooltipClose } from "./MapTooltipShell";
-import { mapTooltip } from "./tooltipConstants";
 
 export function MapTooltip({
-  community,
   beaconId,
-  onShowContext,
-  onPerson,
   onDetails,
-  onFeature,
+  onOpenPeople,
   onClose,
 }: {
   onShowContext?: (filter: MapContextFilter) => void;
   beaconId: string | null;
   personId: string | null;
   pinned: boolean;
-  community?: { name: string; onPress(): void };
+  onOpenPeople?: () => void;
   onPerson?: (id: string) => void;
   onDetails(): void;
   onFeature?: (feature: MapBeaconFeature) => void;
   onMessage(): void;
   onClose(): void;
 }) {
-  const { data, userId } = useBeacon();
+  const { data, userId, act } = useBeacon();
   const { colors, styles } = useTheme();
   const now = useNow();
+  const communityAssociations = useBeaconCommunityAssociations();
   const activity = data.activities.find((row) => row.id === beaconId);
   if (
     !activity ||
@@ -59,235 +48,100 @@ export function MapTooltip({
     !canReadBeaconActivity(data, activity, userId)
   )
     return null;
-  const host = data.profiles.find(
-    (row) => row.id === activity.owner_id && canViewProfile(data, row, userId),
+
+  const reason = browseEntryReason(
+    { kind: "activity", activity },
+    data,
+    userId,
+    now,
+    communityAssociations,
   );
-  const place = canReadBeaconMeetingDetails(data, activity, userId)
-    ? data.places.find((row) => row.activity_id === activity.id)
+  const plan = readablePlanForActivity(data, activity, userId);
+  const planContext = plan
+    ? {
+        title: plan.title,
+        onPress: () =>
+          router.push({ pathname: "/plan/[id]", params: { id: plan.id } }),
+      }
     : undefined;
-  const participants = crew(data, activity).filter(
-    ({ person, status }) =>
-      (status === "Going" || status === "Hosting") &&
-      canViewProfile(data, person, userId),
-  );
-  const going = activity.accepted_seat_count ?? participants.length;
-  const needed = Math.max(0, (activity.target_count ?? going) - going);
-  const live =
-    Date.parse(activity.starts_at) <= now && Date.parse(activity.ends_at) > now;
-  const allowed = canUseBeaconModules(data, activity, userId);
-  const teams =
-    allowed && isBeaconModuleEnabled(activity, "scoreboard")
-      ? data.beacon_teams
-          .filter((row) => row.activity_id === activity.id)
-          .slice(0, 2)
-      : [];
-  const music =
-    allowed && isBeaconModuleEnabled(activity, "music") && !!activity.music_url;
+  const url = ExpoLinking.createURL(`/activity/${activity.id}`);
+  const feedProps = activityFeedCardProps(data, activity, userId, now, {
+    onOpen: onDetails,
+    onMap: onDetails,
+    onRSVP: async (status) => {
+      await act("rsvp", { id: activity.id, status });
+    },
+    onChangeRSVP: onDetails,
+    onSave: async () => {
+      await act("save_beacon", {
+        activity_id: activity.id,
+        saved: !data.beacon_favorites.some(
+          (favorite) =>
+            favorite.owner_id === userId &&
+            favorite.activity_id === activity.id,
+        ),
+      });
+    },
+    onShare: async () => {
+      await Share.share({
+        title: activity.title,
+        message: `${activity.title}\n${url}`,
+        url,
+      });
+    },
+  });
+  const strictCapacityLabel =
+    activity.capacity_policy === "strict" &&
+    activity.capacity_limit != null &&
+    activity.capacity_limit > 0 &&
+    (feedProps.isFull || (feedProps.capacityRemaining ?? 0) > 0)
+      ? feedProps.isFull
+        ? "Full"
+        : `${feedProps.capacityRemaining} spots left`
+      : undefined;
+  const visibleReason = discoveryContextLabel(reason, {
+    timingLabel: feedProps.whenLabel,
+    strictCapacityLabel,
+    communityLabel: communityAssociations.some(
+      (row) =>
+        row.activity_id === activity.id &&
+        row.summary.membership_status === "active",
+    )
+      ? "associated community"
+      : undefined,
+  });
+
   return (
-    <MapTooltipShell testID="map-tooltip-card">
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-        <ActivityBadge
-          category={activity.category}
-          size={mapTooltip.avatarSize}
-        />
-        <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
-          <Text
-            accessibilityRole="header"
-            numberOfLines={1}
-            style={[
-              styles.h2,
-              { fontSize: mapTooltip.titleSize, textAlign: "left" },
-            ]}
-          >
-            {activity.title}
-          </Text>
-          <Pressable
-            disabled={!host || !onPerson}
-            accessibilityRole="button"
-            accessibilityLabel={`View ${host?.name ?? "host"}'s profile`}
-            onPress={() => host && onPerson?.(host.id)}
-            style={{ flexDirection: "row", alignItems: "center", gap: 4 }}
-          >
-            {host && <ProfileAvatar profile={host} size={16} />}
-            <Text
-              numberOfLines={1}
-              style={[
-                styles.muted,
-                { flex: 1, fontSize: mapTooltip.detailSize, textAlign: "left" },
-              ]}
-            >
-              {host?.name ?? "Host"} {"\u00b7"}{" "}
-              {place?.online_url
-                ? "Virtual"
-                : (place?.label ?? "Meeting details private")}
-            </Text>
-          </Pressable>
-        </View>
-        <MapTooltipClose label="Close map preview" onClose={onClose} />
-      </View>
-      <View
-        style={{
-          flexDirection: "row",
-          alignSelf: "flex-start",
-          alignItems: "center",
-          gap: 5,
-          backgroundColor: colors.green + "20",
-          borderRadius: 12,
-          paddingHorizontal: 8,
-          paddingVertical: 4,
-          maxWidth: "100%",
-        }}
-      >
-        {live && (
-          <View
-            style={{
-              width: 6,
-              height: 6,
-              borderRadius: 3,
-              backgroundColor: colors.green,
-            }}
-          />
-        )}
-        <Text
-          numberOfLines={1}
-          style={[
-            styles.label,
-            { color: colors.green, fontSize: mapTooltip.detailSize },
-          ]}
-        >
-          {beaconPreviewWhen(activity, now)}
-        </Text>
-      </View>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-        <View style={{ flexDirection: "row" }}>
-          {participants.slice(0, 3).map(({ person }, i) => (
-            <View key={person.id} style={{ marginLeft: i ? -7 : 0 }}>
-              <ProfileAvatar profile={person} size={22} />
-            </View>
-          ))}
-        </View>
-        <View style={{ flex: 1, gap: 4 }}>
-          <View
-            style={{
-              flexDirection: "row",
-              justifyContent: "space-between",
-              gap: 6,
-            }}
-          >
-            <Text numberOfLines={1} style={[styles.label, { fontSize: 12 }]}>
-              {going} going
-            </Text>
-            {needed > 0 && (
-              <Text numberOfLines={1} style={[styles.muted, { fontSize: 12 }]}>
-                Need {needed} more
-              </Text>
-            )}
-          </View>
-          {!!activity.target_count && (
-            <View
-              accessibilityRole="progressbar"
-              accessibilityLabel="Going"
-              accessibilityValue={{
-                min: 0,
-                max: activity.target_count,
-                now: Math.min(going, activity.target_count),
-              }}
-              style={{
-                height: 3,
-                borderRadius: 2,
-                backgroundColor: colors.line,
-              }}
-            >
-              <View
-                style={{
-                  height: 3,
-                  borderRadius: 2,
-                  backgroundColor: colors.green,
-                  width: `${Math.min(100, (going / activity.target_count) * 100)}%`,
-                }}
-              />
-            </View>
-          )}
-        </View>
-      </View>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <MapBeaconRsvp activity={activity} />
-        </View>
-        {allowed &&
-          onFeature &&
-          isBeaconModuleEnabled(activity, "reactions") && (
-            <IconButton
-              label="React to Beacon"
-              onPress={() => onFeature("reactions")}
-            >
-              <Smile size={17} color={colors.green} />
-            </IconButton>
-          )}
-        {allowed &&
-          onFeature &&
-          isBeaconModuleEnabled(activity, "comments") && (
-            <IconButton
-              label="Open Beacon comments"
-              onPress={() => onFeature("comments")}
-            >
-              <MessageCircle size={17} color={colors.green} />
-            </IconButton>
-          )}
-      </View>
-      <MapRelationshipActions beaconId={activity.id} onShow={onShowContext} />
-      {(teams.length > 0 || music) && (
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 7 }}>
-          {teams.length > 0 && (
-            <>
-              <Trophy size={13} color={colors.muted} />
-              <Text numberOfLines={1} style={[styles.muted, { fontSize: 11 }]}>
-                {teams.map((team) => team.score).join("\u2013")}
-              </Text>
-            </>
-          )}
-          {music && (
-            <>
-              <Music size={13} color={colors.muted} />
+    <View testID="map-tooltip-card">
+      <BeaconFeedCard
+        compact
+        presentation="discovery"
+        adaptiveDiscovery
+        detailsLabel="See overview"
+        headerAccessory={
+          <MapTooltipClose label="Close map preview" onClose={onClose} />
+        }
+        planContext={planContext}
+        compactFooter={
+          <View style={{ gap: 4 }}>
+            {visibleReason ? (
               <Text
-                numberOfLines={1}
-                style={[styles.muted, { flexShrink: 1, fontSize: 11 }]}
+                style={{
+                  ...styles.muted,
+                  color: colors.textSecondary,
+                  fontSize: 12,
+                  lineHeight: 17,
+                }}
               >
-                Music available
+                {visibleReason}
               </Text>
-            </>
-          )}
-        </View>
-      )}
-      {community && (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Hosted by ${community.name}`}
-          onPress={community.onPress}
-        >
-          <Text numberOfLines={1} style={[styles.muted, { fontSize: 11 }]}>
-            {community.name}
-          </Text>
-        </Pressable>
-      )}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="See overview"
-        onPress={onDetails}
-        style={{
-          borderTopWidth: 1,
-          borderColor: colors.line,
-          minHeight: 44,
-          flexDirection: "row",
-          alignItems: "center",
-          justifyContent: "space-between",
-        }}
-      >
-        <Text style={[styles.label, { color: colors.green, fontSize: 13 }]}>
-          See overview
-        </Text>
-        <ChevronRight size={17} color={colors.green} />
-      </Pressable>
-    </MapTooltipShell>
+            ) : null}
+            <BeaconCommunityRow activityId={activity.id} compact />
+          </View>
+        }
+        {...feedProps}
+        onOpenPeople={onOpenPeople}
+      />
+    </View>
   );
 }

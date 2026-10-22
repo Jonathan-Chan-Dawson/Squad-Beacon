@@ -91,8 +91,13 @@ export function addDemoMapFixtures(data: Data, viewer: string, now: number) {
     { id: "map-plan-walk", title: "Plan stop 3: Lakefront stroll", category: "Fitness" as const, latitude: 41.886, longitude: -87.615 },
   ].entries()) {
     event(stop.id, stop.title, index + 1, index + 2, stop.latitude, stop.longitude,
-      { owner_id: viewer, category: stop.category, plan_id: planId, plan_step_index: index, timezone: "America/Chicago" });
+      { owner_id: viewer, category: stop.category, plan_id: planId, plan_step_index: index, timezone: "America/Chicago",
+        ...(stop.id === "map-plan-coffee" ? { capacity_limit: 8, capacity_policy: "strict" as const } : {}) });
   }
+  // The first Plan stop demonstrates the compact joined-community row beside
+  // its Plan link and strict capacity summary in the demo UI.
+  data.activity_social_links.push({ activity_id: "map-plan-coffee", entity_type: "squad",
+    entity_id: crewId, created_by: viewer, created_at: at(0) });
   const concert = event("map-public-concert", "Lakefront Summer Lights concert", 1, 5, 41.891, -87.617,
     { audience: "private", target_count: 500, capacity_limit: 500, capacity_policy: "soft" });
   const meetup = event("map-public-photo-walk", "Five-person street photography meetup", -0.1, 2, 41.881, -87.641,

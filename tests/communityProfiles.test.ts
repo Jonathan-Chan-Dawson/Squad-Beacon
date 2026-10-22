@@ -6,6 +6,7 @@ import {
   parseCommunityProfileSummary,
   searchSocialDirectoryInData,
 } from "../src/features/social/directory";
+import { communityProfileMode } from "../src/features/discovery/communityPublicProfileAccess";
 
 test("exact-ID community summaries match the safe directory projection in Demo", () => {
   const data = makeDemo();
@@ -120,4 +121,35 @@ test("pending requests preserve safe identity access for private communities wit
   data.organization_members = data.organization_members.filter((row) => row.user_id !== viewerId);
   for (const type of ["squad", "space", "organization"] as const)
     assert.equal(getCommunitySummary(type, entity.id, data, viewerId), null, `${type}: withdrawn requests revoke identity access`);
+});
+
+test("a permitted summary can render without a private entity row while member areas stay gated", () => {
+  const summary = {
+    entity_type: "space" as const,
+    entity_id: "public-space",
+    name: "Public Studio",
+    description: "A summary available to nonmembers.",
+    discoverability: "public" as const,
+    join_mode: "open" as const,
+    member_count: 12,
+    child_count: 3,
+    membership_status: null,
+    action: "join" as const,
+    parent_type: null,
+    parent_id: null,
+    parent_name: null,
+  };
+
+  assert.equal(communityProfileMode(summary, false, false), "summary",
+    "safe profile fields remain available when the entity row is absent");
+  assert.equal(communityProfileMode(summary, true, false), "summary",
+    "a locally cached entity row never grants member areas on its own");
+  assert.equal(communityProfileMode({ ...summary, membership_status: "active" }, false, false), "summary",
+    "an active summary still falls back to summary-only presentation if its member record is absent");
+  assert.equal(communityProfileMode({ ...summary, membership_status: "active" }, true, false), "member");
+});
+
+test("community profile mode keeps unresolved summary access separate from unavailable profiles", () => {
+  assert.equal(communityProfileMode(null, true, true), "loading");
+  assert.equal(communityProfileMode(null, true, false), "unavailable");
 });

@@ -22,6 +22,10 @@ import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
 import { VirtualizedCommunityDirectory } from "@/src/features/people/VirtualizedCommunityDirectory";
 import { activeSquadMembership } from "@/src/features/people/squadProfile";
 import { canReadOrganization } from "@/src/features/organizations/domain";
+import { CommunityPublicBeacons } from "@/src/features/discovery/CommunityPublicBeacons";
+import { CommunityPublicProfile } from "@/src/features/discovery/CommunityPublicProfile";
+import { communityProfileMode } from "@/src/features/discovery/communityPublicProfileAccess";
+import { communityTypeLabel } from "@/src/features/social/communityPresentation";
 import {
   canInviteWithPolicy,
   SOCIAL_ROLE_RANK,
@@ -84,7 +88,7 @@ export default function SpaceScreen() {
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
   const legacyView = params.tab ?? params.view;
   const { data, userId, act } = useBeacon();
-  const { summary: safeSummary, loading: summaryLoading } =
+  const { summary: safeSummary, loading: summaryLoading, refresh: refreshSummary } =
     useCommunitySummary("space", id);
   const now = useNow();
   const { styles, colors } = useTheme();
@@ -128,19 +132,25 @@ export default function SpaceScreen() {
   >(undefined);
   const pendingRemoveAction = useRef<NavigationAction | null>(null);
   const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
-  const space = (id ? data.spaces.find((row) => row.id === id) : undefined) ??
-    (safeSummary
-      ?
-      ({
-        id: safeSummary.entity_id,
-        owner_id: "",
-        name: safeSummary.name,
-        description: safeSummary.description,
-        created_at: "",
-        discoverability: safeSummary.discoverability,
-        join_mode: safeSummary.join_mode,
-      } satisfies Space)
-      : undefined);
+  const memberSpaceRecord = id ? data.spaces.find((row) => row.id === id) : undefined;
+  const hasReadableMemberRecord = !!(
+    safeSummary?.membership_status === "active" &&
+    memberSpaceRecord && userId && canReadSpace(data, memberSpaceRecord.id, userId)
+  );
+  const profileMode = communityProfileMode(safeSummary, hasReadableMemberRecord, summaryLoading);
+  const space = profileMode === "member"
+    ? memberSpaceRecord
+    : safeSummary
+      ? ({
+          id: safeSummary.entity_id,
+          owner_id: "",
+          name: safeSummary.name,
+          description: safeSummary.description,
+          created_at: "",
+          discoverability: safeSummary.discoverability,
+          join_mode: safeSummary.join_mode,
+        } satisfies Space)
+      : undefined;
   const policyInitial: SocialPolicyValue = {
     discoverability: space?.discoverability ?? safeSummary?.discoverability ?? "private",
     join_mode: space?.join_mode ?? safeSummary?.join_mode ?? "invite",
@@ -161,37 +171,38 @@ export default function SpaceScreen() {
     policyDraft.invite_policy !== policyInitial.invite_policy
   );
   const settingsDirty = tab === "settings" && (detailsDirty || policyDirty);
-  const currentMemberAccess = summaryLoading || safeSummary?.membership_status === "active";
+  const currentMemberAccess = profileMode === "member";
   const canManageCurrentSpace = currentMemberAccess && !!id && !!userId && canManageSpace(data, id, userId);
   usePreventRemove(settingsDirty && canManageCurrentSpace, ({ data: { action } }) => {
     pendingRemoveAction.current = action;
     setPendingDestination(undefined);
     setDiscardOpen(true);
   });
-  if (summaryLoading && !space)
+  if (profileMode === "loading")
     return (
       <Screen title="Loading Organization" eyebrow="">
         <Txt muted>Loading the safe Organization profile.</Txt>
       </Screen>
     );
-  const profileSummary = safeSummary ?? (
-    space && userId && canReadSpace(data, space.id, userId) && summaryLoading
-      ? {
-          name: space.name,
-          description: space.description,
-          member_count: data.space_members.filter(
-            (member) => member.space_id === space.id && member.status === "active",
-          ).length,
-        }
-      : null
-  );
-  if (!space || !id || !profileSummary)
+  const profileSummary = safeSummary;
+  if (profileMode === "unavailable" || !space || !id || !profileSummary)
     return (
       <Screen title="Organization unavailable" eyebrow="">
         <Empty
           title="This Organization isn’t available"
           body="This Organization is unavailable to your account. Check Communities for an invitation or an eligible public profile."
         />
+      </Screen>
+    );
+  if (profileMode === "summary")
+    return (
+      <Screen
+        title={communityTypeLabel("space")}
+        eyebrow={safeSummary?.name}
+        create={false}
+        showDemoNotice={false}
+      >
+        <CommunityPublicProfile summary={profileSummary} onSummaryChanged={refreshSummary} />
       </Screen>
     );
   const viewerRole = userId && currentMemberAccess && canReadSpace(data, id, userId)
@@ -504,6 +515,13 @@ export default function SpaceScreen() {
             )}
           </View>
         )}
+      {tab === "overview" ? (
+        <CommunityPublicBeacons
+          type="space"
+          entityId={id}
+          excludeActivityIds={spaceActivities.map((activity) => activity.id)}
+        />
+      ) : null}
       {tab === "overview" ? (
         <View style={{ gap: 4 }}>
           <ProfileLink

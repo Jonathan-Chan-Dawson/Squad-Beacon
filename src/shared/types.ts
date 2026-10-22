@@ -144,6 +144,8 @@ export interface Checkin {
   local_date: string;
 }
 export interface Activity extends Shared {
+  solo_purpose?: "status_note" | "activity_note";
+  superseded_at?: string | null;
   /** Owner-only choice for linking this Status to a live group Beacon. */
   status_show_current_beacon?: boolean;
   /** Owner-only selected Beacon id; null means Auto. */
@@ -564,13 +566,27 @@ export interface Data {
   places: ActivityPlace[];
   rsvps: RSVP[];
   resolved_beacon_responses?: RSVP[];
-  capabilities?: { rsvp_decline?: boolean; beacon_supplies?: boolean; status_privacy?: boolean; status_attachments?: boolean; status_current_beacon?: boolean };
+  presence?: Presence[];
+  capabilities?: { living_activity?: boolean; rsvp_decline?: boolean; beacon_supplies?: boolean; status_privacy?: boolean; status_attachments?: boolean; status_current_beacon?: boolean };
   comments: Comment[];
   reactions: Reaction[];
   locations: LocationSession[];
   notices: Notice[];
   reports: Report[];
   blocks: { blocker_id: ID; blocked_id: ID }[];
+}
+export interface Presence {
+  owner_id: ID;
+  sharing: boolean;
+  availability: "available" | "busy" | null;
+  availability_until?: string | null;
+  availability_audience?: Audience;
+  availability_audience_id?: string | null;
+  show_current_beacon?: boolean;
+  current_beacon_id?: ID | null;
+  current_audience?: Audience;
+  current_audience_id?: ID | null;
+  current_activity: { type: "beacon" | "activity_note"; id: ID; role?: "hosting" | "cohosting" | "going" } | null;
 }
 export type Payload = Record<string, unknown>;
 export const emptyData = (): Data => ({
@@ -658,7 +674,8 @@ export function normalizeData(value: Partial<Data> | null | undefined): Data {
   data.resolved_beacon_responses = undefined;
   data.beacon_supply_requests = Array.isArray(data.beacon_supply_requests) ? data.beacon_supply_requests : [];
   data.beacon_supply_claims = Array.isArray(data.beacon_supply_claims) ? data.beacon_supply_claims : [];
-  data.capabilities = { status_attachments: data.is_demo === true || data.capabilities?.status_attachments === true, beacon_supplies: data.is_demo === true || data.capabilities?.beacon_supplies === true, status_privacy: data.is_demo === true || data.capabilities?.status_privacy === true, status_current_beacon: data.is_demo === true || data.capabilities?.status_current_beacon === true, rsvp_decline: data.is_demo === true || data.capabilities?.rsvp_decline === true };
+  data.presence = Array.isArray(data.presence) ? data.presence : [];
+  data.capabilities = { living_activity: data.is_demo === true || data.capabilities?.living_activity === true, status_attachments: data.is_demo === true || data.capabilities?.status_attachments === true, beacon_supplies: data.is_demo === true || data.capabilities?.beacon_supplies === true, status_privacy: data.is_demo === true || data.capabilities?.status_privacy === true, status_current_beacon: data.is_demo === true || data.capabilities?.status_current_beacon === true, rsvp_decline: data.is_demo === true || data.capabilities?.rsvp_decline === true };
   data.dm_message_reads = Array.isArray(data.dm_message_reads) ? data.dm_message_reads : [];
   data.plan_members = Array.isArray(data.plan_members) ? data.plan_members : [];
   data.plan_routines = Array.isArray(data.plan_routines)
@@ -682,6 +699,7 @@ export function normalizeData(value: Partial<Data> | null | undefined): Data {
   data.activities = (Array.isArray(data.activities) ? data.activities : []).map(
     (activity) => ({
       ...activity,
+      solo_purpose: activity.solo_purpose === "activity_note" ? "activity_note" : "status_note",
       status_attachment: activity.status_attachment ?? null,
       status_presentation: activity.status_presentation ?? "text_only",
       status_show_current_beacon: activity.status_show_current_beacon ?? false,

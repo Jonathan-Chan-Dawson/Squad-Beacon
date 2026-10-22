@@ -181,8 +181,10 @@ export default function YourActivityScreen() {
   }, [data.viewer_id, getViewerEpoch, historyEligibilityKey, loadActivityHistory, reload, settledSearch.query, settledSearch.revision, userId, viewerEpoch]);
 
   const openActivity = useCallback((id: string) => {
-    router.push({ pathname: "/activity/[id]", params: { id } });
-  }, []);
+    const note=data.activities.find(a=>a.id===id&&a.solo_purpose==="activity_note"&&a.owner_id===userId);
+    if(note)router.push({pathname:"/activity-note",params:{id}});
+    else router.push({ pathname: "/activity/[id]", params: { id } });
+  }, [data.activities,userId]);
 
   const respond = useCallback(async (activityId: string, status: "going" | "interested" | "withdraw") => {
     const activity = data.activities.find((row) => row.id === activityId);
@@ -271,7 +273,7 @@ export default function YourActivityScreen() {
   const exploreBeacons = useCallback(() => router.push("/browse-beacons"), []);
   const isSearching = !!historyQuery.trim();
   const showHistoryRows = showHistoryForSearch(historyExpanded, historyQuery);
-  const currentActivitiesById = useMemo(() => new Map(confirmed.map((activity) => [activity.id, activity])), [confirmed]);
+  const currentActivitiesById = useMemo(() => new Map([...confirmed,...data.activities.filter(a=>a.owner_id===userId&&a.solo_purpose==="activity_note")].map((activity) => [activity.id, activity])), [confirmed,data.activities,userId]);
   const visibleHistoryRows = useMemo(() =>
     historyOwner === userId && data.viewer_id === userId
       ? historyRows.filter((row) => currentActivitiesById.has(row.id))

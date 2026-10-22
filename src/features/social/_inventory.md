@@ -7,3 +7,5 @@
 - Community membership and discovery are independently authorized by the backend; a parent/child link never implies membership or private child access.
 
 - Prompt 2: CommunityProfileAccess provides exact-ID safe summaries and authorized relationship disclosures; directory.ts shares safe summary projection across Demo search and direct retrieval. community_profile_summary is an additive read-only RPC.
+
+- communityPresentation.ts centralizes legacy entity display names; communityNavigation.ts opens canonical profile routes. CommunityProfileAccess refreshes exact summaries on focus and retains independent member authorization.

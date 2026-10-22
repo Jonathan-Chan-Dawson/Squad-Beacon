@@ -1,4 +1,6 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useFocusEffect } from "expo-router";
+import { communityTypeLabel } from "./communityPresentation";
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { ProfileLink, ProfileSection } from "@/src/features/people/components/ProfilePrimitives";
 import { CommunityAvatar } from "@/src/features/people/components/CommunityAvatar";
@@ -24,6 +26,10 @@ export function useCommunitySummary(
 ): CommunitySummaryState {
   const { data, userId, viewerEpoch, loadCommunitySummary } = useBeacon();
   const requestId = useRef(0);
+  const latest = useRef({ data, id, type, userId, viewerEpoch, loadCommunitySummary });
+  useLayoutEffect(() => {
+    latest.current = { data, id, type, userId, viewerEpoch, loadCommunitySummary };
+  }, [data, id, type, userId, viewerEpoch, loadCommunitySummary]);
   const [result, setResult] = useState<{
     type: SocialEntityType;
     id: string | null;
@@ -35,7 +41,7 @@ export function useCommunitySummary(
     error: string | null;
   } | null>(null);
 
-  useEffect(() => {
+  useFocusEffect(useCallback(() => {
     const targetId = typeof id === "string" && id.length <= 100 ? id : null;
     if (!targetId || !userId || data.viewer_id !== userId) return;
     let live = true;
@@ -61,9 +67,10 @@ export function useCommunitySummary(
       live = false;
       requestId.current += 1;
     };
-  }, [data, id, loadCommunitySummary, type, userId, viewerEpoch]);
+  }, [data, id, loadCommunitySummary, type, userId, viewerEpoch]));
 
   const refresh = useCallback(async () => {
+    const { data, id, type, userId, viewerEpoch, loadCommunitySummary } = latest.current;
     const targetId = typeof id === "string" && id.length <= 100 ? id : null;
     const snapshot = data;
     const request = ++requestId.current;
@@ -89,7 +96,7 @@ export function useCommunitySummary(
         error: failure instanceof Error ? failure.message : "Community unavailable.",
       });
     }
-  }, [data, id, loadCommunitySummary, type, userId, viewerEpoch]);
+  }, []);
 
   const expectedId = typeof id === "string" && id.length <= 100 ? id : null;
   const current = !!result && result.type === type && result.id === expectedId &&
@@ -133,8 +140,7 @@ export interface CommunityRelationshipContext {
   parentId: ID;
 }
 
-const relationshipTypeLabel = (type: SocialEntityType) =>
-  type === "organization" ? "Network" : type === "space" ? "Organization" : "Squad";
+const relationshipTypeLabel = communityTypeLabel;
 
 function RelationshipContextRow({
   context,

@@ -74,11 +74,11 @@ for (const width of [320, 375, 430]) {
       screen.getByRole("button", { name: "Plan with 1", exact: true }),
     ).toBeVisible();
     await selector
-      .getByRole("button", { name: "Super-Organizations", exact: true })
+      .getByRole("button", { name: "Networks", exact: true })
       .click();
     await expect(
       selector.getByRole("button", {
-        name: "Super-Organizations",
+        name: "Networks",
         exact: true,
       }),
     ).toBeInViewport();

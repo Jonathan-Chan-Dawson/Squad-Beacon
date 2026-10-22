@@ -1,3 +1,4 @@
+import { currentActivity } from "@/src/features/beacons/livingActivity";
 import { StatusReactionPicker } from "@/src/features/beacons/components/feed/StatusReactionPicker";
 import React from "react";
 import { Pressable, Text, View } from "react-native";
@@ -40,7 +41,8 @@ export function MapPersonPreview({
   const now = useNow();
   const selection = selectPersonPreview(data, personId, userId, now);
   // Solo statuses use the existing activity storage, but are not linked Beacon cards.
-  const linkedBeacon = selectPersonPreview(
+  const current=currentActivity(data,personId,userId,now);
+  const legacyLinkedBeacon = selectPersonPreview(
     {
       ...data,
       activities: data.activities.filter(
@@ -51,7 +53,8 @@ export function MapPersonPreview({
     userId,
     now,
   ).beacon;
-  const solo =
+  const linkedBeacon=(data.is_demo||data.capabilities?.living_activity)?(current?.type==="beacon"?current.activity:undefined):legacyLinkedBeacon;
+  const solo = current?.type==="activity_note"?current.activity:
     linkedBeacon && Date.parse(linkedBeacon.starts_at) <= now
       ? undefined
       : visibleSoloActivity(data, personId, userId, now);
@@ -246,7 +249,7 @@ export function MapPersonPreview({
               ? "just now"
               : `${Math.floor((now - Date.parse(solo.starts_at)) / 60000)}m ago`}
           </Text>
-          <StatusReactionPicker activityId={solo.id} />
+          {solo.solo_purpose!=="activity_note"&&<StatusReactionPicker activityId={solo.id} />}
         </View>
       )}
       {linkedBeacon && (

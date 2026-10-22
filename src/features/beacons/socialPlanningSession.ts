@@ -44,6 +44,82 @@ export function usePlanningSelection(
   );
   return [ids, (next) => setPlanningSelection(viewer, next)];
 }
+// Ordinary mobile editors get isolated in-memory drafts; planning selections stay separate.
+let creationVersion = 0;
+const creationDrafts = new Map<
+  string,
+  { viewer: string; fields: Map<string, unknown> }
+>();
+let creationAccount: string | null | undefined;
+/** Account transitions invalidate any in-flight picker result, including switching back. */
+export function setCreationDraftAccount(viewer: string | null) {
+  if (creationAccount === viewer) return;
+  creationAccount = viewer;
+  creationDrafts.clear();
+  sessions.forEach((value) => value.fields.delete("locationReturn"));
+}
+export function startCreationDraft(viewer: string | null) {
+  if (!viewer) return undefined;
+  setCreationDraftAccount(viewer);
+  const token = `creation:${++creationVersion}`;
+  creationDrafts.set(token, { viewer, fields: new Map() });
+  return token;
+}
+function draftFields(viewer: string | null, token?: string) {
+  if (!viewer || !token) return undefined;
+  if (token.startsWith("creation:")) {
+    const draft = creationDrafts.get(token);
+    return draft?.viewer === viewer ? draft.fields : undefined;
+  }
+  return token === String(session(viewer).version)
+    ? session(viewer).fields
+    : undefined;
+}
+export type PickedCreationLocation = {
+  label: string;
+  latitude: number;
+  longitude: number;
+};
+export function beginCreationLocationPick(
+  viewer: string | null,
+  token: string | undefined,
+  params: Record<string, string>,
+) {
+  const fields = draftFields(viewer, token);
+  if (!fields) return false;
+  fields.set("locationReturn", params);
+  return true;
+}
+export function finishCreationLocationPick(
+  viewer: string | null,
+  token?: string,
+  location?: PickedCreationLocation,
+) {
+  const fields = draftFields(viewer, token);
+  const params = fields?.get("locationReturn") as
+    Record<string, string> | undefined;
+  if (!fields || !params) return undefined;
+  if (
+    location &&
+    (!Number.isFinite(location.latitude) ||
+      !Number.isFinite(location.longitude) ||
+      Math.abs(location.latitude) > 90 ||
+      Math.abs(location.longitude) > 180)
+  )
+    return undefined;
+  if (location) {
+    fields.set("label", location.label.trim() || "Pinned location");
+    fields.set("pin", {
+      latitude: location.latitude,
+      longitude: location.longitude,
+    });
+  }
+  fields.delete("locationReturn");
+  return location
+    ? { ...params, locationResult: String(++creationVersion) }
+    : params;
+}
+
 export function startPlanningDraft(viewer: string | null) {
   if (!viewer) throw new Error("Sign in before making a plan.");
   return String(session(viewer).version);
@@ -54,8 +130,8 @@ export function planningDraftObject<T>(
   field: string,
   create: () => T,
 ): T {
-  if (!viewer || token !== String(session(viewer).version)) return create();
-  const fields = session(viewer).fields;
+  const fields = draftFields(viewer, token);
+  if (!fields) return create();
   if (!fields.has(field)) fields.set(field, create());
   return fields.get(field) as T;
 }
@@ -64,11 +140,7 @@ export function hasPlanningDraftField(
   token: string | undefined,
   field: string,
 ) {
-  return (
-    !!viewer &&
-    token === String(session(viewer).version) &&
-    session(viewer).fields.has(field)
-  );
+  return draftFields(viewer, token)?.has(field) ?? false;
 }
 export function usePlanningInvitees(
   viewer: string | null,
@@ -76,18 +148,27 @@ export function usePlanningInvitees(
   initial: string[],
 ): [string[], Dispatch<SetStateAction<string[]>>] {
   const [selected, update] = usePlanningSelection(viewer);
-  const [local, setLocal] = useState(initial);
-  const ids = token ? selected : local;
+  const [local, setLocal] = usePlanningDraftState(
+    viewer,
+    token?.startsWith("creation:") ? token : undefined,
+    "inviteeIds",
+    initial,
+  );
+  const ids = token && !token.startsWith("creation:") ? selected : local;
   return [
     ids,
     (next) => {
       const result = typeof next === "function" ? next(ids) : next;
-      if (token) update(result);
+      if (token && !token.startsWith("creation:")) update(result);
       else setLocal(result);
     },
   ];
 }
 export function completePlanningDraft(viewer: string | null, token?: string) {
+  if (token?.startsWith("creation:")) {
+    if (draftFields(viewer, token)) creationDrafts.delete(token);
+    return;
+  }
   if (!viewer || !token || token !== String(session(viewer).version)) return;
   const value = session(viewer);
   value.ids = [];
@@ -103,7 +184,7 @@ export function usePlanningDraftState<T>(
   field: string,
   initial: T | (() => T),
 ): [T, Dispatch<SetStateAction<T>>] {
-  const active = !!viewer && token === String(session(viewer).version);
+  const active = !!draftFields(viewer, token);
   const [value, setValue] = useState<T>(() => {
     const resolve = () =>
       typeof initial === "function" ? (initial as () => T)() : initial;
@@ -118,8 +199,7 @@ export function usePlanningDraftState<T>(
           typeof next === "function"
             ? (next as (value: T) => T)(previous)
             : next;
-        if (viewer && token === String(session(viewer).version))
-          session(viewer).fields.set(field, result);
+        draftFields(viewer, token)?.set(field, result);
         return result;
       });
     },

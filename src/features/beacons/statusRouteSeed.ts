@@ -12,7 +12,7 @@ export function legacyStatusSeed(data: Data, userId: string | null, params: Reco
   const sourceKey = params.statusSourceId || params.repeat;
   const source = sourceKey ? data.activities.find((item) => item.id === sourceKey && canReadBeaconActivity(data, item, userId)) : undefined;
   if (sourceKey && (!source || params.statusSourceId && (source.owner_id !== userId || source.mode !== "solo"))) throw new Error("This status source is unavailable.");
-  const ownedStatusSource = source?.owner_id === userId && source.mode === "solo";
+  const ownedStatusSource = source?.owner_id === userId && source.mode === "solo" && source.solo_purpose !== "activity_note";
   let timezone = data.profiles.find((item) => item.id === userId)?.timezone || "UTC";
   if (params.timezone) {
     try { new Intl.DateTimeFormat("en-US", { timeZone: String(params.timezone) }); timezone = String(params.timezone); }
@@ -39,7 +39,7 @@ export function legacyStatusSeed(data: Data, userId: string | null, params: Reco
     currentBeaconId: ownedStatusSource ? source.status_current_beacon_id ?? null : null,
     title: saved?.title ?? source?.title ?? "", description: saved?.description ?? source?.description ?? "", category: saved?.category ?? source?.category ?? "Social",
     available: source?.available === true, startsAt, endsAt: new Date(Date.parse(startsAt) + (saved?.minutes ?? 60)*60000).toISOString(), timezone, audience, audienceId,
-    latitude, longitude, label, onlineUrl: place?.online_url ?? null, sourceId: source?.owner_id === userId && source.mode === "solo" ? source.id : undefined };
+    latitude, longitude, label, onlineUrl: place?.online_url ?? null, sourceId: source?.owner_id === userId && source.mode === "solo" && source.solo_purpose !== "activity_note" ? source.id : undefined };
 }
 
 export function usesSharedStatusEditor(params: Record<string, unknown>) {

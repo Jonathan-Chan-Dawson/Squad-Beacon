@@ -5,12 +5,8 @@ import Svg, { Defs, LinearGradient, Rect, Stop } from "react-native-svg";
 import { useTheme } from "@/src/shared/ui";
 import type { SocialEntityType, SocialRole } from "@/src/features/social/types";
 
-export const communityTypeLabel = (type: SocialEntityType) =>
-  type === "organization"
-    ? "Network"
-    : type === "space"
-      ? "Organization"
-      : "Squad";
+import { communityTypeLabel } from "@/src/features/social/communityPresentation";
+export { communityTypeLabel };
 export const communityRoleLabel = (role: SocialRole) =>
   role === "coowner" ? "Co-owner" : role[0].toUpperCase() + role.slice(1);
 

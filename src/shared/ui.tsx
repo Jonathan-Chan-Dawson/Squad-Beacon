@@ -1,3 +1,5 @@
+import { sheetSurface } from "./mobilePresentation";
+import { ImmersiveStatusBar } from "./SystemBars";
 import React, { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -31,7 +33,15 @@ import {
   type BottomSheetFooterProps,
 } from "@gorhom/bottom-sheet";
 import { ReduceMotion } from "react-native-reanimated";
-import { ArrowLeft, Bell, Radio, X } from "lucide-react-native";
+import {
+  ArrowLeft,
+  Bell,
+  Check,
+  Lock,
+  Radio,
+  Users,
+  X,
+} from "lucide-react-native";
 import { pendingSocialCount } from "@/src/features/people/communication";
 import { useNow } from "@/src/shared/useNow";
 import {
@@ -340,6 +350,7 @@ export function Txt({
 }
 export function Button({
   title,
+  accessibilityLabel,
   onPress,
   secondary = false,
   disabled = false,
@@ -347,6 +358,7 @@ export function Button({
   icon,
 }: {
   title: string;
+  accessibilityLabel?: string;
   onPress: () => void;
   secondary?: boolean;
   disabled?: boolean;
@@ -361,7 +373,7 @@ export function Button({
       compact={compact}
       onPress={onPress}
       disabled={disabled}
-      accessibilityLabel={title}
+      accessibilityLabel={accessibilityLabel ?? title}
       accessibilityRole="button"
     />
   );
@@ -400,6 +412,7 @@ export function IconButton({
 
 export function Action({
   title,
+  accessibilityLabel,
   run,
   secondary = false,
   disabled = false,
@@ -407,6 +420,7 @@ export function Action({
   feedback,
 }: {
   title: string;
+  accessibilityLabel?: string;
   run: () => Promise<unknown>;
   secondary?: boolean;
   disabled?: boolean;
@@ -421,6 +435,7 @@ export function Action({
     <View style={{ gap: tokens.space.sm }}>
       <Button
         title={busy ? "Working…" : title}
+        accessibilityLabel={busy ? "Working…" : accessibilityLabel}
         disabled={busy || disabled}
         compact={compact}
         secondary={secondary}
@@ -610,6 +625,8 @@ export function Sheet({
   const returnFocusRef = React.useRef<HTMLElement | null>(null);
   const scrollLockRef = React.useRef(false);
   const isRegisteredRef = React.useRef(false);
+  const centeredNative = centered && Platform.OS !== "web";
+  const safeBottom = centered ? 0 : insets.bottom;
   const capPercent = Math.max(35, Math.min(94, maxHeightPercent));
   const centeredHeight = Math.min(
     620,
@@ -752,14 +769,14 @@ export function Sheet({
       footer ? (
         <BottomSheetFooter
           {...props}
-          bottomInset={insets.bottom}
+          bottomInset={0}
           style={{
             backgroundColor: colors.bg,
             borderTopWidth: 1,
             borderTopColor: colors.border,
             paddingHorizontal: tokens.space.md,
             paddingTop: tokens.space.sm,
-            paddingBottom: tokens.space.sm,
+            paddingBottom: tokens.space.sm + safeBottom,
             ...(centered
               ? {
                   borderBottomLeftRadius: tokens.radius.sheet,
@@ -775,9 +792,9 @@ export function Sheet({
       colors.bg,
       colors.border,
       centered,
+      safeBottom,
       tokens.radius.sheet,
       footer,
-      insets.bottom,
       tokens.space.md,
       tokens.space.sm,
     ],
@@ -903,7 +920,9 @@ export function Sheet({
       maxDynamicContentSize={maxContentHeight}
       enableDynamicSizing={!centered && snapHeight === undefined}
       detached={centered}
-      enablePanDownToClose
+      enablePanDownToClose={!centeredNative}
+      enableContentPanningGesture={!centeredNative}
+      enableHandlePanningGesture={!centeredNative}
       enableBlurKeyboardOnGesture
       keyboardBehavior="interactive"
       keyboardBlurBehavior="restore"
@@ -914,24 +933,30 @@ export function Sheet({
         centered
           ? insets.bottom +
             (height - insets.top - insets.bottom - centeredHeight) / 2
-          : insets.bottom
+          : 0
       }
-      overrideReduceMotion={ReduceMotion.System}
+      overrideReduceMotion={
+        centeredNative ? ReduceMotion.Always : ReduceMotion.System
+      }
       animationConfigs={animationConfigs}
       backdropComponent={renderBackdrop}
       footerComponent={footer ? renderFooter : undefined}
       style={modalStyle}
-      backgroundStyle={{
-        backgroundColor: colors.bg,
-        borderTopLeftRadius: tokens.radius.sheet,
-        borderTopRightRadius: tokens.radius.sheet,
-        ...(centered
-          ? {
-              borderBottomLeftRadius: tokens.radius.sheet,
-              borderBottomRightRadius: tokens.radius.sheet,
+      backgroundStyle={
+        Platform.OS !== "web"
+          ? sheetSurface(colors.bg, tokens.radius.sheet, centered)
+          : {
+              backgroundColor: colors.bg,
+              borderTopLeftRadius: tokens.radius.sheet,
+              borderTopRightRadius: tokens.radius.sheet,
+              ...(centered
+                ? {
+                    borderBottomLeftRadius: tokens.radius.sheet,
+                    borderBottomRightRadius: tokens.radius.sheet,
+                  }
+                : {}),
             }
-          : {}),
-      }}
+      }
       handleIndicatorStyle={{
         backgroundColor: colors.textSecondary,
         width: tokens.space.xxl,
@@ -971,9 +996,15 @@ export function Sheet({
               nestedScrollEnabled: true,
               enableFooterMarginAdjustment: !!footer,
               stickyHeaderIndices: [0],
-              contentContainerStyle: { paddingBottom: tokens.space.xxl },
+              contentContainerStyle: {
+                paddingBottom: tokens.space.xxl + (footer ? 0 : safeBottom),
+              },
             }
-          : { style: { paddingBottom: tokens.space.xxl } })}
+          : {
+              style: {
+                paddingBottom: tokens.space.xxl + (footer ? 0 : safeBottom),
+              },
+            })}
       >
         <View style={{ backgroundColor: colors.bg }}>
           <View
@@ -1027,6 +1058,7 @@ export function Screen({
   footer,
   headerAction,
   scrollStateKey,
+  immersive = false,
 }: {
   title: string;
   eyebrow: string;
@@ -1041,6 +1073,8 @@ export function Screen({
   showDemoNotice?: boolean;
   /** Preserve independent scroll positions for in-page sections such as Profile tabs. */
   scrollStateKey?: string;
+  /** Explicit full-screen media only; restores the status bar when focus leaves. */
+  immersive?: boolean;
 }) {
   const { styles, colors, tokens } = useTheme();
   const insets = useSafeAreaInsets();
@@ -1149,6 +1183,7 @@ export function Screen({
 
   return (
     <SafeAreaView edges={["top"]} style={styles.screen}>
+      {immersive && <ImmersiveStatusBar />}
       <View style={{ flex: 1 }}>
         {scroll ? (
           <Animated.ScrollView
@@ -1386,55 +1421,170 @@ export function AudiencePicker({
   id: string | null;
   onChange: (value: Audience, id: string | null) => void;
 }) {
-  const { styles, tokens } = useTheme();
-
   const { data, userId } = useBeacon();
-  const targets =
-    value === "list"
-      ? data.lists.filter((list) => list.owner_id === userId)
-      : value === "organization"
-        ? data.organizations.filter(
-            (org) =>
-              org.owner_id === userId ||
-              data.organization_members.some(
-                (member) =>
-                  member.organization_id === org.id &&
-                  member.user_id === userId &&
-                  member.status === "active",
-              ),
-          )
-        : data.squads.filter((squad) =>
-            data.squad_members.some(
-              (member) =>
-                member.squad_id === squad.id && member.user_id === userId,
-            ),
-          );
+  const { colors, styles } = useTheme();
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const groups: {
+    audience: Audience;
+    id: string;
+    name: string;
+    kind: string;
+  }[] = [
+    ...data.lists
+      .filter((x) => x.owner_id === userId)
+      .map((x) => ({
+        audience: "list" as const,
+        id: x.id,
+        name: x.name,
+        kind: "Private List",
+      })),
+    ...data.squads
+      .filter((x) =>
+        data.squad_members.some(
+          (m) => m.squad_id === x.id && m.user_id === userId,
+        ),
+      )
+      .map((x) => ({
+        audience: "squad" as const,
+        id: x.id,
+        name: x.name,
+        kind: "Squad",
+      })),
+    ...data.organizations
+      .filter(
+        (x) =>
+          !x.archived_at &&
+          (x.owner_id === userId ||
+            data.organization_members.some(
+              (m) =>
+                m.organization_id === x.id &&
+                m.user_id === userId &&
+                m.status === "active",
+            )) &&
+          !data.organization_bans.some(
+            (b) => b.organization_id === x.id && b.user_id === userId,
+          ),
+      )
+      .map((x) => ({
+        audience: "organization" as const,
+        id: x.id,
+        name: x.name,
+        kind: "Network",
+      })),
+  ];
+  const selected =
+    value === "friends"
+      ? "Friends"
+      : value === "private"
+        ? "Only me"
+        : groups.find((g) => g.audience === value && g.id === id)?.name;
+  const choices = [
+    {
+      audience: "friends" as Audience,
+      id: null,
+      name: "Friends",
+      kind: "Accepted friends",
+    },
+    {
+      audience: "private" as Audience,
+      id: null,
+      name: "Only me",
+      kind: "Private to you",
+    },
+    ...groups,
+  ].filter((g) =>
+    (g.name + " " + g.kind).toLowerCase().includes(query.trim().toLowerCase()),
+  );
   return (
-    <View style={{ gap: tokens.space.sm }}>
-      <Text style={styles.muted}>Who can see this?</Text>
-      <Chips
-        options={
-          ["private", "friends", "list", "squad", "organization"] as const
-        }
-        value={value}
-        onChange={(v) => onChange(v, null)}
-        showSelectedCheckmark={false}
-      />
-      {(value === "list" || value === "squad" || value === "organization") && (
-        <View style={{ gap: tokens.space.sm }}>
-          {targets.map((x) => (
-            <Button
-              key={x.id}
-              secondary={id !== x.id}
-              title={x.name}
-              onPress={() => onChange(value, x.id)}
-            />
-          ))}
-          {!targets.length && (
-            <Txt muted>Create a {value} in Squads first.</Txt>
-          )}
+    <View>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Choose audience"
+        onPress={() => setOpen(true)}
+        style={{
+          minHeight: 48,
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 8,
+          paddingVertical: 8,
+        }}
+      >
+        <Text style={{ color: colors.green, fontSize: 20 }}>＋</Text>
+        <View style={{ flex: 1, gap: 2 }}>
+          <Text style={styles.body}>{selected ?? "Choose audience"}</Text>
+          <Text style={styles.muted}>
+            {selected ? "Audience · Change" : "Choose one audience"}
+          </Text>
         </View>
-      )}
+      </Pressable>
+      <Sheet
+        title="Choose audience"
+        visible={open}
+        onClose={() => setOpen(false)}
+      >
+        <Field
+          label="Search audiences"
+          value={query}
+          onChangeText={setQuery}
+          placeholder="Friends, private lists, Squads, Networks…"
+        />
+        <Txt muted>
+          Choose one audience. Invitations to individual friends are separate.
+        </Txt>
+        <View>
+          {choices.map((g) => {
+            const chosen =
+              value === g.audience && (g.id === null || id === g.id);
+            return (
+              <Pressable
+                key={g.audience + (g.id ?? "")}
+                accessibilityRole="button"
+                accessibilityLabel={g.id ? `${g.name} · ${g.kind}` : g.name}
+                accessibilityState={{ selected: chosen }}
+                onPress={() => {
+                  onChange(g.audience, g.id);
+                  setOpen(false);
+                }}
+                style={{
+                  minHeight: 64,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 12,
+                  paddingVertical: 10,
+                  borderBottomWidth: StyleSheet.hairlineWidth,
+                  borderBottomColor: colors.line,
+                }}
+              >
+                {g.id ? (
+                  <Avatar name={g.name} size={36} />
+                ) : (
+                  <View
+                    style={{
+                      width: 36,
+                      height: 36,
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  >
+                    {g.audience === "private" ? (
+                      <Lock size={21} color={colors.muted} />
+                    ) : (
+                      <Users size={21} color={colors.muted} />
+                    )}
+                  </View>
+                )}
+                <View style={{ flex: 1, gap: 3 }}>
+                  <Text style={styles.body}>{g.name}</Text>
+                  <Text style={styles.muted}>{g.kind}</Text>
+                </View>
+                {chosen && <Check size={20} color={colors.green} />}
+              </Pressable>
+            );
+          })}
+          {!choices.length && <Txt muted>No matching audiences.</Txt>}
+        </View>
+      </Sheet>
     </View>
   );
 }

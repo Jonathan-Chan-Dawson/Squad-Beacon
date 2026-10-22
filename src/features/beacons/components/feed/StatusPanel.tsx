@@ -250,6 +250,7 @@ function CurrentBeaconStatusSetting({
 }
 
 export type StatusPanelProps = {
+  headerOverride?: React.ReactNode;
   initialDraft?: StatusDraft;
   advanced?: boolean;
   compact?: boolean;
@@ -276,6 +277,7 @@ export type StatusPanelProps = {
 };
 
 export function StatusPanel({
+  headerOverride,
   initialDraft,
   advanced = false,
   compact = false,
@@ -305,8 +307,10 @@ export function StatusPanel({
   const { data, userId } = useBeacon();
   const supportsAttachments =
     data.is_demo || data.capabilities?.status_attachments === true;
+  const supportsLiving = data.capabilities?.living_activity === true;
   const supportsCurrentBeacon =
-    data.is_demo || data.capabilities?.status_current_beacon === true;
+    !supportsLiving &&
+    (data.is_demo || data.capabilities?.status_current_beacon === true);
   const tick = useNow();
   const now = Math.max(tick, observedNow ?? 0);
   const currentBeaconOptions = supportsCurrentBeacon
@@ -358,6 +362,7 @@ export function StatusPanel({
   const [audienceId, setAudienceId] = useState<string | null>(
     initialDraft?.audienceId ?? null,
   );
+  const creationContinuation = useRef<(() => void) | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(advanced);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [available, setAvailable] = useState(initialDraft?.available ?? true);
@@ -661,49 +666,88 @@ export function StatusPanel({
 
   return (
     <>
-      {profilePill ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Edit your status"
-          disabled={saving}
-          onPress={status ? beginEdit : beginCreate}
-          style={({ pressed }) => ({
-            minHeight: 44,
-            paddingVertical: 7,
-            paddingHorizontal: 10,
-            borderRadius: 18,
-            backgroundColor: colors.surfaceRaised,
-            opacity: pressed ? 0.75 : 1,
-            flexDirection: "row",
-            alignItems: "center",
-            gap: 7,
-          })}
+      {headerOverride !== undefined ? (
+        headerOverride
+      ) : profilePill ? (
+        <View
+          style={
+            Platform.OS !== "web"
+              ? { flexDirection: "row", alignItems: "center", gap: 4 }
+              : undefined
+          }
         >
-          <View
-            style={{
-              width: 7,
-              height: 7,
-              borderRadius: 4,
-              backgroundColor: liveStatusColor,
-            }}
-          />
-          <Text
-            numberOfLines={2}
-            style={{
-              flex: 1,
-              color: liveStatusColor,
-              fontSize: 12,
-              lineHeight: 17,
-            }}
+          <Pressable
+            accessibilityRole="button"
+            ref={availabilityAnchorRef}
+            collapsable={false}
+            accessibilityLabel={
+              Platform.OS !== "web"
+                ? "Availability choices"
+                : "Edit your status"
+            }
+            disabled={saving}
+            onPress={
+              Platform.OS !== "web"
+                ? (onAvailability ?? beginCreate)
+                : status
+                  ? beginEdit
+                  : beginCreate
+            }
+            style={({ pressed }) => ({
+              minHeight: 44,
+              ...(Platform.OS !== "web" ? { flex: 1 } : {}),
+              paddingVertical: 7,
+              paddingHorizontal: 10,
+              borderRadius: 18,
+              backgroundColor: colors.surfaceRaised,
+              opacity: pressed ? 0.75 : 1,
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 7,
+            })}
           >
-            {saving
-              ? "Saving…"
-              : status
-                ? `${Date.parse(status.startsAt) > now ? "Scheduled" : Date.parse(status.endsAt) <= now ? "Ended" : status.available ? "Available" : "Unavailable"}`
-                : "Set your availability"}
-          </Text>
-          <ChevronDown size={13} color={colors.textSecondary} />
-        </Pressable>
+            <View
+              style={{
+                width: 7,
+                height: 7,
+                borderRadius: 4,
+                backgroundColor: liveStatusColor,
+              }}
+            />
+            <Text
+              numberOfLines={2}
+              style={{
+                flex: 1,
+                color: liveStatusColor,
+                fontSize: 12,
+                lineHeight: 17,
+              }}
+            >
+              {saving
+                ? "Saving…"
+                : status
+                  ? `${Date.parse(status.startsAt) > now ? "Scheduled" : Date.parse(status.endsAt) <= now ? "Ended" : status.available ? "Available" : "Unavailable"}`
+                  : "Set your availability"}
+            </Text>
+            <ChevronDown size={13} color={colors.textSecondary} />
+          </Pressable>
+          {Platform.OS !== "web" && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Status options"
+              disabled={saving}
+              onPress={status ? beginEdit : beginCreate}
+              style={{
+                minWidth: 44,
+                minHeight: 44,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Settings2 size={18} color={colors.textSecondary} />
+            </Pressable>
+          )}
+        </View>
       ) : avatarControl ? (
         <Pressable
           testID="profile-status-control"
@@ -1126,6 +1170,11 @@ export function StatusPanel({
         title={status ? "Edit your status" : "Share your status"}
         visible={editorVisible}
         onClose={onCloseEditor}
+        onDismiss={() => {
+          const next = creationContinuation.current;
+          creationContinuation.current = null;
+          next?.();
+        }}
         centered={Platform.OS === "web" && viewportWidth >= 768}
         maxHeightPercent={90}
         footer={
@@ -1146,7 +1195,7 @@ export function StatusPanel({
             <View style={{ gap: 6, alignItems: "center" }}>
               <NoteSpeechBubble>
                 <Field
-                  label="Activity Note"
+                  label="Status Note"
                   value={title}
                   onChangeText={setTitle}
                   maxLength={120}
@@ -1169,6 +1218,19 @@ export function StatusPanel({
             disabled={saving}
             picking={picking}
             onPicking={setPicking}
+            onCreate={(kind) => {
+              creationContinuation.current = () =>
+                router.push({
+                  pathname: kind === "beacon" ? "/create" : "/councils",
+                  params: {
+                    featureAfter: "yes",
+                    ...(kind === "beacon"
+                      ? {}
+                      : { newPing: "yes", creationKind: kind }),
+                  },
+                });
+              onCloseEditor();
+            }}
             onAttachment={(value) => {
               setAttachment(value);
               if (value && !attachment && presentation === "text_only")
@@ -1330,6 +1392,7 @@ export function StatusPanel({
               <View style={{ gap: 8 }}>
                 <View
                   style={{
+                    display: supportsLiving ? "none" : "flex",
                     flexDirection: "row",
                     alignItems: "center",
                     gap: 12,
@@ -1386,7 +1449,11 @@ export function StatusPanel({
             <View
               accessibilityRole="radiogroup"
               accessibilityLabel="Availability"
-              style={{ flexDirection: "row", gap: space.sm }}
+              style={{
+                display: supportsLiving ? "none" : "flex",
+                flexDirection: "row",
+                gap: space.sm,
+              }}
             >
               {[true, false].map((choice) => {
                 const selected = available === choice;

@@ -66,6 +66,8 @@ import { ActivityBadge } from "@/src/features/beacons/ActivityBadge";
 import { useNow } from "@/src/shared/useNow";
 import { HomeAction } from "./HomeAction";
 import { BeaconIcon } from "./BeaconIcon";
+import { DiscoveryBeaconCard } from "@/src/features/discovery/DiscoveryBeaconCard";
+import { shouldUseAdaptiveDiscoveryShell } from "@/src/features/discovery/discoveryCardPresentation";
 
 export type FeedRsvpStatus =
   "going" | "interested" | "requested" | "invited" | "declined" | "unknown";
@@ -86,6 +88,10 @@ export type BeaconFeedLocation = {
 export interface BeaconFeedCardProps {
   /** Homepage-only display treatments; other lists retain their existing layout. */
   presentation?: "personal-preview" | "home" | "discovery";
+  /** Opt into the shared compact shell on Browse and Map discovery surfaces. */
+  adaptiveDiscovery?: boolean;
+  /** Accessible controls owned by the containing surface, such as Map close. */
+  headerAccessory?: React.ReactNode;
   decorationEmoji?: string | null;
   animationVisible?: boolean;
   /** Use the compact home/list treatment while keeping the same permission and RSVP callbacks. */
@@ -93,6 +99,7 @@ export interface BeaconFeedCardProps {
   /** Emphasize a confirmed personal Beacon on the home hub. */
   featured?: boolean;
   planRelation?: string | null;
+  planContext?: { title: string; onPress: () => void };
   compactFooter?: React.ReactNode;
   activityId: string;
   title: string;
@@ -123,10 +130,14 @@ export interface BeaconFeedCardProps {
   isPast: boolean;
   saved: boolean;
   onOpen: () => void;
+  /** Opens the attendee roster when the current viewer is authorized. */
+  onOpenPeople?: () => void;
   /** Reject on failure so the card can show an error and avoid success feedback. */
   onRSVP: (status: FeedRsvpAction) => Promise<void> | void;
   /** Opens the route's RSVP choices when the viewer is already Going. */
   onChangeRSVP?: () => Promise<void> | void;
+  /** Optional accessible label for Map or other destination-specific details actions. */
+  detailsLabel?: string;
   onMap?: () => void;
   onChat?: () => void;
   onSave: () => Promise<void> | void;
@@ -294,11 +305,14 @@ function SwipeReveal({
 
 export function BeaconFeedCard({
   presentation,
+  adaptiveDiscovery = false,
+  headerAccessory,
   decorationEmoji,
   animationVisible = true,
   compact = false,
   featured = false,
   planRelation,
+  planContext,
   compactFooter,
   activityId,
   title,
@@ -325,8 +339,10 @@ export function BeaconFeedCard({
   isPast,
   saved,
   onOpen,
+  onOpenPeople,
   onRSVP,
   onChangeRSVP,
+  detailsLabel,
   onMap,
   onChat,
   onSave,
@@ -425,6 +441,9 @@ export function BeaconFeedCard({
   const editorial = presentation === "home" || presentation === "discovery";
   const secondaryMetadata = cardSecondaryMetadata(title, location, hostName);
   const categoryToken = tokens.categories[category] ?? tokens.categories.Other;
+  const previewAvatars = socialPreview?.rosterAllowed
+    ? socialPreview.attendeeAvatars
+    : (socialPreview?.friendAvatars ?? []);
 
   const notifySwipeState = useCallback((active: boolean) => {
     if (swipeActiveRef.current === active) return;
@@ -573,7 +592,76 @@ export function BeaconFeedCard({
       </Pressable>
     );
 
-  const card = (
+  const card = shouldUseAdaptiveDiscoveryShell(
+    presentation,
+    adaptiveDiscovery,
+  ) ? (
+    <DiscoveryBeaconCard
+      activityId={activityId}
+      title={title}
+      category={category}
+      decorationEmoji={decorationEmoji}
+      whenLabel={isCancelled ? "Cancelled" : isEnded ? "Ended" : whenText}
+      isLive={isLive}
+      locationLabel={
+        secondaryMetadata?.kind === "host" ? null : secondaryMetadata?.label
+      }
+      goingCount={socialPreview?.capacity.count ?? goingCount}
+      capacity={socialPreview?.capacity ?? null}
+      friendsGoing={socialPreview?.friendCount}
+      onOpenPeople={
+        socialPreview?.rosterAllowed ? onOpenPeople : undefined
+      }
+      hosted={isHost}
+      planContext={planContext}
+      headerAccessory={headerAccessory}
+      socialAvatars={
+        showAvatars && previewAvatars.length ? (
+          <AvatarStack people={previewAvatars} size={24} limit={3} />
+        ) : undefined
+      }
+      context={compactFooter}
+      metadataAccessory={
+        <BeaconCardEngagement activityId={activityId} mode="reactions" />
+      }
+      primaryAction={
+        <ParticipationButtons
+          controller={participation}
+          onOpen={onOpen}
+          hostingLabel={isHost ? "Hosting management" : undefined}
+          stretch
+          showMaybe={false}
+        />
+      }
+      onDetails={onOpen}
+      detailsLabel={detailsLabel}
+      menu={
+        <View ref={menuAnchor} collapsable={false}>
+          <HomeAction
+            label="More Beacon actions"
+            plain
+            disabled={busyAction !== null}
+            icon={<MoreHorizontal size={18} color={colors.textSecondary} />}
+            onPress={() => setMenuVisible(true)}
+          />
+        </View>
+      }
+      feedback={
+        <>
+          {participation.feedback}
+          {actionError ? (
+            <Text
+              accessibilityRole="alert"
+              accessibilityLiveRegion="polite"
+              style={{ color: colors.danger, ...tokens.type.caption }}
+            >
+              {actionError}
+            </Text>
+          ) : null}
+        </>
+      }
+    />
+  ) : (
     <Card
       testID={`beacon-feed-card-${activityId}`}
       style={{
@@ -973,6 +1061,7 @@ export function BeaconFeedCard({
             />
           </View>
           {participation.feedback}
+          {compactFooter}
         </>
       ) : compact ? (
         <>

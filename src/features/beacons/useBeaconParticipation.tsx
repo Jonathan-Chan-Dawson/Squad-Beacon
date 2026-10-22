@@ -227,11 +227,14 @@ export function ParticipationButtons({
   onOpen,
   stretch = false,
   showMaybe = true,
+  hostingLabel,
 }: {
   controller: ParticipationController;
   onOpen: () => void;
   stretch?: boolean;
   showMaybe?: boolean;
+  /** Presentation-only label override; the host action still opens the same route. */
+  hostingLabel?: string;
 }) {
   const { state, operation, perform, openChoices } = controller;
   if (!state) return null;
@@ -254,8 +257,14 @@ export function ParticipationButtons({
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
         <View style={{ flex: stretch ? 1 : undefined, minWidth: 88 }}>
           <HomeAction
-            title={operation.busy ? "Updating…" : state.primary}
-            label={state.primary}
+            title={
+              operation.busy
+                ? "Updating…"
+                : state.hosting && hostingLabel
+                  ? "Hosting"
+                  : state.primary
+            }
+            label={state.hosting && hostingLabel ? hostingLabel : state.primary}
             stretch={stretch}
             primary={!state.choices && primaryEnabled}
             disabled={operation.busy || !primaryEnabled}

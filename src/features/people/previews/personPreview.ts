@@ -234,7 +234,13 @@ export function selectPersonPreview(
           favorite.kind === "friend" &&
           favorite.target_id === personId,
       ),
-    availability: friendAvailabilityState(activeAvailability, now),
+    availability: (() => {
+      const presence=data.presence?.find(p=>p.owner_id===personId);
+      if(!presence)return friendAvailabilityState(activeAvailability,now);
+      if(!presence.availability||presence.availability_until&&Date.parse(presence.availability_until)<=now)return "unknown";
+      if(presence.availability==="busy")return "unavailable";
+      return presence.availability_until&&Date.parse(presence.availability_until)-now<=1800000?"ending-soon":"available";
+    })(),
     beacon,
     sharedContexts: sharedContexts(data, viewerId, personId),
     canViewMap: !!location,

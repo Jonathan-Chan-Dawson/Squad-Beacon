@@ -29,7 +29,7 @@ test("one activity search finds people by interest and connects through the exis
   const person = page.getByTestId("map-person-preview");
   await expect(person).toContainText("Auburn Hoops");
   await expect(
-    person.getByRole("button", { name: "View Profile", exact: true }),
+    person.getByRole("button", { name: "View profile", exact: true }),
   ).toBeVisible();
   await person.getByRole("button", { name: "Add Friend", exact: true }).click();
   await expect(
@@ -52,21 +52,23 @@ test("public discovery previews a coarse area before joining", async ({
     .first();
   await result.click();
   const preview = page.getByTestId("map-public-preview");
-  await expect(preview).toContainText("Approximate area");
+  await expect(preview).toContainText(/approximate area/i);
   await expect(preview).toContainText("Chicago");
   await preview.getByRole("button", { name: "Join", exact: true }).click();
   const joined = page.getByTestId("map-tooltip-card");
   await expect(joined).toContainText("Food? A walk?");
   await expect(
-    joined.getByRole("button", { name: "I'm Out", exact: true }),
+    joined.getByRole("button", { name: "Going \u2713", exact: true }),
   ).toBeVisible();
 });
 
-test("a compact Beacon preview leads to joining and the hosting community", async ({
+test("a compact Beacon preview joins independently and opens its community profile", async ({
   page,
 }) => {
   await page.goto("/");
   await page.getByRole("button", { name: /Explore the demo/ }).click();
+  await page.getByRole("button", { name: "Now", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Now", exact: true })).toHaveAttribute("aria-selected", "true");
   await page.getByRole("textbox", { name: searchName }).fill("basketball");
   await page
     .getByTestId("map-search-results")
@@ -74,21 +76,34 @@ test("a compact Beacon preview leads to joining and the hosting community", asyn
     .first()
     .click();
   const preview = page.getByTestId("map-tooltip-card");
-  await expect(preview).toContainText("Now");
+  await expect(preview).toContainText("Live");
   await preview.getByRole("button", { name: "Join", exact: true }).click();
   await expect(
-    preview.getByRole("button", { name: "I'm Out", exact: true }),
+    preview.getByRole("button", { name: "Going \u2713", exact: true }),
   ).toBeVisible();
   await preview
-    .getByRole("button", { name: "Hosted by Weekend Hoops", exact: true })
+    .getByRole("button", { name: "View Squad Weekend Hoops", exact: true })
     .click();
-  const community = page.getByRole("dialog", {
-    name: "Community preview",
-    exact: true,
-  });
+  await expect(page).toHaveURL(/\/squad\/weekend-hoops/);
+  const community = page.getByTestId("community-public-profile");
   await expect(community).toContainText("Weekend Hoops");
-  await community.getByRole("button", { name: "Join", exact: true }).click();
+  await community
+    .getByRole("button", { name: "Join Squad Weekend Hoops", exact: true })
+    .click();
   await expect(community).toHaveCount(0);
+  await page.goBack();
+  await expect(page.getByRole("button", { name: "Now", exact: true })).toHaveAttribute("aria-selected", "true");
+  await expect(page.getByTestId("map-tooltip-card")).toContainText(
+    "Pickup basketball",
+  );
+  await expect(
+    page
+      .getByTestId("beacon-community-row")
+      .getByRole("button", {
+        name: "View Squad Weekend Hoops, joined",
+        exact: true,
+      }),
+  ).toBeVisible();
 });
 
 for (const viewport of [

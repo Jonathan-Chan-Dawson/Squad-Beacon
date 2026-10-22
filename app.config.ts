@@ -4,7 +4,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   ...config,
   name: 'Squad Beacon',
   slug: 'Squad-Beacon',
-  userInterfaceStyle: 'light',
+  userInterfaceStyle: 'automatic',
   ios: { ...config.ios, bundleIdentifier: 'com.squadbeacon.app' },
   android: { ...config.android, package: 'com.squadbeacon.app' },
   plugins: [

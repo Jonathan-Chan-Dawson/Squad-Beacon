@@ -1,3 +1,7 @@
+import {
+  LivingActivitySection,
+  LivingActivityHighlights,
+} from "@/src/features/beacons/components/feed/LivingActivitySection";
 import React, { useEffect, useState } from "react";
 import { Text, View } from "react-native";
 import Animated, {
@@ -230,7 +234,19 @@ export function ProfileExperience({
   });
   const [statusViewerOpen, setStatusViewerOpen] = useState(false);
   const status = visibleSoloActivity(data, profile.id, userId, now);
-  const availability = friendAvailabilityState(status, now);
+  const presence = data.presence?.find((p) => p.owner_id === profile.id);
+  const availability = presence
+    ? !presence.availability ||
+      (presence.availability_until &&
+        Date.parse(presence.availability_until) <= now)
+      ? "unknown"
+      : presence.availability === "busy"
+        ? "unavailable"
+        : presence.availability_until &&
+            Date.parse(presence.availability_until) - now <= 1800000
+          ? "ending-soon"
+          : "available"
+    : friendAvailabilityState(status, now);
   const available = availability === "available";
   const availabilityColor =
     tokens.availability[
@@ -311,10 +327,12 @@ export function ProfileExperience({
         </Svg>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
           <View style={{ alignItems: "center", gap: 6, maxWidth: "46%" }}>
-            <StatusBubble
-              personId={profile.id}
-              onPress={() => setStatusViewerOpen(true)}
-            />
+            {!(data.is_demo || data.capabilities?.living_activity) && (
+              <StatusBubble
+                personId={profile.id}
+                onPress={() => setStatusViewerOpen(true)}
+              />
+            )}
             <MotionPressable
               testID="profile-avatar"
               accessibilityRole="button"
@@ -349,7 +367,9 @@ export function ProfileExperience({
             </Text>
             <Txt muted>@{profile.username}</Txt>
             {own ? (
-              <SharedStatusControl profilePill />
+              !(data.is_demo || data.capabilities?.living_activity) ? (
+                <SharedStatusControl profilePill />
+              ) : null
             ) : (
               availability !== "unknown" && (
                 <View
@@ -487,7 +507,22 @@ export function ProfileExperience({
           {actions}
         </View>
       </View>
-      {featured && (
+      {(data.is_demo || data.capabilities?.living_activity) &&
+        (own ? (
+          <SharedStatusControl livingLayout />
+        ) : (
+          <View style={{ gap: 12 }}>
+            <StatusBubble
+              personId={profile.id}
+              onPress={() => setStatusViewerOpen(true)}
+            />
+            <LivingActivitySection personId={profile.id} showLower={false} />
+          </View>
+        ))}
+      {(data.is_demo || data.capabilities?.living_activity) && (
+        <LivingActivityHighlights personId={profile.id} />
+      )}
+      {featured && !(data.is_demo || data.capabilities?.living_activity) && (
         <MotionPressable
           testID="profile-current-beacon"
           accessibilityRole="button"

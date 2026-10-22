@@ -1,3 +1,6 @@
+import { BeaconCommunitiesProvider } from "@/src/features/discovery/BeaconCommunityRow";
+import { useBeaconCommunities } from "@/src/features/discovery/useBeaconCommunities";
+import { finishCreationLocationPick } from "@/src/features/beacons/socialPlanningSession";
 import { MyBeaconsSheet } from "../MyBeaconsSheet";
 import { selectMyMapBeacons } from "../myBeacons";
 import { discoveryActivities } from "@/src/features/beacons/discoverySelectors";
@@ -57,7 +60,10 @@ import BeaconMap, {
 import { useBeacon } from "@/src/shared/store";
 import { useNow } from "@/src/shared/useNow";
 import { matchesSearch } from "@/src/shared/search";
-import { canReadBeaconActivity } from "@/src/features/beacons/beaconModules";
+import {
+  canReadBeaconActivity,
+  canUseBeaconModules,
+} from "@/src/features/beacons/beaconModules";
 import { creationHandoffParams } from "@/src/features/beacons/createHandoff";
 import { Button, IconButton, Sheet, Txt, useTheme } from "@/src/shared/ui";
 import { usePreferences } from "@/src/shared/preferences";
@@ -126,6 +132,7 @@ import {
   matchesSelectedCategories,
 } from "@/src/features/maps/mapUIselectors";
 import { MapTooltip } from "@/src/features/maps/MapTooltip";
+import { MapTooltipClose } from "@/src/features/maps/MapTooltipShell";
 import { physicalDirectionsUrl } from "@/src/features/maps/directions";
 import { pulseCopy } from "@/src/features/pulse/copy/pulse";
 import { usePulse } from "@/src/features/pulse/usePulse";
@@ -270,7 +277,8 @@ export default function MapScreen() {
     if (exploration.area?.kind === "near-me" && exploration.area.coordinate)
       nearMeArea.current = exploration.area;
   }, [exploration.area]);
-  const { data, userId, demo, loading, act, searchDirectory } = useBeacon();
+  const { data, userId, demo, loading, act, searchDirectory, refresh } = useBeacon();
+  useFocusEffect(useCallback(() => { void refresh(); }, [refresh]));
 
   const params = useLocalSearchParams<{
     beacon?: string;
@@ -281,6 +289,7 @@ export default function MapScreen() {
     mapPlan?: string;
     mapThread?: string;
     pickLocation?: string;
+    locationPicker?: string;
     inviteeIds?: string;
     statusSourceId?: string;
     startsAt?: string;
@@ -522,6 +531,8 @@ export default function MapScreen() {
   }));
   const [offline, setOffline] = useState(false);
   const [pickMode, setPickMode] = useState(false);
+  const [locationPickError, setLocationPickError] = useState("");
+  const [pickingForEditor, setPickingForEditor] = useState(false);
   const creationLocationContext = useRef<Record<string, string>>({});
   const [pickedMapPoint, setPickedMapPoint] = useState<{
     latitude: number;
@@ -1001,7 +1012,7 @@ export default function MapScreen() {
               .map((organization) => ({
                 id: organization.id,
                 label: organization.name,
-                kind: "Organization" as const,
+                kind: "Network" as const,
               })),
           ]
         : [],
@@ -1081,11 +1092,13 @@ export default function MapScreen() {
     exploration.area?.coordinate ?? viewport?.center,
   );
   const [publicSelection, setPublicSelection] = useState<string | null>(null);
+  const beaconCommunities = useBeaconCommunities([...activities.map((row) => row.id), ...publicDiscovery.rows.map((row) => row.activity_id), ...(selected ? [selected] : [])]);
   const rankedPublic = rankPublicBeaconSummaries(
     publicDiscovery.rows,
     data.profiles.find((row) => row.id === userId)?.interests ?? [],
     exploration.area?.label ?? null,
     now,
+    beaconCommunities.rows,
   );
   const selectedPublic = publicDiscovery.rows.find(
     (row) => row.activity_id === publicSelection,
@@ -1134,7 +1147,7 @@ export default function MapScreen() {
       discoveryRestore.current.selectionChanged = true;
       discoveryRestore.current.cameraChanged = true;
     }
-    setCompassSheetOpen(false);
+    closePopovers();
     setSelected(null);
     setPerson(null);
     setClusterActivityIds(null);
@@ -1226,8 +1239,8 @@ export default function MapScreen() {
     ) ?? null;
   const communityKind = {
     squad: "Squads",
-    space: "Spaces",
-    organization: "Organizations",
+    space: "Organizations",
+    organization: "Networks",
   } as const;
   const searchPlaceResults = safePlaces
     .filter(
@@ -1283,18 +1296,6 @@ export default function MapScreen() {
             canReadBeaconActivity(data, activity, userId),
         )
       : undefined;
-  const hostLink = focusedBeacon
-    ? data.activity_social_links.find(
-        (row) => row.activity_id === focusedBeacon.id,
-      )
-    : undefined;
-  const hostingCommunity = directoryRows.find((row) =>
-    hostLink
-      ? row.entity_type === hostLink.entity_type &&
-        row.entity_id === hostLink.entity_id
-      : focusedBeacon?.audience_id === row.entity_id &&
-        focusedBeacon.audience === row.entity_type,
-  );
   function openCommunity(row: SocialDirectorySummary) {
     setPlaceSearchOpen(false);
     if (row.action !== "joined")
@@ -1493,7 +1494,7 @@ export default function MapScreen() {
       discoveryRestore.current.selectionChanged = true;
       discoveryRestore.current.cameraChanged = true;
     }
-    setCompassSheetOpen(false);
+    closePopovers();
     setDetailTab(null);
     if (
       !userId ||
@@ -1542,6 +1543,7 @@ export default function MapScreen() {
 
   const startPickingLocation = useCallback(() => {
     creationLocationContext.current = {};
+    setPickingForEditor(false);
     setDetailTab(null);
     setCompassSheetOpen(false);
     setPulseSelection(null);
@@ -1577,16 +1579,22 @@ export default function MapScreen() {
     if (params.pickLocation !== "yes") return;
     const frame = requestAnimationFrame(() => {
       startPickingLocation();
+      setLocationPickError("");
       const context = creationHandoffParams(params);
       creationLocationContext.current = context;
+      setPickingForEditor(Platform.OS !== "web" && context.locationPicker === "editor");
       if (context.latitude && context.longitude)
         setPickedMapPoint({
           latitude: Number(context.latitude),
           longitude: Number(context.longitude),
-          label: context.placeLabel || "Pinned map location",
+          label: context.placeLabel || (Platform.OS !== "web" ? "Pinned location" : "Pinned map location"),
         });
+      else if (Platform.OS !== "web" && context.locationPicker === "editor")
+        setPickedMapPoint(null);
       router.setParams({
         pickLocation: undefined,
+        locationPicker: undefined,
+        planSession: undefined,
         inviteeIds: undefined,
         statusSourceId: undefined,
         startsAt: undefined,
@@ -1633,6 +1641,12 @@ export default function MapScreen() {
   }
 
   function exploreWorldPlace(place: WorldwidePlace) {
+    if (Platform.OS !== "web" && pickMode && isValidCoordinate(place.coordinate)) {
+      setPickedMapPoint({ ...place.coordinate, label: place.label });
+      setPlaceSearchOpen(false);
+      setControlCommand(previous => ({ kind: "focus", coordinates: [place.coordinate], revision: (previous?.revision ?? 0) + 1 }));
+      return;
+    }
     if (discoveryRestore.current) discoveryRestore.current.cameraChanged = true;
     if (!isValidCoordinate(place.coordinate)) return;
     clearRouteSelection();
@@ -2032,6 +2046,10 @@ export default function MapScreen() {
       return;
     setSelected(id);
     setPerson(null);
+    if (Platform.OS !== "web" && tab === "chat") {
+      router.push({ pathname: "/activity/[id]/chat", params: { id } });
+      return;
+    }
     if (tab === "overview") {
       setDetailTab(null);
       router.push({ pathname: "/activity/[id]", params: { id, from: "map" } });
@@ -2040,12 +2058,39 @@ export default function MapScreen() {
     setDetailTab(tab);
   }
 
+  function openActivityPeopleDetails(id: string) {
+    const activity = data.activities.find((row) => row.id === id);
+    if (
+      !userId ||
+      data.viewer_id !== userId ||
+      !activity ||
+      !canReadBeaconActivity(data, activity, userId)
+    )
+      return;
+    setSelected(id);
+    setPerson(null);
+    router.push({
+      pathname: "/activity/[id]",
+      params: {
+        id,
+        from: "map",
+        ...(canUseBeaconModules(data, activity, userId)
+          ? { tab: "people" }
+          : {}),
+      },
+    });
+  }
+
   function createBeaconHere() {
     if (!pickedMapPoint || !isValidCoordinate(pickedMapPoint)) return;
     const context = creationLocationContext.current;
+    const returnParams = Platform.OS !== "web" ? finishCreationLocationPick(userId, context.planSession, { ...pickedMapPoint, label: pickedMapPoint.label || "Pinned location" }) : undefined;
+    if (Platform.OS !== "web" && context.locationPicker === "editor" && !returnParams) { setLocationPickError("This editor is no longer available. Cancel and reopen your Beacon draft."); return; }
     creationLocationContext.current = {};
     setPickedMapPoint(null);
     setPickMode(false);
+    if (returnParams) { router.dismissTo({ pathname: "/create", params: returnParams }); return; }
+    if (Platform.OS !== "web" && context.planSession?.startsWith("creation:")) return;
     router.push({
       pathname: "/create",
       params: {
@@ -2109,6 +2154,9 @@ export default function MapScreen() {
   const displayControlVisible = availableControlHeight >= 98;
   const weatherControlVisible =
     weather.visible && availableControlHeight >= 152;
+  const beaconPreviewOpen =
+    (!!selectedPublic && !person && !selected) ||
+    (!!selected && !person && !detailTab);
   const activeAreaTarget = explorationTarget;
   const activeSearchVisible = placeSearchOpen || params.search === "yes";
   const shareIndicator = (
@@ -2240,6 +2288,7 @@ export default function MapScreen() {
   );
 
   return (
+    <BeaconCommunitiesProvider rows={beaconCommunities.rows} onRefresh={beaconCommunities.refresh}>
     <KeyboardAvoidingView
       testID="full-map-screen"
       onLayout={(event) => {
@@ -2335,7 +2384,7 @@ export default function MapScreen() {
                   setPickedMapPoint({
                     latitude,
                     longitude,
-                    label: "Pinned map location",
+                    label: Platform.OS !== "web" ? "Pinned location" : "Pinned map location",
                   })
               : undefined
           }
@@ -2691,6 +2740,9 @@ export default function MapScreen() {
                       setPlaceSearchOpen(true);
                     }}
                   />
+                  <Button title="Browse Communities" compact secondary onPress={() => router.push("/communities")} />
+                  <Button title="Find Friends" compact secondary onPress={() => router.push("/find-friends")} />
+                  {publicDiscovery.error ? <Button title="Retry public Beacons" compact secondary onPress={publicDiscovery.refresh} /> : null}
                   <IconButton
                     label="Create Beacon"
                     onPress={() => router.push("/create")}
@@ -2774,8 +2826,9 @@ export default function MapScreen() {
       {!pickMode &&
       !pickedMapPoint &&
       !activeSearchVisible &&
-      controlsVisible ? (
+      controlsVisible && !beaconPreviewOpen ? (
         <View
+          testID="map-control-rail"
           pointerEvents="box-none"
           style={{
             position: "absolute",
@@ -3015,16 +3068,20 @@ export default function MapScreen() {
             <IconButton
               label="Cancel location selection"
               onPress={() => {
+                const context = creationLocationContext.current;
+                const returnParams = Platform.OS !== "web" ? finishCreationLocationPick(userId, context.planSession) : undefined;
                 creationLocationContext.current = {};
                 setPickedMapPoint(null);
                 setPickMode(false);
+                if (returnParams) router.dismissTo({ pathname: "/create", params: returnParams });
               }}
             >
               <Text style={{ color: colors.green, fontSize: 19 }}>×</Text>
             </IconButton>
           </View>
+          {!!locationPickError && <Text accessibilityRole="alert" style={styles.error}>{locationPickError}</Text>}
           {pickedMapPoint ? (
-            <Button title="Create Beacon here" onPress={createBeaconHere} />
+            <Button title={pickingForEditor ? "Use this location" : "Create Beacon here"} onPress={createBeaconHere} />
           ) : null}
         </View>
       ) : null}
@@ -3032,6 +3089,8 @@ export default function MapScreen() {
       {selectedPublic && !person && !selected && (
         <MapCallout
           testID="map-public-callout"
+          compact
+          maxWidth={mapTooltip.width}
           anchor={null}
           bounds={{
             ...mapSize,
@@ -3039,15 +3098,28 @@ export default function MapScreen() {
             bottom: 24,
           }}
         >
-          <PublicBeaconPreview
-            key={selectedPublic.activity_id}
-            summary={selectedPublic}
-            onClose={() => setPublicSelection(null)}
-            onJoined={(id) => {
-              setPublicSelection(null);
-              router.setParams({ beacon: id });
-            }}
-          />
+          <ScrollView
+            keyboardShouldPersistTaps="handled"
+            style={{ maxHeight: mapTooltip.maxHeight }}
+            contentContainerStyle={{ paddingBottom: 0 }}
+          >
+            <PublicBeaconPreview
+              key={selectedPublic.activity_id}
+              summary={selectedPublic}
+              adaptiveDiscovery
+              headerAccessory={
+                <MapTooltipClose
+                  label="Close map preview"
+                  onClose={() => setPublicSelection(null)}
+                />
+              }
+              onClose={() => setPublicSelection(null)}
+              onJoined={(id) => {
+                setPublicSelection(null);
+                router.setParams({ beacon: id });
+              }}
+            />
+          </ScrollView>
         </MapCallout>
       )}
       {person || (selected && !detailTab) ? (
@@ -3067,9 +3139,13 @@ export default function MapScreen() {
             ...mapSize,
             top: headerTop + headerHeight + 12,
             bottom: 24,
-            exclusionRight: mapTooltip.controlRailWidth,
-            exclusionBottom:
-              headerTop + headerHeight + mapTooltip.controlRailHeight,
+            ...(person
+              ? {
+                  exclusionRight: mapTooltip.controlRailWidth,
+                  exclusionBottom:
+                    headerTop + headerHeight + mapTooltip.controlRailHeight,
+                }
+              : {}),
           }}
         >
           <ScrollView
@@ -3087,19 +3163,12 @@ export default function MapScreen() {
               />
             ) : (
               <MapTooltip
-                community={
-                  hostingCommunity
-                    ? {
-                        name: hostingCommunity.name,
-                        onPress: () => openCommunity(hostingCommunity),
-                      }
-                    : undefined
-                }
                 onShowContext={focusContext}
                 beaconId={selected}
                 personId={null}
                 pinned={!!focusedPlace}
                 onDetails={() => selected && openActivityDetails(selected)}
+                onOpenPeople={() => selected && openActivityPeopleDetails(selected)}
                 onPerson={choosePerson}
                 onFeature={(feature) =>
                   selected && openActivityDetails(selected, feature)
@@ -3160,6 +3229,7 @@ export default function MapScreen() {
           key={selected}
           onShowContext={focusContext}
           beaconId={selected}
+          onFocusLocation={(id) => { setDetailTab(null); selectMyBeacon(id); }}
           initialTab={detailTab}
           onBeacon={(id) => openActivityDetails(id)}
           onClose={() => setDetailTab(null)}
@@ -3425,5 +3495,6 @@ export default function MapScreen() {
           })()
         : null}
     </KeyboardAvoidingView>
+    </BeaconCommunitiesProvider>
   );
 }

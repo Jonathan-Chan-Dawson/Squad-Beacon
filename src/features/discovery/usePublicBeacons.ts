@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useFocusEffect } from "expo-router";
 import { useBeacon } from "@/src/shared/store";
 import { supabase } from "@/src/shared/supabase";
 import { demoPublicBeacons, parsePublicBeaconRows } from "./publicDirectory";
@@ -10,6 +11,13 @@ export function usePublicBeacons(
   coordinate?: Coordinate | null,
 ) {
   const { data, userId, demo, getViewerEpoch, viewerEpoch } = useBeacon();
+  const [revision, setRevision] = useState(0);
+  const refresh = useCallback(() => setRevision((value) => value + 1), []);
+  useFocusEffect(
+    useCallback(() => {
+      refresh();
+    }, [refresh]),
+  );
   const [result, setResult] = useState<{
     snapshot: typeof data;
     key: string;
@@ -22,18 +30,26 @@ export function usePublicBeacons(
   const longitude = coordinate
     ? Math.round(coordinate.longitude * 10) / 10
     : null;
-  const key = JSON.stringify([userId, viewerEpoch, query, latitude, longitude]);
+  const key = JSON.stringify([
+    userId,
+    viewerEpoch,
+    query,
+    latitude,
+    longitude,
+    revision,
+  ]);
   useEffect(() => {
     if (!userId || data.viewer_id !== userId || demo || !supabase) return;
     let current = true;
     const epoch = getViewerEpoch();
     const timer = setTimeout(() => {
-      void supabase!
-        .rpc("public_beacon_search", {
+      void Promise.resolve(
+        supabase!.rpc("public_beacon_search", {
           p_query: query,
           p_lat: latitude,
           p_lng: longitude,
-        })
+        }),
+      )
         .then(({ data: rows, error }) => {
           if (current && epoch === getViewerEpoch())
             setResult({
@@ -43,6 +59,15 @@ export function usePublicBeacons(
               ...(error
                 ? { error: "Public Beacons could not load. Try again shortly." }
                 : {}),
+            });
+        })
+        .catch(() => {
+          if (current && epoch === getViewerEpoch())
+            setResult({
+              snapshot: data,
+              key,
+              rows: [],
+              error: "Public Beacons could not load. Try again shortly.",
             });
         });
     }, 250);
@@ -56,8 +81,9 @@ export function usePublicBeacons(
       rows: demoPublicBeacons(data, userId, query),
       error: undefined,
       ready: true,
+      refresh,
     };
   return result?.snapshot === data && result.key === key
-    ? { ...result, ready: true }
-    : { rows: [], error: undefined, ready: false };
+    ? { ...result, ready: true, refresh }
+    : { rows: [], error: undefined, ready: false, refresh };
 }

@@ -1,3 +1,4 @@
+import { randomUUID } from "expo-crypto";
 import { demoRoutineCalendar, parseRoutineCalendarResult, validateRoutineCalendarRange, type RoutineCalendarRange, type RoutineCalendarResult } from "@/src/features/beacons/calendarRoutineProjection";
 import React, {
   createContext,
@@ -128,6 +129,15 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
       setData(emptyData());
       setError(failure.message);
     } else {
+      if (next?.capabilities?.living_activity === true) {
+        const result=await supabase.rpc("beacon_action",{action:"reconcile_current_activity",payload:{},request_id:randomUUID()});
+        if (generation !== epoch.current || sequence !== fetchId.current) return;
+        if (!result.error) {
+          const updated=await supabase.rpc("beacon_snapshot");
+          if (generation !== epoch.current || sequence !== fetchId.current) return;
+          if (!updated.error) Object.assign(next,updated.data);
+        }
+      }
       setData({
         ...normalizeData(next),
         viewer_id: session.user.id,
@@ -324,7 +334,7 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
           );
         const atomic = action === "create_activity_with_invitees" || action === "create_plan_beacon_with_invitees";
         const requestKey = requestId ? `${DEMO_ID}:${action}:${requestId}` : "";
-        if (atomic && requestKey && demoRequests.current.has(requestKey)) return demoRequests.current.get(requestKey)!;
+        if (requestKey && demoRequests.current.has(requestKey)) return demoRequests.current.get(requestKey)!;
         let next: Data;
         try { next = demoAction(baseData, action, payload); }
         catch (failure) {
@@ -336,6 +346,12 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
           const created=next.activities.find((item)=>!baseData.activities.some((previous)=>previous.id===item.id));
           const result={id:created?.id,event:action,committed:true,invited_ids:payload.invitee_ids};
           if (requestKey) demoRequests.current.set(requestKey,result);
+          return result;
+        }
+        if (["save_activity_note","end_activity_note","update_presence","reconcile_current_activity"].includes(action)) {
+          const note=next.activities.find(a => a.owner_id===DEMO_ID && a.solo_purpose==="activity_note" && (!baseData.activities.some(b => b.id===a.id) || a.id===payload.id));
+          const result={event:action,id:note?.id ?? payload.id,committed:true};
+          if(requestKey) demoRequests.current.set(requestKey,result);
           return result;
         }
         if (action === "save_status_note" || action === "clear_status_notes") {
@@ -470,7 +486,9 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
               (item) =>
                 !baseData.planning_threads.some((old) => old.id === item.id),
             );
-          return thread ? { id: thread.id, status: thread.status } : {};
+          const result=thread ? { id: thread.id, status: thread.status } : {};
+          if(requestKey)demoRequests.current.set(requestKey,result);
+          return result;
         }
         if (action === "convert_planning_ping") {
           const thread = next.planning_threads.find(
@@ -491,9 +509,9 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
               (item) =>
                 !baseData.planning_proposals.some((old) => old.id === item.id),
             );
-          return proposal
-            ? { id: proposal.id, thread_id: proposal.thread_id }
-            : {};
+          const result=proposal ? { id: proposal.id, thread_id: proposal.thread_id } : {};
+          if(requestKey)demoRequests.current.set(requestKey,result);
+          return result;
         }
         if (
           action === "resolve_planning_thread" ||
@@ -515,8 +533,9 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
       const generation = epoch.current;
       const viewer = session.user.id;
       const atomicCreation = action === "create_activity_with_invitees" || action === "create_plan_beacon_with_invitees";
+      const actorScoped = atomicCreation || ["rsvp","save_activity_note","end_activity_note","update_presence","save_status_note","create_planning_thread","add_council_proposal"].includes(action);
       const assertAtomicViewer = () => {
-        if ((atomicCreation || action === "rsvp") && (generation !== epoch.current || dataRef.current.viewer_id !== viewer)) throw new Error(action === "rsvp" ? "Your account changed. Refresh before responding." : "Your account changed before publication. Return to the account that started this Beacon.");
+        if (actorScoped && (generation !== epoch.current || dataRef.current.viewer_id !== viewer)) throw new Error(action === "rsvp" ? "Your account changed. Refresh before responding." : "Your account changed before publication. Return to the account that started this Beacon.");
       };
       assertAtomicViewer();
       const network = await Network.getNetworkStateAsync();
@@ -526,7 +545,7 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
         network.isInternetReachable === false
       )
         throw new Error("Reconnect to save changes. Nothing was queued.");
-      const result = await rpc(action, payload, requestId, atomicCreation || action === "rsvp" ? viewer : undefined);
+      const result = await rpc(action, payload, requestId, actorScoped ? viewer : undefined);
       assertAtomicViewer();
       if (generation === epoch.current) await refresh();
       assertAtomicViewer();

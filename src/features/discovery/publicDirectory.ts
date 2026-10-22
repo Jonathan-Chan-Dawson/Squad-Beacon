@@ -1,6 +1,6 @@
 import type { Data } from "@/src/shared/types";
 import type { PublicBeaconSummary } from "./types";
-import { beaconCapacity } from "@/src/features/beacons/permissions";
+import { beaconCapacity, isApprovedGoing } from "@/src/features/beacons/permissions";
 import { matchesSearch } from "@/src/shared/search";
 
 export function parsePublicBeaconRows(value: unknown): PublicBeaconSummary[] {
@@ -108,8 +108,7 @@ export function demoPublicBeacons(
         (row) =>
           row.activity_id === activity.id &&
           row.user_id === viewerId &&
-          (row.status === "requested" ||
-            (row.status === "going" && row.approved)),
+          (row.status === "requested" || isApprovedGoing(activity, row)),
       )?.status as "going" | "requested" | undefined,
     };
     return matchesSearch(

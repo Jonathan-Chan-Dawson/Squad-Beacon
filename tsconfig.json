@@ -9,6 +9,7 @@
   "include": ["**/*.ts", "**/*.tsx", ".expo/types/**/*.ts", "expo-env.d.ts"],
   "exclude": [
     "node_modules",
+    "dist-native",
     "supabase/functions",
     "tests",
     "playwright.config.ts"

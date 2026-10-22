@@ -171,6 +171,7 @@ export function StatusAttachmentEditor({
   disabled,
   picking,
   onPicking,
+  onCreate,
 }: {
   attachment: StatusAttachment | null;
   presentation: StatusPresentation;
@@ -179,10 +180,14 @@ export function StatusAttachmentEditor({
   disabled?: boolean;
   picking: boolean;
   onPicking(value: boolean): void;
+  onCreate(kind: "ping" | "beacon" | "council"): void;
 }) {
   const { data, userId } = useBeacon();
   const now = useNow();
   const [query, setQuery] = useState("");
+  const [sourceChoice, setSourceChoice] = useState<"existing" | "new" | null>(
+    null,
+  );
   const [filter, setFilter] = useState("All");
   const [limit, setLimit] = useState(20);
   const modeRefs = useRef<(View | null)[]>([]);
@@ -213,7 +218,50 @@ export function StatusAttachmentEditor({
   );
   return (
     <View style={{ gap: 10 }}>
-      {picking ? (
+      {picking && sourceChoice === null ? (
+        <View style={{ gap: 8 }}>
+          <Button
+            secondary
+            title="Choose Existing"
+            onPress={() => setSourceChoice("existing")}
+          />
+          <Button
+            secondary
+            title="Create New"
+            onPress={() => setSourceChoice("new")}
+          />
+          <Button
+            compact
+            secondary
+            title="Back to note"
+            onPress={() => onPicking(false)}
+          />
+        </View>
+      ) : picking && sourceChoice === "new" ? (
+        <View style={{ gap: 8 }}>
+          <Button
+            secondary
+            title="Create Ping"
+            onPress={() => onCreate("ping")}
+          />
+          <Button
+            secondary
+            title="Create Beacon"
+            onPress={() => onCreate("beacon")}
+          />
+          <Button
+            secondary
+            title="Create Council"
+            onPress={() => onCreate("council")}
+          />
+          <Button
+            compact
+            secondary
+            title="Back"
+            onPress={() => setSourceChoice(null)}
+          />
+        </View>
+      ) : picking ? (
         <>
           <Text
             accessibilityRole="header"
@@ -281,7 +329,10 @@ export function StatusAttachmentEditor({
                 attachment ? "Change attached activity" : "Attach Activity"
               }
               disabled={disabled}
-              onPress={() => onPicking(true)}
+              onPress={() => {
+                setSourceChoice(null);
+                onPicking(true);
+              }}
               style={{ flex: 1, minHeight: 44, justifyContent: "center" }}
             >
               <Text style={{ color: colors.green, fontWeight: "500" }}>

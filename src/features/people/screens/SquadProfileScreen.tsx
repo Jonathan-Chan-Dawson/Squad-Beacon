@@ -22,6 +22,10 @@ import {
   ProfileSection,
 } from "@/src/features/people/components/ProfilePrimitives";
 import { ActivityCard } from "@/src/features/beacons/ActivityCard";
+import { CommunityPublicBeacons } from "@/src/features/discovery/CommunityPublicBeacons";
+import { CommunityPublicProfile } from "@/src/features/discovery/CommunityPublicProfile";
+import { communityProfileMode } from "@/src/features/discovery/communityPublicProfileAccess";
+import { communityTypeLabel } from "@/src/features/social/communityPresentation";
 import { canViewProfile } from "@/src/features/profile/privacy";
 import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
 import { activityWhen, friendIds } from "@/src/shared/domain";
@@ -54,7 +58,6 @@ import {
 } from "@/src/shared/ui";
 import {
   squadProfilePreviews,
-  publicSquadBeaconPreviews,
   canOpenSquadProfile,
   squadHistory,
   squadSizeLabel,
@@ -151,13 +154,9 @@ export default function SquadProfileScreen() {
     squadId && canOpenSquadProfile(data, squadId, userId)
       ? data.squads.find((item) => item.id === squadId)
       : undefined;
-  const isCurrentMember =
-    !!memberSquad &&
-    (summaryLoading || summary?.membership_status === "active");
+  const profileMode = communityProfileMode(summary, !!memberSquad, summaryLoading);
+  const isCurrentMember = profileMode === "member";
   const squad = isCurrentMember ? memberSquad : undefined;
-  const publicBeaconPreviews = squadId && userId
-    ? publicSquadBeaconPreviews(data, squadId, userId, summary)
-    : [];
   const viewerRole = data.squad_members.find(
     (member) => member.squad_id === squadId && member.user_id === userId,
   )?.role;
@@ -346,14 +345,14 @@ export default function SquadProfileScreen() {
       </Screen>
     );
   }
-  if (!isCurrentMember && summaryLoading) {
+  if (profileMode === "loading") {
     return (
       <Screen title="Squad profile" eyebrow="SQUAD PROFILE" compactHeader create={false}>
         <Txt muted>Loading Squad profile…</Txt>
       </Screen>
     );
   }
-  if (!isCurrentMember && !summary) {
+  if (profileMode === "unavailable" || !summary) {
     return (
       <Screen title="Squad unavailable" eyebrow="SQUAD PROFILE" compactHeader create={false}>
         <Empty
@@ -367,106 +366,16 @@ export default function SquadProfileScreen() {
       </Screen>
     );
   }
-  if (!isCurrentMember && summary) {
-    const invite = data.squad_invites.find(
-      (item) => item.squad_id === summary.entity_id && item.recipient_id === userId,
-    );
+  if (profileMode === "summary" && summary) {
     return (
       <Screen
-        title="Squad"
+        title={communityTypeLabel("squad")}
         eyebrow="SQUAD PROFILE"
         compactHeader
         showDemoNotice={false}
         create={false}
       >
-        <View style={{ gap: 12 }}>
-          <View style={[styles.row, { gap: 12 }]}>
-            <CommunityAvatar size={46} />
-            <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
-              <Text style={styles.h2}>{summary.name}</Text>
-              <Txt muted>
-                {summary.member_count} {summary.member_count === 1 ? "member" : "members"} · {summary.discoverability === "public" ? "Public" : summary.discoverability === "community" ? "Community" : "Private"} Squad
-              </Txt>
-            </View>
-          </View>
-          {summary.action === "join" ? (
-            <Action
-              title="Join Squad"
-              run={async () => {
-                await act("join_squad", { squad_id: summary.entity_id });
-                await refreshSummary();
-              }}
-            />
-          ) : summary.action === "request" ? (
-            <Action
-              title="Request to join"
-              run={async () => {
-                await act("request_squad_join", { squad_id: summary.entity_id });
-                await refreshSummary();
-              }}
-            />
-          ) : summary.action === "requested" ? (
-            <Action
-              title="Cancel join request"
-              secondary
-              run={async () => {
-                await act("cancel_squad_join_request", { squad_id: summary.entity_id });
-                await refreshSummary();
-              }}
-            />
-          ) : summary.action === "invited" && invite ? (
-            <Action
-              title="Accept invitation"
-              run={async () => {
-                await act("accept_squad", { id: invite.id });
-                await refreshSummary();
-              }}
-            />
-          ) : summary.action === "invite_required" ? (
-            <Txt muted>An invitation is required to join this Squad.</Txt>
-          ) : null}
-          {summary.parent_name && summary.parent_type ? (
-            <ProfileLink
-              title={summary.parent_name}
-              detail={summary.parent_type === "space" ? "Organization association" : "Network association"}
-              onPress={() =>
-                router.push(
-                  summary.parent_type === "space"
-                    ? { pathname: "/space/[id]", params: { id: summary.parent_id! } }
-                    : { pathname: "/organization/[id]", params: { id: summary.parent_id! } },
-                )
-              }
-            />
-          ) : null}
-          {publicBeaconPreviews.length ? (
-            <ProfileSection title="What's happening">
-              {publicBeaconPreviews.map(({ activity, timing }) => (
-                <Pressable
-                  key={activity.id}
-                  testID="squad-activity-preview"
-                  accessibilityRole="button"
-                  accessibilityLabel={`Open ${activity.title}`}
-                  onPress={() => router.push({ pathname: "/activity/[id]", params: { id: activity.id } })}
-                  style={[styles.row, { minHeight: 48 }]}
-                >
-                  <CalendarClock size={18} color={colors.green} />
-                  <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
-                    <Text style={styles.body} numberOfLines={1}>{activity.title}</Text>
-                    <Txt muted>
-                      {timing === "current" ? "Current Beacon" : "Upcoming Beacon"} · {activityWhen(activity)}
-                    </Txt>
-                  </View>
-                  <ChevronRight size={17} color={colors.muted} />
-                </Pressable>
-              ))}
-            </ProfileSection>
-          ) : null}
-          {summary.description ? (
-            <ProfileSection title="About">
-              <Txt>{summary.description}</Txt>
-            </ProfileSection>
-          ) : null}
-        </View>
+        <CommunityPublicProfile summary={summary} onSummaryChanged={refreshSummary} />
       </Screen>
     );
   }
@@ -702,6 +611,14 @@ export default function SquadProfileScreen() {
               onPress={() => selectTab("Activity")}
             />
           ) : null}
+
+          <CommunityPublicBeacons
+            type="squad"
+            entityId={activeSquadId}
+            excludeActivityIds={overviewPreviews.flatMap((preview) =>
+              preview.kind === "beacon" ? [preview.activity.id] : [],
+            )}
+          />
 
           <ProfileSection
             title={`Members · ${members.length}`}
