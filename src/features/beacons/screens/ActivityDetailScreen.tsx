@@ -1,3 +1,4 @@
+import { BeaconOrganizerRoles } from "../components/BeaconOrganizerRoles";
 import { pageAnimation } from "@/src/shared/mobilePresentation";
 import { BeaconSupplies, BeaconReadiness } from "../components/BeaconSupplies";
 import { BeaconCardEngagement } from "../components/BeaconCardEngagement";
@@ -1328,6 +1329,7 @@ export default function ActivityDetail() {
             {visibleTab === "People" ? (
               <View style={{ gap: tokens.space.md }}>
                 <BeaconSupplies activity={activity} />
+                <BeaconOrganizerRoles activity={activity} />
                 <ActivityDetailPeople
                   going={goingRows}
                   maybe={maybeRows}

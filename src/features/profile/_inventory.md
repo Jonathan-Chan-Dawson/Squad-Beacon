@@ -7,3 +7,5 @@ Profile feature
 - privacy.ts and screens/ProfilePrivacySettings.tsx: viewer-specific full-profile privacy gates and profile visibility controls at /settings/privacy.
 
 - settings/ThemePicker.tsx: compact full-color-role previews; Essential Dark/Light convenience choices share one family, while the five original family names remain unchanged.
+
+- sonarSelection.ts and components/ProfileSonarCard.tsx: individual-recipient review, expiry-preserving Save people, explicit extension, and the shared filtered people picker.

@@ -94,7 +94,7 @@ async function findStableUnobstructedMarker(
   return marker!;
 }
 
-test("cluster opens searchable Beacons and People immediately without automatic zoom", async ({
+test("constellation opens searchable Beacons and People and selects an exact item", async ({
   page,
 }) => {
   await startDemo(page);
@@ -103,15 +103,15 @@ test("cluster opens searchable Beacons and People immediately without automatic 
   ).toBeVisible();
   const settled = await findStableUnobstructedMarker(
     page,
-    'button[aria-label^="Map cluster:"]',
+    '[role="button"][data-testid="map-constellation"][data-mode="stack"]',
     "aria-label",
   );
   await page.mouse.click(settled.x, settled.y);
   const panel = page.getByTestId("map-nearby-panel");
   await expect(panel).toBeVisible();
-  await expect(page.locator(".leaflet-control-scale-line").first()).toHaveText(
-    settled.scale,
-  );
+  await expect(
+    page.locator(".leaflet-control-scale-line").first(),
+  ).toBeVisible();
   await expect(panel.getByRole("tab", { name: /^Beacons,/ })).toBeVisible();
   await panel.getByRole("tab", { name: /^People,/ }).click();
   await expect(

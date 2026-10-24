@@ -17,7 +17,7 @@ import { Button, IconButton, useTheme } from "@/src/shared/ui";
 import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
 import { canViewProfile } from "@/src/features/profile/privacy";
 import { usePreferences } from "@/src/shared/preferences";
-import { ActivityBadge } from "./ActivityBadge";
+import { BeaconIdentity } from "./components/BeaconIdentity";
 import { BeaconResponse } from "./BeaconResponse";
 import { canUseBeaconModules } from "./beaconModules";
 import { Card, useDesignTheme } from "@/src/shared/design-system";
@@ -109,15 +109,15 @@ export function ActivityCard({
   return (
     <Card
       style={{
-          padding: tokens.space.md,
-          gap: tokens.space.sm,
-          borderLeftWidth: 4,
-          borderLeftColor: highlighted
+        padding: tokens.space.md,
+        gap: tokens.space.sm,
+        borderLeftWidth: 4,
+        borderLeftColor: highlighted
+          ? designColors.accent
+          : live
             ? designColors.accent
-            : live
-              ? designColors.accent
-              : designColors.border,
-        }}
+            : designColors.border,
+      }}
     >
       <View style={[styles.row, { gap: 8 }]}>
         <Pressable
@@ -142,19 +142,11 @@ export function ActivityCard({
             },
           ]}
         >
-          <ActivityBadge category={activity.category} size={36} />
-          <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-            <Text
-              numberOfLines={2}
-              maxFontSizeMultiplier={tokens.type.denseMaxMultiplier}
-              style={[styles.h2, tokens.type.headline]}
-            >
-              {activity.title}
-            </Text>
-            <Text numberOfLines={1} style={styles.muted}>
-              {owner?.name ?? "Squad member"} {"\u00b7"} {activity.category}
-            </Text>
-          </View>
+          <BeaconIdentity
+            title={activity.title}
+            category={activity.category}
+            subtitle={`${owner?.name ?? "Squad member"} · ${activity.category}`}
+          />
         </Pressable>
         <View style={{ alignItems: "center", gap: 2 }}>
           <IconButton

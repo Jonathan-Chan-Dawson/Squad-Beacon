@@ -1,3 +1,19 @@
+import { validCreationMeetingLink } from "../creationValidation";
+import { BeaconIdentity } from "../components/BeaconIdentity";
+import { CreationDateField } from "../components/CreationDateField";
+import { localDate, validateActivity } from "@/src/shared/domain";
+import { addLocalDays } from "@/src/features/plans/routines";
+import { planLocalDateTimeToISO } from "@/src/features/plans/domain";
+import {
+  CreationRow,
+  CreationSwitch,
+  CreationModuleControls,
+} from "../components/CreationControls";
+import { creationModules } from "../creationModules";
+import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
+import { DECORATION_ACCENTS, DECORATION_EMOJIS } from "../controls";
+import { runFrozenPublication, type FrozenPublication } from "../draftSnapshot";
+
 import { activityNoteSeed } from "../livingActivity";
 import { CreationLocationInput } from "../components/CreationLocationInput";
 import { SocialSelector } from "@/src/features/people/components/SocialSelector";
@@ -5,9 +21,12 @@ import { randomUUID } from "expo-crypto";
 import { usesSharedStatusEditor } from "../statusRouteSeed";
 import { LegacyStatusScreen } from "./LegacyStatusScreen";
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { Platform, Text, View } from "react-native";
+import { Pressable, Text, View, type TextInput } from "react-native";
 import { router, useLocalSearchParams, type Href } from "expo-router";
 import {
+  saveCreationDraft,
+  restoreCreationDraft,
+  setCreationDraftField,
   startCreationDraft,
   beginCreationLocationPick,
   usePlanningDraftState,
@@ -16,13 +35,11 @@ import {
   hasPlanningDraftField,
   completePlanningDraft,
 } from "../socialPlanningSession";
+
 import { CreationInvitees } from "../components/feed/CreationInvitees";
 import { CreateHome } from "@/src/features/beacons/CreateHome";
 import { canReadPlanningThread } from "@/src/features/planning/domain";
 import type { BeaconDraft } from "@/src/features/planning/types";
-import BeaconMap from "@/src/features/maps/components/BeaconMap";
-import DateField from "@/components/DateField";
-import { BeaconSettings } from "@/src/features/beacons/BeaconSettings";
 import { ActivityBadge } from "@/src/features/beacons/ActivityBadge";
 import {
   beaconControlValuesFromActivity,
@@ -33,7 +50,10 @@ import {
 import { useBeacon } from "@/src/shared/store";
 import { useNow } from "@/src/shared/useNow";
 import { readViewerDeviceDefaults } from "@/src/features/profile/settings/deviceDefaults";
-import { resolveDefaultAudience } from "@/src/features/profile/settings/beaconDefaults";
+import {
+  resolveDefaultAudience,
+  eligibleDefaultTargets,
+} from "@/src/features/profile/settings/beaconDefaults";
 import { canOpenSquadProfile } from "@/src/features/people/squadProfile";
 import { canViewProfile } from "@/src/features/profile/privacy";
 import {
@@ -58,16 +78,13 @@ import type {
   BeaconModuleDefaults,
   Category,
 } from "@/src/shared/types";
-import { validateActivity } from "@/src/shared/domain";
+
 import {
   durationMinutesForLabel,
   formatDurationLabel,
   resolveActivityEndAt,
 } from "@/src/features/beacons/createTiming";
-import {
-  type SuggestedTool,
-  type BeaconTemplate,
-} from "@/src/shared/templates";
+import { type BeaconTemplate } from "@/src/shared/templates";
 import {
   Action,
   AudiencePicker,
@@ -81,15 +98,6 @@ import {
   useTheme,
 } from "@/src/shared/ui";
 
-const suggestedToolNames: Record<SuggestedTool, string> = {
-  chat: "Chat",
-  checklist: "Checklist",
-  notes: "Beacon Sketchboard",
-  focus: "Timer",
-  memories: "Beacon Memories",
-  music: "Music",
-  scoreboard: "Teams / Scoreboard",
-};
 function moduleDefaultsFromControls(
   controls: BeaconControlValues,
 ): BeaconModuleDefaults {
@@ -107,15 +115,59 @@ function moduleDefaultsFromControls(
 export default function CreateActivity() {
   const params = useLocalSearchParams();
   const { userId } = useBeacon();
+  if (typeof params.resumeDraft === "string")
+    return (
+      <RestoreDraft
+        key={userId + params.resumeDraft}
+        token={params.resumeDraft}
+      />
+    );
   if (usesSharedStatusEditor(params))
     return <LegacyStatusScreen params={params} />;
   return <CreateEditor key={userId + JSON.stringify(params)} />;
 }
 
-function CreateEditor() {
-  const { colors, styles } = useTheme();
+function RestoreDraft({ token }: { token: string }) {
+  const { userId } = useBeacon();
+  const [error, setError] = useState("");
+  useEffect(() => {
+    let active = true;
+    if (userId)
+      void restoreCreationDraft(userId, token)
+        .then((context) => {
+          if (active)
+            router.replace({
+              pathname: "/create",
+              params: { ...context, planSession: token, editor: "yes" },
+            });
+        })
+        .catch((e) => {
+          if (active)
+            setError(
+              e instanceof Error ? e.message : "Draft could not be restored.",
+            );
+        });
+    return () => {
+      active = false;
+    };
+  }, [userId, token]);
+  return (
+    <Screen title="Continue Draft" eyebrow="" compactHeader>
+      <Txt>{error || "Restoring your saved draft..."}</Txt>
+      {error ? (
+        <Button
+          title="Back to Create"
+          onPress={() => router.replace("/create")}
+        />
+      ) : null}
+    </Screen>
+  );
+}
 
-  const { data, userId, act } = useBeacon();
+function CreateEditor() {
+  const { styles } = useTheme();
+
+  const { data, userId, act, getViewerEpoch } = useBeacon();
   const currentTime = useNow();
   const params = useLocalSearchParams<{
     kind?: string;
@@ -143,9 +195,7 @@ function CreateEditor() {
     timezone?: string;
   }>();
   const [draftToken] = useState(
-    () =>
-      params.planSession ??
-      (Platform.OS !== "web" ? startCreationDraft(userId) : undefined),
+    () => params.planSession ?? startCreationDraft(userId),
   );
   let creationTimezone =
     Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
@@ -233,7 +283,13 @@ function CreateEditor() {
     params.editTemplate === "yes" || params.saveTemplate === "yes";
   const previous = statusSourceId
     ? undefined
-    : data.activities.find((a) => a.id === params.repeat);
+    : data.activities.find(
+        (a) =>
+          a.id === params.repeat &&
+          a.owner_id === userId &&
+          data.viewer_id === userId &&
+          a.mode !== "solo",
+      );
   const associationCandidates =
     userId && data.viewer_id === userId
       ? [
@@ -410,13 +466,7 @@ function CreateEditor() {
     "prepAnswers",
     [],
   );
-  const [view, setView] = usePlanningDraftState(
-    userId,
-    draftToken,
-    "view",
-    "Normal",
-  );
-  const [kind, setKind] = usePlanningDraftState(
+  const [kind] = usePlanningDraftState(
     userId,
     draftToken,
     "kind",
@@ -447,7 +497,7 @@ function CreateEditor() {
     "templateName",
     saved?.name ?? previous?.title ?? "",
   );
-  const [available, setAvailable] = usePlanningDraftState(
+  const [available] = usePlanningDraftState(
     userId,
     draftToken,
     "available",
@@ -579,7 +629,7 @@ function CreateEditor() {
     setAudienceValue,
     setAudienceId,
   ]);
-  const [target, setTarget] = usePlanningDraftState(
+  const [target] = usePlanningDraftState(
     userId,
     draftToken,
     "target",
@@ -623,7 +673,12 @@ function CreateEditor() {
     userId,
     draftToken,
     "label",
-    params.placeLabel ?? saved?.label ?? "",
+    params.placeLabel ??
+      (previous
+        ? data.places.find((place) => place.activity_id === previous.id)?.label
+        : undefined) ??
+      saved?.label ??
+      "",
   );
   const [placeType, setPlaceType] = usePlanningDraftState(
       userId,
@@ -636,7 +691,14 @@ function CreateEditor() {
     latitude: number;
     longitude: number;
   } | null>(userId, draftToken, "pin", () => {
-    if (params.latitude == null || params.longitude == null) return null;
+    if (params.latitude == null || params.longitude == null) {
+      const place = previous
+        ? data.places.find((place) => place.activity_id === previous.id)
+        : undefined;
+      return place?.latitude != null && place.longitude != null
+        ? { latitude: place.latitude, longitude: place.longitude }
+        : null;
+    }
     const latitude = Number(params.latitude),
       longitude = Number(params.longitude);
     return Number.isFinite(latitude) &&
@@ -646,7 +708,33 @@ function CreateEditor() {
       ? { latitude, longitude }
       : null;
   });
-  const [showPin, setShowPin] = useState(false);
+  const [reuseReviewed, setReuseReviewed] = usePlanningDraftState(
+    userId,
+    draftToken,
+    "reuseReviewed",
+    false,
+  );
+  const [peopleOpen, setPeopleOpen] = useState(false);
+  const titleInput = useRef<TextInput>(null);
+  const locationInput = useRef<TextInput>(null);
+  const [modulesOpen, setModulesOpen] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [destinationOpen, setDestinationOpen] = useState(false);
+  const [appearanceOpen, setAppearanceOpen] = useState(false);
+  const [aspirationQuery, setAspirationQuery] = useState("");
+  const [saveNotice, setSaveNotice] = useState("");
+  const [fieldError, setFieldError] = useState<{
+    field: string;
+    message: string;
+  } | null>(null);
+  const [pendingPublication, setPendingPublication] =
+    usePlanningDraftState<FrozenPublication | null>(
+      userId,
+      draftToken,
+      "pendingPublication",
+      null,
+    );
+  const publicationBusy = useRef(false);
   const [beaconControlDraft, setBeaconControlDraft] = usePlanningDraftState<{
     routeKey: string;
     value: BeaconControlValues;
@@ -655,7 +743,13 @@ function CreateEditor() {
     value: saved?.module_defaults
       ? { ...defaultBeaconControlValues(), ...saved.module_defaults }
       : previous
-        ? beaconControlValuesFromActivity(previous)
+        ? {
+            ...beaconControlValuesFromActivity(previous),
+            capacity_limit: null,
+            capacity_policy: "soft" as const,
+            manual_closed: false,
+            checklist_edit_policy: "participants" as const,
+          }
         : defaultBeaconControlValues(),
   }));
   const beaconControls =
@@ -668,10 +762,7 @@ function CreateEditor() {
     userId,
     draftToken,
     "aspirationIds",
-    () =>
-      (previous?.aspiration_ids ?? []).filter((id) =>
-        currentAspirationIds.has(id),
-      ),
+    () => ([] as string[]).filter((id) => currentAspirationIds.has(id)),
   );
   function applyTemplate(t: BeaconTemplate) {
     if (!statusSeed) {
@@ -729,7 +820,7 @@ function CreateEditor() {
     if (!templateName.trim() || !title.trim())
       throw new Error("Give your template a name and activity.");
     await act("save_template", {
-      id: saved?.id,
+      id: templateEditor ? saved?.id : undefined,
       name: templateName.trim(),
       title: title.trim(),
       description: templateDescription,
@@ -740,13 +831,139 @@ function CreateEditor() {
       approval_required: approval === "Host approval",
       module_defaults: moduleDefaultsFromControls(beaconControls),
     });
-    if (inviteeIds.length || inviteeError || statusSourceId) {
+    if (
+      !templateEditor ||
+      inviteeIds.length ||
+      inviteeError ||
+      statusSourceId
+    ) {
       setTemplateNotice(
         "Template saved. Your Beacon draft and selected friends are still here.",
       );
       return;
     }
     router.replace("/your-activity?historyExpanded=yes" as Href);
+  }
+  const checkpoint = () =>
+    saveCreationDraft(
+      userId,
+      draftToken,
+      Object.fromEntries(
+        Object.entries(params).filter(
+          (entry): entry is [string, string] => typeof entry[1] === "string",
+        ),
+      ),
+    );
+  async function saveDraft() {
+    setSaveNotice("");
+    setCreationDraftField(userId, draftToken, "home", false);
+    try {
+      await checkpoint();
+      setSaveNotice("Saved on this device");
+    } catch (error) {
+      setSaveNotice(
+        error instanceof Error
+          ? error.message
+          : "Draft could not be saved. Keep this editor open and try again.",
+      );
+    }
+  }
+  async function durableAction(
+    action: string,
+    payload: Record<string, unknown> = {},
+    requestId?: string,
+  ) {
+    if (!userId || dataRef.current.viewer_id !== userId)
+      throw new Error(
+        "Your account changed. Return to the account that started this draft.",
+      );
+    const requestEpoch = getViewerEpoch();
+    const stored = planningDraftObject<FrozenPublication | null>(
+      userId,
+      draftToken,
+      "pendingPublication",
+      () => null,
+    );
+    if (stored && !stored.result && stored.action !== action)
+      throw new Error(
+        "Confirm the saved publication before starting another operation.",
+      );
+    const attempt =
+      stored && stored.action === action
+        ? stored
+        : {
+            action,
+            payload: structuredClone({ ...payload, expected_actor_id: userId }),
+            requestId: requestId ?? randomUUID(),
+            viewer: userId,
+          };
+    setCreationDraftField(userId, draftToken, "pendingPublication", attempt);
+    try {
+      const result = await runFrozenPublication(
+        attempt,
+        userId,
+        checkpoint,
+        async (a, p, id) => {
+          if (
+            dataRef.current.viewer_id !== userId ||
+            getViewerEpoch() !== requestEpoch
+          )
+            throw new Error("Your account changed before publication.");
+          const result = await act(a, p, id);
+          if (
+            dataRef.current.viewer_id !== userId ||
+            getViewerEpoch() !== requestEpoch
+          )
+            throw new Error(
+              "Your account changed while confirming publication. Return to the original account.",
+            );
+          return result;
+        },
+      );
+      setPendingPublication(null);
+      setCreationDraftField(userId, draftToken, "pendingPublication", null);
+      return result;
+    } catch (error) {
+      if (
+        (error as { definitive?: boolean })?.definitive === true &&
+        !(error instanceof Error && /account changed/i.test(error.message))
+      ) {
+        setPendingPublication(null);
+        setCreationDraftField(userId, draftToken, "pendingPublication", null);
+        await checkpoint();
+      } else setPendingPublication({ ...attempt });
+      throw error;
+    }
+  }
+  async function submit() {
+    if (publicationBusy.current) return;
+    publicationBusy.current = true;
+    setFieldError(null);
+    try {
+      await publish();
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Could not publish this Beacon.";
+      setWorkflowError(message);
+      if (
+        /capacity|spots|limit|approval|audience|share with|friend|eligible/i.test(
+          message,
+        )
+      )
+        setPeopleOpen(true);
+      else if (
+        /end time|start time|duration|future time|deadline/i.test(message)
+      )
+        setTiming(true);
+      else if (/music/i.test(message)) setModulesOpen(true);
+      else if (/description|details|characters/i.test(message))
+        setAdvancedOpen(true);
+      throw error;
+    } finally {
+      publicationBusy.current = false;
+    }
   }
   async function publish() {
     if (
@@ -756,14 +973,66 @@ function CreateEditor() {
       throw new Error(
         "This Beacon has already been created. Use Retry invitations or Open Beacon.",
       );
+    if (pendingPublication)
+      throw new Error(
+        "Confirm the pending publication before creating another Beacon.",
+      );
+    if (previous && !reuseReviewed) {
+      setPeopleOpen(true);
+      throw new Error(
+        "Review the reused location and People & Access, then choose Done before creating.",
+      );
+    }
     if (inviteeError) throw new Error(inviteeError);
     if (sourceError) throw new Error(sourceError);
+    if (
+      userId &&
+      ["list", "squad", "organization"].includes(audience) &&
+      !eligibleDefaultTargets(dataRef.current, userId, audience).some(
+        (row) => row.id === audienceId,
+      )
+    ) {
+      setPeopleOpen(true);
+      throw new Error(
+        "This audience is no longer available. Choose an eligible audience before publishing.",
+      );
+    }
     if (inviteeIds.length && (kind === "Status" || addTo === "Vote / Draw"))
       throw new Error(
         "Selected friends can be invited to a Beacon. Clear the selected friends before sharing a status or submitting a Vote / Draw proposal.",
       );
     if (inviteeIds.length)
       validateCreationInvitees(dataRef.current, userId, inviteeIds);
+    if (!title.trim()) {
+      titleInput.current?.focus();
+      setFieldError({ field: "title", message: "Give your Beacon a title." });
+      throw new Error("Give your Beacon a title.");
+    }
+    if (
+      kind !== "Status" &&
+      addTo !== "Vote / Draw" &&
+      placeType === "In person" &&
+      !pin
+    ) {
+      setFieldError({
+        field: "location",
+        message: "Choose a place or a point on the Map.",
+      });
+      locationInput.current?.focus();
+      throw new Error("Choose a place or a point on the Map.");
+    }
+    if (
+      kind !== "Status" &&
+      addTo !== "Vote / Draw" &&
+      placeType === "Online" &&
+      !validCreationMeetingLink(url)
+    ) {
+      setFieldError({
+        field: "location",
+        message: "Enter a secure meeting link beginning with https://.",
+      });
+      throw new Error("Enter a secure meeting link beginning with https://.");
+    }
     const start = effectiveStartAt();
     const finalDescription = descriptionWithPrep();
     const controls =
@@ -802,7 +1071,7 @@ function CreateEditor() {
         currentAspirationIds.has(id),
       ),
       label: label.trim(),
-      online_url: placeType === "Online" ? url : null,
+      online_url: placeType === "Online" ? url.trim() : null,
       latitude: placeType === "In person" ? (pin?.latitude ?? null) : null,
       longitude: placeType === "In person" ? (pin?.longitude ?? null) : null,
       ...(controls ?? {}),
@@ -844,7 +1113,7 @@ function CreateEditor() {
         throw new Error("Choose a Beacon time after the decision deadline.");
       let threadId = decisionId;
       if (!threadId) {
-        const created = await act("create_planning_thread", {
+        const created = await durableAction("create_planning_thread", {
           kind: decisionKind.toLowerCase(),
           title: decisionTitle.trim() || title.trim(),
           body: "",
@@ -860,7 +1129,7 @@ function CreateEditor() {
         threadId = created.id;
         setDecisionId(threadId);
       }
-      await act("add_council_proposal", {
+      await durableAction("add_council_proposal", {
         thread_id: threadId,
         payload: payload as BeaconDraft,
         approve_if_manager: true,
@@ -875,7 +1144,7 @@ function CreateEditor() {
         (item) => item.plan_id === plan.id,
       ).length;
       const create = () =>
-        act("create_plan_beacon", {
+        durableAction("create_plan_beacon", {
           ...payload,
           plan_id: plan.id,
           position: planPosition === "End" ? count : Number(planPosition) - 1,
@@ -894,7 +1163,7 @@ function CreateEditor() {
       router.replace({ pathname: "/plan/[id]", params: { id: plan.id } });
       return;
     }
-    const create = () => act("create_activity", payload);
+    const create = () => durableAction("create_activity", payload);
     const result = inviteeIds.length
       ? await publishAtomic("create_activity_with_invitees", payload)
       : {
@@ -906,6 +1175,7 @@ function CreateEditor() {
               userId,
               create,
               act,
+              checkpoint,
             )
           ).createdId,
         };
@@ -931,11 +1201,11 @@ function CreateEditor() {
         userId,
         action,
         payload,
-        act,
+        durableAction,
         randomUUID,
       );
       setCreatedSession(session);
-      completePlanningDraft(userId, draftToken);
+      await checkpoint();
       return { id: session.createdId };
     } finally {
       setCreatedSession(
@@ -982,6 +1252,7 @@ function CreateEditor() {
         userId,
         create,
         act,
+        checkpoint,
       );
       setCreatedSession(session);
       return { id: session.createdId };
@@ -1006,6 +1277,56 @@ function CreateEditor() {
       setRetryBusy(false);
     }
   }
+  if (pendingPublication)
+    return (
+      <Screen
+        title="Confirm publication"
+        eyebrow=""
+        compactHeader
+        create={false}
+      >
+        <Txt>{String(pendingPublication.payload.title ?? title)}</Txt>
+        <Txt muted>
+          Publication needs confirmation. Retry uses this request ID and the
+          original details. If saving failed, keep this editor open. A request
+          is sent only after its recovery state is saved. If the server cannot
+          confirm this request, retain this pending draft and try again later.
+        </Txt>
+        {!!workflowError && (
+          <Text accessibilityRole="alert" style={styles.error}>
+            {workflowError}
+          </Text>
+        )}
+        <Action
+          title="Retry confirmation"
+          run={async () => {
+            const attempt = pendingPublication;
+            const result = await durableAction(
+              attempt.action,
+              attempt.payload,
+              attempt.requestId,
+            );
+            if (attempt.action === "create_planning_thread") {
+              setDecisionId(String(result.id));
+              await checkpoint();
+              return;
+            }
+            completePlanningDraft(userId, draftToken);
+            if (attempt.action === "add_council_proposal")
+              router.replace({
+                pathname: "/council/[id]",
+                params: { id: String(attempt.payload.thread_id) },
+              });
+            else
+              router.replace({
+                pathname: "/activity/[id]",
+                params: { id: String(result.id) },
+              });
+          }}
+        />
+        <Action secondary title="Save pending state" run={checkpoint} />
+      </Screen>
+    );
   if (
     createdSession &&
     (createdSession.viewerId !== userId || data.viewer_id !== userId)
@@ -1151,221 +1472,341 @@ function CreateEditor() {
           setInviteeError("");
         }}
         onClearStatusSource={() => setStatusSourceDismissed(true)}
-        onBlank={() => setHome(false)}
+        onBlank={() =>
+          router.push({
+            pathname: "/create",
+            params: { ...handoff, planSession: undefined, editor: "yes" },
+          })
+        }
+        onReuse={(id) =>
+          router.push({
+            pathname: "/create",
+            params: {
+              ...handoff,
+              planSession: undefined,
+              editor: "yes",
+              repeat: id,
+            },
+          })
+        }
         onTemplate={(recipe) => {
           applyTemplate(recipe);
           setHome(false);
         }}
       />
     );
+  const audienceName =
+    audience === "list"
+      ? "Private list"
+      : audience === "squad"
+        ? "Squad"
+        : audience === "organization"
+          ? "Organization"
+          : audience === "private"
+            ? "Private"
+            : "Friends";
+  const moduleNames = creationModules
+    .filter((row) => beaconControls[row.field])
+    .map((row) => row.name);
+  const primaryAction = templateEditor
+    ? "Save Template"
+    : addTo === "Plan"
+      ? "Add Beacon Step"
+      : addTo === "Vote / Draw"
+        ? "Submit Council Option"
+        : "Create Beacon";
+  const stamp = (date: number) =>
+    Number.isFinite(date)
+      ? new Date(date).toLocaleString([], {
+          timeZone: creationTimezone,
+          month: "short",
+          day: "numeric",
+          hour: "numeric",
+          minute: "2-digit",
+        })
+      : "Choose time";
+  const errorFor = (field: string) =>
+    fieldError?.field === field ? (
+      <Text accessibilityRole="alert" style={styles.error}>
+        {fieldError.message}
+      </Text>
+    ) : null;
   return (
     <Screen
-      title={
-        templateEditor
-          ? "Beacon Template"
-          : kind === "Status"
-            ? "Share a little update"
-            : "Beacon Quick Editor"
-      }
-      eyebrow="SMALL PLANS. GOOD COMPANY."
+      title={templateEditor ? "Beacon Template" : "Create Beacon"}
+      eyebrow=""
+      compactHeader
       create={false}
-      footer={
-        <Action
-          title={
-            templateEditor
-              ? "Save template"
-              : kind === "Status"
-                ? "Share my status"
-                : addTo === "Vote / Draw"
-                  ? "Add Suggested Beacon"
-                  : addTo === "Plan"
-                    ? "Add Beacon to Plan"
-                    : "Create Beacon"
-          }
-          run={templateEditor ? saveTemplate : publish}
+      headerAction={
+        <Button
+          compact
+          secondary
+          title="Save Draft"
+          onPress={() => void saveDraft()}
         />
+      }
+      footer={
+        <View style={{ flexDirection: "row", gap: 8 }}>
+          <View style={{ flex: 1 }}>
+            <Button
+              secondary
+              title="Preview"
+              onPress={() => setPreviewOpen(true)}
+            />
+          </View>
+          <View style={{ flex: 1.4 }}>
+            <Action
+              title={primaryAction}
+              run={templateEditor ? saveTemplate : submit}
+            />
+          </View>
+        </View>
       }
     >
-      {inviteeError || sourceError ? (
+      {!!(workflowError || inviteeError || sourceError) && (
         <Text accessibilityRole="alert" style={styles.error}>
-          {inviteeError || sourceError}
+          {workflowError || inviteeError || sourceError}
         </Text>
-      ) : null}
-      {workflowError ? (
-        <Text accessibilityRole="alert" style={styles.error}>
-          {workflowError}
-        </Text>
-      ) : null}
-      {templateNotice ? <Txt muted>{templateNotice}</Txt> : null}
-      <CreationInvitees ids={inviteeIds} onChange={setInviteeIds} />
-      {statusSourceId ? (
-        <Button
-          compact
-          secondary
-          title="Clear status source"
-          onPress={() => setStatusSourceDismissed(true)}
-        />
-      ) : null}
-      {!templateEditor && kind === "Beacon" && (
-        <Button
-          compact
-          secondary
-          title="← Blank or template"
-          onPress={() => setHome(true)}
-        />
       )}
-      {templateEditor && (
+      {!!(saveNotice || templateNotice) && (
+        <Text accessibilityLiveRegion="polite" style={styles.muted}>
+          {saveNotice || templateNotice}
+        </Text>
+      )}
+      {params.template && !saved ? (
+        <Txt muted>
+          This template is no longer available. Your draft details are retained;
+          review them before creating.
+        </Txt>
+      ) : null}
+      {previous ? (
+        <Txt muted>
+          Reusing {previous.title} · Review time, location, and access.
+        </Txt>
+      ) : null}
+      {addTo !== "Standalone" ? (
+        <Txt muted>
+          {addTo === "Plan"
+            ? `Adding to: ${ownPlans.find((row) => row.id === selectedPlanId)?.title ?? "Choose a Plan"}`
+            : `Council proposal: ${decision?.title ?? "New Council"}`}
+        </Txt>
+      ) : null}
+      {templateEditor ? (
         <Field
           label="Template name"
           value={templateName}
           onChangeText={setTemplateName}
           maxLength={80}
         />
-      )}
-      {kind === "Status" && (
-        <Chips
-          options={["Busy", "Free to hang"]}
-          value={available ? "Free to hang" : "Busy"}
-          onChange={(v) => setAvailable(v === "Free to hang")}
-        />
-      )}
-      <Field
-        label="Title / Activity"
-        placeholder="A tiny adventure with your people"
-        value={title}
-        onChangeText={(value) => {
-          textEdited.current.title = true;
-          setTitle(value);
-        }}
-        maxLength={120}
-      />
-      {view === "Advanced" && !!selectedRecipe?.prepPrompts?.length && (
-        <View style={[styles.card, { padding: 13, gap: 10 }]}>
-          <Text style={styles.h2}>A few helpful details</Text>
-          <Txt muted>
-            Optional prompts from this template. Your answers are added to the
-            beacon description so the group can see them.
-          </Txt>
-          {selectedRecipe.prepPrompts.map((prompt, index) => (
-            <Field
-              key={`${selectedRecipe.id}-${prompt}`}
-              label={prompt}
-              value={prepAnswers[index] ?? ""}
-              onChangeText={(answer) =>
-                setPrepAnswers((current) =>
-                  current.map((value, answerIndex) =>
-                    answerIndex === index ? answer : value,
-                  ),
-                )
-              }
-              maxLength={240}
-            />
-          ))}
-          <Txt muted>
-            Combined details: {descriptionWithPrep().length}/
-            {templateEditor ? 1000 : 2000} characters
-          </Txt>
-        </View>
-      )}
-      {view === "Advanced" &&
-        kind !== "Status" &&
-        !!selectedRecipe?.suggestedTools?.length && (
-          <View style={[styles.card, { padding: 13, gap: 5 }]}>
-            <Text style={styles.label}>READY WITH</Text>
-            <Text style={[styles.body, { fontWeight: "700" }]}>
-              {selectedRecipe.suggestedTools
-                .map((tool) => suggestedToolNames[tool])
-                .join(" · ")}
+      ) : null}
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Choose artwork"
+          onPress={() => setAppearanceOpen(true)}
+          style={{
+            minWidth: 52,
+            minHeight: 52,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          {beaconControls.decoration_emoji ? (
+            <Text style={{ fontSize: 32 }}>
+              {beaconControls.decoration_emoji}
             </Text>
-            <Txt muted>
-              These module defaults are ready for this recipe. Adjust them in
-              Advanced options before publishing.
-            </Txt>
-          </View>
-        )}
-      {Platform.OS !== "web" && placeType === "In person" ? (
-        <CreationLocationInput
-          value={label}
-          selected={!!pin}
-          onChange={(value) => {
-            setLabel(value);
-            setPin(null);
-          }}
-          onChoose={(place) => {
-            setLabel(place.label);
-            setPin(place.coordinate);
-          }}
-          onPickMap={() => {
-            const returnParams = Object.fromEntries(
-              Object.entries(params).filter(
-                (entry): entry is [string, string] =>
-                  typeof entry[1] === "string",
-              ),
-            );
-            returnParams.planSession = draftToken!;
-            if (!beginCreationLocationPick(userId, draftToken, returnParams))
-              return;
-            router.push({
-              pathname: "/",
-              params: {
-                ...creationHandoffParams({
-                  ...handoff,
-                  planSession: draftToken,
-                  latitude: pin ? String(pin.latitude) : undefined,
-                  longitude: pin ? String(pin.longitude) : undefined,
-                  placeLabel: label,
-                }),
-                pickLocation: "yes",
-                locationPicker: "editor",
-              },
-            });
-          }}
-        />
-      ) : (
-        <Field
-          label="Where? (optional)"
-          placeholder="Your usual spot, or decide together"
-          value={label}
-          onChangeText={setLabel}
-          maxLength={160}
-        />
-      )}
-      <Text style={styles.label}>TIME</Text>
-      <View style={styles.row}>
+          ) : (
+            <ActivityBadge category={category} size={48} />
+          )}
+        </Pressable>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Field
+            label="Activity title"
+            inputRef={titleInput}
+            placeholder="What are we doing?"
+            value={title}
+            onChangeText={(value) => {
+              textEdited.current.title = true;
+              setTitle(value);
+            }}
+            maxLength={120}
+          />
+        </View>
+      </View>
+      {errorFor("title")}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Choose category"
+        style={{ minHeight: 44, justifyContent: "center" }}
+        onPress={() => setAppearanceOpen(true)}
+      >
+        <Txt muted>{category} · Change category</Txt>
+      </Pressable>
+      <View style={{ flexDirection: "row", gap: 8 }}>
         <View style={{ flex: 1 }}>
-          <Button
-            secondary
-            title={
-              when === "Pick time"
-                ? new Date(starts).toLocaleString([], {
-                    timeZone: creationTimezone,
-                    month: "short",
-                    day: "numeric",
-                    hour: "numeric",
-                    minute: "2-digit",
-                  })
-                : when
-            }
+          <CreationRow
+            title="Starts"
+            detail={stamp(effectiveStartAt())}
             onPress={() => setTiming(true)}
           />
         </View>
         <View style={{ flex: 1 }}>
-          <Button secondary title={duration} onPress={() => setTiming(true)} />
+          <CreationRow
+            title="Ends"
+            detail={stamp(
+              Date.parse(
+                resolveActivityEndAt(effectiveStartAt(), duration, ends),
+              ),
+            )}
+            onPress={() => setTiming(true)}
+          />
         </View>
       </View>
-      {params.timezone ? <Txt muted>Time zone: {creationTimezone}</Txt> : null}
+      <View style={{ gap: 6 }}>
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <Text style={styles.label}>LOCATION</Text>
+          <Button
+            compact
+            secondary
+            title={placeType === "Online" ? "Use in person" : "Use online"}
+            onPress={() =>
+              setPlaceType(placeType === "Online" ? "In person" : "Online")
+            }
+          />
+        </View>
+        {placeType === "Online" ? (
+          <Field
+            label="HTTPS meeting link"
+            value={url}
+            onChangeText={setUrl}
+            autoCapitalize="none"
+            keyboardType="url"
+          />
+        ) : (
+          <CreationLocationInput
+            inputRef={locationInput}
+            value={label}
+            selected={!!pin}
+            onChange={(value) => {
+              setLabel(value);
+              setPin(null);
+            }}
+            onChoose={(place) => {
+              setLabel(place.label);
+              setPin(place.coordinate);
+            }}
+            onPickMap={() => {
+              const returnParams = Object.fromEntries(
+                Object.entries(params).filter(
+                  (entry): entry is [string, string] =>
+                    typeof entry[1] === "string",
+                ),
+              );
+              returnParams.planSession = draftToken!;
+              if (!beginCreationLocationPick(userId, draftToken, returnParams))
+                return;
+              router.push({
+                pathname: "/",
+                params: {
+                  ...creationHandoffParams({
+                    ...handoff,
+                    planSession: draftToken,
+                    latitude: pin ? String(pin.latitude) : undefined,
+                    longitude: pin ? String(pin.longitude) : undefined,
+                    placeLabel: label,
+                  }),
+                  pickLocation: "yes",
+                  locationPicker: "editor",
+                },
+              });
+            }}
+          />
+        )}
+        {errorFor("location")}
+      </View>
+      <CreationRow
+        title="People & Access"
+        detail={`${audienceName} · ${inviteeIds.length} invited · ${approval}`}
+        onPress={() => setPeopleOpen(true)}
+      />
+      <CreationRow
+        title="Primary community"
+        detail={
+          selectedAssociationRow?.name ??
+          (selectedAssociation
+            ? "Unavailable community · Clear or choose another"
+            : "Optional · Choose a community")
+        }
+        onPress={() => setAssociationOpen(true)}
+      />
+      <CreationRow
+        title="Modules"
+        detail={moduleNames.join(" · ") || "Choose tools for this Beacon"}
+        onPress={() => setModulesOpen(true)}
+      />
+      <CreationRow
+        title="Advanced Options"
+        detail="Details, appearance, aspirations, template"
+        onPress={() => setAdvancedOpen(true)}
+      />
+      {!templateEditor ? (
+        <Pressable
+          accessibilityRole="button"
+          style={{ minHeight: 44, justifyContent: "center" }}
+          onPress={() => setDestinationOpen(true)}
+        >
+          <Txt muted>
+            {addTo === "Standalone"
+              ? "Add to Plan or Council"
+              : "Change destination"}
+          </Txt>
+        </Pressable>
+      ) : null}
       <Sheet
         title="When shall we?"
         visible={timing}
         onClose={() => setTiming(false)}
       >
+        {workflowError ? (
+          <Text accessibilityRole="alert" style={styles.error}>
+            {workflowError}
+          </Text>
+        ) : null}
         <Chips
-          options={["Now", "In 30 min", "Pick time"]}
+          options={["Now", "In 30 min", "Later today", "Tomorrow", "Pick time"]}
           value={when}
-          onChange={setWhen}
+          onChange={(value) => {
+            if (value === "Tomorrow") {
+              setStarts(
+                planLocalDateTimeToISO(
+                  addLocalDays(
+                    localDate(new Date(currentTime), creationTimezone),
+                    1,
+                  ),
+                  "17:00",
+                  creationTimezone,
+                ),
+              );
+              setWhen("Pick time");
+            } else if (value === "Later today") {
+              setStarts(new Date(currentTime + 3600000).toISOString());
+              setWhen("Pick time");
+            } else setWhen(value);
+          }}
         />
         {when === "Pick time" && (
-          <DateField label="Starts" value={starts} onChange={setStarts} />
+          <CreationDateField
+            label="Starts"
+            value={starts}
+            onChange={setStarts}
+            timezone={creationTimezone}
+          />
         )}
         <Txt muted>How long?</Txt>
         <Chips
@@ -1377,39 +1818,16 @@ function CreateEditor() {
           }}
         />
         {duration === "Custom" && (
-          <DateField label="Ends" value={ends} onChange={setEnds} />
+          <CreationDateField
+            label="Ends"
+            value={ends}
+            onChange={setEnds}
+            timezone={creationTimezone}
+          />
         )}
         <Button title="Done" onPress={() => setTiming(false)} />
       </Sheet>
-      <Text style={styles.label}>PEOPLE / AUDIENCE</Text>
-      <AudiencePicker
-        value={audience}
-        id={audienceId}
-        onChange={(a, id) => {
-          setAudience(a);
-          setAudienceId(id);
-        }}
-      />
-      {defaultNotice ? <Txt muted>{defaultNotice}</Txt> : null}
-      {view === "Advanced" && kind !== "Status" ? (
-        <View style={[styles.card, { gap: 7 }]}>
-          <Text style={styles.label}>COMMUNITY CONTEXT</Text>
-          <Txt muted>
-            This optional association is separate from the audience and does not
-            change who can see or join the Beacon.
-          </Txt>
-          <Button
-            compact
-            secondary
-            title={
-              selectedAssociationRow
-                ? `Associated with ${selectedAssociationRow.name}`
-                : "Choose a community"
-            }
-            onPress={() => setAssociationOpen(true)}
-          />
-        </View>
-      ) : null}
+
       <Sheet
         title="Associate with a community"
         visible={associationOpen}
@@ -1461,418 +1879,505 @@ function CreateEditor() {
           />
         ) : null}
       </Sheet>
-      <Chips
-        options={["In person", "Online"]}
-        value={placeType}
-        onChange={setPlaceType}
-        showSelectedCheckmark={false}
-      />
-      {placeType === "Online" ? (
-        <Field
-          label="HTTPS link"
-          value={url}
-          onChangeText={setUrl}
-          autoCapitalize="none"
-          keyboardType="url"
-        />
-      ) : null}
-      {view === "Advanced" && kind !== "Status" ? (
-        <View style={{ gap: 6 }}>
-          <Text style={styles.label}>JOINING</Text>
-          <Chips
-            options={["Open joining", "Host approval"]}
-            value={approval}
-            onChange={setApproval}
-            showSelectedCheckmark={false}
-          />
-        </View>
-      ) : null}
-      {!templateEditor && kind !== "Status" && (
-        <View style={{ gap: 8 }}>
-          <Text style={styles.label}>ADD TO</Text>
-          <Chips
-            options={["Standalone", "Vote / Draw", "Plan"]}
-            value={addTo}
-            onChange={(next) => {
-              if (
-                next === "Vote / Draw" &&
-                (inviteeIds.length || inviteeError)
-              ) {
-                setWorkflowError(
-                  "Clear selected friends before adding a Vote / Draw proposal. Invitations apply to the created Beacon.",
-                );
-                return;
-              }
-              setWorkflowError("");
-              setAddTo(next);
-            }}
-            showSelectedCheckmark={false}
-          />
-          {addTo === "Vote / Draw" && (
-            <>
-              <Txt muted>
-                A Suggested Beacon is an option. Vote lets participants choose;
-                Draw picks one at random. The winner becomes a Beacon.
-              </Txt>
-              <Button
-                compact
-                secondary={!decisionId}
-                title="New Vote / Draw"
-                onPress={() => setDecisionId("")}
-              />
-              {!decisionId && (
-                <>
-                  <Chips
-                    options={["Vote", "Draw"]}
-                    value={decisionKind}
-                    onChange={setDecisionKind}
-                  />
-                  <Field
-                    label="Decision name (optional)"
-                    value={decisionTitle}
-                    onChangeText={setDecisionTitle}
-                    placeholder="What should we do?"
-                    maxLength={100}
-                  />
-                </>
-              )}
-              {decisions.map((item) => (
-                <Button
-                  key={item.id}
-                  compact
-                  secondary={decisionId !== item.id}
-                  title={`${item.kind === "vote" ? "Vote" : "Draw"} · ${item.title}`}
-                  onPress={() => {
-                    setDecisionId(item.id);
-                    setAudience(item.audience);
-                    setAudienceId(item.audience_id);
-                  }}
-                />
-              ))}
-              {decision && (
-                <Txt muted>
-                  Decide by {new Date(decision.deadline_at).toLocaleString()}.
-                  Add more suggestions in this decision.
-                </Txt>
-              )}
-            </>
-          )}
-          {addTo === "Plan" && (
-            <>
-              {!!inviteeIds.length && (
-                <Txt muted>
-                  Choose an existing Plan to invite these friends to the new
-                  Beacon. Clear selected friends before creating a new Plan from
-                  this draft.
-                </Txt>
-              )}
-              <Button
-                compact
-                secondary
-                title="+ New Plan with this Beacon"
-                disabled={inviteeIds.length > 0 || !!inviteeError}
-                onPress={() =>
-                  router.push({
-                    pathname: "/plans",
-                    params: {
-                      create: "yes",
-                      beaconDraft: JSON.stringify({
-                        title,
-                        description: descriptionWithPrep(),
-                        category,
-                        location_name: label,
-                        lat: pin?.latitude ?? null,
-                        lng: pin?.longitude ?? null,
-                        day_offset: 0,
-                        start_time: new Date(
-                          effectiveStartAt(),
-                        ).toLocaleTimeString("en-GB", {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                          hourCycle: "h23",
-                        }),
-                        duration_minutes: durationMinutesForLabel(
-                          duration,
-                          starts,
-                          ends,
-                        ),
-                        aspiration_ids: aspirationIds,
-                      }),
-                    },
-                  })
-                }
-              />
-              {ownPlans.map((item) => (
-                <Button
-                  key={item.id}
-                  compact
-                  secondary={selectedPlanId !== item.id}
-                  title={item.title}
-                  onPress={() => {
-                    setSelectedPlanId(item.id);
-                    setPlanPosition("End");
-                    setAudience(item.squad_id ? "squad" : "private");
-                    setAudienceId(item.squad_id);
-                  }}
-                />
-              ))}
-              {!!selectedPlanId && (
-                <>
-                  <Txt muted>Where in the Plan?</Txt>
-                  <Chips
-                    options={[
-                      ...data.activities
-                        .filter((item) => item.plan_id === selectedPlanId)
-                        .map((_, index) => String(index + 1)),
-                      "End",
-                    ]}
-                    value={planPosition}
-                    onChange={setPlanPosition}
-                  />
-                  <Txt muted>
-                    Plan Beacons use the Plan audience. Check this Beacon?s time
-                    against the itinerary.
-                  </Txt>
-                </>
-              )}
-            </>
-          )}
-        </View>
-      )}
-      <Button
-        compact
-        secondary
-        title={
-          view === "Advanced" ? "Advanced Options ↑" : "Advanced Options ↓"
-        }
-        onPress={() => setView(view === "Advanced" ? "Normal" : "Advanced")}
-      />
-      {view === "Advanced" && kind !== "Status" && aspirations.length > 0 && (
-        <View style={styles.card}>
-          <Text style={styles.h2}>Connect to an aspiration</Text>
-          {aspirations.length ? (
-            aspirations.map((aspiration) => {
-              const selected = aspirationIds.includes(aspiration.id);
-              return (
-                <Button
-                  key={aspiration.id}
-                  title={`${selected ? "✓ " : ""}${aspiration.title} · ${aspiration.target_per_week}/week`}
-                  secondary={!selected}
-                  onPress={() =>
-                    setAspirationIds((current) =>
-                      selected
-                        ? current.filter((id) => id !== aspiration.id)
-                        : [...current, aspiration.id],
-                    )
-                  }
-                />
-              );
-            })
-          ) : (
-            <Txt muted>
-              Add aspirations in your profile to connect them to beacons.
-            </Txt>
-          )}
-        </View>
-      )}
-      <Txt muted>
-        {kind === "Status"
-          ? "Just your update. Switch to Beacon whenever you want company."
-          : approval === "Host approval"
-            ? "People request to join. You give the okay."
-            : "One tap to join. Maybe is welcome. Plans can change."}
-      </Txt>
-      {view === "Advanced" && (
-        <>
-          <Text style={styles.h2}>Make it yours</Text>
-          <Chips
-            options={["Beacon", "Status", "Squad"]}
-            value={kind}
-            onChange={(k) => {
-              if (
-                k === "Status" &&
-                (inviteeIds.length || inviteeError || statusSourceId)
-              ) {
-                setWorkflowError(
-                  "Clear selected friends and the status source before sharing a separate status.",
-                );
-                return;
-              }
-              setWorkflowError("");
-              setKind(k);
-              setAudience(k === "Squad" ? "squad" : "friends");
-              setAudienceId(null);
-            }}
-          />
 
-          {kind !== "Status" && (
-            <Field
-              label="How many make it happen? (optional)"
-              placeholder="4 people for doubles, including you"
-              value={target}
-              onChangeText={setTarget}
-              keyboardType="number-pad"
-            />
-          )}
-          <Chips
-            options={
-              [
-                "Fitness",
-                "Study",
-                "Gaming",
-                "Creative",
-                "Social",
-                "Other",
-              ] as const
-            }
-            value={category}
-            onChange={(value) => {
-              textEdited.current.category = true;
-              setCategory(value);
+      <Sheet
+        title="People & Access"
+        visible={peopleOpen}
+        onClose={() => setPeopleOpen(false)}
+        footer={
+          <Button
+            title="Done"
+            onPress={() => {
+              setReuseReviewed(true);
+              setPeopleOpen(false);
             }}
           />
-          {kind !== "Status" && (
-            <BeaconSettings
-              key={`${controlsRouteKey}-${templateEditor ? "template" : "beacon"}`}
-              value={beaconControls}
-              onChange={setBeaconControls}
-              templateMode={templateEditor}
-              description={
-                templateEditor
-                  ? "These module defaults are saved with your template. You can still change them for each new Beacon."
-                  : "Recipe recommendations can be changed here before you publish. Each new Beacon uses the choices shown."
+        }
+      >
+        {workflowError ? (
+          <Text accessibilityRole="alert" style={styles.error}>
+            {workflowError}
+          </Text>
+        ) : null}
+        <Text style={styles.h2}>Who can see this Beacon?</Text>
+        <AudiencePicker
+          value={audience}
+          id={audienceId}
+          onChange={(value, id) => {
+            setAudience(value);
+            setAudienceId(id);
+          }}
+        />
+        <Txt muted>
+          {defaultNotice ||
+            "Visibility controls who can see it. It does not send invitations."}
+        </Txt>
+        <Text style={styles.h2}>Who receives invitations?</Text>
+        <CreationInvitees ids={inviteeIds} onChange={setInviteeIds} />
+        <View style={{ flexDirection: "row", gap: 6, flexWrap: "wrap" }}>
+          {inviteeIds.slice(0, 8).map((id) => (
+            <ProfileAvatar
+              key={id}
+              profile={data.profiles.find((row) => row.id === id)}
+              size={30}
+            />
+          ))}
+        </View>
+        <Text style={styles.h2}>Notifications</Text>
+        <Txt muted>
+          {inviteeIds.length} selected · Invitations send on publish. Up to 20
+          eligible friends. Community association does not invite members.
+        </Txt>
+        <Text style={styles.h2}>How can people join?</Text>
+        {["Open joining", "Host approval"].map((value) => (
+          <CreationRow
+            key={value}
+            title={`${approval === value ? "✓ " : ""}${value}`}
+            detail={
+              value === "Open joining"
+                ? "Eligible people join directly."
+                : "Eligible people request permission first."
+            }
+            onPress={() => setApproval(value)}
+          />
+        ))}
+        <Text style={styles.h2}>Capacity</Text>
+        <Field
+          label="Maximum spots (optional)"
+          placeholder="No limit"
+          value={
+            beaconControls.capacity_limit == null
+              ? ""
+              : String(beaconControls.capacity_limit)
+          }
+          onChangeText={(value) =>
+            setBeaconControls({
+              ...beaconControls,
+              capacity_limit: value ? Number(value) : null,
+            })
+          }
+          keyboardType="number-pad"
+        />
+        <CreationSwitch
+          title="Enforce maximum"
+          detail="Includes the host and accepted seats. When off, the limit is advisory."
+          value={beaconControls.capacity_policy === "strict"}
+          onChange={(value) =>
+            setBeaconControls({
+              ...beaconControls,
+              capacity_policy: value ? "strict" : "soft",
+            })
+          }
+        />
+        <Text style={styles.h2}>Manage co-owners & admins</Text>
+        <Txt muted>
+          After creating, open the Beacon’s People tab, then Organizer roles.
+          People must be approved and Going before you can give them a role.
+          Co-owners can edit settings; admins can manage participants.
+          Invitations do not grant roles.
+        </Txt>
+      </Sheet>
+      <Sheet
+        title="Modules"
+        visible={modulesOpen}
+        onClose={() => setModulesOpen(false)}
+        footer={<Button title="Done" onPress={() => setModulesOpen(false)} />}
+      >
+        {workflowError ? (
+          <Text accessibilityRole="alert" style={styles.error}>
+            {workflowError}
+          </Text>
+        ) : null}
+        <CreationModuleControls
+          value={beaconControls}
+          onChange={setBeaconControls}
+          category={category}
+        />
+      </Sheet>
+      <Sheet
+        title="Appearance"
+        visible={appearanceOpen}
+        onClose={() => setAppearanceOpen(false)}
+        footer={
+          <Button title="Done" onPress={() => setAppearanceOpen(false)} />
+        }
+      >
+        <Text style={styles.h2}>Category</Text>
+        <Chips
+          options={
+            [
+              "Fitness",
+              "Study",
+              "Gaming",
+              "Creative",
+              "Social",
+              "Other",
+            ] as const
+          }
+          value={category}
+          onChange={(value) => {
+            textEdited.current.category = true;
+            setCategory(value);
+          }}
+        />
+        <Text style={styles.h2}>Artwork override</Text>
+        <Button
+          compact
+          secondary
+          title="Use category artwork"
+          onPress={() =>
+            setBeaconControls({ ...beaconControls, decoration_emoji: null })
+          }
+        />
+        <Chips
+          options={[...DECORATION_EMOJIS]}
+          value={beaconControls.decoration_emoji ?? ""}
+          onChange={(value) =>
+            setBeaconControls({
+              ...beaconControls,
+              decoration_emoji: value as typeof beaconControls.decoration_emoji,
+            })
+          }
+        />
+        <Text style={styles.h2}>Accent</Text>
+        <Chips
+          options={[...DECORATION_ACCENTS]}
+          value={beaconControls.decoration_accent ?? "neutral"}
+          onChange={(value) =>
+            setBeaconControls({
+              ...beaconControls,
+              decoration_accent:
+                value as typeof beaconControls.decoration_accent,
+            })
+          }
+        />
+      </Sheet>
+      <Sheet
+        title="Advanced Options"
+        visible={advancedOpen}
+        onClose={() => setAdvancedOpen(false)}
+        footer={<Button title="Done" onPress={() => setAdvancedOpen(false)} />}
+      >
+        {workflowError ? (
+          <Text accessibilityRole="alert" style={styles.error}>
+            {workflowError}
+          </Text>
+        ) : null}
+        <Field
+          label="Description & details"
+          value={description}
+          onChangeText={setDescription}
+          multiline
+          maxLength={templateEditor ? 1000 : 2000}
+        />
+        {selectedRecipe?.prepPrompts?.map((prompt, index) => (
+          <Field
+            key={prompt}
+            label={prompt}
+            value={prepAnswers[index] ?? ""}
+            onChangeText={(answer) =>
+              setPrepAnswers((current) => {
+                const next = [...current];
+                next[index] = answer;
+                return next;
+              })
+            }
+            maxLength={240}
+          />
+        ))}
+        <CreationRow
+          title="Appearance"
+          detail="Category artwork, emoji, and accent"
+          onPress={() => {
+            setAdvancedOpen(false);
+            setAppearanceOpen(true);
+          }}
+        />
+        <Text style={styles.h2}>Aspirations</Text>
+        <Txt muted>
+          {aspirations
+            .filter((row) => aspirationIds.includes(row.id))
+            .map((row) => row.title)
+            .join(" · ") || "No aspiration selected"}
+        </Txt>
+        <Field
+          label="Search aspirations"
+          value={aspirationQuery}
+          onChangeText={setAspirationQuery}
+        />
+        {aspirations
+          .filter((row) =>
+            row.title.toLowerCase().includes(aspirationQuery.toLowerCase()),
+          )
+          .slice(0, 8)
+          .map((row) => (
+            <CreationSwitch
+              key={row.id}
+              title={row.title}
+              value={aspirationIds.includes(row.id)}
+              onChange={(value) =>
+                setAspirationIds((current) =>
+                  value
+                    ? [...current, row.id]
+                    : current.filter((id) => id !== row.id),
+                )
               }
             />
-          )}
-          {placeType === "In person" && Platform.OS === "web" && (
-            <>
-              <Button
-                secondary
-                title={
-                  showPin
-                    ? "Hide map"
-                    : pin
-                      ? "Edit meeting pin"
-                      : "Add a meeting pin"
-                }
-                onPress={() => setShowPin(!showPin)}
-              />
-              {showPin && (
-                <BeaconMap
-                  activities={[]}
-                  places={[]}
-                  locations={[]}
-                  profiles={[]}
-                  onActivity={() => {}}
-                  onPerson={() => {}}
-                  onPick={(latitude, longitude) =>
-                    setPin({ latitude, longitude })
-                  }
-                  selected={pin}
-                />
-              )}
-              {pin && (
-                <Button
-                  secondary
-                  title="Remove pin"
-                  onPress={() => setPin(null)}
-                />
-              )}
-            </>
-          )}
-          <Button
-            secondary
-            title="Set a custom end time"
-            onPress={chooseCustomEnd}
-          />
-          {duration === "Custom" && (
-            <DateField label="Ends" value={ends} onChange={setEnds} />
-          )}
-          <Field
-            label="A little more detail (optional)"
-            value={description}
-            onChangeText={(value) => {
-              textEdited.current.description = true;
-              setDescription(value);
-            }}
-            multiline
-            maxLength={2000}
-          />
-          {!templateEditor && (
-            <>
-              <Field
-                label="Save this as a template (optional name)"
-                value={templateName}
-                onChangeText={setTemplateName}
-                maxLength={80}
-              />
-              <Action title="Save as template" secondary run={saveTemplate} />
-            </>
-          )}
-        </>
-      )}
-      {duration === "Custom" && view === "Normal" && (
+          ))}
+        {!aspirations.length ? (
+          <Txt muted>Add aspirations in your profile to connect them.</Txt>
+        ) : null}
+        {!templateEditor ? (
+          <>
+            <Field
+              label="Template name"
+              value={templateName}
+              onChangeText={setTemplateName}
+              maxLength={80}
+            />
+            <Action secondary title="Save as template" run={saveTemplate} />
+          </>
+        ) : null}
+        <Text style={styles.h2}>Public discovery</Text>
         <Txt muted>
-          Custom end: {new Date(ends).toLocaleString()}. Edit in More options.
+          Manage public discovery after creating. Exact meeting details and
+          participant tools keep their existing access protections. Sonar
+          sharing is separate.
         </Txt>
-      )}
-      {!templateEditor && (
-        <View style={{ gap: 8 }}>
+      </Sheet>
+      <Sheet
+        title="Add to Plan or Council"
+        snapHeight={560}
+        visible={destinationOpen}
+        onClose={() => setDestinationOpen(false)}
+        footer={
+          <Button title="Done" onPress={() => setDestinationOpen(false)} />
+        }
+      >
+        {" "}
+        {!templateEditor && kind !== "Status" && (
+          <View style={{ gap: 8 }}>
+            <Text style={styles.label}>ADD TO</Text>
+            <Chips
+              options={["Standalone", "Vote / Draw", "Plan"]}
+              value={addTo}
+              onChange={(next) => {
+                if (
+                  next === "Vote / Draw" &&
+                  (inviteeIds.length || inviteeError)
+                ) {
+                  setWorkflowError(
+                    "Clear selected friends before adding a Vote / Draw proposal. Invitations apply to the created Beacon.",
+                  );
+                  return;
+                }
+                setWorkflowError("");
+                setAddTo(next);
+              }}
+              showSelectedCheckmark={false}
+            />
+            {addTo === "Vote / Draw" && (
+              <>
+                <Txt muted>
+                  A Suggested Beacon is an option. Vote lets participants
+                  choose; Draw picks one at random. The winner becomes a Beacon.
+                </Txt>
+                <Button
+                  compact
+                  secondary={!decisionId}
+                  title="New Vote / Draw"
+                  onPress={() => setDecisionId("")}
+                />
+                {!decisionId && (
+                  <>
+                    <Chips
+                      options={["Vote", "Draw"]}
+                      value={decisionKind}
+                      onChange={setDecisionKind}
+                    />
+                    <Field
+                      label="Decision name (optional)"
+                      value={decisionTitle}
+                      onChangeText={setDecisionTitle}
+                      placeholder="What should we do?"
+                      maxLength={100}
+                    />
+                  </>
+                )}
+                {decisions.map((item) => (
+                  <Button
+                    key={item.id}
+                    compact
+                    secondary={decisionId !== item.id}
+                    title={`${item.kind === "vote" ? "Vote" : "Draw"} · ${item.title}`}
+                    onPress={() => {
+                      setDecisionId(item.id);
+                      setAudience(item.audience);
+                      setAudienceId(item.audience_id);
+                    }}
+                  />
+                ))}
+                {decision && (
+                  <Txt muted>
+                    Decide by {new Date(decision.deadline_at).toLocaleString()}.
+                    Add more suggestions in this decision.
+                  </Txt>
+                )}
+              </>
+            )}
+            {addTo === "Plan" && (
+              <>
+                {!!inviteeIds.length && (
+                  <Txt muted>
+                    Choose an existing Plan to invite these friends to the new
+                    Beacon. Clear selected friends before creating a new Plan
+                    from this draft.
+                  </Txt>
+                )}
+                <Button
+                  compact
+                  secondary
+                  title="+ New Plan with this Beacon"
+                  disabled={inviteeIds.length > 0 || !!inviteeError}
+                  onPress={() =>
+                    router.push({
+                      pathname: "/plans",
+                      params: {
+                        create: "yes",
+                        beaconDraft: JSON.stringify({
+                          title,
+                          description: descriptionWithPrep(),
+                          category,
+                          location_name: label,
+                          lat: pin?.latitude ?? null,
+                          lng: pin?.longitude ?? null,
+                          day_offset: 0,
+                          start_time: new Date(
+                            effectiveStartAt(),
+                          ).toLocaleTimeString("en-GB", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            hourCycle: "h23",
+                          }),
+                          duration_minutes: durationMinutesForLabel(
+                            duration,
+                            starts,
+                            ends,
+                          ),
+                          aspiration_ids: aspirationIds,
+                        }),
+                      },
+                    })
+                  }
+                />
+                {ownPlans.map((item) => (
+                  <Button
+                    key={item.id}
+                    compact
+                    secondary={selectedPlanId !== item.id}
+                    title={item.title}
+                    onPress={() => {
+                      setSelectedPlanId(item.id);
+                      setPlanPosition("End");
+                      setAudience(item.squad_id ? "squad" : "private");
+                      setAudienceId(item.squad_id);
+                    }}
+                  />
+                ))}
+                {!!selectedPlanId && (
+                  <>
+                    <Txt muted>Where in the Plan?</Txt>
+                    <Chips
+                      options={[
+                        ...data.activities
+                          .filter((item) => item.plan_id === selectedPlanId)
+                          .map((_, index) => String(index + 1)),
+                        "End",
+                      ]}
+                      value={planPosition}
+                      onChange={setPlanPosition}
+                    />
+                    <Txt muted>
+                      Plan Beacons use the Plan audience. Check this Beacon?s
+                      time against the itinerary.
+                    </Txt>
+                  </>
+                )}
+              </>
+            )}
+          </View>
+        )}
+      </Sheet>
+      <Sheet
+        title="Review your Beacon"
+        visible={previewOpen}
+        onClose={() => setPreviewOpen(false)}
+        footer={
           <Button
-            compact
-            secondary
-            title={previewOpen ? "Hide preview" : "Preview my Beacon"}
-            onPress={() => setPreviewOpen(!previewOpen)}
+            title="Back to editor"
+            onPress={() => setPreviewOpen(false)}
           />
-          {previewOpen && (
-            <View
-              style={[
-                styles.card,
-                { gap: 8, borderLeftWidth: 3, borderLeftColor: colors.green },
-              ]}
-            >
-              <View style={styles.row}>
-                <ActivityBadge category={category} size={36} />
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text numberOfLines={2} style={styles.h2}>
-                    {title.trim() || "Your next little plan"}
-                  </Text>
-                  <Text style={styles.label}>
-                    {kind === "Status" ? "STATUS" : category.toUpperCase()} ·{" "}
-                    {audience}
-                  </Text>
-                </View>
-              </View>
-              <Txt muted>
-                {placeType === "Online"
-                  ? "Virtual"
-                  : label.trim() || "Place to be decided"}
-              </Txt>
-              {selectedAssociationRow ? (
-                <Txt muted>
-                  Community context · {selectedAssociationRow.name}
-                </Txt>
-              ) : null}
-              <Txt muted>
-                {when === "Pick time" && Number.isFinite(Date.parse(starts))
-                  ? new Date(starts).toLocaleString()
-                  : when}{" "}
-                · {duration}
-              </Txt>
-              {kind !== "Status" && (
-                <Txt muted>
-                  {approval === "Host approval"
-                    ? "Request to join"
-                    : "Open joining"}
-                  {beaconControls.capacity_limit != null
-                    ? ` · ${beaconControls.capacity_limit} seats (${beaconControls.capacity_policy})`
-                    : ""}
-                </Txt>
-              )}
-            </View>
-          )}
+        }
+      >
+        <View style={[styles.card, { gap: 10 }]}>
+          <BeaconIdentity
+            title={title.trim() || "Untitled Beacon"}
+            category={category}
+            subtitle="Unpublished draft"
+          />
+          <Txt>
+            {stamp(effectiveStartAt())} -{" "}
+            {stamp(
+              Date.parse(
+                resolveActivityEndAt(effectiveStartAt(), duration, ends),
+              ),
+            )}
+          </Txt>
+          <Txt>
+            {placeType === "Online"
+              ? url || "Meeting link required"
+              : label || (pin ? "Pinned location" : "Location required")}
+          </Txt>
+          <Txt>{descriptionWithPrep()}</Txt>
         </View>
-      )}
+        <Text style={styles.h2}>Who can see it</Text>
+        <Txt>
+          {audienceName}
+          {audienceId
+            ? ` · ${data.squads.find((row) => row.id === audienceId)?.name ?? data.organizations.find((row) => row.id === audienceId)?.name ?? data.lists.find((row) => row.id === audienceId)?.name ?? "Selected target"}`
+            : ""}
+        </Txt>
+        <Text style={styles.h2}>Invitations & notifications</Text>
+        <Txt>
+          {inviteeIds.length
+            ? inviteeIds.map(inviteeLabel).join(", ")
+            : "No invitations selected"}
+        </Txt>
+        <Txt muted>
+          {inviteeIds.length
+            ? "Invitations send when publication succeeds."
+            : "Visibility alone does not send invitations."}
+        </Txt>
+        <Text style={styles.h2}>Joining</Text>
+        <Txt>
+          {approval}
+          {beaconControls.capacity_limit
+            ? ` · ${beaconControls.capacity_limit} spots · ${beaconControls.capacity_policy === "strict" ? "Maximum enforced" : "Advisory"}`
+            : " · No limit"}
+        </Txt>
+        <Text style={styles.h2}>What will be created</Text>
+        <Txt>
+          {primaryAction}
+          {templateEditor
+            ? " · A reusable template; no Beacon is published"
+            : addTo === "Plan"
+              ? ` · ${ownPlans.find((row) => row.id === selectedPlanId)?.title ?? "Choose a Plan"}`
+              : addTo === "Vote / Draw"
+                ? ` · ${decision?.title || decisionTitle || "New Council and proposed option"}`
+                : " · A new Beacon"}
+        </Txt>
+        <Txt muted>{moduleNames.join(" · ")}</Txt>
+      </Sheet>
     </Screen>
   );
 }

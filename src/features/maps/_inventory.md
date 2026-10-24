@@ -38,3 +38,5 @@ Maps feature
 - components/LivingMapMarkers.native.tsx: original-artwork native constellation stacks, accessible expanded touch targets, static geographic atmosphere and ownership anchors.
 
 - Community discovery: Map previews and Beacon Overview use BeaconCommunityRow, batched viewer-authorized associations and canonical profile routes. communityReturnState.ts retains viewer/Beacon sheet position; camera, filters and contextual selection remain Map-owned.
+
+- webConstellation.ts: Leaflet DOM adapter for the shared constellation policy; ten visible petal previews, exact overflow, accessible expansion/explorer actions, Spark Swarms and ownership anchors. BeaconMap.web.tsx adds static geographic atmosphere and excludes friend locations from activity density.

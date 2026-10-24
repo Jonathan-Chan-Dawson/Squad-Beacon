@@ -1,8 +1,10 @@
+import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
 import { randomUUID } from "expo-crypto";
 import React, { useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { router } from "expo-router";
 import {
+  Check,
   ChevronDown,
   ChevronRight,
   EyeOff,
@@ -303,10 +305,18 @@ export function ActivityNoteEditor({
   );
 }
 
-export function LivingStatusHeader({ onEditStatus }: { onEditStatus(): void }) {
+export function LivingStatusHeader({
+  onEditStatus,
+  variant = "profile",
+  renderIdentity,
+}: {
+  onEditStatus(): void;
+  variant?: "compact" | "profile";
+  renderIdentity?: (availability: React.ReactNode) => React.ReactNode;
+}) {
   const { data, userId, act } = useBeacon();
   const now = useNow(1000);
-  const { colors, styles } = useTheme();
+  const { colors, styles, tokens } = useTheme();
   const [open, setOpen] = useState(false),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
@@ -358,29 +368,49 @@ export function LivingStatusHeader({ onEditStatus }: { onEditStatus(): void }) {
       setBusy(false);
     }
   };
-  return (
-    <View style={{ gap: 12 }}>
-      <View
+  const availabilityTone =
+    tokens.availability[
+      availability === "available"
+        ? "available"
+        : availability === "busy"
+          ? "unavailable"
+          : "unknown"
+    ];
+  const availabilityControl = (
+    <View
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        alignSelf: "flex-start",
+        gap: 8,
+      }}
+    >
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Change availability"
+        accessibilityState={{ expanded: open, disabled: busy }}
+        disabled={busy}
+        onPress={() => setOpen(true)}
         style={{
+          minHeight: 44,
           flexDirection: "row",
           alignItems: "center",
-          justifyContent: "space-between",
-          gap: 8,
+          gap: 6,
+          justifyContent: "center",
         }}
       >
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Change availability"
-          onPress={() => setOpen(true)}
+        <View
+          testID="availability-pill-visual"
           style={{
-            minHeight: 44,
+            minHeight: 30,
+            paddingHorizontal: 9,
             flexDirection: "row",
             alignItems: "center",
-            gap: 8,
-            paddingHorizontal: 12,
+            gap: 6,
             borderWidth: 1,
-            borderColor: colors.line,
-            borderRadius: 12,
+            borderColor: availabilityTone.color + "35",
+            backgroundColor: availabilityTone.tint,
+            borderRadius: 999,
           }}
         >
           <View
@@ -388,48 +418,103 @@ export function LivingStatusHeader({ onEditStatus }: { onEditStatus(): void }) {
               width: 8,
               height: 8,
               borderRadius: 4,
-              backgroundColor:
-                availability === "available"
-                  ? colors.green
-                  : availability === "busy"
-                    ? colors.muted
-                    : colors.muted,
+              backgroundColor: availabilityTone.color,
             }}
           />
-          <Txt>
+          <Text style={{ fontSize: 12, fontWeight: "500", color: colors.ink }}>
             {availability === "available"
               ? "Available"
               : availability === "busy"
                 ? "Busy"
-                : "Not sharing availability"}
-          </Txt>
-          <ChevronDown size={15} color={colors.muted} />
-        </Pressable>
-        {presence?.sharing === false && (
-          <EyeOff size={17} color={colors.muted} />
-        )}
-      </View>
-      <Pressable
-        testID="living-status-message"
-        accessibilityRole="button"
-        accessibilityLabel="Edit Status Note"
-        onPress={onEditStatus}
-        style={{ minHeight: 44 }}
-      >
-        <NoteSpeechBubble compact tailTowardIdentity>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-            <Text
-              style={[
-                styles.body,
-                { flex: 1, color: text ? colors.ink : colors.muted },
-              ]}
-            >
-              {text || "Add a status message…"}
-            </Text>
-            <Pencil size={15} color={colors.muted} />
-          </View>
-        </NoteSpeechBubble>
+                : "Not sharing"}
+          </Text>
+          <ChevronDown size={13} color={colors.muted} />
+        </View>
       </Pressable>
+      {presence?.sharing === false && <EyeOff size={17} color={colors.muted} />}
+    </View>
+  );
+  const noteControl = (
+    <Pressable
+      testID="living-status-message"
+      accessibilityRole="button"
+      accessibilityLabel="Edit Status Note"
+      onPress={onEditStatus}
+      style={{ minHeight: 44, alignSelf: "stretch", minWidth: 0 }}
+    >
+      <NoteSpeechBubble compact tailTowardIdentity>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+          <Text
+            style={[
+              styles.body,
+              {
+                flex: 1,
+                minWidth: 0,
+                fontSize: variant === "compact" ? 13 : 14,
+                lineHeight: 20,
+                color: text ? colors.ink : colors.muted,
+              },
+            ]}
+          >
+            {text || "Add a status message…"}
+          </Text>
+          <Pencil size={15} color={colors.muted} />
+        </View>
+      </NoteSpeechBubble>
+    </Pressable>
+  );
+  const profile = data.profiles.find((person) => person.id === userId);
+  return (
+    <View
+      testID={
+        variant === "compact"
+          ? "home-identity-status"
+          : "profile-identity-status"
+      }
+      style={{ gap: 4 }}
+    >
+      {variant === "compact" ? (
+        <View>
+          <View
+            style={{ flexDirection: "row", alignItems: "flex-start", gap: 10 }}
+          >
+            <Pressable
+              testID="home-status-avatar"
+              accessibilityRole="button"
+              accessibilityLabel="Open your profile"
+              onPress={() => router.push("/(tabs)/profile")}
+              style={{
+                minWidth: 44,
+                minHeight: 44,
+                justifyContent: "center",
+                paddingTop: 4,
+              }}
+            >
+              <ProfileAvatar profile={profile} size={44} />
+            </Pressable>
+            <Text
+              style={{
+                flex: 1,
+                minWidth: 0,
+                alignSelf: "center",
+                fontSize: 14,
+                fontWeight: "600",
+                color: colors.ink,
+              }}
+            >
+              {profile?.name || "Your status"}
+            </Text>
+            {availabilityControl}
+          </View>
+          {noteControl}
+        </View>
+      ) : (
+        <View style={{ gap: 2 }}>
+          {renderIdentity?.(availabilityControl)}
+          {noteControl}
+          {!renderIdentity && availabilityControl}
+        </View>
+      )}
       <Sheet
         title="Availability & sharing"
         visible={open}
@@ -437,15 +522,120 @@ export function LivingStatusHeader({ onEditStatus }: { onEditStatus(): void }) {
           if (!busy) setOpen(false);
         }}
       >
-        <Txt muted>
-          Availability is independent of your notes, plans, and location.
-        </Txt>
-        <Button
-          compact
-          secondary
-          title={settings ? "Hide audience & duration" : "Audience & duration"}
+        <Txt muted>Let friends know if you’re free.</Txt>
+        <View style={{ gap: 3 }}>
+          {(["available", "busy", null] as const).map((value) => {
+            const tone =
+              tokens.availability[
+                value === "available"
+                  ? "available"
+                  : value === "busy"
+                    ? "unavailable"
+                    : "unknown"
+              ];
+            const selected = availability === value;
+            const label =
+              value === "available"
+                ? "Available"
+                : value === "busy"
+                  ? "Busy"
+                  : "Not sharing availability";
+            return (
+              <Pressable
+                key={String(value)}
+                accessibilityRole="button"
+                accessibilityLabel={label}
+                accessibilityState={{ selected, disabled: busy }}
+                aria-pressed={selected}
+                disabled={busy}
+                onPress={() =>
+                  void setPresence({
+                    availability: value,
+                    availability_audience: audience,
+                    availability_audience_id: audienceId,
+                  })
+                }
+                style={{
+                  minHeight: 54,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 12,
+                  paddingVertical: 8,
+                  paddingHorizontal: 10,
+                  borderRadius: 14,
+                  backgroundColor: selected ? tone.tint : "transparent",
+                  borderWidth: 1,
+                  borderColor: selected ? tone.color + "35" : "transparent",
+                }}
+              >
+                <View
+                  style={{
+                    width: 28,
+                    height: 28,
+                    borderRadius: 14,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    backgroundColor: tone.tint,
+                  }}
+                >
+                  <View
+                    style={{
+                      width: 9,
+                      height: 9,
+                      borderRadius: 5,
+                      backgroundColor:
+                        value === null ? "transparent" : tone.color,
+                      borderWidth: value === null ? 1.5 : 0,
+                      borderColor: tone.color,
+                    }}
+                  />
+                </View>
+                <View style={{ flex: 1, gap: 3 }}>
+                  <Text
+                    style={{
+                      color: colors.ink,
+                      fontSize: 15,
+                      fontWeight: "500",
+                    }}
+                  >
+                    {label}
+                  </Text>
+                  <Text style={{ color: colors.muted, fontSize: 12 }}>
+                    {value === "available"
+                      ? "Open to hanging out"
+                      : value === "busy"
+                        ? "Doing my own thing"
+                        : "Keep availability private"}
+                  </Text>
+                </View>
+                {selected && <Check size={19} color={tone.color} />}
+              </Pressable>
+            );
+          })}
+        </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={
+            settings ? "Hide audience & duration" : "Audience & duration"
+          }
+          accessibilityState={{ expanded: settings }}
           onPress={() => setSettings(!settings)}
-        />
+          style={{
+            minHeight: 44,
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
+          <Text style={{ flex: 1, color: colors.muted, fontSize: 13 }}>
+            Audience & duration
+          </Text>
+          <ChevronDown
+            size={15}
+            color={colors.muted}
+            style={{ transform: [{ rotate: settings ? "180deg" : "0deg" }] }}
+          />
+        </Pressable>
         {settings && (
           <>
             <AudiencePicker
@@ -464,27 +654,6 @@ export function LivingStatusHeader({ onEditStatus }: { onEditStatus(): void }) {
             />
           </>
         )}
-        {(["available", "busy", null] as const).map((value) => (
-          <Button
-            key={String(value)}
-            secondary
-            title={
-              value === "available"
-                ? "Available"
-                : value === "busy"
-                  ? "Busy"
-                  : "Not sharing availability"
-            }
-            disabled={busy}
-            onPress={() =>
-              void setPresence({
-                availability: value,
-                availability_audience: audience,
-                availability_audience_id: audienceId,
-              })
-            }
-          />
-        ))}
         <Button
           secondary
           title={

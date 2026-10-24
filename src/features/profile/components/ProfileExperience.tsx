@@ -3,7 +3,7 @@ import {
   LivingActivityHighlights,
 } from "@/src/features/beacons/components/feed/LivingActivitySection";
 import React, { useEffect, useState } from "react";
-import { Text, View } from "react-native";
+import { Text, View, useWindowDimensions } from "react-native";
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -213,6 +213,7 @@ export function ProfileExperience({
   onTabChange: (tab: ProfileTab) => void;
 }) {
   const { data, userId } = useBeacon();
+  const { width: profileWidth } = useWindowDimensions();
   const { styles, semanticColors: colors, tokens } = useTheme();
   const reduced = useReducedMotion();
   const fade = useSharedValue(1);
@@ -305,11 +306,116 @@ export function ProfileExperience({
       router.push({ pathname: "/space/[id]", params: { id: context.id } });
     else router.push({ pathname: "/squad/[id]", params: { id: context.id } });
   }
+  const renderIdentity = (availabilityControl?: React.ReactNode) => (
+    <View
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        gap: availabilityControl && profileWidth < 360 ? 10 : 14,
+      }}
+    >
+      <View style={{ alignItems: "center", gap: 6, maxWidth: "46%" }}>
+        {!(data.is_demo || data.capabilities?.living_activity) && (
+          <StatusBubble
+            personId={profile.id}
+            onPress={() => setStatusViewerOpen(true)}
+          />
+        )}
+        <MotionPressable
+          testID="profile-avatar"
+          accessibilityRole="button"
+          accessibilityLabel={
+            own ? "Edit profile photo" : `${profile.name}'s avatar`
+          }
+          onPress={own ? () => edit() : undefined}
+          disabled={!own}
+          style={{
+            padding: 3,
+            borderRadius: 50,
+            borderWidth: 1.5,
+            borderColor:
+              availability !== "unknown" ? availabilityColor : colors.border,
+          }}
+        >
+          <ProfileAvatar
+            profile={profile}
+            size={availabilityControl && profileWidth < 360 ? 64 : 88}
+            status={availability}
+          />
+        </MotionPressable>
+      </View>
+      <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+        <Text
+          accessibilityRole="header"
+          style={[
+            styles.title,
+            {
+              fontSize: availabilityControl && profileWidth < 360 ? 22 : 25,
+              lineHeight: 30,
+            },
+          ]}
+        >
+          {profile.name}
+        </Text>
+        <Txt muted>@{profile.username}</Txt>
+        {!!profile.home && (
+          <View style={{ flexDirection: "row", gap: 5, alignItems: "center" }}>
+            <MapPin size={13} color={colors.textSecondary} />
+            <Text style={[styles.muted, { flex: 1, fontSize: 12 }]}>
+              {profile.home}
+            </Text>
+          </View>
+        )}
+        {own ? (
+          !(data.is_demo || data.capabilities?.living_activity) ? (
+            <SharedStatusControl profilePill />
+          ) : null
+        ) : (
+          availability !== "unknown" && (
+            <View
+              style={{
+                flexDirection: "row",
+                gap: 6,
+                alignItems: "center",
+                paddingVertical: 5,
+              }}
+            >
+              <View
+                style={{
+                  width: 7,
+                  height: 7,
+                  borderRadius: 4,
+                  backgroundColor: availabilityColor,
+                }}
+              />
+              <Text
+                style={[
+                  styles.muted,
+                  {
+                    flex: 1,
+                    color: availabilityColor,
+                  },
+                ]}
+              >
+                {available
+                  ? "Available now"
+                  : availability === "ending-soon"
+                    ? "Wrapping up soon"
+                    : "Not available right now"}
+              </Text>
+            </View>
+          )
+        )}
+      </View>
+      {accessory}
+      {availabilityControl}
+    </View>
+  );
   return (
-    <View style={{ gap: 18 }}>
+    <View style={{ gap: 14 }}>
       <View
         testID={own ? "profile-identity" : "person-profile-identity"}
-        style={{ gap: 12, padding: 2, overflow: "hidden", borderRadius: 22 }}
+        style={{ gap: 10, padding: 2, overflow: "hidden", borderRadius: 22 }}
       >
         <Svg
           pointerEvents="none"
@@ -325,90 +431,22 @@ export function ProfileExperience({
           </Defs>
           <Rect width="100%" height="100%" fill="url(#profile-light)" />
         </Svg>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 14 }}>
-          <View style={{ alignItems: "center", gap: 6, maxWidth: "46%" }}>
-            {!(data.is_demo || data.capabilities?.living_activity) && (
-              <StatusBubble
-                personId={profile.id}
-                onPress={() => setStatusViewerOpen(true)}
-              />
-            )}
-            <MotionPressable
-              testID="profile-avatar"
-              accessibilityRole="button"
-              accessibilityLabel={
-                own ? "Edit profile photo" : `${profile.name}'s avatar`
-              }
-              onPress={own ? () => edit() : undefined}
-              disabled={!own}
-              style={{
-                padding: 3,
-                borderRadius: 50,
-                borderWidth: 1.5,
-                borderColor:
-                  availability !== "unknown"
-                    ? availabilityColor
-                    : colors.border,
-              }}
-            >
-              <ProfileAvatar
-                profile={profile}
-                size={88}
-                status={availability}
-              />
-            </MotionPressable>
-          </View>
-          <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
-            <Text
-              accessibilityRole="header"
-              style={[styles.title, { fontSize: 25, lineHeight: 30 }]}
-            >
-              {profile.name}
-            </Text>
-            <Txt muted>@{profile.username}</Txt>
-            {own ? (
-              !(data.is_demo || data.capabilities?.living_activity) ? (
-                <SharedStatusControl profilePill />
-              ) : null
-            ) : (
-              availability !== "unknown" && (
-                <View
-                  style={{
-                    flexDirection: "row",
-                    gap: 6,
-                    alignItems: "center",
-                    paddingVertical: 5,
-                  }}
-                >
-                  <View
-                    style={{
-                      width: 7,
-                      height: 7,
-                      borderRadius: 4,
-                      backgroundColor: availabilityColor,
-                    }}
-                  />
-                  <Text
-                    style={[
-                      styles.muted,
-                      {
-                        flex: 1,
-                        color: availabilityColor,
-                      },
-                    ]}
-                  >
-                    {available
-                      ? "Available now"
-                      : availability === "ending-soon"
-                        ? "Wrapping up soon"
-                        : "Not available right now"}
-                  </Text>
-                </View>
-              )
-            )}
-          </View>
-          {accessory}
-        </View>
+        {(data.is_demo || data.capabilities?.living_activity) && own ? (
+          <SharedStatusControl
+            livingLayout
+            identityOnly
+            renderIdentity={renderIdentity}
+          />
+        ) : (
+          renderIdentity()
+        )}
+        {(data.is_demo || data.capabilities?.living_activity) && !own && (
+          <StatusBubble
+            attached
+            personId={profile.id}
+            onPress={() => setStatusViewerOpen(true)}
+          />
+        )}
         <StatusViewer
           personId={profile.id}
           visible={statusViewerOpen}
@@ -435,12 +473,6 @@ export function ProfileExperience({
             secondary
             onPress={() => edit()}
           />
-        )}
-        {!!profile.home && (
-          <View style={{ flexDirection: "row", gap: 7, alignItems: "center" }}>
-            <MapPin size={15} color={colors.textSecondary} />
-            <Txt muted>{profile.home}</Txt>
-          </View>
         )}
         <View
           style={{ flexDirection: "row", paddingVertical: 4 }}
@@ -507,18 +539,9 @@ export function ProfileExperience({
           {actions}
         </View>
       </View>
-      {(data.is_demo || data.capabilities?.living_activity) &&
-        (own ? (
-          <SharedStatusControl livingLayout />
-        ) : (
-          <View style={{ gap: 12 }}>
-            <StatusBubble
-              personId={profile.id}
-              onPress={() => setStatusViewerOpen(true)}
-            />
-            <LivingActivitySection personId={profile.id} showLower={false} />
-          </View>
-        ))}
+      {(data.is_demo || data.capabilities?.living_activity) && (
+        <LivingActivitySection personId={profile.id} showLower={false} />
+      )}
       {(data.is_demo || data.capabilities?.living_activity) && (
         <LivingActivityHighlights personId={profile.id} />
       )}

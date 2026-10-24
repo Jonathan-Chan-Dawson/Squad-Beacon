@@ -14,3 +14,7 @@ Documentation guide
 - ADAPTIVE_BEACON_CARD_VALIDATION.md: shared Browse/Map card shell, canonical capacity and Plan metadata, verification status, screenshots, and native acceptance boundaries.
 
 - LIVING_ACTIVITY_VALIDATION.md: Pass 3 profile order, independent presence, creation and privacy behavior, additive migration rollout, and verification boundaries.
+
+- SOCIAL_PRESENCE_REFINEMENT.md: attached identity/status layout, Sonar people filters, API compatibility, and verification boundaries.
+
+- beacon-creation-polish.md: Pass 1 compact creation, durable drafts, publishing recovery, rendered evidence, test results, and device/hosted verification boundaries.

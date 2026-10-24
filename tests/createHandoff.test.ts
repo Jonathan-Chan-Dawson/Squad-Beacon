@@ -215,3 +215,19 @@ test("server actor mismatch cannot discard an ambiguous original-account request
   assert.equal(session.atomicAttempt?.requestId,"owner-request");
   assert.equal(session.atomicAttempt?.payload.expected_actor_id,DEMO_ID);
 });
+
+test("a failed created-ID checkpoint blocks invitations and retry never recreates", async () => {
+  const data = makeDemo(), session = newCreationInviteSession();
+  let creates = 0, invitations = 0;
+  await assert.rejects(createAndInvite(session, ["jordan"], () => data, DEMO_ID,
+    async () => { creates++; return { id: "confirmed-beacon" }; },
+    async () => { invitations++; return {}; },
+    async () => { throw new Error("storage lost"); }), /storage lost/);
+  assert.equal(session.createdId, "confirmed-beacon");
+  assert.equal(invitations, 0);
+  await createAndInvite(session, ["jordan"], () => data, DEMO_ID,
+    async () => { creates++; return { id: "duplicate" }; },
+    async () => { invitations++; return {}; }, async () => {});
+  assert.equal(creates, 1);
+  assert.equal(invitations, 1);
+});

@@ -460,7 +460,11 @@ export function Action({
     </View>
   );
 }
-export function Field({ label, ...props }: TextInputProps & { label: string }) {
+export function Field({
+  label,
+  inputRef,
+  ...props
+}: TextInputProps & { label: string; inputRef?: React.Ref<TextInput> }) {
   const { styles, colors, tokens } = useTheme();
 
   return (
@@ -472,6 +476,7 @@ export function Field({ label, ...props }: TextInputProps & { label: string }) {
         {label}
       </Text>
       <TextInput
+        ref={inputRef}
         accessibilityLabel={label}
         placeholderTextColor={colors.muted}
         {...props}

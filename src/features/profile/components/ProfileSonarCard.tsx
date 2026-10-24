@@ -1,6 +1,8 @@
+import { sonarSelectionRequest, type SonarDuration } from "../sonarSelection";
+import { SocialSelector } from "@/src/features/people/components/SocialSelector";
 import React, { useEffect, useRef, useState } from "react";
-import { Pressable, Text, View } from "react-native";
-import { Check, ChevronRight, Radio } from "lucide-react-native";
+import { Pressable, ScrollView, Text, View } from "react-native";
+import { ChevronRight, Radio } from "lucide-react-native";
 import Animated, {
   cancelAnimation,
   useAnimatedStyle,
@@ -16,7 +18,6 @@ import { useNow } from "@/src/shared/useNow";
 import { startDeviceLocation, stopDeviceLocation } from "@/src/platform/device";
 import {
   activeSonarSession,
-  locationShareExpiry,
   MAX_LOCATION_SHARE_MS,
   sonarMinutesRemaining,
 } from "@/src/features/maps/sessionHelpers";
@@ -24,16 +25,9 @@ import { readViewerDeviceDefaults } from "@/src/features/profile/settings/device
 import { HomeAction } from "@/src/features/beacons/components/HomeAction";
 import { Action, Button, Sheet, Txt, useTheme } from "@/src/shared/ui";
 
-type Duration =
-  "15 minutes" | "30 minutes" | "1 hour" | "4 hours" | "Until activity ends";
-const minuteDurations = {
-  "15 minutes": 15,
-  "30 minutes": 30,
-  "1 hour": 60,
-  "4 hours": 240,
-} as const;
+type Duration = SonarDuration;
 
-export function ProfileSonarCard({
+function ProfileSonarControl({
   compact = false,
   row = false,
 }: {
@@ -51,7 +45,10 @@ export function ProfileSonarCard({
   const [duration, setDuration] = useState<Duration>("15 minutes");
   const [activityId, setActivityId] = useState("");
   const [busy, setBusy] = useState(false);
+  const [sharingError, setSharingError] = useState("");
+  const submitting = useRef(false);
   const opening = useRef(0);
+  const openedSessionId = useRef<string | null>(null);
   const mountedViewer = useRef<string | null>(userId);
   const latest = useRef({ data, userId });
   useEffect(() => {
@@ -115,7 +112,9 @@ export function ProfileSonarCard({
   const openConfirmation = () => {
     // Reading a preference does not request location or start a session.
     const request = ++opening.current;
-    setSelected([]);
+    openedSessionId.current = session?.id ?? null;
+    setSelected(session ? [...(data.location_recipients ?? [])] : []);
+    setSharingError("");
     setActivityId("");
     setDuration("15 minutes");
     setOpen(true);
@@ -147,6 +146,105 @@ export function ProfileSonarCard({
     if (!supabase) return false;
     const { data: authentication, error } = await supabase.auth.getSession();
     return !error && authentication.session?.user.id === viewerId;
+  };
+
+  const confirmSharing = async (extend: boolean) => {
+    const currentSnapshot = latest.current;
+    if (
+      !userId ||
+      currentSnapshot.userId !== userId ||
+      currentSnapshot.data.viewer_id !== userId ||
+      mountedViewer.current !== userId
+    )
+      throw new Error("Refresh your profile before starting Sonar.");
+    if (demo)
+      throw new Error(
+        "The demo never shares your device location. Use a real account and mobile development build.",
+      );
+    const request = sonarSelectionRequest(
+      currentSnapshot.data,
+      userId,
+      selected,
+      duration,
+      activityId,
+      openedSessionId.current ? (extend ? "extend" : "save") : "start",
+      openedSessionId.current,
+    );
+    setBusy(true);
+    try {
+      const result = await act("start_location", {
+        ...request,
+        expected_actor_id: userId,
+      });
+      const stillViewer =
+        latest.current.userId === userId &&
+        latest.current.data.viewer_id === userId &&
+        (await accountMatches(userId));
+      if (mountedViewer.current !== userId || !stillViewer) {
+        if (stillViewer) await act("stop_location");
+        throw new Error(
+          "Your account or screen changed before location sharing could start.",
+        );
+      }
+      if (
+        typeof result.id !== "string" ||
+        !result.id ||
+        typeof result.expires_at !== "string" ||
+        !Number.isFinite(Date.parse(result.expires_at)) ||
+        Date.parse(result.expires_at) <= Date.now()
+      ) {
+        await act("stop_location");
+        throw new Error(
+          "Location sharing did not return a valid active session. Try again.",
+        );
+      }
+      try {
+        await startDeviceLocation({
+          id: result.id,
+          expires_at: result.expires_at,
+        });
+        if (
+          mountedViewer.current !== userId ||
+          latest.current.userId !== userId
+        ) {
+          await stopDeviceLocation();
+          throw new Error(
+            "Your account or screen changed while device location was starting.",
+          );
+        }
+      } catch (error) {
+        if (
+          latest.current.userId === userId &&
+          latest.current.data.viewer_id === userId &&
+          (await accountMatches(userId))
+        )
+          await act("stop_location");
+        throw error;
+      }
+      opening.current += 1;
+      setOpen(false);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const submit = async (extend: boolean) => {
+    if (submitting.current) return;
+    submitting.current = true;
+    setBusy(true);
+    setSharingError("");
+    try {
+      await confirmSharing(extend);
+    } catch (failure) {
+      setSharingError(
+        failure instanceof Error
+          ? failure.message
+          : "Could not update Sonar. Try again.",
+      );
+    } finally {
+      submitting.current = false;
+      setBusy(false);
+    }
   };
 
   return (
@@ -260,9 +358,51 @@ export function ProfileSonarCard({
           )}
         </>
       )}
-      <Sheet title="Start Sonar" visible={open} onClose={close}>
+      <Sheet
+        title={session ? "Manage Sonar" : "Start Sonar"}
+        visible={open}
+        onClose={close}
+        footer={
+          <View style={{ gap: 8 }}>
+            {!!sharingError && (
+              <Text accessibilityRole="alert" style={styles.error}>
+                {sharingError}
+              </Text>
+            )}
+            <Button
+              title={`${session ? "Save people" : "Start Sonar"} · ${picked.length} ${picked.length === 1 ? "person" : "people"}`}
+              disabled={
+                busy ||
+                !picked.length ||
+                selected.length > 50 ||
+                picked.length !== selected.length ||
+                (!session &&
+                  duration === "Until activity ends" &&
+                  !eligible.some((a) => a.id === activityId))
+              }
+              onPress={() => void submit(!session)}
+            />
+            {session && (
+              <Button
+                secondary
+                title="Extend Sonar"
+                disabled={
+                  busy ||
+                  !picked.length ||
+                  selected.length > 50 ||
+                  picked.length !== selected.length ||
+                  atLimit ||
+                  (duration === "Until activity ends" &&
+                    !eligible.some((a) => a.id === activityId))
+                }
+                onPress={() => void submit(true)}
+              />
+            )}
+          </View>
+        }
+      >
         <View testID="profile-sonar-confirmation" style={{ gap: 12 }}>
-          {compact && session ? (
+          {session ? (
             <Action
               title="Stop Sonar"
               secondary
@@ -280,88 +420,95 @@ export function ProfileSonarCard({
             />
           ) : null}
           <Text style={styles.body}>
-            Your live location will be visible only to the accepted friends you
-            select. Sharing ends automatically; no location history is kept.
+            Choose which friends can temporarily see your live location.
           </Text>
-          <Text style={styles.body}>
-            Temporary. Only the friends you pick. Not a safety service.
-          </Text>
-          {demo && (
+          {session && (
             <Txt muted>
-              The demo never shares your device location. A real account and
-              mobile development build are required.
+              Active · {sonarMinutesRemaining(session.expires_at, now)}m
+              remaining. Save people keeps the current end time.
             </Txt>
           )}
-          <Text style={styles.h2}>Choose friends</Text>
-          {!friends.length && (
-            <Txt muted>Add and accept a friend before starting Sonar.</Txt>
+          <SocialSelector
+            groupBehavior="filterFriends"
+            supportedKinds={["friend"]}
+            selected={selected.map((id) => ({ kind: "friend", id }))}
+            onChange={(rows) =>
+              setSelected(
+                rows.filter((r) => r.kind === "friend").map((r) => r.id),
+              )
+            }
+            disabled={busy}
+          />
+          {picked.length !== selected.length && (
+            <View style={{ gap: 4 }}>
+              <Text accessibilityRole="alert" style={styles.error}>
+                Some selected people are no longer eligible. Review your
+                selection before sharing.
+              </Text>
+              <Button
+                secondary
+                title="Remove unavailable selections"
+                onPress={() => setSelected(picked)}
+                disabled={busy}
+              />
+            </View>
           )}
-          {friends.map((friend) => (
-            <Pressable
-              key={friend.id}
-              accessibilityRole="checkbox"
-              accessibilityLabel={`Share location with ${friend.name}`}
-              accessibilityState={{
-                checked: picked.includes(friend.id),
-                disabled: busy,
-              }}
-              disabled={busy}
-              onPress={() =>
-                setSelected((previous) =>
-                  previous.includes(friend.id)
-                    ? previous.filter((id) => id !== friend.id)
-                    : [...previous, friend.id],
-                )
-              }
-              style={[styles.row, { minHeight: 44, gap: 12 }]}
-            >
-              <View
+          <Text style={styles.h2}>{session ? "Extend by" : "Duration"}</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            {(
+              [
+                "15 minutes",
+                "30 minutes",
+                "1 hour",
+                "4 hours",
+                "Until activity ends",
+              ] as const
+            ).map((option) => (
+              <Pressable
+                key={option}
+                accessibilityRole="button"
+                accessibilityLabel={option}
+                accessibilityState={{
+                  selected: duration === option,
+                  disabled: busy,
+                }}
+                disabled={busy}
+                onPress={() => {
+                  opening.current += 1;
+                  setDuration(option);
+                }}
                 style={{
-                  width: 24,
-                  height: 24,
-                  borderRadius: 7,
-                  borderWidth: 1,
-                  borderColor: colors.border,
-                  backgroundColor: picked.includes(friend.id)
-                    ? colors.accent
-                    : colors.surface,
-                  alignItems: "center",
+                  minHeight: 44,
+                  minWidth: 44,
+                  paddingHorizontal: 12,
                   justifyContent: "center",
+                  borderBottomWidth: 2,
+                  borderBottomColor:
+                    duration === option ? colors.accent : "transparent",
                 }}
               >
-                {picked.includes(friend.id) && (
-                  <Check size={18} color={colors.onAccent} />
-                )}
-              </View>
-              <Text style={styles.body}>{friend.name}</Text>
-            </Pressable>
-          ))}
-          <Text style={styles.h2}>Duration</Text>
-          {(
-            [
-              "15 minutes",
-              "30 minutes",
-              "1 hour",
-              "4 hours",
-              "Until activity ends",
-            ] as const
-          ).map((option) => (
-            <Button
-              key={option}
-              title={option}
-              secondary={duration !== option}
-              disabled={busy}
-              onPress={() => {
-                opening.current += 1;
-                setDuration(option);
-              }}
-            />
-          ))}
+                <Text
+                  style={{
+                    color:
+                      duration === option
+                        ? colors.accent
+                        : colors.textSecondary,
+                  }}
+                >
+                  {option}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
           {duration === "Until activity ends" && (
             <>
               <Txt muted>
-                Choose a Beacon. Sharing ends at its end, capped at four hours
-                from now.
+                Choose a Beacon. Sharing ends at its end, capped at{" "}
+                {MAX_LOCATION_SHARE_MS / 3600000} hours from now.
               </Txt>
               {eligible.map((activity) => (
                 <Button
@@ -381,159 +528,16 @@ export function ProfileSonarCard({
           )}
           {atLimit && (
             <Txt muted>
-              The session has reached the four-hour limit from now.
+              The session has reached the {MAX_LOCATION_SHARE_MS / 3600000}-hour
+              limit from now.
             </Txt>
           )}
-          <Action
-            title={
-              session ? "Confirm and extend Sonar" : "Confirm and start Sonar"
-            }
-            disabled={
-              busy ||
-              !picked.length ||
-              atLimit ||
-              (duration === "Until activity ends" &&
-                !eligible.some((activity) => activity.id === activityId))
-            }
-            run={async () => {
-              const currentSnapshot = latest.current;
-              if (
-                !userId ||
-                currentSnapshot.userId !== userId ||
-                currentSnapshot.data.viewer_id !== userId ||
-                mountedViewer.current !== userId
-              )
-                throw new Error("Refresh your profile before starting Sonar.");
-              if (demo)
-                throw new Error(
-                  "The demo never shares your device location. Use a real account and mobile development build.",
-                );
-              const currentFriends = friendIds(
-                currentSnapshot.data,
-                userId,
-              ).filter(
-                (id) =>
-                  !currentSnapshot.data.blocks.some(
-                    (block) =>
-                      (block.blocker_id === userId &&
-                        block.blocked_id === id) ||
-                      (block.blocked_id === userId && block.blocker_id === id),
-                  ),
-              );
-              const confirmedFriends = picked.filter((id) =>
-                currentFriends.includes(id),
-              );
-              if (
-                !confirmedFriends.length ||
-                confirmedFriends.length !== picked.length
-              )
-                throw new Error(
-                  "Choose currently accepted friends before starting Sonar.",
-                );
-              const current = Date.now();
-              const active = activeSonarSession(
-                currentSnapshot.data.locations,
-                userId,
-                current,
-              );
-              const beacon = currentSnapshot.data.activities.find(
-                (activity) =>
-                  activity.id === activityId &&
-                  activity.status === "scheduled" &&
-                  (activity.owner_id === userId ||
-                    currentSnapshot.data.rsvps.some(
-                      (rsvp) =>
-                        rsvp.activity_id === activity.id &&
-                        rsvp.user_id === userId &&
-                        rsvp.status === "going" &&
-                        rsvp.approved,
-                    )),
-              );
-              const expiry =
-                duration === "Until activity ends"
-                  ? locationShareExpiry(
-                      duration,
-                      current,
-                      active?.expires_at,
-                      beacon?.ends_at,
-                    )
-                  : Math.min(
-                      Math.max(
-                        current,
-                        active ? Date.parse(active.expires_at) : current,
-                      ) +
-                        minuteDurations[duration] * 60000,
-                      current + MAX_LOCATION_SHARE_MS,
-                    );
-              if (
-                !expiry ||
-                expiry <=
-                  Math.max(
-                    current,
-                    active ? Date.parse(active.expires_at) : current,
-                  )
-              )
-                throw new Error(
-                  "Choose a duration or Beacon that extends sharing within the four-hour limit.",
-                );
-              setBusy(true);
-              try {
-                const result = await act("start_location", {
-                  recipients: confirmedFriends,
-                  expires_at: new Date(expiry).toISOString(),
-                });
-                const stillViewer =
-                  latest.current.userId === userId &&
-                  latest.current.data.viewer_id === userId &&
-                  (await accountMatches(userId));
-                if (mountedViewer.current !== userId || !stillViewer) {
-                  if (stillViewer) await act("stop_location");
-                  throw new Error(
-                    "Your account or screen changed before location sharing could start.",
-                  );
-                }
-                if (
-                  typeof result.id !== "string" ||
-                  !result.id ||
-                  typeof result.expires_at !== "string" ||
-                  !Number.isFinite(Date.parse(result.expires_at)) ||
-                  Date.parse(result.expires_at) <= Date.now()
-                ) {
-                  await act("stop_location");
-                  throw new Error(
-                    "Location sharing did not return a valid active session. Try again.",
-                  );
-                }
-                try {
-                  await startDeviceLocation({
-                    id: result.id,
-                    expires_at: result.expires_at,
-                  });
-                  if (
-                    mountedViewer.current !== userId ||
-                    latest.current.userId !== userId
-                  ) {
-                    await stopDeviceLocation();
-                    throw new Error(
-                      "Your account or screen changed while device location was starting.",
-                    );
-                  }
-                } catch (error) {
-                  if (
-                    latest.current.userId === userId &&
-                    latest.current.data.viewer_id === userId &&
-                    (await accountMatches(userId))
-                  )
-                    await act("stop_location");
-                  throw error;
-                }
-                opening.current += 1;
-                setOpen(false);
-              } finally {
-                setBusy(false);
-              }
-            }}
-          />
+          {demo && (
+            <Txt muted>
+              The demo never shares your device location. A real account and
+              mobile development build are required.
+            </Txt>
+          )}
           <Txt muted>
             Location updates depend on device permissions, battery settings, and
             app state. Old positions disappear after five minutes. Offline stop
@@ -544,4 +548,11 @@ export function ProfileSonarCard({
       </Sheet>
     </View>
   );
+}
+
+export function ProfileSonarCard(
+  props: React.ComponentProps<typeof ProfileSonarControl>,
+) {
+  const { userId } = useBeacon();
+  return <ProfileSonarControl key={userId ?? "signed-out"} {...props} />;
 }

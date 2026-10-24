@@ -29,3 +29,5 @@ People feature
 - Prompt 2: SquadProfileScreen uses compact profiles, a combined three-item activity preview, horizontal member previews, virtualized focused Members, multiple authorized community disclosures and categorized guarded settings. VirtualizedCommunityDirectory owns full safe community lists and existing membership actions.
 
 - components/PrivateListAvatar.tsx: shared Close Friends people icon and deterministic theme-aware custom-list initial colors in the selector and management.
+
+- components/FriendFilterSelector.tsx and friendGroupFilters.ts: SocialSelector's optional filterFriends mode; authorized group/list browsing narrows accepted friends without selecting group audiences.

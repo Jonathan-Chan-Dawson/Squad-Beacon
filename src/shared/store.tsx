@@ -423,7 +423,9 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
           const activity = next.activities.find(
             (item) => !baseData.activities.some((old) => old.id === item.id),
           );
-          return activity ? { id: activity.id } : {};
+          const result=activity ? { id: activity.id } : {};
+          if(requestKey)demoRequests.current.set(requestKey,result);
+          return result;
         }
         if (action === "create_plan" || action === "run_routine_once" || action === "run_routine_now") {
           const plan = next.plans.find(
@@ -533,7 +535,7 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
       const generation = epoch.current;
       const viewer = session.user.id;
       const atomicCreation = action === "create_activity_with_invitees" || action === "create_plan_beacon_with_invitees";
-      const actorScoped = atomicCreation || ["rsvp","save_activity_note","end_activity_note","update_presence","save_status_note","create_planning_thread","add_council_proposal"].includes(action);
+      const actorScoped = atomicCreation || action === "create_activity" || action === "create_plan_beacon" || ["rsvp","start_location","stop_location","save_activity_note","end_activity_note","update_presence","save_status_note","create_planning_thread","add_council_proposal"].includes(action);
       const assertAtomicViewer = () => {
         if (actorScoped && (generation !== epoch.current || dataRef.current.viewer_id !== viewer)) throw new Error(action === "rsvp" ? "Your account changed. Refresh before responding." : "Your account changed before publication. Return to the account that started this Beacon.");
       };

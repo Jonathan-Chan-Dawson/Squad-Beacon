@@ -16,6 +16,7 @@ export function CreationInvitees({
   const { data, userId } = useBeacon();
   const now = useNow();
   const [open, setOpen] = useState(false);
+  const [selectionError, setSelectionError] = useState("");
   const friends = useMemo(
     () => socialFriends(data, userId, now),
     [data, userId, now],
@@ -28,7 +29,9 @@ export function CreationInvitees({
       <Button
         compact
         secondary
-        title={`${ids.length} selected friends · Edit`}
+        title={
+          ids.length ? `${ids.length} selected · Edit people` : "+ Add People"
+        }
         onPress={() => setOpen(true)}
       />
       <Sheet
@@ -38,7 +41,7 @@ export function CreationInvitees({
         footer={
           <View style={{ gap: 8 }}>
             <Txt muted>
-              {ids.length} selected · Invitations send when you publish.
+              {ids.length}/20 selected · Invitations send when you publish.
             </Txt>
             <Button
               compact
@@ -50,6 +53,7 @@ export function CreationInvitees({
           </View>
         }
       >
+        {selectionError ? <Txt>{selectionError}</Txt> : null}
         {unavailable.map((id) => (
           <Button
             key={id}
@@ -75,11 +79,19 @@ export function CreationInvitees({
         <SocialSelector
           friends={friends}
           selected={ids.map((id) => ({ kind: "friend", id }))}
-          onChange={(rows) =>
-            onChange(
-              rows.filter((row) => row.kind === "friend").map((row) => row.id),
-            )
-          }
+          onChange={(rows) => {
+            const ids = rows
+              .filter((row) => row.kind === "friend")
+              .map((row) => row.id);
+            if (ids.length > 20) {
+              setSelectionError(
+                "Choose up to 20 friends for this invitation batch.",
+              );
+              return;
+            }
+            setSelectionError("");
+            onChange(ids);
+          }}
           supportedKinds={["friend"]}
           bulk
         />

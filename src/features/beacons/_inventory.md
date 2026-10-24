@@ -19,10 +19,19 @@ Beacons feature
 - moduleCollections.ts: private saved Lists and Journal demo actions.
 - controls.ts, permissions.ts: organizer roles/capabilities and authorization helpers.
 - createTiming.ts, focusTimer.ts: duration/deadline and local focus timer helpers.
-- CreateHome.tsx: compact creation launcher with blank first, diverse For You, Recent, direct activity search, and saved-template reuse/editing. Plan/Routine tabs retain their existing creation routes. The existing Quick/Advanced editor in screens/CreateScreen.tsx owns persistence and placement.
+- CreateHome.tsx: compact creation launcher with blank first, diverse For You, Recent, direct activity search, and saved-template reuse/editing. Compact secondary Plan/Routine entries retain canonical routes. The focused editor in screens/CreateScreen.tsx owns persistence and placement.
 - templateBrowser.ts: presentation-only template families referencing stable IDs in shared/templates.ts; six core families and seventeen additional families use one catalog, including cross-listed Music, Photography, Home and Classes presets. No saved-template migration.
 - Remaining redesign extensions (2026-10-13): shared status-reaction registry/picker; atomic own-status service and legacy StatusPanel route; bounded Routine projection DTO/read hook; transactional selected-invitation creation with frozen request UUID/reconciliation. Chronological Supabase migrations 202610130001 through 004 are source-only pending hosted rollout. Existing template, status-conversion and map/date handoffs remain supported.
 
-- components/CreationLocationInput.tsx, socialPlanningSession.ts: native debounced Places suggestions and account-scoped editor/Map location round trips; only location changes on confirm, and completed/account-switched drafts reject results.
+- components/CreationLocationInput.tsx, socialPlanningSession.ts: web/native debounced Places suggestions and account-scoped editor/Map location round trips; only location changes on confirm, and completed/account-switched drafts reject results.
 
 - livingActivity.ts, demoLivingActivity.ts, components/feed/LivingActivitySection.tsx: owner-first authorized Current Activity, independent Activity Note lifecycle, compact profile presence, direct editor, and contextual planning handoffs.
+
+- creationDraftStorage.ts, draftSnapshot.ts: versioned account-owned local draft snapshots, size-safe native storage chunks, serialized commits, validation, and frozen canonical publication recovery. Publication is blocked when its initial checkpoint fails.
+- components/CreationControls.tsx, creationModules.ts: compact disclosure rows, real module switches/configuration, and explicit recommendations; People & Access separates visibility, eligible invitations, delivery effects, approval, capacity, and post-publication role management.
+- components/BeaconIdentity.tsx: read-only shared identity for published ActivityCard and creation review; draft review never fabricates published/RSVP state.
+- components/CreationDateField.tsx and .native.tsx: native date/time controls and timezone-aware browser date input, retaining calendar handoffs.
+
+- creationValidation.ts: supported HTTPS meeting-link validation for publication; unfinished templates remain exempt.
+
+- components/BeaconOrganizerRoles.tsx: post-publication People entry for canonical approved-Going role grants/removal, with existing owner/co-owner hierarchy and server authorization.

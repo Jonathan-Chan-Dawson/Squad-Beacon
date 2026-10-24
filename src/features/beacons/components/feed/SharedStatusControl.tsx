@@ -160,11 +160,15 @@ export function SharedStatusControl({
   avatarControl = false,
   profilePill = false,
   livingLayout = false,
+  identityOnly = false,
+  renderIdentity,
 }: {
   compact?: boolean;
   avatarControl?: boolean;
   profilePill?: boolean;
   livingLayout?: boolean;
+  identityOnly?: boolean;
+  renderIdentity?: (availability: React.ReactNode) => React.ReactNode;
 }) {
   const { userId, data } = useBeacon();
   const living =
@@ -177,11 +181,15 @@ export function SharedStatusControl({
       avatarControl={avatarControl}
       profilePill={profilePill}
       livingLayout={living}
+      identityOnly={identityOnly}
+      renderIdentity={renderIdentity}
     />
   );
 }
 
 function SharedStatusContent({
+  renderIdentity,
+  identityOnly,
   livingLayout,
   compact,
   avatarControl,
@@ -191,6 +199,8 @@ function SharedStatusContent({
   avatarControl: boolean;
   profilePill: boolean;
   livingLayout: boolean;
+  identityOnly: boolean;
+  renderIdentity?: (availability: React.ReactNode) => React.ReactNode;
 }) {
   const control = useOwnStatusControl();
   const { colors, tokens } = useDesignTheme();
@@ -349,9 +359,15 @@ function SharedStatusContent({
       <StatusPanel
         headerOverride={
           livingLayout ? (
-            <View style={{ gap: 16 }}>
-              <LivingStatusHeader onEditStatus={control.openCurrent} />
-              <LivingActivitySection personId={userId!} showLower={false} />
+            <View style={{ gap: 10 }}>
+              <LivingStatusHeader
+                variant={compact ? "compact" : "profile"}
+                renderIdentity={renderIdentity}
+                onEditStatus={control.openCurrent}
+              />
+              {!identityOnly && (
+                <LivingActivitySection personId={userId!} showLower={false} />
+              )}
             </View>
           ) : undefined
         }

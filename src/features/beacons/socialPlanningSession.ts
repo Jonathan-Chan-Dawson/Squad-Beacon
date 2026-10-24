@@ -44,24 +44,30 @@ export function usePlanningSelection(
   );
   return [ids, (next) => setPlanningSelection(viewer, next)];
 }
-// Ordinary mobile editors get isolated in-memory drafts; planning selections stay separate.
+// Editors get isolated account-scoped sessions; explicit saves persist snapshots separately.
 let creationVersion = 0;
 const creationDrafts = new Map<
   string,
-  { viewer: string; fields: Map<string, unknown> }
+  {
+    viewer: string;
+    fields: Map<string, unknown>;
+    context?: Record<string, string>;
+  }
 >();
 let creationAccount: string | null | undefined;
+let creationEpoch = 0;
 /** Account transitions invalidate any in-flight picker result, including switching back. */
 export function setCreationDraftAccount(viewer: string | null) {
   if (creationAccount === viewer) return;
   creationAccount = viewer;
+  creationEpoch += 1;
   creationDrafts.clear();
   sessions.forEach((value) => value.fields.delete("locationReturn"));
 }
 export function startCreationDraft(viewer: string | null) {
   if (!viewer) return undefined;
   setCreationDraftAccount(viewer);
-  const token = `creation:${++creationVersion}`;
+  const token = `creation:${Date.now()}-${++creationVersion}-${Math.random().toString(36).slice(2)}`;
   creationDrafts.set(token, { viewer, fields: new Map() });
   return token;
 }
@@ -166,7 +172,13 @@ export function usePlanningInvitees(
 }
 export function completePlanningDraft(viewer: string | null, token?: string) {
   if (token?.startsWith("creation:")) {
-    if (draftFields(viewer, token)) creationDrafts.delete(token);
+    if (draftFields(viewer, token)) {
+      creationDrafts.delete(token);
+      if (viewer)
+        void import("./creationDraftStorage")
+          .then((storage) => storage.deleteCreationSnapshot(viewer, token))
+          .catch(() => {});
+    }
     return;
   }
   if (!viewer || !token || token !== String(session(viewer).version)) return;
@@ -177,7 +189,63 @@ export function completePlanningDraft(viewer: string | null, token?: string) {
   notify();
 }
 
-/** In-memory only, account-scoped draft fields; no cross-account or stale completed draft restoration. */
+export async function saveCreationDraft(
+  viewer: string | null,
+  token: string | undefined,
+  context?: Record<string, string>,
+) {
+  const fields = draftFields(viewer, token);
+  const epoch = creationEpoch;
+  if (!viewer || !token || !fields)
+    throw new Error(
+      "This draft is no longer active. Return to the account that started it.",
+    );
+  const draft = creationDrafts.get(token);
+  if (draft && context) draft.context = context;
+  const { writeCreationSnapshot } = await import("./creationDraftStorage");
+  if (creationEpoch !== epoch || draftFields(viewer, token) !== fields)
+    throw new Error("This draft changed accounts before saving.");
+  await writeCreationSnapshot({
+    version: 1,
+    viewer,
+    token: token.startsWith("creation:") ? token : `creation:planning-${token}`,
+    updatedAt: Date.now(),
+    context: context ?? draft?.context ?? {},
+    fields: Object.fromEntries(fields),
+  });
+  if (creationAccount !== viewer || creationEpoch !== epoch)
+    throw new Error(
+      "Your account changed while saving. Return to the original account.",
+    );
+}
+
+export async function restoreCreationDraft(viewer: string, token: string) {
+  setCreationDraftAccount(viewer);
+  const epoch = creationEpoch;
+  const { readCreationSnapshot } = await import("./creationDraftStorage");
+  const snapshot = await readCreationSnapshot(viewer, token);
+  if (creationAccount !== viewer || creationEpoch !== epoch)
+    throw new Error("Your account changed while restoring this draft.");
+  creationDrafts.set(token, {
+    viewer,
+    fields: new Map(Object.entries(snapshot.fields)),
+    context: snapshot.context,
+  });
+  return snapshot.context;
+}
+
+export function setCreationDraftField(
+  viewer: string | null,
+  token: string | undefined,
+  field: string,
+  value: unknown,
+) {
+  const fields = draftFields(viewer, token);
+  if (!fields) throw new Error("This draft is no longer active.");
+  fields.set(field, value);
+}
+
+/** Live account-scoped fields; explicit checkpoints serialize them for restart recovery. */
 export function usePlanningDraftState<T>(
   viewer: string | null,
   token: string | undefined,

@@ -170,7 +170,7 @@ export default function PlanningListScreen() {
   const [kindChoice, setKindChoice] = useSessionField<(typeof kinds)[number]>(
     sessionKey,
     "kind",
-    route.creationKind === "council" ? "Vote" : "Ping",
+    route.creationKind === "draw" ? "Draw" : route.creationKind === "council" ? "Vote" : "Ping",
   );
   const [titleDraft, setTitleDraft] = useSessionField(sessionKey, "title", {
     key: "",
@@ -334,7 +334,7 @@ export default function PlanningListScreen() {
       payload,
     );
     const options: BeaconDraft[] = [];
-    if (kind !== "ping" && (source || route.creationKind === "council")) {
+    if (kind !== "ping" && (source || (route.creationKind === "council" || route.creationKind === "draw"))) {
       if (!sourceOption.trim() || !secondOption.trim())
         throw new Error(
           "Add at least two actual options before finishing your Council.",
@@ -604,7 +604,7 @@ export default function PlanningListScreen() {
               onChange={setResponseDeadline}
             />
             {kind !== "ping" &&
-              (source || route.creationKind === "council") && (
+              (source || (route.creationKind === "council" || route.creationKind === "draw")) && (
                 <>
                   <Field
                     label="First activity option"

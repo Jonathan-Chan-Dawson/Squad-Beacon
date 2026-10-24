@@ -5,43 +5,49 @@ async function createHome(page: import("@playwright/test").Page) {
   await page.getByRole("button", { name: /Explore the demo/ }).click();
   await page.getByRole("button", { name: "Create", exact: true }).click();
   await expect(
-    page.getByRole("button", { name: "Create Blank Template", exact: true }),
+    page.getByRole("button", { name: "+ Create Blank Beacon", exact: true }),
   ).toBeVisible();
 }
 
+async function returnToHub(page: import("@playwright/test").Page) {
+  await page.getByRole("button", { name: /^(Back|Back to Beacons)$/ }).click();
+  const create = page.getByRole("button", { name: "Create", exact: true }),
+    blank = page.getByRole("button", {
+      name: "+ Create Blank Beacon",
+      exact: true,
+    });
+  await expect(create.or(blank)).toBeVisible();
+  if (await create.isVisible()) await create.click();
+  await expect(blank).toBeVisible();
+}
 test("Create stays compact and app templates prefill the Beacon Quick Editor", async ({
   page,
 }) => {
   await createHome(page);
-  await expect(
-    page.getByLabel("Title / Activity", { exact: true }),
-  ).toHaveCount(0);
-  await page
-    .getByRole("button", { name: "Browse More Templates", exact: true })
-    .click();
+  await expect(page.getByLabel("Activity title", { exact: true })).toHaveCount(
+    0,
+  );
+  await page.getByRole("button", { name: "Browse All", exact: true }).click();
   await page.getByLabel("Search", { exact: true }).fill("Basketball");
   await page.getByRole("button", { name: "Basketball", exact: true }).click();
-  await expect(
-    page.getByLabel("Title / Activity", { exact: true }),
-  ).toHaveValue("Basketball");
+  await expect(page.getByLabel("Activity title", { exact: true })).toHaveValue(
+    "Basketball",
+  );
   await expect(
     page.getByRole("button", { name: "Create Beacon", exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByText("A few helpful details", { exact: true }),
+    page.getByLabel("Search aspirations", { exact: true }),
   ).toHaveCount(0);
-  await page
-    .getByRole("button", { name: "Advanced Options ↓", exact: true })
-    .click();
+  await page.getByRole("button", { name: /^Advanced Options,/ }).click();
   await expect(
-    page.getByText("A few helpful details", { exact: true }),
+    page.getByLabel("Search aspirations", { exact: true }),
   ).toBeVisible();
 });
 
 test("Plan timeline can create a reusable manual Routine", async ({ page }) => {
   await createHome(page);
-  await page.getByRole("button", { name: "Plan", exact: true }).click();
-  await page.getByRole("button", { name: "+ Blank Plan", exact: true }).click();
+  await page.getByRole("button", { name: "Create Plan", exact: true }).click();
   await page
     .getByLabel("Plan name", { exact: true })
     .fill("Friday test itinerary");
@@ -99,10 +105,9 @@ test("Routine quick start offers source Plans and the shared Plan builder", asyn
   page,
 }) => {
   await createHome(page);
-  await page.getByRole("button", { name: "Routine", exact: true }).click();
-  await expect(page.getByText("FOR YOU", { exact: true })).toHaveCount(0);
+
   await page
-    .getByRole("button", { name: "+ Create Routine", exact: true })
+    .getByRole("button", { name: "Create Routine", exact: true })
     .click();
   await page
     .getByRole("button", { name: "Build a Plan from scratch", exact: true })
@@ -118,36 +123,44 @@ test("a Suggested Beacon creates a Vote and can add another suggestion with the 
 }) => {
   await createHome(page);
   await page
-    .getByLabel("Search activities", { exact: true })
+    .getByLabel("Search activities or templates", { exact: true })
     .fill("Coffee together");
   await page
     .getByRole("button", { name: "Coffee together", exact: true })
     .click();
   await page
-    .getByLabel("Title / Activity", { exact: true })
+    .getByLabel("Activity title", { exact: true })
     .fill("Coffee suggestion test");
-  await page.getByRole("button", { name: "Now", exact: true }).click();
+  await page.getByRole("button", { name: /^Starts,/ }).click();
   await page.getByRole("button", { name: "In 30 min", exact: true }).click();
   await page.getByRole("button", { name: "Done", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Add to Plan or Council", exact: true })
+    .click();
   await page.getByRole("button", { name: "Vote / Draw", exact: true }).click();
   await page
     .getByLabel("Decision name (optional)", { exact: true })
     .fill("Friday choices test");
   await page
-    .getByRole("button", { name: "Add Suggested Beacon", exact: true })
+    .getByRole("dialog", { name: "Add to Plan or Council", exact: true })
+    .getByRole("button", { name: "Done", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Submit Council Option", exact: true })
     .click();
   await expect(page).toHaveURL(/\/council\//);
   await expect(
     page.getByText("Coffee suggestion test", { exact: true }).first(),
   ).toBeVisible();
   await page
-    .getByRole("button", { name: "+ Suggested Beacon", exact: true })
+    .getByRole("button", { name: "Add option", exact: true })
     .click();
+  await page.getByRole("button", { name: "Use Beacon editor", exact: true }).click();
   await page
-    .getByLabel("Title / Activity", { exact: true })
+    .getByLabel("Activity title", { exact: true })
     .fill("Bowling suggestion test");
   await page
-    .getByRole("button", { name: "Add Suggested Beacon", exact: true })
+    .getByRole("button", { name: "Submit Council Option", exact: true })
     .click();
   await expect(page).toHaveURL(/\/council\//);
   await expect(
@@ -162,23 +175,25 @@ test("launcher preserves blank first, recommendations, search, and compact famil
 }) => {
   await createHome(page);
   const blank = page.getByRole("button", {
-    name: "Create Blank Template",
+    name: "+ Create Blank Beacon",
     exact: true,
   });
-  const forYou = page.getByText("FOR YOU", { exact: true });
+  const forYou = page.getByText("RECOMMENDED STARTERS", { exact: true });
   expect((await blank.boundingBox())!.y).toBeLessThan(
     (await forYou.boundingBox())!.y,
   );
-  await page.getByLabel("Search activities", { exact: true }).fill("groceries");
+  await page
+    .getByLabel("Search activities or templates", { exact: true })
+    .fill("groceries");
   await expect(
     page.getByRole("button", { name: "Grocery Run", exact: true }),
   ).toBeVisible();
   await expect(forYou).toHaveCount(0);
-  await page.getByRole("button", { name: "Clear search", exact: true }).click();
-  await page.screenshot({ path: "test-results/create-launcher-390.png" });
   await page
-    .getByRole("button", { name: "Browse More Templates", exact: true })
-    .click();
+    .getByLabel("Search activities or templates", { exact: true })
+    .fill("");
+  await page.screenshot({ path: "test-results/create-launcher-390.png" });
+  await page.getByRole("button", { name: "Browse All", exact: true }).click();
   const browser = page.getByRole("dialog");
   await expect(
     browser.getByRole("button", { name: "Hangout", exact: true }),
@@ -206,15 +221,15 @@ test("launcher preserves blank first, recommendations, search, and compact famil
     .click();
   await browser.getByLabel("Search", { exact: true }).fill("movie night");
   await browser.getByRole("button", { name: "Movie", exact: true }).click();
-  await expect(
-    page.getByLabel("Title / Activity", { exact: true }),
-  ).toHaveValue("Movie");
+  await expect(page.getByLabel("Activity title", { exact: true })).toHaveValue(
+    "Movie",
+  );
   await page
-    .getByLabel("Title / Activity", { exact: true })
+    .getByLabel("Activity title", { exact: true })
     .fill("Movie at mine");
-  await expect(
-    page.getByLabel("Title / Activity", { exact: true }),
-  ).toHaveValue("Movie at mine");
+  await expect(page.getByLabel("Activity title", { exact: true })).toHaveValue(
+    "Movie at mine",
+  );
 });
 
 for (const preset of ["Grocery Run", "General Hangout"]) {
@@ -222,43 +237,35 @@ for (const preset of ["Grocery Run", "General Hangout"]) {
     page,
   }) => {
     await createHome(page);
-    await page.getByLabel("Search activities", { exact: true }).fill(preset);
+    await page
+      .getByLabel("Search activities or templates", { exact: true })
+      .fill(preset);
     await page.getByRole("button", { name: preset, exact: true }).click();
+    await page.getByRole("button", { name: "Use online", exact: true }).click();
+    await page
+      .getByLabel("HTTPS meeting link", { exact: true })
+      .fill("https://example.com/meeting");
     await page
       .getByRole("button", { name: "Create Beacon", exact: true })
       .click();
-    await expect(page).toHaveURL(/beacon=/);
-    await page
-      .getByTestId("map-tooltip-card")
-      .getByRole("button", { name: "See overview", exact: true })
-      .click();
-    const panel = page.getByTestId("map-panel");
+    await expect(page).toHaveURL(/activity-created/);
+    await page.getByRole("button", { name: "Continue", exact: true }).click();
+    await expect(page.getByTestId("activity-detail-hero")).toBeVisible();
+    const panel = page;
+    await panel.getByRole("tab", { name: "Activity", exact: true }).click();
     if (preset === "Grocery Run") {
-      await panel.getByRole("tab", { name: "Tools", exact: true }).click();
-      await expect(
-        panel.getByRole("tab", { name: "Grocery List", exact: true }),
-      ).toBeVisible();
-      await expect(
-        panel.getByText("Grocery List", { exact: true }),
-      ).toHaveCount(2);
+      await panel.getByRole("tab", { name: "Checklist", exact: true }).click();
       await expect(
         panel.getByLabel("Add a checklist item", { exact: true }),
       ).toBeVisible();
+    } else
       await expect(
-        panel.getByRole("button", { name: "Add item", exact: true }),
-      ).toBeVisible();
-    } else {
-      await expect(panel.getByRole("tab")).toHaveText([
-        "Overview",
-        "Chat",
-        "People",
-      ]);
-    }
-    await page
-      .getByTestId("beacon-sheet-dismiss-area")
-      .click({ position: { x: 5, y: 5 } });
-    await page.getByRole("button", { name: "Create", exact: true }).click();
-    await expect(page.getByText("RECENT", { exact: true })).toBeVisible();
+        panel.getByRole("tab", { name: "Checklist", exact: true }),
+      ).toHaveCount(0);
+    await returnToHub(page);
+    await expect(
+      page.getByText("RECENT BEACONS", { exact: true }),
+    ).toBeVisible();
     await expect(
       page.getByRole("button", { name: preset, exact: true }).first(),
     ).toBeVisible();
@@ -270,31 +277,31 @@ test("My Templates saves, reuses, and edits the existing configuration", async (
 }) => {
   await createHome(page);
   await page
-    .getByLabel("Search activities", { exact: true })
+    .getByLabel("Search activities or templates", { exact: true })
     .fill("Grocery Run");
   await page.getByRole("button", { name: "Grocery Run", exact: true }).click();
+  await page.getByRole("button", { name: /^Advanced Options,/ }).click();
   await page
-    .getByRole("button", { name: "Advanced Options ↓", exact: true })
-    .click();
-  await page
-    .getByLabel("Save this as a template (optional name)", { exact: true })
+    .getByLabel("Template name", { exact: true })
     .fill("Weekly groceries");
   await page
     .getByRole("button", { name: "Save as template", exact: true })
     .click();
-  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page
+    .getByRole("dialog", { name: "Advanced Options", exact: true })
+    .getByRole("button", { name: "Done", exact: true })
+    .click();
+  await returnToHub(page);
   await page.getByRole("button", { name: "My Templates", exact: true }).click();
   await page
     .getByRole("dialog")
     .getByRole("button", { name: "Weekly groceries", exact: true })
     .click();
-  await expect(
-    page.getByLabel("Title / Activity", { exact: true }),
-  ).toHaveValue("Grocery Run");
+  await expect(page.getByLabel("Activity title", { exact: true })).toHaveValue(
+    "Grocery Run",
+  );
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await page
-    .getByRole("button", { name: "← Blank or template", exact: true })
-    .click();
+  await returnToHub(page);
   await page.getByRole("button", { name: "My Templates", exact: true }).click();
   await page
     .getByRole("dialog")
@@ -304,20 +311,20 @@ test("My Templates saves, reuses, and edits the existing configuration", async (
     })
     .click();
   await page
-    .getByLabel("Title / Activity", { exact: true })
+    .getByLabel("Activity title", { exact: true })
     .fill("Groceries and supplies");
   await page
-    .getByRole("button", { name: "Save template", exact: true })
+    .getByRole("button", { name: "Save Template", exact: true })
     .click();
-  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await returnToHub(page);
   await page.getByRole("button", { name: "My Templates", exact: true }).click();
   await page
     .getByRole("dialog")
     .getByRole("button", { name: "Weekly groceries", exact: true })
     .click();
-  await expect(
-    page.getByLabel("Title / Activity", { exact: true }),
-  ).toHaveValue("Groceries and supplies");
+  await expect(page.getByLabel("Activity title", { exact: true })).toHaveValue(
+    "Groceries and supplies",
+  );
 });
 
 test("a preset Beacon can join an existing Plan through the same editor", async ({
@@ -325,16 +332,27 @@ test("a preset Beacon can join an existing Plan through the same editor", async 
 }) => {
   await createHome(page);
   await page
-    .getByLabel("Search activities", { exact: true })
+    .getByLabel("Search activities or templates", { exact: true })
     .fill("Grocery Run");
   await page.getByRole("button", { name: "Grocery Run", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Add to Plan or Council", exact: true })
+    .click();
   await page.getByRole("button", { name: "Plan", exact: true }).click();
   await page
     .getByRole("button", { name: /^Friday Night Routine.*First plan$/ })
     .click();
   await page.getByRole("button", { name: "1", exact: true }).click();
   await page
-    .getByRole("button", { name: "Add Beacon to Plan", exact: true })
+    .getByRole("dialog", { name: "Add to Plan or Council", exact: true })
+    .getByRole("button", { name: "Done", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Use online", exact: true }).click();
+  await page
+    .getByLabel("HTTPS meeting link", { exact: true })
+    .fill("https://example.com/meeting");
+  await page
+    .getByRole("button", { name: "Add Beacon Step", exact: true })
     .click();
   await expect(page).toHaveURL(/\/plan\//);
   await expect(

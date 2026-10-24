@@ -43,9 +43,11 @@ function attachmentDeadlineLabel(deadline: string, now: number) {
 export function StatusBubble({
   personId,
   onPress,
+  attached = false,
 }: {
   personId: string;
   onPress(): void;
+  attached?: boolean;
 }) {
   const { data, userId } = useBeacon();
   const now = useNow(1000);
@@ -73,10 +75,15 @@ export function StatusBubble({
       accessibilityRole="button"
       accessibilityLabel="Open shared Status"
       onPress={onPress}
-      style={{ maxWidth: 156, minWidth: 96 }}
+      style={{
+        maxWidth: attached ? "100%" : 156,
+        minWidth: 96,
+        minHeight: attached ? 44 : undefined,
+        alignSelf: attached ? "stretch" : undefined,
+      }}
     >
       {!!text && (
-        <NoteSpeechBubble compact>
+        <NoteSpeechBubble compact tailTowardIdentity={attached}>
           {!!text && (
             <Text
               numberOfLines={2}

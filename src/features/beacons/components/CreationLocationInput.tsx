@@ -2,12 +2,14 @@ import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Linking,
+  Keyboard,
   Platform,
   Pressable,
   Text,
   View,
+  type TextInput,
 } from "react-native";
-import { MapPin } from "lucide-react-native";
+import { MapPin, Search } from "lucide-react-native";
 import { Field, IconButton, useTheme } from "@/src/shared/ui";
 import { useBeacon } from "@/src/shared/store";
 import {
@@ -22,12 +24,14 @@ export function CreationLocationInput({
   onChange,
   onChoose,
   onPickMap,
+  inputRef,
 }: {
   value: string;
   selected: boolean;
   onChange: (value: string) => void;
   onChoose: (place: WorldwidePlace) => void;
   onPickMap: () => void;
+  inputRef?: React.Ref<TextInput>;
 }) {
   const { colors, styles } = useTheme();
   const { demo, userId } = useBeacon();
@@ -72,13 +76,56 @@ export function CreationLocationInput({
   }, [value, selected, demo, provider, userId, focused]);
   const visible =
     !selected && value.trim().length >= 3 && state.query === value;
+  if (selected)
+    return (
+      <View style={{ gap: 6 }}>
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 10,
+            minHeight: 52,
+          }}
+        >
+          <MapPin size={20} color={colors.primary} />
+          <Text style={[styles.body, { flex: 1 }]}>
+            {value.trim() || "Pinned location"}
+          </Text>
+        </View>
+        <View style={{ flexDirection: "row", gap: 14 }}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Change location"
+            style={{ minHeight: 44, justifyContent: "center" }}
+            onPress={() => {
+              setFocused(true);
+              onChange("");
+            }}
+          >
+            <Text style={styles.muted}>Change location</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Adjust on Map"
+            style={{ minHeight: 44, justifyContent: "center" }}
+            onPress={onPickMap}
+          >
+            <Text style={styles.muted}>Adjust on Map</Text>
+          </Pressable>
+        </View>
+      </View>
+    );
   return (
     <View style={{ gap: 6 }}>
       <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 6 }}>
+        <View style={{ paddingBottom: 18 }}>
+          <Search size={18} color={colors.muted} />
+        </View>
         <View style={{ flex: 1 }}>
           <Field
-            label="Choose location (optional)"
-            placeholder="Search a place or address"
+            inputRef={inputRef}
+            label="Meeting place"
+            placeholder="Search a place or address…"
             value={value}
             onFocus={() => setFocused(true)}
             onChangeText={(text) => {
@@ -124,7 +171,11 @@ export function CreationLocationInput({
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={`Choose ${place.label}`}
-                onPress={() => onChoose(place)}
+                onPress={() => {
+                  Keyboard.dismiss();
+                  setFocused(false);
+                  onChoose(place);
+                }}
                 style={{ minHeight: 48, paddingVertical: 6, gap: 2 }}
               >
                 <Text style={styles.body}>{place.label}</Text>

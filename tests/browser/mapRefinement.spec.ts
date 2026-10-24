@@ -232,7 +232,7 @@ test("panning updates map markers without a Search this area action", async ({
   await expect(
     page
       .locator(
-        'button[aria-label^="Map cluster:"], .leaflet-marker-icon[title^="Map:"]',
+        '[data-testid="map-constellation"], .leaflet-marker-icon[title^="Map:"]',
       )
       .first(),
   ).toBeVisible();

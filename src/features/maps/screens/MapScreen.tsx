@@ -674,6 +674,7 @@ export default function MapScreen() {
         latitude: String(pulsePlace.lat),
         longitude: String(pulsePlace.lng),
         placeLabel: pulsePlace.name,
+        editor: "yes",
       },
     });
   }
@@ -1582,14 +1583,14 @@ export default function MapScreen() {
       setLocationPickError("");
       const context = creationHandoffParams(params);
       creationLocationContext.current = context;
-      setPickingForEditor(Platform.OS !== "web" && context.locationPicker === "editor");
+      setPickingForEditor(context.locationPicker === "editor");
       if (context.latitude && context.longitude)
         setPickedMapPoint({
           latitude: Number(context.latitude),
           longitude: Number(context.longitude),
           label: context.placeLabel || (Platform.OS !== "web" ? "Pinned location" : "Pinned map location"),
         });
-      else if (Platform.OS !== "web" && context.locationPicker === "editor")
+      else if (context.locationPicker === "editor")
         setPickedMapPoint(null);
       router.setParams({
         pickLocation: undefined,
@@ -2084,18 +2085,19 @@ export default function MapScreen() {
   function createBeaconHere() {
     if (!pickedMapPoint || !isValidCoordinate(pickedMapPoint)) return;
     const context = creationLocationContext.current;
-    const returnParams = Platform.OS !== "web" ? finishCreationLocationPick(userId, context.planSession, { ...pickedMapPoint, label: pickedMapPoint.label || "Pinned location" }) : undefined;
-    if (Platform.OS !== "web" && context.locationPicker === "editor" && !returnParams) { setLocationPickError("This editor is no longer available. Cancel and reopen your Beacon draft."); return; }
+    const returnParams = finishCreationLocationPick(userId, context.planSession, { ...pickedMapPoint, label: pickedMapPoint.label || "Pinned location" });
+    if (context.locationPicker === "editor" && !returnParams) { setLocationPickError("This editor is no longer available. Cancel and reopen your Beacon draft."); return; }
     creationLocationContext.current = {};
     setPickedMapPoint(null);
     setPickMode(false);
     if (returnParams) { router.dismissTo({ pathname: "/create", params: returnParams }); return; }
-    if (Platform.OS !== "web" && context.planSession?.startsWith("creation:")) return;
+    if (context.planSession?.startsWith("creation:")) return;
     router.push({
       pathname: "/create",
       params: {
         ...context,
         fromMap: "yes",
+        editor: "yes",
         latitude: String(pickedMapPoint.latitude),
         longitude: String(pickedMapPoint.longitude),
         placeLabel: pickedMapPoint.label,
@@ -2745,7 +2747,7 @@ export default function MapScreen() {
                   {publicDiscovery.error ? <Button title="Retry public Beacons" compact secondary onPress={publicDiscovery.refresh} /> : null}
                   <IconButton
                     label="Create Beacon"
-                    onPress={() => router.push("/create")}
+                    onPress={() => { creationLocationContext.current = {}; setPickingForEditor(false); setPickedMapPoint(null); startPickingLocation(); }}
                   >
                     <Plus size={18} color={colors.green} />
                   </IconButton>
@@ -3069,7 +3071,7 @@ export default function MapScreen() {
               label="Cancel location selection"
               onPress={() => {
                 const context = creationLocationContext.current;
-                const returnParams = Platform.OS !== "web" ? finishCreationLocationPick(userId, context.planSession) : undefined;
+                const returnParams = finishCreationLocationPick(userId, context.planSession);
                 creationLocationContext.current = {};
                 setPickedMapPoint(null);
                 setPickMode(false);

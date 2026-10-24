@@ -114,7 +114,7 @@ test("friend preview keeps compact profile and message actions", async ({
   ).toBeVisible();
 });
 
-test("clusters stay compact, open the existing list, and become area summaries when zoomed out", async ({
+test("constellations stay compact, open the existing list, and reveal geographic activity when zoomed out", async ({
   page,
 }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
@@ -122,7 +122,7 @@ test("clusters stay compact, open the existing list, and become area summaries w
   const map = page.getByLabel("Beacon map", { exact: true }).locator("..");
   const cluster = map.getByRole("button", { name: /^Map cluster:/ }).first();
   await expect(cluster).toBeVisible();
-  expect(await cluster.locator("img").count()).toBeLessThanOrEqual(3);
+  expect(await cluster.locator("img").count()).toBeLessThanOrEqual(10);
   await cluster.click();
   const panel = page.getByTestId("map-nearby-panel");
   await expect(panel).toBeVisible();
@@ -134,18 +134,20 @@ test("clusters stay compact, open the existing list, and become area summaries w
   await page.mouse.wheel(0, 700);
   const summary = map
     .getByRole("button", {
-      name: /^Explore .+: .*(Friends?|Beacons?|happening now)/,
+      name: /^Activity area:/,
     })
     .first();
   await expect(summary).toBeVisible();
-  await expect(map.getByRole("button", { name: /^Map cluster:/ })).toHaveCount(
-    0,
-  );
+  await expect(summary).toHaveAttribute("data-mode", "atmosphere");
   expect(await summary.locator("img").count()).toBe(0);
   await summary.click();
   await expect(panel).toHaveCount(0);
   await expect(
-    map.getByRole("button", { name: /^Map cluster:/ }).first(),
+    map
+      .locator(
+        '[data-testid="map-constellation"]:not([data-mode="atmosphere"])',
+      )
+      .first(),
   ).toBeVisible();
 });
 

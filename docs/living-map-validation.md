@@ -1,6 +1,6 @@
 # Living Map — Pass 1
 
-Native iOS/Android presentation uses the existing map engine and explorer. Web presentation, backend contracts, and stored coordinates are unchanged.
+Native iOS/Android and web reuse the existing map engines and explorer. Web now renders the same shared constellation policy with a DOM adapter and static geographic atmosphere. Backend contracts and stored coordinates are unchanged.
 
 ## Behavior
 
@@ -24,3 +24,9 @@ Native iOS/Android presentation uses the existing map engine and explorer. Web p
 No successful native device session was available in this run: the local Android bridge could not start its daemon, and iOS device/simulator checks were not performed.
 
 On both platforms, verify the original artwork and ownership stars, native marker snapshot clipping, avatar photo refresh, expanded-stack hit targets near screen edges and preview overlays, searchable explorer actions, pan/rotation/pinch behavior, hardware Back, VoiceOver/TalkBack actions, themes, and reduced motion. Brief marker fades use bounded native snapshot tracking; atmosphere uses static map primitives.
+
+## Web follow-up
+
+The web pass retains Leaflet/CARTO and ports the constellation presentation only. Existing controls, cards, contextual focus, basemaps and search remain in place. Small stacks expand into individual buttons; six or more open the existing searchable explorer, ten are visible before overflow, and keyboard Enter/Space/Escape actions work. Transparent marker margins pass through to map gestures. Both singleton rendering and aggregation deduplicate physical Beacons and select the freshest eligible friend session.
+
+Validation: 60 relevant policy/privacy tests and 10 headless browser adapter/ripple tests pass. TypeScript, targeted ESLint and the production web export pass. A headless browser loaded the real static app, entered the demo, rendered constellation stacks/atmosphere, opened the existing explorer, entered a search query, and selected a person into the existing preview with zero page errors. Localhost access was denied by the sandbox, so the real exported files were served through file-backed browser request interception; external tiles were blocked, so live basemap loading was not verified. One repeat adapter test hit a browser-setup timeout under build load; its isolated rerun passed.

@@ -1,3 +1,4 @@
+import { FriendFilterSelector } from "./FriendFilterSelector";
 import React, { useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { Check, Plus } from "lucide-react-native";
@@ -23,7 +24,7 @@ import {
 } from "../socialSelection";
 
 /** Callers own selection and submission semantics; group membership is never expanded. */
-export function SocialSelector({
+function StandardSocialSelector({
   friends = [],
   selected,
   onChange,
@@ -476,5 +477,24 @@ export function SocialSelector({
         }}
       />
     </View>
+  );
+}
+
+export function SocialSelector({
+  groupBehavior = "select",
+  disabled,
+  ...props
+}: React.ComponentProps<typeof StandardSocialSelector> & {
+  groupBehavior?: "select" | "filterFriends";
+  disabled?: boolean;
+}) {
+  return groupBehavior === "filterFriends" ? (
+    <FriendFilterSelector
+      selected={props.selected}
+      onChange={props.onChange}
+      disabled={disabled}
+    />
+  ) : (
+    <StandardSocialSelector {...props} />
   );
 }
