@@ -48,7 +48,7 @@ import type {
 
 const AnimatedMapCircle = Animated.createAnimatedComponent(MapCircle);
 
-function useMarkerTracking(updateKey: string) {
+export function useMarkerTracking(updateKey: string) {
   const [settledKey, setSettledKey] = useState<string | null>(null);
   useEffect(() => {
     const timeout = setTimeout(() => setSettledKey(updateKey), 420);

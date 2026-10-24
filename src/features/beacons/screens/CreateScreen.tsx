@@ -1,3 +1,6 @@
+import { CreationDisclosure } from "../components/CreationDisclosure";
+import { CreationPeople } from "../components/CreationPeople";
+import { CreationAppearance } from "../components/CreationAppearance";
 import { validCreationMeetingLink } from "../creationValidation";
 import { BeaconIdentity } from "../components/BeaconIdentity";
 import { CreationDateField } from "../components/CreationDateField";
@@ -10,8 +13,6 @@ import {
   CreationModuleControls,
 } from "../components/CreationControls";
 import { creationModules } from "../creationModules";
-import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
-import { DECORATION_ACCENTS, DECORATION_EMOJIS } from "../controls";
 import { runFrozenPublication, type FrozenPublication } from "../draftSnapshot";
 
 import { activityNoteSeed } from "../livingActivity";
@@ -87,7 +88,6 @@ import {
 import { type BeaconTemplate } from "@/src/shared/templates";
 import {
   Action,
-  AudiencePicker,
   Button,
   Chips,
   Empty,
@@ -714,11 +714,79 @@ function CreateEditor() {
     "reuseReviewed",
     false,
   );
-  const [peopleOpen, setPeopleOpen] = useState(false);
+  const [optionalSection, setOptionalSection] = usePlanningDraftState<
+    "none" | "modules" | "advanced"
+  >(userId, draftToken, "creationOptionalSection", "none");
+  const [allAspirations, setAllAspirations] = useState(false);
+  const [descriptionHeight, setDescriptionHeight] = useState(96);
+  const [savingDraft, setSavingDraft] = useState(false);
+  const savingDraftRef = useRef(false);
+  const capacityInput = useRef<TextInput>(null),
+    musicInput = useRef<TextInput>(null),
+    descriptionInput = useRef<TextInput>(null);
+  const sectionY = useRef<Record<string, number>>({});
+  const [scrollRequest, setScrollRequest] = useState<{
+    y: number;
+    sequence: number;
+  }>();
+  const scrollSequence = useRef(0);
+  const scrollPosition = useRef(0);
+  const anchorVersion = useRef(0);
+  const advancedSection = useRef<View>(null);
+  const pendingAnchor = useRef<{ screenY: number; version: number } | null>(
+    null,
+  );
+  function toggleOptional(section: "modules" | "advanced") {
+    const version = ++anchorVersion.current;
+    pendingAnchor.current = null;
+    if (
+      optionalSection === "modules" &&
+      section === "advanced" &&
+      advancedSection.current
+    ) {
+      // Measure the actual viewport position: web onLayout does not report sibling-only movement.
+      advancedSection.current.measureInWindow((_x, y) => {
+        if (anchorVersion.current !== version) return;
+        pendingAnchor.current = { screenY: y, version };
+        setOptionalSection(section);
+      });
+    } else setOptionalSection(optionalSection === section ? "none" : section);
+  }
+  function recordSection(key: string, y: number) {
+    sectionY.current[key] = y;
+    const anchor = pendingAnchor.current;
+    if (anchor && key === "advanced") {
+      pendingAnchor.current = null;
+      requestAnimationFrame(() => {
+        advancedSection.current?.measureInWindow((_x, screenY) => {
+          if (anchorVersion.current !== anchor.version) return;
+          const delta = screenY - anchor.screenY;
+          if (Math.abs(delta) > 2)
+            setScrollRequest({
+              y: Math.max(0, scrollPosition.current + delta) + 12,
+              sequence: ++scrollSequence.current,
+            });
+        });
+      });
+    }
+  }
+  function reveal(
+    section: "people" | "modules" | "advanced",
+    input?: React.RefObject<TextInput | null>,
+  ) {
+    pendingAnchor.current = null;
+    anchorVersion.current++;
+    if (section !== "people") setOptionalSection(section);
+    requestAnimationFrame(() => {
+      setScrollRequest({
+        y: sectionY.current[section] ?? 0,
+        sequence: ++scrollSequence.current,
+      });
+      if (input) requestAnimationFrame(() => input.current?.focus());
+    });
+  }
   const titleInput = useRef<TextInput>(null);
   const locationInput = useRef<TextInput>(null);
-  const [modulesOpen, setModulesOpen] = useState(false);
-  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [destinationOpen, setDestinationOpen] = useState(false);
   const [appearanceOpen, setAppearanceOpen] = useState(false);
   const [aspirationQuery, setAspirationQuery] = useState("");
@@ -855,17 +923,30 @@ function CreateEditor() {
       ),
     );
   async function saveDraft() {
+    if (savingDraftRef.current) return;
+    savingDraftRef.current = true;
+    setSavingDraft(true);
     setSaveNotice("");
-    setCreationDraftField(userId, draftToken, "home", false);
+    const epoch = getViewerEpoch();
     try {
+      setCreationDraftField(userId, draftToken, "home", false);
       await checkpoint();
-      setSaveNotice("Saved on this device");
+      if (getViewerEpoch() !== epoch || dataRef.current.viewer_id !== userId)
+        return;
+      router.replace({
+        pathname: "/create",
+        params: { savedDraft: draftToken },
+      });
     } catch (error) {
-      setSaveNotice(
-        error instanceof Error
-          ? error.message
-          : "Draft could not be saved. Keep this editor open and try again.",
-      );
+      if (getViewerEpoch() === epoch)
+        setSaveNotice(
+          error instanceof Error
+            ? error.message
+            : "Draft could not be saved. Keep this editor open and try again.",
+        );
+    } finally {
+      savingDraftRef.current = false;
+      if (getViewerEpoch() === epoch) setSavingDraft(false);
     }
   }
   async function durableAction(
@@ -947,19 +1028,35 @@ function CreateEditor() {
           ? error.message
           : "Could not publish this Beacon.";
       setWorkflowError(message);
+      setFieldError({
+        field:
+          /capacity|spots|limit|approval|audience|share with|friend|eligible/i.test(
+            message,
+          )
+            ? "people"
+            : /music/i.test(message)
+              ? "modules"
+              : /description|details|characters/i.test(message)
+                ? "advanced"
+                : "publication",
+        message,
+      });
       if (
         /capacity|spots|limit|approval|audience|share with|friend|eligible/i.test(
           message,
         )
       )
-        setPeopleOpen(true);
+        reveal(
+          "people",
+          /capacity|spots|limit/i.test(message) ? capacityInput : undefined,
+        );
       else if (
         /end time|start time|duration|future time|deadline/i.test(message)
       )
         setTiming(true);
-      else if (/music/i.test(message)) setModulesOpen(true);
+      else if (/music/i.test(message)) reveal("modules", musicInput);
       else if (/description|details|characters/i.test(message))
-        setAdvancedOpen(true);
+        reveal("advanced", descriptionInput);
       throw error;
     } finally {
       publicationBusy.current = false;
@@ -978,9 +1075,9 @@ function CreateEditor() {
         "Confirm the pending publication before creating another Beacon.",
       );
     if (previous && !reuseReviewed) {
-      setPeopleOpen(true);
+      reveal("people");
       throw new Error(
-        "Review the reused location and People & Access, then choose Done before creating.",
+        "Review the reused location and People & Community, then confirm your review before creating.",
       );
     }
     if (inviteeError) throw new Error(inviteeError);
@@ -992,7 +1089,7 @@ function CreateEditor() {
         (row) => row.id === audienceId,
       )
     ) {
-      setPeopleOpen(true);
+      reveal("people");
       throw new Error(
         "This audience is no longer available. Choose an eligible audience before publishing.",
       );
@@ -1501,7 +1598,7 @@ function CreateEditor() {
       : audience === "squad"
         ? "Squad"
         : audience === "organization"
-          ? "Organization"
+          ? "Network"
           : audience === "private"
             ? "Private"
             : "Friends";
@@ -1536,12 +1633,16 @@ function CreateEditor() {
       title={templateEditor ? "Beacon Template" : "Create Beacon"}
       eyebrow=""
       compactHeader
+      iconOnlyBack
+      scrollRequest={scrollRequest}
+      scrollPositionRef={scrollPosition}
       create={false}
       headerAction={
         <Button
           compact
           secondary
-          title="Save Draft"
+          title={savingDraft ? "Saving…" : "Save Draft"}
+          disabled={savingDraft}
           onPress={() => void saveDraft()}
         />
       }
@@ -1730,31 +1831,193 @@ function CreateEditor() {
         )}
         {errorFor("location")}
       </View>
-      <CreationRow
-        title="People & Access"
-        detail={`${audienceName} · ${inviteeIds.length} invited · ${approval}`}
-        onPress={() => setPeopleOpen(true)}
-      />
-      <CreationRow
-        title="Primary community"
-        detail={
-          selectedAssociationRow?.name ??
-          (selectedAssociation
-            ? "Unavailable community · Clear or choose another"
-            : "Optional · Choose a community")
-        }
-        onPress={() => setAssociationOpen(true)}
-      />
-      <CreationRow
-        title="Modules"
-        detail={moduleNames.join(" · ") || "Choose tools for this Beacon"}
-        onPress={() => setModulesOpen(true)}
-      />
-      <CreationRow
-        title="Advanced Options"
-        detail="Details, appearance, aspirations, template"
-        onPress={() => setAdvancedOpen(true)}
-      />
+      <View
+        onLayout={(event) => {
+          recordSection("people", event.nativeEvent.layout.y);
+        }}
+      >
+        {errorFor("people")}
+        <CreationPeople
+          audience={audience}
+          audienceId={audienceId}
+          audienceLabel={
+            audienceId
+              ? (eligibleDefaultTargets(data, userId ?? "", audience).find(
+                  (row) => row.id === audienceId,
+                )?.name ?? `${audienceName} · Unavailable target`)
+              : audienceName
+          }
+          onAudience={(value, id) => {
+            setAudience(value);
+            setAudienceId(id);
+          }}
+          notice={defaultNotice}
+          invitations={
+            <CreationInvitees ids={inviteeIds} onChange={setInviteeIds} />
+          }
+          community={
+            selectedAssociationRow
+              ? `${selectedAssociationRow.name} · ${selectedAssociationRow.entity_type === "space" ? "Organization" : selectedAssociationRow.entity_type === "organization" ? "Network" : "Squad"}`
+              : selectedAssociation
+                ? "Unavailable community"
+                : undefined
+          }
+          onCommunity={() => setAssociationOpen(true)}
+          onClearCommunity={() =>
+            setAssociationDraft({ routeKey: associationRouteKey, value: null })
+          }
+          approval={approval}
+          onApproval={setApproval}
+          controls={beaconControls}
+          onControls={setBeaconControls}
+          capacityRef={capacityInput}
+          review={
+            previous && !reuseReviewed ? (
+              <Button
+                compact
+                secondary
+                title="Confirm reused location and access"
+                onPress={() => setReuseReviewed(true)}
+              />
+            ) : undefined
+          }
+        />
+      </View>
+      <View
+        onLayout={(event) => {
+          recordSection("modules", event.nativeEvent.layout.y);
+        }}
+      >
+        <CreationDisclosure
+          title="Modules"
+          summary={moduleNames.join(" · ") || "No optional modules"}
+          open={optionalSection === "modules"}
+          onToggle={() => toggleOptional("modules")}
+        >
+          {errorFor("modules")}
+          <CreationModuleControls
+            value={beaconControls}
+            onChange={setBeaconControls}
+            category={category}
+            musicInputRef={musicInput}
+          />
+        </CreationDisclosure>
+      </View>
+      <View
+        ref={advancedSection}
+        onLayout={(event) => {
+          recordSection("advanced", event.nativeEvent.layout.y);
+        }}
+      >
+        <CreationDisclosure
+          title="Advanced Options"
+          summary="Details · Appearance · Aspirations · Template"
+          open={optionalSection === "advanced"}
+          onToggle={() => toggleOptional("advanced")}
+        >
+          {errorFor("advanced")}
+          <Field
+            label="Description & details"
+            inputRef={descriptionInput}
+            scrollEnabled={false}
+            style={{ minHeight: 96, height: descriptionHeight }}
+            onContentSizeChange={(event) =>
+              setDescriptionHeight(
+                Math.max(96, event.nativeEvent.contentSize.height),
+              )
+            }
+            value={description}
+            onChangeText={setDescription}
+            multiline
+            maxLength={templateEditor ? 1000 : 2000}
+          />
+          {selectedRecipe?.prepPrompts?.map((prompt, index) => (
+            <Field
+              key={prompt}
+              label={prompt}
+              value={prepAnswers[index] ?? ""}
+              onChangeText={(answer) =>
+                setPrepAnswers((current) => {
+                  const next = [...current];
+                  next[index] = answer;
+                  return next;
+                })
+              }
+              maxLength={240}
+            />
+          ))}
+          <Text style={styles.h2}>Appearance</Text>
+          <CreationAppearance
+            value={beaconControls}
+            onChange={setBeaconControls}
+          />
+          <Text style={styles.h2}>
+            Aspirations
+            {aspirationIds.length ? ` · ${aspirationIds.length} selected` : ""}
+          </Text>
+          <Txt muted>
+            {aspirations
+              .filter((row) => aspirationIds.includes(row.id))
+              .slice(0, 3)
+              .map((row) => row.title)
+              .join(" · ") || "No aspiration selected"}
+          </Txt>
+          <Field
+            label="Search aspirations"
+            value={aspirationQuery}
+            onChangeText={setAspirationQuery}
+          />
+          {aspirations
+            .filter((row) =>
+              row.title.toLowerCase().includes(aspirationQuery.toLowerCase()),
+            )
+            .slice(0, 8)
+            .map((row) => (
+              <CreationSwitch
+                key={row.id}
+                title={row.title}
+                value={aspirationIds.includes(row.id)}
+                onChange={(value) =>
+                  setAspirationIds((current) =>
+                    value
+                      ? [...current, row.id]
+                      : current.filter((id) => id !== row.id),
+                  )
+                }
+              />
+            ))}
+          {aspirations.filter((row) =>
+            row.title.toLowerCase().includes(aspirationQuery.toLowerCase()),
+          ).length > 8 ? (
+            <Button
+              compact
+              secondary
+              title="See more aspirations"
+              onPress={() => setAllAspirations(true)}
+            />
+          ) : null}
+          {!aspirations.length ? (
+            <Txt muted>Add aspirations in your profile to connect them.</Txt>
+          ) : null}
+          {!templateEditor ? (
+            <>
+              <Field
+                label="Template name"
+                value={templateName}
+                onChangeText={setTemplateName}
+                maxLength={80}
+              />
+              <Action secondary title="Save as template" run={saveTemplate} />
+            </>
+          ) : null}
+          <Text style={styles.h2}>Public discovery</Text>
+          <Txt muted>
+            Manage public discovery after creating. Exact meeting details and
+            participant tools keep their existing access protections. Sonar
+            sharing is separate.
+          </Txt>
+        </CreationDisclosure>
+      </View>
       {!templateEditor ? (
         <Pressable
           accessibilityRole="button"
@@ -1881,120 +2144,6 @@ function CreateEditor() {
       </Sheet>
 
       <Sheet
-        title="People & Access"
-        visible={peopleOpen}
-        onClose={() => setPeopleOpen(false)}
-        footer={
-          <Button
-            title="Done"
-            onPress={() => {
-              setReuseReviewed(true);
-              setPeopleOpen(false);
-            }}
-          />
-        }
-      >
-        {workflowError ? (
-          <Text accessibilityRole="alert" style={styles.error}>
-            {workflowError}
-          </Text>
-        ) : null}
-        <Text style={styles.h2}>Who can see this Beacon?</Text>
-        <AudiencePicker
-          value={audience}
-          id={audienceId}
-          onChange={(value, id) => {
-            setAudience(value);
-            setAudienceId(id);
-          }}
-        />
-        <Txt muted>
-          {defaultNotice ||
-            "Visibility controls who can see it. It does not send invitations."}
-        </Txt>
-        <Text style={styles.h2}>Who receives invitations?</Text>
-        <CreationInvitees ids={inviteeIds} onChange={setInviteeIds} />
-        <View style={{ flexDirection: "row", gap: 6, flexWrap: "wrap" }}>
-          {inviteeIds.slice(0, 8).map((id) => (
-            <ProfileAvatar
-              key={id}
-              profile={data.profiles.find((row) => row.id === id)}
-              size={30}
-            />
-          ))}
-        </View>
-        <Text style={styles.h2}>Notifications</Text>
-        <Txt muted>
-          {inviteeIds.length} selected · Invitations send on publish. Up to 20
-          eligible friends. Community association does not invite members.
-        </Txt>
-        <Text style={styles.h2}>How can people join?</Text>
-        {["Open joining", "Host approval"].map((value) => (
-          <CreationRow
-            key={value}
-            title={`${approval === value ? "✓ " : ""}${value}`}
-            detail={
-              value === "Open joining"
-                ? "Eligible people join directly."
-                : "Eligible people request permission first."
-            }
-            onPress={() => setApproval(value)}
-          />
-        ))}
-        <Text style={styles.h2}>Capacity</Text>
-        <Field
-          label="Maximum spots (optional)"
-          placeholder="No limit"
-          value={
-            beaconControls.capacity_limit == null
-              ? ""
-              : String(beaconControls.capacity_limit)
-          }
-          onChangeText={(value) =>
-            setBeaconControls({
-              ...beaconControls,
-              capacity_limit: value ? Number(value) : null,
-            })
-          }
-          keyboardType="number-pad"
-        />
-        <CreationSwitch
-          title="Enforce maximum"
-          detail="Includes the host and accepted seats. When off, the limit is advisory."
-          value={beaconControls.capacity_policy === "strict"}
-          onChange={(value) =>
-            setBeaconControls({
-              ...beaconControls,
-              capacity_policy: value ? "strict" : "soft",
-            })
-          }
-        />
-        <Text style={styles.h2}>Manage co-owners & admins</Text>
-        <Txt muted>
-          After creating, open the Beacon’s People tab, then Organizer roles.
-          People must be approved and Going before you can give them a role.
-          Co-owners can edit settings; admins can manage participants.
-          Invitations do not grant roles.
-        </Txt>
-      </Sheet>
-      <Sheet
-        title="Modules"
-        visible={modulesOpen}
-        onClose={() => setModulesOpen(false)}
-        footer={<Button title="Done" onPress={() => setModulesOpen(false)} />}
-      >
-        {workflowError ? (
-          <Text accessibilityRole="alert" style={styles.error}>
-            {workflowError}
-          </Text>
-        ) : null}
-        <CreationModuleControls
-          value={beaconControls}
-          onChange={setBeaconControls}
-          category={category}
-        />
-      </Sheet>
-      <Sheet
         title="Appearance"
         visible={appearanceOpen}
         onClose={() => setAppearanceOpen(false)}
@@ -2020,88 +2169,21 @@ function CreateEditor() {
             setCategory(value);
           }}
         />
-        <Text style={styles.h2}>Artwork override</Text>
-        <Button
-          compact
-          secondary
-          title="Use category artwork"
-          onPress={() =>
-            setBeaconControls({ ...beaconControls, decoration_emoji: null })
-          }
-        />
-        <Chips
-          options={[...DECORATION_EMOJIS]}
-          value={beaconControls.decoration_emoji ?? ""}
-          onChange={(value) =>
-            setBeaconControls({
-              ...beaconControls,
-              decoration_emoji: value as typeof beaconControls.decoration_emoji,
-            })
-          }
-        />
-        <Text style={styles.h2}>Accent</Text>
-        <Chips
-          options={[...DECORATION_ACCENTS]}
-          value={beaconControls.decoration_accent ?? "neutral"}
-          onChange={(value) =>
-            setBeaconControls({
-              ...beaconControls,
-              decoration_accent:
-                value as typeof beaconControls.decoration_accent,
-            })
-          }
+        <CreationAppearance
+          value={beaconControls}
+          onChange={setBeaconControls}
         />
       </Sheet>
       <Sheet
-        title="Advanced Options"
-        visible={advancedOpen}
-        onClose={() => setAdvancedOpen(false)}
-        footer={<Button title="Done" onPress={() => setAdvancedOpen(false)} />}
+        title="Choose aspirations"
+        visible={allAspirations}
+        onClose={() => setAllAspirations(false)}
+        footer={
+          <Button title="Done" onPress={() => setAllAspirations(false)} />
+        }
       >
-        {workflowError ? (
-          <Text accessibilityRole="alert" style={styles.error}>
-            {workflowError}
-          </Text>
-        ) : null}
         <Field
-          label="Description & details"
-          value={description}
-          onChangeText={setDescription}
-          multiline
-          maxLength={templateEditor ? 1000 : 2000}
-        />
-        {selectedRecipe?.prepPrompts?.map((prompt, index) => (
-          <Field
-            key={prompt}
-            label={prompt}
-            value={prepAnswers[index] ?? ""}
-            onChangeText={(answer) =>
-              setPrepAnswers((current) => {
-                const next = [...current];
-                next[index] = answer;
-                return next;
-              })
-            }
-            maxLength={240}
-          />
-        ))}
-        <CreationRow
-          title="Appearance"
-          detail="Category artwork, emoji, and accent"
-          onPress={() => {
-            setAdvancedOpen(false);
-            setAppearanceOpen(true);
-          }}
-        />
-        <Text style={styles.h2}>Aspirations</Text>
-        <Txt muted>
-          {aspirations
-            .filter((row) => aspirationIds.includes(row.id))
-            .map((row) => row.title)
-            .join(" · ") || "No aspiration selected"}
-        </Txt>
-        <Field
-          label="Search aspirations"
+          label="Search all aspirations"
           value={aspirationQuery}
           onChangeText={setAspirationQuery}
         />
@@ -2109,41 +2191,20 @@ function CreateEditor() {
           .filter((row) =>
             row.title.toLowerCase().includes(aspirationQuery.toLowerCase()),
           )
-          .slice(0, 8)
           .map((row) => (
             <CreationSwitch
               key={row.id}
               title={row.title}
               value={aspirationIds.includes(row.id)}
-              onChange={(value) =>
+              onChange={(checked) =>
                 setAspirationIds((current) =>
-                  value
+                  checked
                     ? [...current, row.id]
                     : current.filter((id) => id !== row.id),
                 )
               }
             />
           ))}
-        {!aspirations.length ? (
-          <Txt muted>Add aspirations in your profile to connect them.</Txt>
-        ) : null}
-        {!templateEditor ? (
-          <>
-            <Field
-              label="Template name"
-              value={templateName}
-              onChangeText={setTemplateName}
-              maxLength={80}
-            />
-            <Action secondary title="Save as template" run={saveTemplate} />
-          </>
-        ) : null}
-        <Text style={styles.h2}>Public discovery</Text>
-        <Txt muted>
-          Manage public discovery after creating. Exact meeting details and
-          participant tools keep their existing access protections. Sonar
-          sharing is separate.
-        </Txt>
       </Sheet>
       <Sheet
         title="Add to Plan or Council"

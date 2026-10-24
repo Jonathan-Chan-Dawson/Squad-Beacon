@@ -1,0 +1,347 @@
+import React, { useState } from "react";
+import { Pressable, Text, View, type TextInput } from "react-native";
+import { AudiencePicker, Button, Field, Txt, useTheme } from "@/src/shared/ui";
+import type { Audience } from "@/src/shared/types";
+import type { BeaconControlValues } from "../controls";
+import { CreationSwitch } from "./CreationControls";
+import { CreationDisclosure } from "./CreationDisclosure";
+
+export function CreationLink({
+  title,
+  onPress,
+}: {
+  title: string;
+  onPress: () => void;
+}) {
+  const { styles, colors } = useTheme();
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={title}
+      onPress={onPress}
+      style={{ minHeight: 44, justifyContent: "center", paddingHorizontal: 4 }}
+    >
+      <Text
+        style={[
+          styles.body,
+          { color: colors.ink, fontWeight: "600", fontSize: 13 },
+        ]}
+      >
+        {title}
+      </Text>
+    </Pressable>
+  );
+}
+function Choice({
+  title,
+  selected,
+  onPress,
+  detail,
+}: {
+  title: string;
+  selected: boolean;
+  onPress: () => void;
+  detail?: string;
+}) {
+  const { styles, colors } = useTheme();
+  return (
+    <Pressable
+      accessibilityRole="radio"
+      accessibilityState={{ checked: selected }}
+      aria-checked={selected}
+      accessibilityLabel={title}
+      onPress={onPress}
+      style={{
+        minHeight: 48,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 10,
+        paddingVertical: 6,
+      }}
+    >
+      <Text
+        accessible={false}
+        style={{
+          color: selected ? colors.primary : colors.muted,
+          fontSize: 20,
+        }}
+      >
+        {selected ? "◉" : "○"}
+      </Text>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.body}>{title}</Text>
+        {detail ? <Txt muted>{detail}</Txt> : null}
+      </View>
+    </Pressable>
+  );
+}
+export function CreationCapacity({
+  value,
+  onChange,
+  inputRef,
+}: {
+  value: BeaconControlValues;
+  onChange: (value: BeaconControlValues) => void;
+  inputRef?: React.Ref<TextInput>;
+}) {
+  const { styles } = useTheme();
+  const maximum = value.capacity_limit;
+  const [editingMaximum, setEditingMaximum] = useState(false);
+  const configured = maximum != null || editingMaximum;
+  return (
+    <View style={{ gap: 6 }}>
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 8,
+        }}
+      >
+        <Text style={styles.label}>Maximum spots</Text>
+        <CreationLink
+          title={configured ? "Clear maximum" : "Set maximum"}
+          onPress={() => {
+            setEditingMaximum(!configured);
+            onChange({ ...value, capacity_limit: configured ? null : 2 });
+          }}
+        />
+      </View>
+      {!configured ? (
+        <Txt muted>Unlimited</Txt>
+      ) : (
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <Button
+            compact
+            secondary
+            title="−"
+            accessibilityLabel="Decrease maximum spots"
+            disabled={maximum == null || maximum <= 2}
+            onPress={() =>
+              onChange({
+                ...value,
+                capacity_limit: Math.max(2, (maximum ?? 2) - 1),
+              })
+            }
+          />
+          <View style={{ flex: 1 }}>
+            <Field
+              inputRef={inputRef}
+              label="Maximum spots (2–500)"
+              keyboardType="number-pad"
+              value={maximum == null ? "" : String(maximum)}
+              onFocus={() => setEditingMaximum(true)}
+              onBlur={() => {
+                if (maximum == null) setEditingMaximum(false);
+              }}
+              onChangeText={(text) =>
+                /^\d*$/.test(text) &&
+                onChange({
+                  ...value,
+                  capacity_limit: text ? Number(text) : null,
+                })
+              }
+            />
+          </View>
+          <Button
+            compact
+            secondary
+            title="+"
+            accessibilityLabel="Increase maximum spots"
+            disabled={maximum != null && maximum >= 500}
+            onPress={() =>
+              onChange({
+                ...value,
+                capacity_limit: Math.min(500, (maximum ?? 1) + 1),
+              })
+            }
+          />
+        </View>
+      )}
+      <CreationSwitch
+        title="Enforce maximum"
+        value={value.capacity_policy === "strict"}
+        onChange={(strict) =>
+          onChange({ ...value, capacity_policy: strict ? "strict" : "soft" })
+        }
+        detail="Off: advisory. On: joining stops when full. Counts the host and accepted seats."
+      />
+    </View>
+  );
+}
+export function CreationPeople({
+  audience,
+  audienceId,
+  audienceLabel,
+  onAudience,
+  invitations,
+  community,
+  onCommunity,
+  onClearCommunity,
+  approval,
+  onApproval,
+  controls,
+  onControls,
+  notice,
+  capacityRef,
+  review,
+}: {
+  audience: Audience;
+  audienceId: string | null;
+  audienceLabel: string;
+  onAudience: (value: Audience, id: string | null) => void;
+  invitations: React.ReactNode;
+  community?: string;
+  onCommunity: () => void;
+  onClearCommunity?: () => void;
+  approval: string;
+  onApproval: (value: string) => void;
+  controls: BeaconControlValues;
+  onControls: (value: BeaconControlValues) => void;
+  notice?: string;
+  capacityRef?: React.Ref<TextInput>;
+  review?: React.ReactNode;
+}) {
+  const { styles, colors } = useTheme();
+  const [visibilityOpen, setVisibilityOpen] = useState(false),
+    [joiningOpen, setJoiningOpen] = useState(false),
+    [moreOpen, setMoreOpen] = useState(false);
+  return (
+    <View
+      style={{
+        gap: 12,
+        borderTopWidth: 1,
+        borderColor: colors.line,
+        paddingTop: 16,
+      }}
+    >
+      <Text accessibilityRole="header" style={styles.h2}>
+        People & Community
+      </Text>
+      <View style={{ gap: 4 }}>
+        <Text style={styles.label}>Who can see this?</Text>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <Text style={[styles.body, { flex: 1 }]}>{audienceLabel}</Text>
+          <CreationLink
+            title="Change visibility"
+            onPress={() => setVisibilityOpen(!visibilityOpen)}
+          />
+        </View>
+        {visibilityOpen ? (
+          <View>
+            <Choice
+              title="Friends"
+              selected={audience === "friends"}
+              onPress={() => {
+                onAudience("friends", null);
+                setVisibilityOpen(false);
+              }}
+            />
+            <Choice
+              title="Only me"
+              selected={audience === "private"}
+              onPress={() => {
+                onAudience("private", null);
+                setVisibilityOpen(false);
+              }}
+            />
+            <AudiencePicker
+              value={audience}
+              id={audienceId}
+              onChange={(value, id) => {
+                onAudience(value, id);
+                setVisibilityOpen(false);
+              }}
+              triggerLabel="Private Lists or communities"
+            />
+          </View>
+        ) : null}
+        <Txt muted>
+          {notice ||
+            "Visibility controls who can see it. It does not send invitations."}
+        </Txt>
+      </View>
+      <View style={{ gap: 6 }}>
+        <Text style={styles.label}>Invite People</Text>
+        {invitations}
+        <Txt muted>
+          Invitations go to selected eligible friends when published.
+        </Txt>
+      </View>
+      <View style={{ gap: 4 }}>
+        <Text style={styles.label}>Community (optional)</Text>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <Text style={[styles.body, { flex: 1 }]}>
+            {community ?? "No community"}
+          </Text>
+          <CreationLink
+            title={community ? "Change community" : "+ Add a community"}
+            onPress={onCommunity}
+          />
+          {community && onClearCommunity ? (
+            <CreationLink title="Clear community" onPress={onClearCommunity} />
+          ) : null}
+        </View>
+        {community ? (
+          <Txt muted>Association does not invite members or change access.</Txt>
+        ) : null}
+      </View>
+      <View style={{ gap: 4 }}>
+        <Text style={styles.label}>Joining</Text>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <Text style={[styles.body, { flex: 1 }]}>
+            {approval === "Host approval" ? "Host Approval" : "Open Joining"}
+          </Text>
+          <CreationLink
+            title="Change joining"
+            onPress={() => setJoiningOpen(!joiningOpen)}
+          />
+        </View>
+        {joiningOpen ? (
+          <View>
+            {["Open joining", "Host approval"].map((value) => (
+              <Choice
+                key={value}
+                title={
+                  value === "Open joining" ? "Open Joining" : "Host Approval"
+                }
+                selected={approval === value}
+                detail={
+                  value === "Open joining"
+                    ? "Eligible users join immediately."
+                    : "Eligible users request permission first."
+                }
+                onPress={() => {
+                  onApproval(value);
+                  setJoiningOpen(false);
+                }}
+              />
+            ))}
+          </View>
+        ) : null}
+      </View>
+      <CreationCapacity
+        value={controls}
+        onChange={onControls}
+        inputRef={capacityRef}
+      />
+      {review}
+      <CreationDisclosure
+        title="More Access Settings"
+        open={moreOpen}
+        onToggle={() => setMoreOpen(!moreOpen)}
+      >
+        <Txt muted>
+          After creating, open the Beacon’s People tab, then Organizer roles.
+          People must be approved and Going before you can give them a role.
+          Invitations never grant leadership.
+        </Txt>
+        <Txt muted>
+          Community association and visibility do not send community-wide
+          invitations. Selected friends receive invitations on publication, up
+          to 20 per creation batch.
+        </Txt>
+      </CreationDisclosure>
+    </View>
+  );
+}

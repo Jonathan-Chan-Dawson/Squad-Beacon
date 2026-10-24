@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { Pressable, Switch, Text, View } from "react-native";
+import React from "react";
+import { Pressable, Switch, Text, View, type TextInput } from "react-native";
 import { ChevronRight } from "lucide-react-native";
 import { Button, Field, Txt, useTheme } from "@/src/shared/ui";
 import type { BeaconControlValues } from "../controls";
@@ -91,36 +91,42 @@ export function CreationModuleControls({
   value,
   onChange,
   category,
+  musicInputRef,
 }: {
   value: BeaconControlValues;
   onChange: (value: BeaconControlValues) => void;
   category: string;
+  musicInputRef?: React.Ref<TextInput>;
 }) {
-  const [expanded, setExpanded] = useState<string | null>(null);
   const { styles, colors } = useTheme();
   const recommendations = recommendedCreationModules(category);
   return (
     <View style={{ gap: 12 }}>
-      <Text style={styles.h2}>Recommended for this activity</Text>
-      <Txt muted>
-        {creationModules
-          .filter((row) => recommendations.includes(row.field))
-          .map((row) => row.name)
-          .join(" + ")}
-      </Txt>
-      <Button
-        compact
-        secondary
-        title="Apply recommendations"
-        onPress={() =>
-          onChange({
-            ...value,
-            ...Object.fromEntries(
-              recommendations.map((field) => [field, true]),
-            ),
-          })
-        }
-      />
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+        <View style={{ flex: 1 }}>
+          <Txt muted>
+            Suggested for {category}:{" "}
+            {creationModules
+              .filter((row) => recommendations.includes(row.field))
+              .map((row) => row.name)
+              .join(" + ")}
+          </Txt>
+        </View>
+        <Button
+          compact
+          secondary
+          title="Apply"
+          accessibilityLabel="Apply module recommendations"
+          onPress={() =>
+            onChange({
+              ...value,
+              ...Object.fromEntries(
+                recommendations.map((field) => [field, true]),
+              ),
+            })
+          }
+        />
+      </View>
       {(["Social", "Tools", "Media"] as const).map((family) => (
         <View key={family} style={{ gap: 5 }}>
           <Text style={styles.label}>{family}</Text>
@@ -136,71 +142,42 @@ export function CreationModuleControls({
                 }}
               >
                 <CreationSwitch
-                  title={`${row.icon}  ${row.name}`}
+                  title={row.name}
                   detail={row.description}
                   value={value[row.field]}
                   onChange={(enabled) =>
                     onChange({ ...value, [row.field]: enabled })
                   }
                 />
-                {value[row.field] ? (
-                  <>
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityLabel={`${row.name} settings`}
-                      style={{ minHeight: 44, justifyContent: "center" }}
-                      onPress={() =>
-                        setExpanded(expanded === row.field ? null : row.field)
-                      }
-                    >
-                      <Txt muted>
-                        {expanded === row.field ? "Hide settings" : "Settings"}
-                      </Txt>
-                    </Pressable>
-                    {expanded === row.field ? (
-                      row.field === "enable_music" ? (
-                        <Field
-                          label="Music link"
-                          value={value.music_url ?? ""}
-                          onChangeText={(music_url) =>
-                            onChange({ ...value, music_url: music_url || null })
-                          }
-                          autoCapitalize="none"
-                        />
-                      ) : row.field === "enable_checklist" ? (
-                        <CreationSwitch
-                          title="Only managers edit the checklist"
-                          value={value.checklist_edit_policy === "managers"}
-                          onChange={(enabled) =>
-                            onChange({
-                              ...value,
-                              checklist_edit_policy: enabled
-                                ? "managers"
-                                : "participants",
-                            })
-                          }
-                        />
-                      ) : (
-                        <Txt muted>
-                          No additional settings. Content is added after
-                          creating.
-                        </Txt>
-                      )
-                    ) : null}
-                  </>
+                {value[row.field] && row.field === "enable_music" ? (
+                  <Field
+                    inputRef={musicInputRef}
+                    label="Music link"
+                    value={value.music_url ?? ""}
+                    onChangeText={(music_url) =>
+                      onChange({ ...value, music_url: music_url || null })
+                    }
+                    autoCapitalize="none"
+                  />
+                ) : null}
+                {value[row.field] && row.field === "enable_checklist" ? (
+                  <CreationSwitch
+                    title="Only managers edit the checklist"
+                    value={value.checklist_edit_policy === "managers"}
+                    onChange={(enabled) =>
+                      onChange({
+                        ...value,
+                        checklist_edit_policy: enabled
+                          ? "managers"
+                          : "participants",
+                      })
+                    }
+                  />
                 ) : null}
               </View>
             ))}
         </View>
       ))}
-      <Text style={styles.h2}>Selected modules</Text>
-      {creationModules
-        .filter((row) => value[row.field])
-        .map((row) => (
-          <Text key={row.field} style={styles.body}>
-            {row.icon} {row.name}
-          </Text>
-        ))}
     </View>
   );
 }

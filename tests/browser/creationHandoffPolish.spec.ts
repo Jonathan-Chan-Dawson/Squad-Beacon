@@ -20,9 +20,9 @@ test("calendar, selected friends, place search, and Map cancellation preserve on
   await expect(
     page.getByRole("button", { name: /^Starts, Dec 25, 3:00 PM/ }),
   ).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: /^People & Access,.*1 invited/ }),
-  ).toBeVisible();
+  await expect(page.getByText("1/20 selected", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Modules", exact: true }).click();
+  await page.getByRole("switch", { name: "Checklist", exact: true }).check();
   await page
     .getByRole("button", { name: "Adjust on Map", exact: true })
     .click();
@@ -32,6 +32,13 @@ test("calendar, selected friends, place search, and Map cancellation preserve on
   await expect(page.getByLabel("Activity title", { exact: true })).toHaveValue(
     "Calendar and Map handoff",
   );
+  await expect(
+    page.getByRole("button", { name: "Modules", exact: true }),
+  ).toHaveAttribute("aria-expanded", "true");
+  await expect(
+    page.getByRole("switch", { name: "Checklist", exact: true }),
+  ).toBeChecked();
+
   await expect(
     page.getByText("Campus meeting point", { exact: true }),
   ).toBeVisible();
@@ -46,9 +53,7 @@ test("calendar, selected friends, place search, and Map cancellation preserve on
     .getByRole("button", { name: "Choose Auburn", exact: true })
     .click();
   await expect(page.getByText("Auburn", { exact: true })).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: /^People & Access,.*1 invited/ }),
-  ).toBeVisible();
+  await expect(page.getByText("1/20 selected", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Preview", exact: true }).click();
   const review = page.getByRole("dialog", {
     name: "Review your Beacon",
@@ -112,30 +117,45 @@ test("tablet layout and larger browser text retain a reachable footer and scroll
   await page.screenshot({
     path: ".expo/creation-polish/editor-tablet-large-text.png",
   });
-  await page.getByRole("button", { name: /^Advanced Options,/ }).click();
-  const advanced = page.getByRole("dialog", {
-    name: "Advanced Options",
-    exact: true,
-  });
-  await advanced
+  await page
+    .getByRole("button", { name: "Advanced Options", exact: true })
+    .click();
+  await page
     .getByLabel("Description & details", { exact: true })
     .fill("Extra instructions and things to bring.");
-  await advanced.getByRole("button", { name: "Done", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Advanced Options", exact: true })
+    .click();
   await expect(
     page.getByRole("button", { name: "Preview", exact: true }),
   ).toBeInViewport();
 });
 
-test("organizer roles are granted and removed only through the post-publication People route", async ({ page }) => {
+test("organizer roles are granted and removed only through the post-publication People route", async ({
+  page,
+}) => {
   await page.goto("/activity/demo-you-showcase-live");
   await page.getByRole("button", { name: /Explore the demo/ }).click();
   await page.getByRole("tab", { name: "People", exact: true }).click();
-  await page.getByRole("button", { name: "Organizer roles", exact: true }).click();
-  const roles = page.getByRole("dialog", { name: "Organizer roles", exact: true });
-  await expect(roles.getByText(/Only approved Going participants/)).toBeVisible();
+  await page
+    .getByRole("button", { name: "Organizer roles", exact: true })
+    .click();
+  const roles = page.getByRole("dialog", {
+    name: "Organizer roles",
+    exact: true,
+  });
+  await expect(
+    roles.getByText(/Only approved Going participants/),
+  ).toBeVisible();
   await roles.getByRole("button", { name: /^Make Jordan.* admin$/ }).click();
-  await expect(roles.getByRole("button", { name: /^Remove Jordan.* organizer role$/ })).toBeVisible();
+  await expect(
+    roles.getByRole("button", { name: /^Remove Jordan.* organizer role$/ }),
+  ).toBeVisible();
   await page.screenshot({ path: ".expo/creation-polish/organizer-roles.png" });
-  await roles.getByRole("button", { name: /^Remove Jordan.* organizer role$/ }).click();
-  await expect(roles.getByRole("button", { name: /^Make Jordan.* admin$/ })).toBeVisible();
+  await roles
+    .getByRole("button", { name: /^Remove Jordan.* organizer role$/ })
+    .click();
+  await expect(
+    roles.getByRole("button", { name: /^Make Jordan.* admin$/ }),
+  ).toBeVisible();
 });

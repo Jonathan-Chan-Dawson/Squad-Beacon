@@ -244,3 +244,19 @@ export async function runFrozenPublication(
   await checkpoint();
   return result;
 }
+
+/** User deletion is conservative: even confirmed IDs must retain their recovery route. */
+export function creationSnapshotNeedsRecovery(snapshot: CreationSnapshot) {
+  const fields = snapshot.fields;
+  if (fields.pendingPublication != null) return true;
+  const session = fields.invitationSession;
+  return (
+    record(session) &&
+    !!(
+      session.atomicAttempt ||
+      session.createdId ||
+      session.creationUnverified ||
+      (Array.isArray(session.pendingIds) && session.pendingIds.length)
+    )
+  );
+}

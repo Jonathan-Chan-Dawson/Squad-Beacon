@@ -1,5 +1,5 @@
 import { useNow } from "@/src/shared/useNow";
-import { listSavedCreationDrafts } from "./creationDraftStorage";
+import { CreationSavedDrafts } from "./components/CreationSavedDrafts";
 import React, { useCallback, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
@@ -101,6 +101,7 @@ export function CreateHome({
     startsAt?: string;
     fromMap?: string;
     timezone?: string;
+    savedDraft?: string;
   }>();
   const context = handoffContext ?? creationHandoffParams(routeContext);
   const { styles, colors } = useTheme();
@@ -124,30 +125,10 @@ export function CreateHome({
   const recent = history
     .filter((item) => item.mode !== "solo" && Date.parse(item.starts_at) < now)
     .slice(0, 3);
-  const [continueDraft, setContinueDraft] = useState<{
-    token: string;
-    title: string;
-  } | null>(null);
-  const [draftNotice, setDraftNotice] = useState("");
   useFocusEffect(
     useCallback(() => {
       setFocusedAt(Date.now());
-      let active = true;
-      if (userId)
-        void listSavedCreationDrafts(userId)
-          .then((rows) => {
-            if (active) setContinueDraft(rows[0] ?? null);
-          })
-          .catch(() => {
-            if (active)
-              setDraftNotice(
-                "Saved drafts could not be loaded. Your stored drafts have not been replaced.",
-              );
-          });
-      return () => {
-        active = false;
-      };
-    }, [userId]),
+    }, []),
   );
   const interests =
     data.profiles.find((item) => item.id === userId)?.interests ?? [];
@@ -377,9 +358,9 @@ export function CreateHome({
                   : "")}
         </Txt>
       ) : null}
-      {!!(contextError || launcherError || draftNotice) && (
+      {!!(contextError || launcherError) && (
         <Text accessibilityRole="alert" style={styles.error}>
-          {contextError || launcherError || draftNotice}
+          {contextError || launcherError}
         </Text>
       )}
       {selectedFriends.length || contextError ? (
@@ -399,19 +380,7 @@ export function CreateHome({
         />
       ) : null}
       <Text style={styles.h2}>Quick Access</Text>
-      {continueDraft
-        ? card(
-            "continue",
-            "Continue Draft",
-            `${continueDraft.title} · Unpublished`,
-            () =>
-              router.push({
-                pathname: "/create",
-                params: { resumeDraft: continueDraft.token },
-              }),
-            <Pencil size={20} color={colors.muted} />,
-          )
-        : null}
+      <CreationSavedDrafts key={userId} savedToken={routeContext.savedDraft} />
       <Field
         label="Search activities or templates"
         placeholder="Search activities or templates…"

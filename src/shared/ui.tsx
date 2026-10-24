@@ -1059,6 +1059,9 @@ export function Screen({
   children,
   scroll = true,
   compactHeader = false,
+  iconOnlyBack = false,
+  scrollRequest,
+  scrollPositionRef,
   create: _create = true,
   footer,
   headerAction,
@@ -1072,6 +1075,9 @@ export function Screen({
   scroll?: boolean;
   /** Use a compact single-row back/title/action header on focused screens. */
   compactHeader?: boolean;
+  iconOnlyBack?: boolean;
+  scrollRequest?: { y: number; sequence: number };
+  scrollPositionRef?: React.MutableRefObject<number>;
   create?: boolean;
   footer?: React.ReactNode;
   headerAction?: React.ReactNode;
@@ -1106,14 +1112,22 @@ export function Screen({
   const handleScreenScroll = useCallback(
     (event: NativeSyntheticEvent<NativeScrollEvent>) => {
       const offset = event.nativeEvent.contentOffset.y;
+      if (scrollPositionRef) scrollPositionRef.current = offset;
       if (activeScrollKey.current != null)
         scrollPositions.current.set(activeScrollKey.current, offset);
       titleAtTopRef.current = offset <= 0.5;
       scrollY.setValue(offset);
     },
-    [scrollY],
+    [scrollY, scrollPositionRef],
   );
   const reducedMotion = useReducedMotion();
+  React.useEffect(() => {
+    if (scrollRequest)
+      scrollRef.current?.scrollTo({
+        y: Math.max(0, scrollRequest.y - 12),
+        animated: !reducedMotion,
+      });
+  }, [scrollRequest, reducedMotion]);
   const [measuredTitleHeight, setMeasuredTitleHeight] = useState<number>(
     tokens.type.display.lineHeight * fontScale,
   );
@@ -1130,6 +1144,9 @@ export function Screen({
         tokens.space.xxs
       : 0);
   const compactHeaderHeight =
+    (iconOnlyBack && fontScale > 1.2
+      ? tokens.layout.minTapTarget + tokens.space.sm
+      : 0) +
     tokens.space.xs +
     Math.max(
       tokens.layout.minTapTarget,
@@ -1288,10 +1305,11 @@ export function Screen({
                   flexDirection: "row",
                   alignItems: "center",
                   gap: tokens.space.sm,
+                  flexWrap: iconOnlyBack && fontScale > 1.2 ? "wrap" : "nowrap",
                   minHeight: tokens.layout.minTapTarget,
                 }}
               >
-                {back ? <BackButton /> : null}
+                {back ? <BackButton iconOnly={iconOnlyBack} /> : null}
                 <Text
                   accessibilityRole="header"
                   numberOfLines={1}
@@ -1301,7 +1319,10 @@ export function Screen({
                     {
                       flex: 1,
                       minWidth: 0,
-                      fontSize: tokens.type.title.fontSize,
+                      fontSize:
+                        iconOnlyBack && width < 375
+                          ? 18
+                          : tokens.type.title.fontSize,
                       lineHeight:
                         tokens.type.title.lineHeight *
                         Math.min(fontScale, tokens.type.denseMaxMultiplier),
@@ -1310,7 +1331,13 @@ export function Screen({
                 >
                   {title}
                 </Text>
-                {action}
+                {iconOnlyBack && fontScale > 1.2 ? (
+                  <View style={{ width: "100%", alignItems: "flex-end" }}>
+                    {action}
+                  </View>
+                ) : (
+                  action
+                )}
               </View>
             ) : back ? (
               <View
@@ -1421,7 +1448,9 @@ export function AudiencePicker({
   value,
   id,
   onChange,
+  triggerLabel,
 }: {
+  triggerLabel?: string;
   value: Audience;
   id: string | null;
   onChange: (value: Audience, id: string | null) => void;
@@ -1505,7 +1534,7 @@ export function AudiencePicker({
     <View>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Choose audience"
+        accessibilityLabel={triggerLabel ?? "Choose audience"}
         onPress={() => setOpen(true)}
         style={{
           minHeight: 48,
@@ -1517,7 +1546,9 @@ export function AudiencePicker({
       >
         <Text style={{ color: colors.green, fontSize: 20 }}>＋</Text>
         <View style={{ flex: 1, gap: 2 }}>
-          <Text style={styles.body}>{selected ?? "Choose audience"}</Text>
+          <Text style={styles.body}>
+            {triggerLabel ?? selected ?? "Choose audience"}
+          </Text>
           <Text style={styles.muted}>
             {selected ? "Audience · Change" : "Choose one audience"}
           </Text>
@@ -1609,7 +1640,7 @@ export function Loading() {
   );
 }
 
-export function BackButton() {
+export function BackButton({ iconOnly = false }: { iconOnly?: boolean }) {
   const { styles, colors, tokens } = useTheme();
 
   return (
@@ -1624,12 +1655,14 @@ export function BackButton() {
         styles.row,
         {
           minHeight: tokens.layout.minTapTarget,
+          minWidth: iconOnly ? tokens.layout.minTapTarget : undefined,
+          justifyContent: "center",
           alignSelf: "flex-start",
         },
       ]}
     >
       <ArrowLeft size={20} color={colors.ink} />
-      <Txt>Back</Txt>
+      {iconOnly ? null : <Txt>Back</Txt>}
     </Pressable>
   );
 }

@@ -1,3 +1,4 @@
+import { ClusterArtworkCache } from "../clusterArtwork";
 import {
   categoryMarkerGlyphs,
   visibleFriendLabels,
@@ -5,7 +6,7 @@ import {
 } from "../markerIdentity";
 import {
   nativeMapMode,
-  nativeMapPresentations,
+  MapPresentationCache,
   nativeStackOpensExplorer,
   type NativeMapMode,
   type NativeMapPresentation,
@@ -630,9 +631,10 @@ export default function BeaconMap({
   );
   const reservedFeatures =
     contextPaths.length + contextPoints.length + Number(!!selected);
+  const [presentationCache] = useState(() => new MapPresentationCache());
   const presentations = useMemo(
     () =>
-      nativeMapPresentations(
+      presentationCache.select(
         mapPoints,
         {
           centerLatitude: region.latitude,
@@ -647,6 +649,7 @@ export default function BeaconMap({
         Math.max(10, MAX_RENDERED_MAP_FEATURES - reservedFeatures),
       ),
     [
+      presentationCache,
       mapPoints,
       region,
       zoom,
@@ -657,6 +660,45 @@ export default function BeaconMap({
       reservedFeatures,
     ],
   );
+  const [artworkCache] = useState(() => new ClusterArtworkCache());
+  const memberModels = useMemo(
+    () =>
+      artworkCache.build(
+        presentations.flatMap((item) => item.visible),
+        activities,
+        profiles,
+        freshLocations,
+        availabilityActivities ?? activities,
+        identityData,
+        identityViewer,
+        now,
+      ),
+    [
+      artworkCache,
+      presentations,
+      activities,
+      profiles,
+      freshLocations,
+      availabilityActivities,
+      identityData,
+      identityViewer,
+      now,
+    ],
+  );
+  const availabilityColors = useMemo(
+    () => ({
+      available: availability.available.color,
+      unavailable: availability.unavailable.color,
+      "ending-soon": availability.endingSoon.color,
+      unknown: availability.unknown.color,
+    }),
+    [availability],
+  );
+  const clusterAppearanceKey = `${appearanceKey}:${JSON.stringify(categoryColors)}:${JSON.stringify(availabilityColors)}`;
+  const modelsFor = (item: NativeMapPresentation) =>
+    item.visible
+      .map((point) => memberModels.get(point.id))
+      .filter((model): model is NonNullable<typeof model> => !!model);
   const groups = presentations.map((item) => item.group);
   const nativeFeatureCount = presentations.reduce(
     (sum, item) => sum + item.featureCost,
@@ -763,6 +805,17 @@ export default function BeaconMap({
       onCluster?.(group, null);
     }
   }
+  const clusterActions = useRef({ pressPresentation, selectStackMember });
+  useEffect(() => {
+    clusterActions.current = { pressPresentation, selectStackMember };
+  });
+  const handlePresentation = useCallback((item: NativeMapPresentation) => {
+    void clusterActions.current.pressPresentation(item);
+  }, []);
+  const handleMember = useCallback(
+    (point: ClusterPoint) => clusterActions.current.selectStackMember(point),
+    [],
+  );
   const friendLabelIds = visibleFriendLabels(
     freshLocations
       .filter((l) => renderedSingletonIds.has(`person:${l.owner_id}`))
@@ -1043,7 +1096,7 @@ export default function BeaconMap({
               <React.Fragment key={presentation.group.id}>
                 <ActivityAtmosphere
                   presentation={presentation}
-                  onPress={pressPresentation}
+                  onPress={handlePresentation}
                   zoom={zoom}
                 />
                 {presentation.owned.length > 0 && (
@@ -1060,15 +1113,12 @@ export default function BeaconMap({
               <LivingMapPin
                 key={presentation.group.id}
                 presentation={presentation}
-                profiles={profiles}
-                activities={activities}
-                availabilityActivities={availabilityActivities}
-                locations={freshLocations}
+                members={modelsFor(presentation)}
                 categoryColors={categoryColors}
-                selectedActivityId={selectedActivityId}
-                appearanceKey={appearanceKey}
-                onPress={pressPresentation}
-                onMember={selectStackMember}
+                availabilityColors={availabilityColors}
+                appearanceKey={clusterAppearanceKey}
+                onPress={handlePresentation}
+                onMember={handleMember}
               />
             ),
           )}
@@ -1191,13 +1241,10 @@ export default function BeaconMap({
           presentation={expandedPresentation}
           anchor={expandedStack}
           size={mapSize}
-          profiles={profiles}
-          activities={activities}
-          availabilityActivities={availabilityActivities}
-          locations={freshLocations}
+          members={modelsFor(expandedPresentation)}
+          availabilityColors={availabilityColors}
           categoryColors={categoryColors}
-          selectedActivityId={selectedActivityId}
-          onMember={selectStackMember}
+          onMember={handleMember}
           onClose={closeStack}
         />
       )}

@@ -211,7 +211,9 @@ export async function saveCreationDraft(
     token: token.startsWith("creation:") ? token : `creation:planning-${token}`,
     updatedAt: Date.now(),
     context: context ?? draft?.context ?? {},
-    fields: Object.fromEntries(fields),
+    fields: Object.fromEntries(
+      [...fields].filter(([key]) => key !== "creationOptionalSection"),
+    ),
   });
   if (creationAccount !== viewer || creationEpoch !== epoch)
     throw new Error(
@@ -228,7 +230,11 @@ export async function restoreCreationDraft(viewer: string, token: string) {
     throw new Error("Your account changed while restoring this draft.");
   creationDrafts.set(token, {
     viewer,
-    fields: new Map(Object.entries(snapshot.fields)),
+    fields: new Map(
+      Object.entries(snapshot.fields).filter(
+        ([key]) => key !== "creationOptionalSection",
+      ),
+    ),
     context: snapshot.context,
   });
   return snapshot.context;

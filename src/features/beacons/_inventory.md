@@ -35,3 +35,7 @@ Beacons feature
 - creationValidation.ts: supported HTTPS meeting-link validation for publication; unfinished templates remain exempt.
 
 - components/BeaconOrganizerRoles.tsx: post-publication People entry for canonical approved-Going role grants/removal, with existing owner/co-owner hierarchy and server authorization.
+
+- Pass 1.1: CreationPeople/CreationCapacity provide flat inline access, invitees, primary association and capacity; CreationDisclosure controls one major optional section at a time; CreationAppearance shares inline and focused artwork controls.
+- CreationSavedDrafts shows three recent pills, all-draft browsing and confirmed removal. creationDraftRepository preserves the version-1 format behind injectable IO, validated summaries, and queued fail-closed user deletion; trusted completion cleanup remains separate.
+- Live creationOptionalSection is retained across Map handoffs but omitted from durable snapshots, so resumed saved drafts begin with optional sections collapsed.

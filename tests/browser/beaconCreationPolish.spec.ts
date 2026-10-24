@@ -32,7 +32,7 @@ async function blank(page: Page) {
 }
 for (const width of [320, 375, 430])
   for (const appearance of ["light", "dark"]) {
-    test(`compact creator ${width}px ${appearance}`, async ({ page }) => {
+    test(`inline creator ${width}px ${appearance}`, async ({ page }) => {
       await page.setViewportSize({ width, height: 844 });
       await page.emulateMedia({ reducedMotion: "reduce" });
       await page.addInitScript(
@@ -46,53 +46,101 @@ for (const width of [320, 375, 430])
         page.getByTestId("creation-starters").getByRole("button"),
       ).toHaveCount(6);
       await page.screenshot({
-        path: `.expo/creation-polish/hub-${width}-${appearance}.png`,
+        path: `.expo/creation-inline/hub-${width}-${appearance}.png`,
       });
       await page
         .getByRole("button", { name: "+ Create Blank Beacon", exact: true })
         .click();
-      const people = page.getByRole("button", { name: /^People & Access,/ });
+      const people = page.getByRole("heading", {
+        name: "People & Community",
+        exact: true,
+      });
       await expect(people).toBeInViewport();
-      const peopleBox = (await people.boundingBox())!;
-      expect(peopleBox.y + peopleBox.height).toBeLessThan(650);
-      const advanced = page.getByRole("button", { name: /^Advanced Options,/ });
-      await expect(advanced).toHaveCount(1);
+      expect((await people.boundingBox())!.y).toBeLessThan(600);
+      const heading = page.getByRole("heading", {
+        name: "Create Beacon",
+        exact: true,
+      });
+      expect(
+        await heading.evaluate((node) => node.scrollWidth <= node.clientWidth),
+      ).toBeTruthy();
       await expect(
         page.getByRole("button", { name: "Create Beacon", exact: true }),
       ).toBeInViewport();
+      await expect(
+        page.getByRole("button", { name: "Modules", exact: true }),
+      ).toHaveAttribute("aria-expanded", "false");
+      await expect(
+        page.getByRole("button", { name: "Advanced Options", exact: true }),
+      ).toHaveAttribute("aria-expanded", "false");
       await page.screenshot({
-        path: `.expo/creation-polish/editor-${width}-${appearance}.png`,
+        path: `.expo/creation-inline/editor-${width}-${appearance}.png`,
       });
       await page
         .getByLabel("Activity title", { exact: true })
         .fill("A longer basketball activity title with friends");
       await page.getByLabel("Activity title", { exact: true }).press("Tab");
-      await people.click();
-      const sheet = page.getByRole("dialog", {
-        name: "People & Access",
-        exact: true,
-      });
-      await expect(
-        sheet.getByText("Who can see this Beacon?", { exact: true }),
-      ).toBeVisible();
-      await sheet
-        .getByLabel("Maximum spots (optional)", { exact: true })
-        .fill("6");
-      await sheet
+      await page
+        .getByRole("button", { name: "Change joining", exact: true })
+        .click();
+      await page
+        .getByRole("radio", { name: "Host Approval", exact: true })
+        .click();
+      await page
+        .getByRole("button", { name: "Set maximum", exact: true })
+        .click();
+      await page.getByLabel("Maximum spots (2–500)", { exact: true }).fill("6");
+      await page
         .getByRole("switch", { name: "Enforce maximum", exact: true })
         .check();
       await page.screenshot({
-        path: `.expo/creation-polish/people-${width}-${appearance}.png`,
+        path: `.expo/creation-inline/people-${width}-${appearance}.png`,
       });
-      await sheet.getByRole("button", { name: "Done", exact: true }).click();
-      await page.getByRole("button", { name: /^Modules,/ }).click();
-      await expect(
-        page.getByRole("dialog", { name: "Modules", exact: true }),
-      ).toBeVisible();
+      await page.getByRole("button", { name: "Modules", exact: true }).click();
       await page
-        .getByRole("dialog", { name: "Modules", exact: true })
-        .getByRole("button", { name: "Done", exact: true })
-        .click();
+        .getByRole("switch", { name: "Checklist", exact: true })
+        .check();
+      await expect(
+        page.getByRole("button", { name: "Checklist settings", exact: true }),
+      ).toHaveCount(0);
+      await page.screenshot({
+        path: `.expo/creation-inline/modules-${width}-${appearance}.png`,
+      });
+      const advancedHeader = page.getByRole("button", {
+        name: "Advanced Options",
+        exact: true,
+      });
+      await advancedHeader.scrollIntoViewIfNeeded();
+      await advancedHeader.evaluate((node) =>
+        node.addEventListener(
+          "pointerdown",
+          () => {
+            (window as any).creationAnchorY = node.getBoundingClientRect().top;
+          },
+          { once: true },
+        ),
+      );
+      await advancedHeader.click();
+      const anchorY = await page.evaluate(
+        () => (window as any).creationAnchorY as number,
+      );
+      if (width === 375 && appearance === "dark") {
+        await expect.poll(async () => (await advancedHeader.boundingBox())!.y - anchorY).toBeGreaterThan(-24);
+        await expect.poll(async () => (await advancedHeader.boundingBox())!.y - anchorY).toBeLessThan(24);
+      }
+      await expect(
+        page.getByRole("button", { name: "Modules", exact: true }),
+      ).toHaveAttribute("aria-expanded", "false");
+      await page
+        .getByLabel("Description & details", { exact: true })
+        .fill("Bring water and comfortable shoes. ".repeat(12));
+      await page.screenshot({
+        path: `.expo/creation-inline/advanced-${width}-${appearance}.png`,
+      });
+      await page.getByRole("button", { name: "Modules", exact: true }).click();
+      await expect(
+        page.getByRole("switch", { name: "Checklist", exact: true }),
+      ).toBeChecked();
       await page.getByRole("button", { name: "Preview", exact: true }).click();
       const review = page.getByRole("dialog", {
         name: "Review your Beacon",
@@ -101,12 +149,9 @@ for (const width of [320, 375, 430])
       await expect(
         review.getByText("Who can see it", { exact: true }),
       ).toBeVisible();
-      await expect(
-        review.getByText("Invitations & notifications", { exact: true }),
-      ).toBeVisible();
       await expect(review.getByText(/Maximum enforced/)).toBeVisible();
       await page.screenshot({
-        path: `.expo/creation-polish/review-${width}-${appearance}.png`,
+        path: `.expo/creation-inline/review-${width}-${appearance}.png`,
       });
       expect(errors).toEqual([]);
       expect(
@@ -116,53 +161,177 @@ for (const width of [320, 375, 430])
       ).toBeTruthy();
     });
   }
-test("draft saves across reload and restores title, modules, audience, and capacity", async ({
+test("Save Draft returns to the hub and restores title, modules, visibility and capacity after restart", async ({
   page,
 }) => {
   await blank(page);
   await page
     .getByLabel("Activity title", { exact: true })
     .fill("Restart-safe draft");
-  await page.getByRole("button", { name: /^Modules,/ }).click();
-  await page.getByRole("switch", { name: /Checklist$/ }).check();
+  await page.getByRole("button", { name: "Modules", exact: true }).click();
+  await page.getByRole("switch", { name: "Checklist", exact: true }).check();
   await page
-    .getByRole("dialog", { name: "Modules", exact: true })
-    .getByRole("button", { name: "Done", exact: true })
+    .getByRole("button", { name: "Change visibility", exact: true })
     .click();
-  await page.getByRole("button", { name: /^People & Access,/ }).click();
-  await page
-    .getByRole("button", { name: "Choose audience", exact: true })
-    .click();
-  await page.getByRole("button", { name: "Only me", exact: true }).click();
-  await page.getByLabel("Maximum spots (optional)", { exact: true }).fill("7");
-  await page
-    .getByRole("dialog", { name: "People & Access", exact: true })
-    .getByRole("button", { name: "Done", exact: true })
-    .click();
+  await page.getByRole("radio", { name: "Only me", exact: true }).click();
+  await page.getByRole("button", { name: "Set maximum", exact: true }).click();
+  await page.getByLabel("Maximum spots (2–500)", { exact: true }).fill("7");
   await page.getByRole("button", { name: "Save Draft", exact: true }).click();
   await expect(
-    page.getByText("Saved on this device", { exact: true }),
+    page.getByRole("button", { name: "+ Create Blank Beacon", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Draft saved on this device", { exact: true }),
   ).toBeVisible();
   await page.reload();
-  const enterDemo = page.getByRole("button", { name: /Explore the demo/ });
-  await enterDemo.click();
-  await returnToHub(page);
+  await page.getByRole("button", { name: /Explore the demo/ }).click();
   await page
-    .getByRole("button", { name: "Continue Draft", exact: true })
+    .getByRole("button", {
+      name: "Resume draft: Restart-safe draft",
+      exact: true,
+    })
     .click();
   await expect(page.getByLabel("Activity title", { exact: true })).toHaveValue(
     "Restart-safe draft",
   );
+  await expect(page.getByText("Private", { exact: true })).toBeVisible();
   await expect(
-    page.getByRole("button", { name: /^Modules,.*Checklist/ }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: /^People & Access, Private/ }),
-  ).toBeVisible();
-  await page.getByRole("button", { name: /^People & Access,/ }).click();
-  await expect(
-    page.getByLabel("Maximum spots (optional)", { exact: true }),
+    page.getByLabel("Maximum spots (2–500)", { exact: true }),
   ).toHaveValue("7");
+  await page.getByRole("button", { name: "Modules", exact: true }).click();
+  await expect(
+    page.getByRole("switch", { name: "Checklist", exact: true }),
+  ).toBeChecked();
+});
+test("multiple draft pills resume exact tokens, confirm removal, and update without duplicates", async ({
+  page,
+}) => {
+  await demo(page);
+  for (const title of ["Draft One", "Draft Two", "Draft Three", "Draft Four"]) {
+    await page
+      .getByRole("button", { name: "+ Create Blank Beacon", exact: true })
+      .click();
+    await page.getByLabel("Activity title", { exact: true }).fill(title);
+    await page.getByRole("button", { name: "Save Draft", exact: true }).click();
+    await expect(
+      page.getByRole("button", { name: `Resume draft: ${title}`, exact: true }),
+    ).toBeVisible();
+  }
+  await expect(
+    page.getByRole("button", { name: /^Resume draft:/ }),
+  ).toHaveCount(3);
+  await expect(
+    page.getByRole("button", { name: "See all saved drafts", exact: true }),
+  ).toBeVisible();
+  await page.screenshot({ path: ".expo/creation-inline/draft-pills.png" });
+  await page
+    .getByRole("button", { name: "See all saved drafts", exact: true })
+    .click();
+  await expect(
+    page
+      .getByRole("dialog", { name: "Saved drafts", exact: true })
+      .getByRole("button", { name: /^Resume draft:/ }),
+  ).toHaveCount(4);
+  await page.screenshot({ path: ".expo/creation-inline/all-drafts.png" });
+  await page
+    .getByRole("dialog", { name: "Saved drafts", exact: true })
+    .getByRole("button", { name: "Done", exact: true })
+    .click();
+
+  await page
+    .getByRole("button", { name: "Delete draft: Draft Two", exact: true })
+    .click();
+  await page.screenshot({
+    path: ".expo/creation-inline/delete-confirmation.png",
+  });
+  await page.getByRole("button", { name: "Keep draft", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Resume draft: Draft Two", exact: true }),
+  ).toHaveCount(1);
+  await page
+    .getByRole("button", { name: "Delete draft: Draft Two", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Delete draft", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Resume draft: Draft Two", exact: true }),
+  ).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Resume draft: Draft One", exact: true })
+    .click();
+  await page
+    .getByLabel("Activity title", { exact: true })
+    .fill("Edited Draft One");
+  await page.getByRole("button", { name: "Save Draft", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: /^Resume draft:/ }),
+  ).toHaveCount(3);
+  await expect(
+    page.getByRole("button", {
+      name: "Resume draft: Edited Draft One",
+      exact: true,
+    }),
+  ).toBeVisible();
+});
+test("failed draft save stays in editor, preserves values, and permits retry", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    (window as any).failDraftSave = true;
+    const write = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) {
+      if (key.startsWith("beacon.creation.") && (window as any).failDraftSave)
+        throw new Error("Draft storage unavailable");
+      return write.call(this, key, value);
+    };
+  });
+  await blank(page);
+  await page
+    .getByLabel("Activity title", { exact: true })
+    .fill("Keep these edits");
+  await page.getByRole("button", { name: "Save Draft", exact: true }).click();
+  await expect(
+    page.getByText("Draft storage unavailable", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Activity title", { exact: true })).toHaveValue(
+    "Keep these edits",
+  );
+  await page.evaluate(() => {
+    (window as any).failDraftSave = false;
+  });
+  await page.getByRole("button", { name: "Save Draft", exact: true }).click();
+  await expect(
+    page.getByRole("button", {
+      name: "Resume draft: Keep these edits",
+      exact: true,
+    }),
+  ).toBeVisible();
+});
+test("hidden invalid music reveals its section and focuses the field", async ({
+  page,
+}) => {
+  await blank(page);
+  await page.getByLabel("Activity title", { exact: true }).fill("Music review");
+  await page.getByRole("button", { name: "Use online", exact: true }).click();
+  await page
+    .getByLabel("HTTPS meeting link", { exact: true })
+    .fill("https://example.com/meeting");
+  await page.getByRole("button", { name: "Modules", exact: true }).click();
+  await page.getByRole("switch", { name: "Music link", exact: true }).check();
+  await page
+    .getByRole("textbox", { name: "Music link", exact: true })
+    .fill("http://invalid.example");
+  await page
+    .getByRole("button", { name: "Advanced Options", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Create Beacon", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Modules", exact: true }),
+  ).toHaveAttribute("aria-expanded", "true");
+  await expect(
+    page.getByRole("textbox", { name: "Music link", exact: true }),
+  ).toBeFocused();
 });
 test("required location, templates, real reuse, and independent blank drafts", async ({
   page,
@@ -194,13 +363,14 @@ test("required location, templates, real reuse, and independent blank drafts", a
   await expect(page.getByLabel("Activity title", { exact: true })).toHaveValue(
     "Original Beacon for reuse",
   );
-  await page.getByRole("button", { name: /^People & Access,/ }).click();
   await expect(
     page.getByRole("button", { name: "+ Add People", exact: true }),
   ).toBeVisible();
   await page
-    .getByRole("dialog", { name: "People & Access", exact: true })
-    .getByRole("button", { name: "Done", exact: true })
+    .getByRole("button", {
+      name: "Confirm reused location and access",
+      exact: true,
+    })
     .click();
   await returnToHub(page);
   await page
@@ -209,4 +379,175 @@ test("required location, templates, real reuse, and independent blank drafts", a
   await expect(page.getByLabel("Activity title", { exact: true })).toHaveValue(
     "",
   );
+});
+
+test("recovery and unreadable drafts remain protected while healthy drafts stay usable", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const viewer = "demo-you",
+      prefix = `beacon.creation.${Array.from(viewer)
+        .map((c) => c.codePointAt(0)!.toString(16))
+        .join("-")}`;
+    const entries = [
+      {
+        token: "creation:recover",
+        title: "Pending basketball",
+        generation: "seed-recovery",
+        chunks: 1,
+        updatedAt: 3,
+      },
+      {
+        token: "creation:broken",
+        title: "Broken snapshot",
+        generation: "seed-broken",
+        chunks: 1,
+        updatedAt: 2,
+      },
+      {
+        token: "creation:healthy",
+        title: "Healthy draft",
+        generation: "seed-healthy",
+        chunks: 1,
+        updatedAt: 1,
+      },
+    ];
+    localStorage.setItem(`${prefix}.index`, JSON.stringify(entries));
+    for (const row of entries) {
+      const fields: Record<string, unknown> = { title: row.title };
+      if (row.generation === "seed-recovery")
+        fields.pendingPublication = {
+          action: "create_activity",
+          payload: { title: row.title },
+          viewer,
+          requestId: "11111111-1111-4111-8111-111111111111",
+        };
+      localStorage.setItem(
+        `${prefix}.${row.generation}.0`,
+        row.generation === "seed-broken"
+          ? "corrupt"
+          : JSON.stringify({
+              version: 1,
+              viewer,
+              token: row.token,
+              updatedAt: row.updatedAt,
+              context: { editor: "yes" },
+              fields,
+            }),
+      );
+    }
+  });
+  await demo(page);
+  await expect(
+    page.getByRole("button", {
+      name: "Resume recovery: Pending basketball",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", {
+      name: "Delete draft: Pending basketball",
+      exact: true,
+    }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", {
+      name: "Delete draft: Broken snapshot",
+      exact: true,
+    }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("button", {
+      name: "Resume draft: Healthy draft",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await page.screenshot({ path: ".expo/creation-inline/protected-drafts.png" });
+  await page
+    .getByRole("button", {
+      name: "Resume recovery: Pending basketball",
+      exact: true,
+    })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Confirm publication", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Retry confirmation", exact: true }),
+  ).toBeVisible();
+});
+
+test("inline people, community, joining and direct capacity entry remain independent", async ({
+  page,
+}) => {
+  await blank(page);
+  await page
+    .getByLabel("Activity title", { exact: true })
+    .fill("Community review");
+  await page.getByRole("button", { name: "Use online", exact: true }).click();
+  await page
+    .getByLabel("HTTPS meeting link", { exact: true })
+    .fill("https://example.com/meeting");
+  await page.getByRole("button", { name: "+ Add People", exact: true }).click();
+  const friends = page.getByRole("dialog", {
+    name: "Edit selected friends",
+    exact: true,
+  });
+  await friends
+    .getByRole("checkbox", { name: "Select Jordan Ellis", exact: true })
+    .click();
+  await friends.getByRole("button", { name: "Done", exact: true }).click();
+  await page
+    .getByRole("button", { name: "+ Add a community", exact: true })
+    .click();
+  const associations = page.getByRole("dialog", {
+    name: "Associate with a community",
+    exact: true,
+  });
+  const choice = associations
+    .getByRole("checkbox", { name: /, (Squads|Organizations|Networks)$/ })
+    .first();
+  const label = (await choice.getAttribute("aria-label"))!;
+  const split = label.lastIndexOf(", "),
+    name = label.slice(0, split),
+    kind = label.slice(split + 2);
+  await choice.click();
+  const kindNames: Record<string, string> = {
+    Squads: "Squad",
+    Organizations: "Organization",
+    Networks: "Network",
+  };
+  const community = `${name} · ${kindNames[kind]}`;
+  await expect(page.getByText(community, { exact: true })).toBeVisible();
+  await page
+    .getByRole("button", { name: "Change visibility", exact: true })
+    .click();
+  await page.getByRole("radio", { name: "Only me", exact: true }).click();
+  await expect(page.getByText(community, { exact: true })).toBeVisible();
+  await expect(page.getByText("1/20 selected", { exact: true })).toBeVisible();
+  await page
+    .getByRole("button", { name: "Change joining", exact: true })
+    .click();
+  await page.getByRole("radio", { name: "Host Approval", exact: true }).click();
+  await page.getByRole("button", { name: "Set maximum", exact: true }).click();
+  const maximum = page.getByLabel("Maximum spots (2–500)", { exact: true });
+  await maximum.fill("");
+  await expect(maximum).toBeVisible();
+  await maximum.fill("501");
+  await page
+    .getByRole("button", { name: "Create Beacon", exact: true })
+    .click();
+  await expect(maximum).toBeFocused();
+  await expect(maximum).toBeInViewport();
+  await maximum.fill("6");
+  await page.screenshot({ path: ".expo/creation-inline/people-selected.png" });
+  await page
+    .getByRole("button", { name: "Clear community", exact: true })
+    .click();
+  await expect(page.getByText("1/20 selected", { exact: true })).toBeVisible();
+  await expect(page.getByText("Private", { exact: true })).toBeVisible();
+  await page
+    .getByRole("button", { name: "Remove Jordan Ellis", exact: true })
+    .click();
+  await expect(page.getByText("1/20 selected", { exact: true })).toHaveCount(0);
 });

@@ -7,6 +7,7 @@ import {
   type MapPointGroup,
   type MapPointPriority,
 } from "./cluster";
+import { clusterPetalOffset } from "./clusterLayout";
 
 export type NativeMapMode = "stack" | "swarm" | "atmosphere";
 export const NATIVE_STACK_LIMIT = 10;
@@ -39,20 +40,8 @@ export function nativeStackOpensExplorer(count: number) {
   return count >= NATIVE_EXPLORER_THRESHOLD;
 }
 
-/** Fixed, loosely fanned petals. Priority changes depth, never randomizes slots. */
-const PETALS = [
-  [18, 12],
-  [-12, 7],
-  [4, -16],
-  [-26, -11],
-  [31, -13],
-  [-6, 29],
-  [38, 20],
-  [-35, 23],
-  [-19, -35],
-  [21, -36],
-] as const;
-export function nativePetalOffset(index: number, expanded = false) {
+/** Fixed circular petals. Priority changes depth, never randomizes slots. */
+export function nativePetalOffset(index: number, expanded = false, count = 10) {
   if (expanded) {
     const slots = [
       [35, 45],
@@ -64,8 +53,50 @@ export function nativePetalOffset(index: number, expanded = false) {
     const [x, y] = slots[index % slots.length];
     return { x, y };
   }
-  const [x, y] = PETALS[index % PETALS.length];
-  return { x, y };
+  return clusterPetalOffset(index, count);
+}
+
+/** Spatial queries ignore names, labels and availability. Ranking changes reuse the groups. */
+export class MapPresentationCache {
+  private spatialKey = "";
+  private rankKey = "";
+  private value: NativeMapPresentation[] = [];
+  readonly stats = { spatialBuilds: 0, hits: 0 };
+  select(...args: Parameters<typeof nativeMapPresentations>) {
+    const [
+      points,
+      viewport,
+      mode,
+      priorities = {},
+      owned = new Set<string>(),
+      budget,
+    ] = args;
+    const ordered = [...points].sort((a, b) => a.id.localeCompare(b.id));
+    const spatialKey = JSON.stringify([
+      ordered,
+      viewport,
+      mode,
+      [...owned].sort(),
+      budget,
+      ordered
+        .filter((point) => priorities[point.id]?.tier === -3)
+        .map((point) => point.id),
+    ]);
+    const rankKey = JSON.stringify(
+      ordered.map((point) => [point.id, priorities[point.id]]),
+    );
+    if (spatialKey !== this.spatialKey) {
+      this.value = nativeMapPresentations(...args);
+      this.spatialKey = spatialKey;
+      this.stats.spatialBuilds++;
+    } else if (rankKey !== this.rankKey) {
+      this.value = this.value.map((item) =>
+        nativePresentation(item.group, item.mode, priorities, owned),
+      );
+    } else this.stats.hits++;
+    this.rankKey = rankKey;
+    return this.value;
+  }
 }
 
 export function nativePresentation(

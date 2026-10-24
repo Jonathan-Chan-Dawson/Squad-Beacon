@@ -71,7 +71,7 @@ for (const count of [6, 10, 11, 14, 25])
     const overflow = page.getByTestId("map-constellation-overflow");
     if (count > 10) await expect(overflow).toHaveText(`+${count - 10}`);
     else await expect(overflow).toHaveCount(0);
-    await stack.click({ position: { x: 90, y: 90 } });
+    await stack.click({ position: { x: 44, y: 44 } });
     await stack.press("Enter");
     expect(await page.evaluate(() => (window as any).explorers)).toBe(2);
     expect(await page.evaluate(() => (window as any).selected)).toEqual([]);
@@ -123,3 +123,45 @@ test("expanded touch rectangles do not overlap, including identical source locat
       ).toBe(true);
     }
 });
+for (const count of [2, 5, 6, 10, 11, 25])
+  test(`${count} petals use a contained shared circular footprint`, async ({
+    page,
+  }) => {
+    await page.evaluate((n) => (window as any).renderConstellation(n), count);
+    const stack = page.getByTestId("map-constellation"),
+      size = count < 6 ? 72 : 88;
+    await expect(stack).toHaveCSS("width", `${size}px`);
+    await expect(stack).toHaveCSS("height", `${size}px`);
+    const geometry = await stack.evaluate((node) => {
+      const bounds = node.getBoundingClientRect();
+      return [...node.querySelectorAll(".map-petal-item")].map((item) => {
+        const box = item.getBoundingClientRect();
+        return {
+          radius:
+            Math.hypot(
+              box.x + box.width / 2 - bounds.x - bounds.width / 2,
+              box.y + box.height / 2 - bounds.y - bounds.height / 2,
+            ) +
+            box.width / 2,
+          width: box.width,
+          height: box.height,
+        };
+      });
+    });
+    for (const petal of geometry) {
+      expect(petal.width).toBe(32);
+      expect(petal.height).toBe(32);
+      expect(petal.radius).toBeLessThanOrEqual(size / 2);
+    }
+    await expect(page.getByTestId("cluster-circle-shadow")).toHaveCSS(
+      "opacity",
+      "0.22",
+    );
+    if (count > 10) {
+      const badge = page.getByTestId("map-constellation-overflow");
+      await expect(badge).toHaveCSS("right", "0px");
+      await expect(badge).toHaveCSS("bottom", "0px");
+      await badge.click();
+      expect(await page.evaluate(() => (window as any).explorers)).toBe(1);
+    }
+  });

@@ -39,7 +39,9 @@ test("Create stays compact and app templates prefill the Beacon Quick Editor", a
   await expect(
     page.getByLabel("Search aspirations", { exact: true }),
   ).toHaveCount(0);
-  await page.getByRole("button", { name: /^Advanced Options,/ }).click();
+  await page
+    .getByRole("button", { name: "Advanced Options", exact: true })
+    .click();
   await expect(
     page.getByLabel("Search aspirations", { exact: true }),
   ).toBeVisible();
@@ -152,10 +154,10 @@ test("a Suggested Beacon creates a Vote and can add another suggestion with the 
   await expect(
     page.getByText("Coffee suggestion test", { exact: true }).first(),
   ).toBeVisible();
+  await page.getByRole("button", { name: "Add option", exact: true }).click();
   await page
-    .getByRole("button", { name: "Add option", exact: true })
+    .getByRole("button", { name: "Use Beacon editor", exact: true })
     .click();
-  await page.getByRole("button", { name: "Use Beacon editor", exact: true }).click();
   await page
     .getByLabel("Activity title", { exact: true })
     .fill("Bowling suggestion test");
@@ -280,7 +282,9 @@ test("My Templates saves, reuses, and edits the existing configuration", async (
     .getByLabel("Search activities or templates", { exact: true })
     .fill("Grocery Run");
   await page.getByRole("button", { name: "Grocery Run", exact: true }).click();
-  await page.getByRole("button", { name: /^Advanced Options,/ }).click();
+  await page
+    .getByRole("button", { name: "Advanced Options", exact: true })
+    .click();
   await page
     .getByLabel("Template name", { exact: true })
     .fill("Weekly groceries");
@@ -288,8 +292,7 @@ test("My Templates saves, reuses, and edits the existing configuration", async (
     .getByRole("button", { name: "Save as template", exact: true })
     .click();
   await page
-    .getByRole("dialog", { name: "Advanced Options", exact: true })
-    .getByRole("button", { name: "Done", exact: true })
+    .getByRole("button", { name: "Advanced Options", exact: true })
     .click();
   await returnToHub(page);
   await page.getByRole("button", { name: "My Templates", exact: true }).click();

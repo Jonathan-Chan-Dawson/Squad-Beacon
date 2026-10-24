@@ -18,3 +18,5 @@ Documentation guide
 - SOCIAL_PRESENCE_REFINEMENT.md: attached identity/status layout, Sonar people filters, API compatibility, and verification boundaries.
 
 - beacon-creation-polish.md: Pass 1 compact creation, durable drafts, publishing recovery, rendered evidence, test results, and device/hosted verification boundaries.
+
+- beacon-creation-inline-polish.md: Pass 1.1 inline form, multiple draft pills, guarded deletion, rendered states, and verification boundaries.
