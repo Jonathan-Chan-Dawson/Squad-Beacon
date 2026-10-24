@@ -39,3 +39,5 @@ Beacons feature
 - Pass 1.1: CreationPeople/CreationCapacity provide flat inline access, invitees, primary association and capacity; CreationDisclosure controls one major optional section at a time; CreationAppearance shares inline and focused artwork controls.
 - CreationSavedDrafts shows three recent pills, all-draft browsing and confirmed removal. creationDraftRepository preserves the version-1 format behind injectable IO, validated summaries, and queued fail-closed user deletion; trusted completion cleanup remains separate.
 - Live creationOptionalSection is retained across Map handoffs but omitted from durable snapshots, so resumed saved drafts begin with optional sections collapsed.
+
+- Focused mobile polish: CreationPeople uses mutually exclusive inline visibility/community/joining panels; CreationInvitees hosts the existing SocialSelector in a full-screen modal with local gesture/sheet support. Saved draft pill styling is compact without changing storage or recovery.

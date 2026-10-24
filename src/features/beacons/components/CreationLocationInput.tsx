@@ -118,13 +118,11 @@ export function CreationLocationInput({
   return (
     <View style={{ gap: 6 }}>
       <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 6 }}>
-        <View style={{ paddingBottom: 18 }}>
-          <Search size={18} color={colors.muted} />
-        </View>
         <View style={{ flex: 1 }}>
           <Field
             inputRef={inputRef}
             label="Meeting place"
+            leadingAdornment={<Search size={18} color={colors.muted} />}
             placeholder="Search a place or address…"
             value={value}
             onFocus={() => setFocused(true)}

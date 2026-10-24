@@ -1,10 +1,12 @@
 import React, { useState } from "react";
 import { Pressable, Text, View, type TextInput } from "react-native";
 import { AudiencePicker, Button, Field, Txt, useTheme } from "@/src/shared/ui";
+import type { SocialEntityType } from "@/src/features/social/types";
 import type { Audience } from "@/src/shared/types";
 import type { BeaconControlValues } from "../controls";
 import { CreationSwitch } from "./CreationControls";
 import { CreationDisclosure } from "./CreationDisclosure";
+import { CommunityAvatar } from "@/src/features/people/components/CommunityAvatar";
 
 export function CreationLink({
   title,
@@ -169,6 +171,14 @@ export function CreationCapacity({
     </View>
   );
 }
+export type CreationPeoplePanel =
+  "none" | "visibility" | "community" | "joining";
+export type CreationCommunityChoice = {
+  entity_type: SocialEntityType;
+  entity_id: string;
+  name: string;
+  joined: boolean;
+};
 export function CreationPeople({
   audience,
   audienceId,
@@ -176,8 +186,9 @@ export function CreationPeople({
   onAudience,
   invitations,
   community,
+  communityChoices,
+  selectedCommunity,
   onCommunity,
-  onClearCommunity,
   approval,
   onApproval,
   controls,
@@ -185,6 +196,8 @@ export function CreationPeople({
   notice,
   capacityRef,
   review,
+  panel,
+  onPanel,
 }: {
   audience: Audience;
   audienceId: string | null;
@@ -192,8 +205,14 @@ export function CreationPeople({
   onAudience: (value: Audience, id: string | null) => void;
   invitations: React.ReactNode;
   community?: string;
-  onCommunity: () => void;
-  onClearCommunity?: () => void;
+  communityChoices: CreationCommunityChoice[];
+  selectedCommunity: {
+    entity_type: SocialEntityType;
+    entity_id: string;
+  } | null;
+  onCommunity: (
+    value: { entity_type: SocialEntityType; entity_id: string } | null,
+  ) => void;
   approval: string;
   onApproval: (value: string) => void;
   controls: BeaconControlValues;
@@ -201,147 +220,168 @@ export function CreationPeople({
   notice?: string;
   capacityRef?: React.Ref<TextInput>;
   review?: React.ReactNode;
+  panel: CreationPeoplePanel;
+  onPanel: (value: CreationPeoplePanel) => void;
 }) {
   const { styles, colors } = useTheme();
-  const [visibilityOpen, setVisibilityOpen] = useState(false),
-    [joiningOpen, setJoiningOpen] = useState(false),
-    [moreOpen, setMoreOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [limit, setLimit] = useState(6);
+  const toggle = (value: CreationPeoplePanel) =>
+    onPanel(panel === value ? "none" : value);
+  const kind = (value: SocialEntityType) =>
+    value === "organization"
+      ? "Network"
+      : value === "space"
+        ? "Organization"
+        : "Squad";
+  const selected = (row: CreationCommunityChoice) =>
+    row.entity_type === selectedCommunity?.entity_type &&
+    row.entity_id === selectedCommunity.entity_id;
+  const choices = [...communityChoices]
+    .sort(
+      (a, b) =>
+        Number(selected(b)) - Number(selected(a)) ||
+        Number(b.joined) - Number(a.joined) ||
+        a.name.localeCompare(b.name),
+    )
+    .filter((row) =>
+      `${row.name} ${kind(row.entity_type)}`
+        .toLowerCase()
+        .includes(query.trim().toLowerCase()),
+    );
   return (
     <View
       style={{
-        gap: 12,
+        gap: 6,
         borderTopWidth: 1,
         borderColor: colors.line,
-        paddingTop: 16,
+        paddingTop: 12,
       }}
     >
       <Text accessibilityRole="header" style={styles.h2}>
         People & Community
       </Text>
-      <View style={{ gap: 4 }}>
-        <Text style={styles.label}>Who can see this?</Text>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-          <Text style={[styles.body, { flex: 1 }]}>{audienceLabel}</Text>
-          <CreationLink
-            title="Change visibility"
-            onPress={() => setVisibilityOpen(!visibilityOpen)}
-          />
-        </View>
-        {visibilityOpen ? (
-          <View>
-            <Choice
-              title="Friends"
-              selected={audience === "friends"}
-              onPress={() => {
-                onAudience("friends", null);
-                setVisibilityOpen(false);
-              }}
-            />
-            <Choice
-              title="Only me"
-              selected={audience === "private"}
-              onPress={() => {
-                onAudience("private", null);
-                setVisibilityOpen(false);
-              }}
-            />
-            <AudiencePicker
-              value={audience}
-              id={audienceId}
-              onChange={(value, id) => {
-                onAudience(value, id);
-                setVisibilityOpen(false);
-              }}
-              triggerLabel="Private Lists or communities"
-            />
-          </View>
-        ) : null}
-        <Txt muted>
-          {notice ||
-            "Visibility controls who can see it. It does not send invitations."}
-        </Txt>
-      </View>
-      <View style={{ gap: 6 }}>
+      <CreationDisclosure
+        compact
+        title="Visibility"
+        summary={audienceLabel}
+        open={panel === "visibility"}
+        onToggle={() => toggle("visibility")}
+      >
+        <AudiencePicker
+          inline
+          value={audience}
+          id={audienceId}
+          onChange={(value, id) => {
+            onAudience(value, id);
+            onPanel("none");
+          }}
+        />
+      </CreationDisclosure>
+      <Txt muted>{"Visibility doesn't send invitations."}</Txt>
+      {notice ? <Txt muted>{notice}</Txt> : null}
+      <View
+        style={{
+          gap: 2,
+          borderTopWidth: 1,
+          borderColor: colors.line,
+          paddingTop: 8,
+        }}
+      >
         <Text style={styles.label}>Invite People</Text>
         {invitations}
-        <Txt muted>
-          Invitations go to selected eligible friends when published.
-        </Txt>
       </View>
-      <View style={{ gap: 4 }}>
-        <Text style={styles.label}>Community (optional)</Text>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-          <Text style={[styles.body, { flex: 1 }]}>
-            {community ?? "No community"}
-          </Text>
-          <CreationLink
-            title={community ? "Change community" : "+ Add a community"}
-            onPress={onCommunity}
-          />
-          {community && onClearCommunity ? (
-            <CreationLink title="Clear community" onPress={onClearCommunity} />
-          ) : null}
-        </View>
-        {community ? (
-          <Txt muted>Association does not invite members or change access.</Txt>
-        ) : null}
-      </View>
-      <View style={{ gap: 4 }}>
-        <Text style={styles.label}>Joining</Text>
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-          <Text style={[styles.body, { flex: 1 }]}>
-            {approval === "Host approval" ? "Host Approval" : "Open Joining"}
-          </Text>
-          <CreationLink
-            title="Change joining"
-            onPress={() => setJoiningOpen(!joiningOpen)}
-          />
-        </View>
-        {joiningOpen ? (
-          <View>
-            {["Open joining", "Host approval"].map((value) => (
-              <Choice
-                key={value}
-                title={
-                  value === "Open joining" ? "Open Joining" : "Host Approval"
-                }
-                selected={approval === value}
-                detail={
-                  value === "Open joining"
-                    ? "Eligible users join immediately."
-                    : "Eligible users request permission first."
-                }
-                onPress={() => {
-                  onApproval(value);
-                  setJoiningOpen(false);
-                }}
-              />
-            ))}
-          </View>
-        ) : null}
-      </View>
-      <CreationCapacity
-        value={controls}
-        onChange={onControls}
-        inputRef={capacityRef}
-      />
-      {review}
       <CreationDisclosure
-        title="More Access Settings"
-        open={moreOpen}
-        onToggle={() => setMoreOpen(!moreOpen)}
+        compact
+        title="Community"
+        icon={
+          selectedCommunity ? (
+            <CommunityAvatar type={selectedCommunity.entity_type} size={26} />
+          ) : undefined
+        }
+        summary={community ?? "No community selected"}
+        open={panel === "community"}
+        onToggle={() => toggle("community")}
       >
+        <Field
+          label="Search communities"
+          value={query}
+          onChangeText={(value) => {
+            setQuery(value);
+            setLimit(6);
+          }}
+          placeholder="Squads, Organizations, Networks…"
+        />
+        <Choice
+          title="No community selected"
+          selected={!selectedCommunity}
+          onPress={() => {
+            onCommunity(null);
+            onPanel("none");
+          }}
+        />
+        {choices.slice(0, limit).map((row) => (
+          <Choice
+            key={`${row.entity_type}:${row.entity_id}`}
+            title={row.name}
+            detail={kind(row.entity_type)}
+            selected={selected(row)}
+            onPress={() => {
+              onCommunity({
+                entity_type: row.entity_type,
+                entity_id: row.entity_id,
+              });
+              onPanel("none");
+            }}
+          />
+        ))}
+        {!choices.length ? <Txt muted>No matching communities.</Txt> : null}
+        {choices.length > limit ? (
+          <CreationLink
+            title="Show more communities"
+            onPress={() => setLimit(limit + 6)}
+          />
+        ) : null}
+        {selectedCommunity ? (
+          <CreationLink
+            title="Clear community"
+            onPress={() => {
+              onCommunity(null);
+              onPanel("none");
+            }}
+          />
+        ) : null}
+      </CreationDisclosure>
+      <CreationDisclosure
+        compact
+        title="Joining & Capacity"
+        summary={`${approval === "Host approval" ? "Host Approval" : "Open Joining"} · ${controls.capacity_limit == null ? "Unlimited" : `${controls.capacity_limit} spots`}${controls.capacity_policy === "strict" ? " · Enforced" : ""}`}
+        open={panel === "joining"}
+        onToggle={() => toggle("joining")}
+      >
+        {["Open joining", "Host approval"].map((value) => (
+          <Choice
+            key={value}
+            title={value === "Open joining" ? "Open Joining" : "Host Approval"}
+            selected={approval === value}
+            onPress={() => onApproval(value)}
+          />
+        ))}
+        <CreationCapacity
+          value={controls}
+          onChange={onControls}
+          inputRef={capacityRef}
+        />
         <Txt muted>
-          After creating, open the Beacon’s People tab, then Organizer roles.
-          People must be approved and Going before you can give them a role.
-          Invitations never grant leadership.
+          Invitations send to selected eligible friends on publication, up to
+          20. Community association does not change access or invite members.
         </Txt>
         <Txt muted>
-          Community association and visibility do not send community-wide
-          invitations. Selected friends receive invitations on publication, up
-          to 20 per creation batch.
+          After creating, open People → Organizer roles. People must be approved
+          and Going before receiving a role. Invitations never grant leadership.
         </Txt>
       </CreationDisclosure>
+      {review}
     </View>
   );
 }

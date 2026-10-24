@@ -1,5 +1,8 @@
 import { CreationDisclosure } from "../components/CreationDisclosure";
-import { CreationPeople } from "../components/CreationPeople";
+import {
+  CreationPeople,
+  type CreationPeoplePanel,
+} from "../components/CreationPeople";
 import { CreationAppearance } from "../components/CreationAppearance";
 import { validCreationMeetingLink } from "../creationValidation";
 import { BeaconIdentity } from "../components/BeaconIdentity";
@@ -17,7 +20,8 @@ import { runFrozenPublication, type FrozenPublication } from "../draftSnapshot";
 
 import { activityNoteSeed } from "../livingActivity";
 import { CreationLocationInput } from "../components/CreationLocationInput";
-import { SocialSelector } from "@/src/features/people/components/SocialSelector";
+import { ChatKeyboardFrame } from "@/src/features/messages/ChatKeyboard";
+import { Pencil } from "lucide-react-native";
 import { randomUUID } from "expo-crypto";
 import { usesSharedStatusEditor } from "../statusRouteSeed";
 import { LegacyStatusScreen } from "./LegacyStatusScreen";
@@ -90,7 +94,6 @@ import {
   Action,
   Button,
   Chips,
-  Empty,
   Field,
   Screen,
   Sheet,
@@ -164,8 +167,16 @@ function RestoreDraft({ token }: { token: string }) {
   );
 }
 
+function CreationKeyboardScreen(props: React.ComponentProps<typeof Screen>) {
+  return (
+    <ChatKeyboardFrame compact>
+      <Screen {...props} />
+    </ChatKeyboardFrame>
+  );
+}
+
 function CreateEditor() {
-  const { styles } = useTheme();
+  const { styles, colors } = useTheme();
 
   const { data, userId, act, getViewerEpoch } = useBeacon();
   const currentTime = useNow();
@@ -299,6 +310,10 @@ function CreateEditor() {
               entity_type: "squad" as const,
               entity_id: squad.id,
               name: squad.name,
+              joined: data.squad_members.some(
+                (member) =>
+                  member.squad_id === squad.id && member.user_id === userId,
+              ),
             })),
           ...data.spaces
             .filter(
@@ -310,6 +325,7 @@ function CreateEditor() {
               entity_type: "space" as const,
               entity_id: space.id,
               name: space.name,
+              joined: true,
             })),
           ...data.organizations
             .filter(
@@ -325,6 +341,7 @@ function CreateEditor() {
               entity_type: "organization" as const,
               entity_id: organization.id,
               name: organization.name,
+              joined: true,
             })),
         ].sort((first, second) => first.name.localeCompare(second.name))
       : [];
@@ -452,7 +469,7 @@ function CreateEditor() {
   );
   const [timing, setTiming] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [associationOpen, setAssociationOpen] = useState(false);
+  const [peoplePanel, setPeoplePanel] = useState<CreationPeoplePanel>("none");
   const [selectedRecipe, setSelectedRecipe] =
     usePlanningDraftState<BeaconTemplate | null>(
       userId,
@@ -773,10 +790,12 @@ function CreateEditor() {
   function reveal(
     section: "people" | "modules" | "advanced",
     input?: React.RefObject<TextInput | null>,
+    panel: CreationPeoplePanel = input ? "joining" : "visibility",
   ) {
     pendingAnchor.current = null;
     anchorVersion.current++;
     if (section !== "people") setOptionalSection(section);
+    else setPeoplePanel(panel);
     requestAnimationFrame(() => {
       setScrollRequest({
         y: sectionY.current[section] ?? 0,
@@ -1030,7 +1049,7 @@ function CreateEditor() {
       setWorkflowError(message);
       setFieldError({
         field:
-          /capacity|spots|limit|approval|audience|share with|friend|eligible/i.test(
+          /capacity|spots|limit|approval|audience|share with|friend|eligible|community/i.test(
             message,
           )
             ? "people"
@@ -1042,13 +1061,18 @@ function CreateEditor() {
         message,
       });
       if (
-        /capacity|spots|limit|approval|audience|share with|friend|eligible/i.test(
+        /capacity|spots|limit|approval|audience|share with|friend|eligible|community/i.test(
           message,
         )
       )
         reveal(
           "people",
           /capacity|spots|limit/i.test(message) ? capacityInput : undefined,
+          /community/i.test(message)
+            ? "community"
+            : /capacity|spots|limit|approval/i.test(message)
+              ? "joining"
+              : "visibility",
         );
       else if (
         /end time|start time|duration|future time|deadline/i.test(message)
@@ -1629,7 +1653,7 @@ function CreateEditor() {
       </Text>
     ) : null;
   return (
-    <Screen
+    <CreationKeyboardScreen
       title={templateEditor ? "Beacon Template" : "Create Beacon"}
       eyebrow=""
       compactHeader
@@ -1700,25 +1724,44 @@ function CreateEditor() {
           maxLength={80}
         />
       ) : null}
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Choose artwork"
           onPress={() => setAppearanceOpen(true)}
           style={{
-            minWidth: 52,
-            minHeight: 52,
+            minWidth: 60,
+            minHeight: 60,
             alignItems: "center",
             justifyContent: "center",
           }}
         >
           {beaconControls.decoration_emoji ? (
-            <Text style={{ fontSize: 32 }}>
+            <Text style={{ fontSize: 36 }}>
               {beaconControls.decoration_emoji}
             </Text>
           ) : (
-            <ActivityBadge category={category} size={48} />
+            <ActivityBadge category={category} size={56} />
           )}
+          <View
+            pointerEvents="none"
+            accessible={false}
+            style={{
+              position: "absolute",
+              right: -1,
+              bottom: -1,
+              width: 18,
+              height: 18,
+              borderRadius: 9,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor: colors.bg,
+              borderWidth: 1,
+              borderColor: colors.line,
+            }}
+          >
+            <Pencil size={10} color={colors.ink} />
+          </View>
         </Pressable>
         <View style={{ flex: 1, minWidth: 0 }}>
           <Field
@@ -1772,14 +1815,72 @@ function CreateEditor() {
           }}
         >
           <Text style={styles.label}>LOCATION</Text>
-          <Button
-            compact
-            secondary
-            title={placeType === "Online" ? "Use in person" : "Use online"}
-            onPress={() =>
-              setPlaceType(placeType === "Online" ? "In person" : "Online")
-            }
-          />
+          <View
+            accessibilityRole="radiogroup"
+            accessibilityLabel="Location type"
+            style={{
+              flexDirection: "row",
+              marginVertical: 6,
+            }}
+          >
+            <View
+              pointerEvents="none"
+              style={{
+                position: "absolute",
+                top: 5,
+                bottom: 5,
+                left: 0,
+                right: 0,
+                borderWidth: 1,
+                borderColor: colors.line,
+                borderRadius: 10,
+              }}
+            />
+            {(["In person", "Online"] as const).map((mode) => (
+              <Pressable
+                key={mode}
+                accessibilityRole="radio"
+                accessibilityLabel={mode}
+                accessibilityState={{ checked: placeType === mode }}
+                aria-checked={placeType === mode}
+                onPress={() => setPlaceType(mode)}
+                style={{
+                  minHeight: 44,
+                  justifyContent: "center",
+                  alignItems: "center",
+                }}
+              >
+                <View
+                  style={{
+                    minHeight: 34,
+                    minWidth: 76,
+                    marginVertical: 5,
+                    paddingHorizontal: 12,
+                    paddingVertical: 6,
+                    alignItems: "center",
+                    justifyContent: "center",
+                    borderRadius: 9,
+                    backgroundColor:
+                      placeType === mode
+                        ? colors.surfaceSelected
+                        : "transparent",
+                  }}
+                >
+                  <Text
+                    style={[
+                      styles.body,
+                      {
+                        fontSize: 13,
+                        fontWeight: placeType === mode ? "600" : "400",
+                      },
+                    ]}
+                  >
+                    {mode}
+                  </Text>
+                </View>
+              </Pressable>
+            ))}
+          </View>
         </View>
         {placeType === "Online" ? (
           <Field
@@ -1862,10 +1963,13 @@ function CreateEditor() {
                 ? "Unavailable community"
                 : undefined
           }
-          onCommunity={() => setAssociationOpen(true)}
-          onClearCommunity={() =>
-            setAssociationDraft({ routeKey: associationRouteKey, value: null })
+          communityChoices={associationCandidates}
+          selectedCommunity={selectedAssociation}
+          onCommunity={(value) =>
+            setAssociationDraft({ routeKey: associationRouteKey, value })
           }
+          panel={peoplePanel}
+          onPanel={setPeoplePanel}
           approval={approval}
           onApproval={setApproval}
           controls={beaconControls}
@@ -2089,58 +2193,6 @@ function CreateEditor() {
           />
         )}
         <Button title="Done" onPress={() => setTiming(false)} />
-      </Sheet>
-
-      <Sheet
-        title="Associate with a community"
-        visible={associationOpen}
-        onClose={() => setAssociationOpen(false)}
-      >
-        <Txt muted>
-          Association organizes community activity; the Beacon’s audience
-          remains unchanged.
-        </Txt>
-        <Button
-          compact
-          secondary
-          title="No community association"
-          onPress={() => {
-            setAssociationDraft({ routeKey: associationRouteKey, value: null });
-            setAssociationOpen(false);
-          }}
-        />
-        <SocialSelector
-          supportedKinds={["squad", "space", "organization"]}
-          multiple={false}
-          selected={
-            selectedAssociation
-              ? [
-                  {
-                    kind: selectedAssociation.entity_type,
-                    id: selectedAssociation.entity_id,
-                  },
-                ]
-              : []
-          }
-          eligibleGroupKeys={associationCandidates.map(
-            (row) => `${row.entity_type}:${row.entity_id}`,
-          )}
-          onChange={(rows) => {
-            const row = rows[0];
-            if (!row || row.kind === "friend") return;
-            setAssociationDraft({
-              routeKey: associationRouteKey,
-              value: { entity_type: row.kind, entity_id: row.id },
-            });
-            setAssociationOpen(false);
-          }}
-        />
-        {!associationCandidates.length ? (
-          <Empty
-            title="No communities available"
-            body="You can associate Beacons with communities you currently belong to."
-          />
-        ) : null}
       </Sheet>
 
       <Sheet
@@ -2439,6 +2491,6 @@ function CreateEditor() {
         </Txt>
         <Txt muted>{moduleNames.join(" · ")}</Txt>
       </Sheet>
-    </Screen>
+    </CreationKeyboardScreen>
   );
 }

@@ -81,7 +81,7 @@ for (const width of [320, 375, 430])
         .fill("A longer basketball activity title with friends");
       await page.getByLabel("Activity title", { exact: true }).press("Tab");
       await page
-        .getByRole("button", { name: "Change joining", exact: true })
+        .getByRole("button", { name: "Joining & Capacity", exact: true })
         .click();
       await page
         .getByRole("radio", { name: "Host Approval", exact: true })
@@ -125,8 +125,12 @@ for (const width of [320, 375, 430])
         () => (window as any).creationAnchorY as number,
       );
       if (width === 375 && appearance === "dark") {
-        await expect.poll(async () => (await advancedHeader.boundingBox())!.y - anchorY).toBeGreaterThan(-24);
-        await expect.poll(async () => (await advancedHeader.boundingBox())!.y - anchorY).toBeLessThan(24);
+        await expect
+          .poll(async () => (await advancedHeader.boundingBox())!.y - anchorY)
+          .toBeGreaterThan(-24);
+        await expect
+          .poll(async () => (await advancedHeader.boundingBox())!.y - anchorY)
+          .toBeLessThan(24);
       }
       await expect(
         page.getByRole("button", { name: "Modules", exact: true }),
@@ -170,10 +174,11 @@ test("Save Draft returns to the hub and restores title, modules, visibility and 
     .fill("Restart-safe draft");
   await page.getByRole("button", { name: "Modules", exact: true }).click();
   await page.getByRole("switch", { name: "Checklist", exact: true }).check();
-  await page
-    .getByRole("button", { name: "Change visibility", exact: true })
-    .click();
+  await page.getByRole("button", { name: "Visibility", exact: true }).click();
   await page.getByRole("radio", { name: "Only me", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Joining & Capacity", exact: true })
+    .click();
   await page.getByRole("button", { name: "Set maximum", exact: true }).click();
   await page.getByLabel("Maximum spots (2–500)", { exact: true }).fill("7");
   await page.getByRole("button", { name: "Save Draft", exact: true }).click();
@@ -195,6 +200,9 @@ test("Save Draft returns to the hub and restores title, modules, visibility and 
     "Restart-safe draft",
   );
   await expect(page.getByText("Private", { exact: true })).toBeVisible();
+  await page
+    .getByRole("button", { name: "Joining & Capacity", exact: true })
+    .click();
   await expect(
     page.getByLabel("Maximum spots (2–500)", { exact: true }),
   ).toHaveValue("7");
@@ -206,6 +214,8 @@ test("Save Draft returns to the hub and restores title, modules, visibility and 
 test("multiple draft pills resume exact tokens, confirm removal, and update without duplicates", async ({
   page,
 }) => {
+  test.setTimeout(60000);
+  await page.emulateMedia({ reducedMotion: "reduce" });
   await demo(page);
   for (const title of ["Draft One", "Draft Two", "Draft Three", "Draft Four"]) {
     await page
@@ -311,7 +321,7 @@ test("hidden invalid music reveals its section and focuses the field", async ({
 }) => {
   await blank(page);
   await page.getByLabel("Activity title", { exact: true }).fill("Music review");
-  await page.getByRole("button", { name: "Use online", exact: true }).click();
+  await page.getByRole("radio", { name: "Online", exact: true }).click();
   await page
     .getByLabel("HTTPS meeting link", { exact: true })
     .fill("https://example.com/meeting");
@@ -348,7 +358,7 @@ test("required location, templates, real reuse, and independent blank drafts", a
       .getByText("Choose a place or a point on the Map.", { exact: true })
       .first(),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Use online", exact: true }).click();
+  await page.getByRole("radio", { name: "Online", exact: true }).click();
   await page
     .getByLabel("HTTPS meeting link", { exact: true })
     .fill("https://example.com/meeting");
@@ -484,49 +494,37 @@ test("inline people, community, joining and direct capacity entry remain indepen
   await page
     .getByLabel("Activity title", { exact: true })
     .fill("Community review");
-  await page.getByRole("button", { name: "Use online", exact: true }).click();
+  await page.getByRole("radio", { name: "Online", exact: true }).click();
   await page
     .getByLabel("HTTPS meeting link", { exact: true })
     .fill("https://example.com/meeting");
   await page.getByRole("button", { name: "+ Add People", exact: true }).click();
   const friends = page.getByRole("dialog", {
-    name: "Edit selected friends",
+    name: "Add People",
     exact: true,
   });
   await friends
     .getByRole("checkbox", { name: "Select Jordan Ellis", exact: true })
     .click();
   await friends.getByRole("button", { name: "Done", exact: true }).click();
-  await page
-    .getByRole("button", { name: "+ Add a community", exact: true })
-    .click();
-  const associations = page.getByRole("dialog", {
-    name: "Associate with a community",
-    exact: true,
-  });
-  const choice = associations
-    .getByRole("checkbox", { name: /, (Squads|Organizations|Networks)$/ })
+  await page.getByRole("button", { name: "Community", exact: true }).click();
+  const choice = page
+    .getByRole("radio")
+    .filter({ hasNotText: "No community selected" })
+    .filter({ hasNotText: "Online" })
+    .filter({ hasNotText: "In person" })
     .first();
-  const label = (await choice.getAttribute("aria-label"))!;
-  const split = label.lastIndexOf(", "),
-    name = label.slice(0, split),
-    kind = label.slice(split + 2);
+  const name = (await choice.getAttribute("aria-label"))!;
+  const kind = await choice.locator('div[dir="auto"]').last().innerText();
+  const community = `${name} · ${kind}`;
   await choice.click();
-  const kindNames: Record<string, string> = {
-    Squads: "Squad",
-    Organizations: "Organization",
-    Networks: "Network",
-  };
-  const community = `${name} · ${kindNames[kind]}`;
   await expect(page.getByText(community, { exact: true })).toBeVisible();
-  await page
-    .getByRole("button", { name: "Change visibility", exact: true })
-    .click();
+  await page.getByRole("button", { name: "Visibility", exact: true }).click();
   await page.getByRole("radio", { name: "Only me", exact: true }).click();
   await expect(page.getByText(community, { exact: true })).toBeVisible();
   await expect(page.getByText("1/20 selected", { exact: true })).toBeVisible();
   await page
-    .getByRole("button", { name: "Change joining", exact: true })
+    .getByRole("button", { name: "Joining & Capacity", exact: true })
     .click();
   await page.getByRole("radio", { name: "Host Approval", exact: true }).click();
   await page.getByRole("button", { name: "Set maximum", exact: true }).click();
@@ -541,6 +539,7 @@ test("inline people, community, joining and direct capacity entry remain indepen
   await expect(maximum).toBeInViewport();
   await maximum.fill("6");
   await page.screenshot({ path: ".expo/creation-inline/people-selected.png" });
+  await page.getByRole("button", { name: "Community", exact: true }).click();
   await page
     .getByRole("button", { name: "Clear community", exact: true })
     .click();

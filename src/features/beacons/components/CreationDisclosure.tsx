@@ -2,13 +2,18 @@ import React, { useEffect, useState } from "react";
 import { Animated, Pressable, Text, View } from "react-native";
 import { useReducedMotion } from "@/src/shared/design-system";
 import { Txt, useTheme } from "@/src/shared/ui";
+import { ChevronDown } from "lucide-react-native";
 export function CreationDisclosure({
   title,
   summary,
   open,
   onToggle,
   children,
+  compact = false,
+  icon,
 }: {
+  icon?: React.ReactNode;
+  compact?: boolean;
   title: string;
   summary?: string;
   open: boolean;
@@ -31,32 +36,36 @@ export function CreationDisclosure({
       style={{
         borderTopWidth: 1,
         borderColor: colors.line,
-        paddingTop: 8,
-        gap: 8,
+        paddingTop: compact ? 2 : 8,
+        gap: compact ? 2 : 8,
       }}
     >
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={title}
+        accessibilityHint={compact ? summary : undefined}
         accessibilityState={{ expanded: open }}
         aria-expanded={open}
         onPress={onToggle}
         style={{
-          minHeight: 52,
+          minHeight: compact ? 44 : 52,
           flexDirection: "row",
           alignItems: "center",
           gap: 12,
         }}
       >
+        {icon}
         <View style={{ flex: 1, gap: 4 }}>
-          <Text style={styles.h2}>{title}</Text>
-          {!open && summary ? <Txt muted>{summary}</Txt> : null}
+          <Text style={compact ? styles.label : styles.h2}>{title}</Text>
+          {summary && (compact || !open) ? <Txt muted>{summary}</Txt> : null}
         </View>
-        <Animated.Text
+        <Animated.View
           accessible={false}
           style={[
-            styles.body,
             {
+              width: 22,
+              alignItems: "center",
+              justifyContent: "center",
               transform: [
                 {
                   rotate: rotation.interpolate({
@@ -68,8 +77,8 @@ export function CreationDisclosure({
             },
           ]}
         >
-          ⌄
-        </Animated.Text>
+          <ChevronDown size={18} strokeWidth={2} color={colors.muted} />
+        </Animated.View>
       </Pressable>
       {open ? <View style={{ gap: 12 }}>{children}</View> : null}
     </View>

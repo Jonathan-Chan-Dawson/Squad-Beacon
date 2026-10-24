@@ -20,3 +20,5 @@ Documentation guide
 - beacon-creation-polish.md: Pass 1 compact creation, durable drafts, publishing recovery, rendered evidence, test results, and device/hosted verification boundaries.
 
 - beacon-creation-inline-polish.md: Pass 1.1 inline form, multiple draft pills, guarded deletion, rendered states, and verification boundaries.
+
+- beacon-creation-mobile-polish.md: compact saved drafts, inline visibility/community, full-screen friend selection, rendered evidence and verification limits.

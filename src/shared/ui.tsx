@@ -463,10 +463,36 @@ export function Action({
 export function Field({
   label,
   inputRef,
+  leadingAdornment,
   ...props
-}: TextInputProps & { label: string; inputRef?: React.Ref<TextInput> }) {
+}: TextInputProps & {
+  label: string;
+  inputRef?: React.Ref<TextInput>;
+  leadingAdornment?: React.ReactNode;
+}) {
   const { styles, colors, tokens } = useTheme();
 
+  const input = (
+    <TextInput
+      ref={inputRef}
+      accessibilityLabel={label}
+      placeholderTextColor={colors.muted}
+      {...props}
+      style={[
+        styles.input,
+        leadingAdornment ? { paddingLeft: 38 } : undefined,
+        props.multiline && {
+          minHeight:
+            tokens.space.xxxl * 2 +
+            tokens.space.md +
+            tokens.space.xs +
+            tokens.space.xxs,
+          textAlignVertical: "top",
+        },
+        props.style,
+      ]}
+    />
+  );
   return (
     <View style={{ gap: tokens.space.sm }}>
       <Text
@@ -475,24 +501,29 @@ export function Field({
       >
         {label}
       </Text>
-      <TextInput
-        ref={inputRef}
-        accessibilityLabel={label}
-        placeholderTextColor={colors.muted}
-        {...props}
-        style={[
-          styles.input,
-          props.multiline && {
-            minHeight:
-              tokens.space.xxxl * 2 +
-              tokens.space.md +
-              tokens.space.xs +
-              tokens.space.xxs,
-            textAlignVertical: "top",
-          },
-          props.style,
-        ]}
-      />
+      {leadingAdornment ? (
+        <View style={{ position: "relative" }}>
+          {leadingAdornment ? (
+            <View
+              pointerEvents="none"
+              accessible={false}
+              style={{
+                position: "absolute",
+                left: 12,
+                top: 0,
+                bottom: 0,
+                justifyContent: "center",
+                zIndex: 1,
+              }}
+            >
+              {leadingAdornment}
+            </View>
+          ) : null}
+          {input}
+        </View>
+      ) : (
+        input
+      )}
     </View>
   );
 }
@@ -1449,8 +1480,10 @@ export function AudiencePicker({
   id,
   onChange,
   triggerLabel,
+  inline = false,
 }: {
   triggerLabel?: string;
+  inline?: boolean;
   value: Audience;
   id: string | null;
   onChange: (value: Audience, id: string | null) => void;
@@ -1459,6 +1492,7 @@ export function AudiencePicker({
   const { colors, styles } = useTheme();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [limit, setLimit] = useState(8);
   const groups: {
     audience: Audience;
     id: string;
@@ -1530,6 +1564,71 @@ export function AudiencePicker({
   ].filter((g) =>
     (g.name + " " + g.kind).toLowerCase().includes(query.trim().toLowerCase()),
   );
+  const content = (
+    <View style={{ gap: 6 }}>
+      <Field
+        label="Search audiences"
+        value={query}
+        onChangeText={(text) => {
+          setQuery(text);
+          setLimit(8);
+        }}
+        placeholder="Friends, private lists, Squads, Networks…"
+      />
+      {choices.slice(0, inline ? limit : choices.length).map((g) => {
+        const chosen = value === g.audience && (g.id === null || id === g.id);
+        return (
+          <Pressable
+            key={g.audience + (g.id ?? "")}
+            accessibilityRole={inline ? "radio" : "button"}
+            accessibilityLabel={g.id ? `${g.name} · ${g.kind}` : g.name}
+            accessibilityState={
+              inline ? { checked: chosen } : { selected: chosen }
+            }
+            aria-checked={inline ? chosen : undefined}
+            onPress={() => {
+              onChange(g.audience, g.id);
+              setOpen(false);
+            }}
+            style={{
+              minHeight: inline ? 44 : 64,
+              flexDirection: "row",
+              alignItems: "center",
+              gap: inline ? 10 : 12,
+              paddingVertical: inline ? 6 : 10,
+              borderBottomWidth: StyleSheet.hairlineWidth,
+              borderBottomColor: colors.line,
+            }}
+          >
+            {g.id ? (
+              <Avatar name={g.name} size={inline ? 28 : 36} />
+            ) : g.audience === "private" ? (
+              <Lock size={20} color={colors.muted} />
+            ) : (
+              <Users size={20} color={colors.muted} />
+            )}
+            <View style={{ flex: 1, gap: 2 }}>
+              <Text style={styles.body}>{g.name}</Text>
+              {g.id || !inline ? (
+                <Text style={styles.muted}>{g.kind}</Text>
+              ) : null}
+            </View>
+            {chosen && <Check size={20} color={colors.green} />}
+          </Pressable>
+        );
+      })}
+      {!choices.length && <Txt muted>No matching audiences.</Txt>}
+      {inline && choices.length > limit ? (
+        <Button
+          compact
+          secondary
+          title="Show more audiences"
+          onPress={() => setLimit(limit + 6)}
+        />
+      ) : null}
+    </View>
+  );
+  if (inline) return content;
   return (
     <View>
       <Pressable
@@ -1559,67 +1658,10 @@ export function AudiencePicker({
         visible={open}
         onClose={() => setOpen(false)}
       >
-        <Field
-          label="Search audiences"
-          value={query}
-          onChangeText={setQuery}
-          placeholder="Friends, private lists, Squads, Networks…"
-        />
         <Txt muted>
           Choose one audience. Invitations to individual friends are separate.
         </Txt>
-        <View>
-          {choices.map((g) => {
-            const chosen =
-              value === g.audience && (g.id === null || id === g.id);
-            return (
-              <Pressable
-                key={g.audience + (g.id ?? "")}
-                accessibilityRole="button"
-                accessibilityLabel={g.id ? `${g.name} · ${g.kind}` : g.name}
-                accessibilityState={{ selected: chosen }}
-                onPress={() => {
-                  onChange(g.audience, g.id);
-                  setOpen(false);
-                }}
-                style={{
-                  minHeight: 64,
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: 12,
-                  paddingVertical: 10,
-                  borderBottomWidth: StyleSheet.hairlineWidth,
-                  borderBottomColor: colors.line,
-                }}
-              >
-                {g.id ? (
-                  <Avatar name={g.name} size={36} />
-                ) : (
-                  <View
-                    style={{
-                      width: 36,
-                      height: 36,
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    {g.audience === "private" ? (
-                      <Lock size={21} color={colors.muted} />
-                    ) : (
-                      <Users size={21} color={colors.muted} />
-                    )}
-                  </View>
-                )}
-                <View style={{ flex: 1, gap: 3 }}>
-                  <Text style={styles.body}>{g.name}</Text>
-                  <Text style={styles.muted}>{g.kind}</Text>
-                </View>
-                {chosen && <Check size={20} color={colors.green} />}
-              </Pressable>
-            );
-          })}
-          {!choices.length && <Txt muted>No matching audiences.</Txt>}
-        </View>
+        {content}
       </Sheet>
     </View>
   );

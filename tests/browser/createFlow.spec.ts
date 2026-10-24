@@ -243,7 +243,7 @@ for (const preset of ["Grocery Run", "General Hangout"]) {
       .getByLabel("Search activities or templates", { exact: true })
       .fill(preset);
     await page.getByRole("button", { name: preset, exact: true }).click();
-    await page.getByRole("button", { name: "Use online", exact: true }).click();
+    await page.getByRole("radio", { name: "Online", exact: true }).click();
     await page
       .getByLabel("HTTPS meeting link", { exact: true })
       .fill("https://example.com/meeting");
@@ -350,7 +350,7 @@ test("a preset Beacon can join an existing Plan through the same editor", async 
     .getByRole("dialog", { name: "Add to Plan or Council", exact: true })
     .getByRole("button", { name: "Done", exact: true })
     .click();
-  await page.getByRole("button", { name: "Use online", exact: true }).click();
+  await page.getByRole("radio", { name: "Online", exact: true }).click();
   await page
     .getByLabel("HTTPS meeting link", { exact: true })
     .fill("https://example.com/meeting");

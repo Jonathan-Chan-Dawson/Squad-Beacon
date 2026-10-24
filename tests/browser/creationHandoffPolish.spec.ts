@@ -81,7 +81,7 @@ test("storage failure blocks publication and reports that recovery is not saved"
   await page
     .getByLabel("Activity title", { exact: true })
     .fill("Storage failure check");
-  await page.getByRole("button", { name: "Use online", exact: true }).click();
+  await page.getByRole("radio", { name: "Online", exact: true }).click();
   await page
     .getByLabel("HTTPS meeting link", { exact: true })
     .fill("https://example.com/meeting");

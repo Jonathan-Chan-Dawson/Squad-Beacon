@@ -68,9 +68,11 @@ export function CreationSavedDrafts({ savedToken }: { savedToken?: string }) {
         style={{
           flexDirection: "row",
           alignItems: "center",
-          width: full ? "100%" : 220,
-          borderRadius: 20,
-          borderWidth: 1,
+          width: full ? "100%" : undefined,
+          maxWidth: full ? undefined : 200,
+          flexShrink: 0,
+          borderRadius: full ? 20 : 16,
+          borderWidth: full ? 1 : 0.5,
           borderColor: colors.line,
         }}
       >
@@ -79,17 +81,22 @@ export function CreationSavedDrafts({ savedToken }: { savedToken?: string }) {
           accessibilityLabel={`${row.status === "recovery" ? "Resume recovery" : row.status === "unavailable" ? "Retry loading" : "Resume draft"}: ${row.title}`}
           onPress={() => resume(row)}
           style={{
-            flex: 1,
-            minWidth: 0,
-            minHeight: 48,
+            flexGrow: full ? 1 : 0,
+            flexShrink: 1,
+            minWidth: full ? 0 : 44,
+            minHeight: full ? 48 : 44,
             justifyContent: "center",
-            paddingLeft: 12,
-            paddingVertical: 6,
+            paddingLeft: full ? 12 : 8,
+            paddingRight: full ? 0 : 8,
+            paddingVertical: full ? 6 : 2,
           }}
         >
           <Text
             numberOfLines={1}
-            style={[styles.body, { fontSize: 13, fontWeight: "600" }]}
+            style={[
+              styles.body,
+              { fontSize: full ? 13 : 12, fontWeight: full ? "600" : "500" },
+            ]}
           >
             ✎ {row.title}
           </Text>
@@ -111,7 +118,8 @@ export function CreationSavedDrafts({ savedToken }: { savedToken?: string }) {
             }}
             style={{
               minWidth: 44,
-              minHeight: 48,
+              flexShrink: 0,
+              minHeight: full ? 48 : 44,
               alignItems: "center",
               justifyContent: "center",
             }}
@@ -125,7 +133,7 @@ export function CreationSavedDrafts({ savedToken }: { savedToken?: string }) {
     );
   }
   return (
-    <View style={{ gap: 8 }}>
+    <View style={{ gap: 4 }}>
       {savedToken ? (
         <Text accessibilityLiveRegion="polite" style={styles.muted}>
           Draft saved on this device
@@ -169,8 +177,8 @@ export function CreationSavedDrafts({ savedToken }: { savedToken?: string }) {
             horizontal
             showsHorizontalScrollIndicator={false}
             contentContainerStyle={{
-              gap: 8,
-              paddingVertical: 4,
+              gap: 6,
+              paddingVertical: 2,
               paddingHorizontal: 2,
             }}
           >
