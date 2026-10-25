@@ -10,7 +10,7 @@ import {
   type TextInput,
 } from "react-native";
 import { MapPin, Search } from "lucide-react-native";
-import { Field, IconButton, useTheme } from "@/src/shared/ui";
+import { Field, useTheme } from "@/src/shared/ui";
 import { useBeacon } from "@/src/shared/store";
 import {
   demoWorldwidePlaces,
@@ -33,7 +33,7 @@ export function CreationLocationInput({
   onPickMap: () => void;
   inputRef?: React.Ref<TextInput>;
 }) {
-  const { colors, styles } = useTheme();
+  const { colors, styles, semanticColors } = useTheme();
   const { demo, userId } = useBeacon();
   const [focused, setFocused] = useState(false);
   const [state, setState] = useState<{
@@ -84,7 +84,7 @@ export function CreationLocationInput({
             flexDirection: "row",
             alignItems: "center",
             gap: 10,
-            minHeight: 52,
+            minHeight: 44,
           }}
         >
           <MapPin size={20} color={colors.primary} />
@@ -117,12 +117,13 @@ export function CreationLocationInput({
     );
   return (
     <View style={{ gap: 6 }}>
-      <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 6 }}>
+      <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 8 }}>
         <View style={{ flex: 1 }}>
           <Field
             inputRef={inputRef}
             label="Meeting place"
-            leadingAdornment={<Search size={18} color={colors.muted} />}
+            leadingAdornment={<Search size={20} color={colors.muted} />}
+            style={{ minHeight: 44, paddingVertical: 10, borderRadius: 12 }}
             placeholder="Search a place or address…"
             value={value}
             onFocus={() => setFocused(true)}
@@ -133,11 +134,24 @@ export function CreationLocationInput({
             maxLength={160}
           />
         </View>
-        <View style={{ paddingBottom: 6 }}>
-          <IconButton label="Choose location on Map" onPress={onPickMap}>
-            <MapPin size={20} color={colors.primary} />
-          </IconButton>
-        </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Choose location on Map"
+          onPress={onPickMap}
+          style={{
+            minWidth: 44,
+            minHeight: 44,
+            flexShrink: 0,
+            alignItems: "center",
+            justifyContent: "center",
+            borderRadius: 12,
+            borderWidth: 1,
+            borderColor: colors.line,
+            backgroundColor: semanticColors.surface,
+          }}
+        >
+          <MapPin size={20} color={colors.primary} />
+        </Pressable>
       </View>
       {visible && state.busy && (
         <ActivityIndicator

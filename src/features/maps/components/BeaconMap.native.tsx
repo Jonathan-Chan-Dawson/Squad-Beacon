@@ -1,4 +1,5 @@
 import { ClusterArtworkCache } from "../clusterArtwork";
+import { bloomGeometry } from "../clusterBloom";
 import {
   categoryMarkerGlyphs,
   visibleFriendLabels,
@@ -7,16 +8,12 @@ import {
 import {
   nativeMapMode,
   MapPresentationCache,
-  nativeStackOpensExplorer,
+  presentationOpensExplorer,
+  presentationArtworkPoints,
   type NativeMapMode,
   type NativeMapPresentation,
 } from "../nativeMapPresentation";
-import {
-  ActivityAtmosphere,
-  ExpandedMapStack,
-  LivingMapPin,
-  OwnedMapAnchor,
-} from "./LivingMapMarkers.native";
+import { ExpandedMapStack, LivingMapPin } from "./LivingMapMarkers.native";
 import React, {
   useCallback,
   useEffect,
@@ -31,7 +28,12 @@ import {
   Pressable,
   useWindowDimensions,
 } from "react-native";
-import { LocateFixed, MapPin, SlidersHorizontal } from "lucide-react-native";
+import {
+  LocateFixed,
+  MapPin,
+  SlidersHorizontal,
+  UsersRound,
+} from "lucide-react-native";
 import MapView, {
   Circle,
   Marker,
@@ -155,6 +157,7 @@ export default function BeaconMap({
   onAnchor,
   onCluster,
   clusterPriorities = {},
+  friendsProminent = false,
   onMapTap,
   onViewportChange,
   onBearingChange,
@@ -647,6 +650,7 @@ export default function BeaconMap({
         clusterPriorities,
         ownedIds,
         Math.max(10, MAX_RENDERED_MAP_FEATURES - reservedFeatures),
+        friendsProminent,
       ),
     [
       presentationCache,
@@ -658,13 +662,14 @@ export default function BeaconMap({
       clusterPriorities,
       ownedIds,
       reservedFeatures,
+      friendsProminent,
     ],
   );
   const [artworkCache] = useState(() => new ClusterArtworkCache());
   const memberModels = useMemo(
     () =>
       artworkCache.build(
-        presentations.flatMap((item) => item.visible),
+        presentations.flatMap(presentationArtworkPoints),
         activities,
         profiles,
         freshLocations,
@@ -696,24 +701,81 @@ export default function BeaconMap({
   );
   const clusterAppearanceKey = `${appearanceKey}:${JSON.stringify(categoryColors)}:${JSON.stringify(availabilityColors)}`;
   const modelsFor = (item: NativeMapPresentation) =>
-    item.visible
+    presentationArtworkPoints(item)
       .map((point) => memberModels.get(point.id))
       .filter((model): model is NonNullable<typeof model> => !!model);
-  const groups = presentations.map((item) => item.group);
   const nativeFeatureCount = presentations.reduce(
     (sum, item) => sum + item.featureCost,
     0,
   );
   const renderedSingletonIds = new Set(
-    groups
-      .filter((group) => group.members.length === 1)
-      .map((group) => group.members[0].id),
+    presentations
+      .filter(
+        (item) => item.mode === "stack" && item.group.members.length === 1,
+      )
+      .map((item) => item.group.members[0].id),
   );
   const [expandedStack, setExpandedStack] = useState<{
     id: string;
     x: number;
     y: number;
   } | null>(null);
+  const [cameraMoving, setCameraMoving] = useState(false);
+  const [friendBadges, setFriendBadges] = useState<
+    {
+      item: NativeMapPresentation;
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    }[]
+  >([]);
+  useEffect(() => {
+    let active = true;
+    if (!ready || onPick || cameraMoving) return;
+    void Promise.all(
+      presentations.map(async (item) => {
+        const badge = bloomGeometry(item).friendBadge;
+        if (!badge) return null;
+        try {
+          const anchor = await map.current?.pointForCoordinate({
+            latitude: item.group.latitude,
+            longitude: item.group.longitude,
+          });
+          return anchor
+            ? {
+                item,
+                x: anchor.x + badge.offset.x,
+                y: anchor.y + badge.offset.y,
+                width: badge.width,
+                height: badge.height,
+              }
+            : null;
+        } catch {
+          return null;
+        }
+      }),
+    ).then((values) => {
+      if (active)
+        setFriendBadges(
+          values.filter((value): value is NonNullable<typeof value> => !!value),
+        );
+    });
+    return () => {
+      active = false;
+    };
+  }, [
+    ready,
+    onPick,
+    cameraMoving,
+    presentations,
+    region,
+    mapSize,
+    mapPadding.top,
+    mapPadding.right,
+    mapPadding.bottom,
+    mapPadding.left,
+  ]);
   const expansionRevision = useRef(0);
   const closeStack = useCallback(() => {
     expansionRevision.current++;
@@ -722,7 +784,8 @@ export default function BeaconMap({
   const expandedPresentation = expandedStack
     ? presentations.find(
         (item) =>
-          item.group.id === expandedStack.id && item.group.members.length <= 5,
+          item.group.id === expandedStack.id &&
+          !presentationOpensExplorer(item),
       )
     : undefined;
   function selectStackMember(member: ClusterPoint) {
@@ -743,11 +806,12 @@ export default function BeaconMap({
   async function pressPresentation(presentation: NativeMapPresentation) {
     if (onPick) return;
     closeStack();
-    if (
-      presentation.mode !== "stack" ||
-      nativeStackOpensExplorer(presentation.group.members.length)
-    ) {
-      void pressCluster(presentation.group, presentation.mode === "atmosphere");
+    if (presentationOpensExplorer(presentation)) {
+      void pressCluster(
+        presentation.group,
+        false,
+        presentation.forceExplorer ? "Friends" : undefined,
+      );
       return;
     }
     const revision = expansionRevision.current;
@@ -777,7 +841,11 @@ export default function BeaconMap({
       .slice(0, availableHaloSlots)
       .map((place) => `beacon:${place.activity_id}`),
   );
-  async function pressCluster(group: MapPointGroup, areaSummary = false) {
+  async function pressCluster(
+    group: MapPointGroup,
+    areaSummary = false,
+    section?: "Beacons" | "Friends",
+  ) {
     const currentMap = map.current;
     if (!currentMap) return;
     const zoom = nativeMapZoom(region.longitudeDelta, mapSize.width);
@@ -800,9 +868,9 @@ export default function BeaconMap({
         latitude: group.latitude,
         longitude: group.longitude,
       });
-      onCluster?.(group, anchor ?? null);
+      onCluster?.(group, anchor ?? null, section);
     } catch {
-      onCluster?.(group, null);
+      onCluster?.(group, null, section);
     }
   }
   const clusterActions = useRef({ pressPresentation, selectStackMember });
@@ -852,6 +920,8 @@ export default function BeaconMap({
         onMapReady={() => setReady(true)}
         onRegionChangeComplete={(nextRegion, details) => {
           if (!isValidMapRegion(nextRegion)) return;
+          setFriendBadges([]);
+          setCameraMoving(false);
           closeStack();
           setRegion(nextRegion);
           setPresentationMode((previous) =>
@@ -892,6 +962,7 @@ export default function BeaconMap({
           onGestureChange?.(true);
         }}
         onRegionChange={(next, details) => {
+          setCameraMoving(true);
           closeStack();
           if (details?.isGesture) {
             gestureActive.current = true;
@@ -1090,26 +1161,11 @@ export default function BeaconMap({
             );
           })}
         {presentations
-          .filter((item) => item.group.members.length > 1)
+          .filter(
+            (item) => item.mode !== "stack" || item.group.members.length > 1,
+          )
           .map((presentation) =>
-            presentation.mode === "atmosphere" ? (
-              <React.Fragment key={presentation.group.id}>
-                <ActivityAtmosphere
-                  presentation={presentation}
-                  onPress={handlePresentation}
-                  zoom={zoom}
-                />
-                {presentation.owned.length > 0 && (
-                  <OwnedMapAnchor
-                    presentation={presentation}
-                    onPress={() => {
-                      if (!onPick) void pressCluster(presentation.group);
-                    }}
-                  />
-                )}
-              </React.Fragment>
-            ) : expandedPresentation?.group.id ===
-              presentation.group.id ? null : (
+            expandedPresentation?.group.id === presentation.group.id ? null : (
               <LivingMapPin
                 key={presentation.group.id}
                 presentation={presentation}
@@ -1236,11 +1292,67 @@ export default function BeaconMap({
         popPlaceKey={pulsePopPlaceKey}
         calm={calm}
       />
+      {!cameraMoving &&
+        !onPick &&
+        friendBadges
+          .filter(
+            (badge) =>
+              presentations.includes(badge.item) &&
+              badge.item.group.id !== expandedPresentation?.group.id,
+          )
+          .map((badge) => (
+            <Pressable
+              key={`friends:${badge.item.group.id}`}
+              accessibilityRole="button"
+              accessibilityLabel={`Explore ${badge.item.people.length} nearby friends; proximity is not attendance`}
+              testID="cluster-friend-count"
+              onPress={() => {
+                closeStack();
+                void pressCluster(badge.item.group, false, "Friends");
+              }}
+              style={{
+                position: "absolute",
+                left: badge.x - 22,
+                top: badge.y - 22,
+                width: 44,
+                height: 44,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <View
+                pointerEvents="none"
+                style={{
+                  width: badge.width,
+                  height: badge.height,
+                  flexDirection: "row",
+                  gap: 2,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  borderRadius: 10,
+                  borderWidth: 1,
+                  borderColor: colors.line,
+                  backgroundColor: colors.white,
+                }}
+              >
+                <UsersRound size={10} color={colors.ink} />
+                <Text
+                  style={{ fontSize: 10, fontWeight: "700", color: colors.ink }}
+                >
+                  {badge.item.people.length}
+                </Text>
+              </View>
+            </Pressable>
+          ))}
       {expandedStack && expandedPresentation && !onPick && (
         <ExpandedMapStack
           presentation={expandedPresentation}
           anchor={expandedStack}
           size={mapSize}
+          onPeople={() => {
+            closeStack();
+            void pressCluster(expandedPresentation.group, false, "Friends");
+          }}
           members={modelsFor(expandedPresentation)}
           availabilityColors={availabilityColors}
           categoryColors={categoryColors}

@@ -388,9 +388,7 @@ export default function MapScreen() {
     (members: import("@/src/features/maps/cluster").ClusterPoint[]) =>
       clusterPeople(
         data,
-        members
-          .filter((row) => row.kind === "beacon")
-          .map((row) => row.id.slice(7)),
+        [],
         members
           .filter((row) => row.kind === "person")
           .map((row) => row.id.slice(7)),
@@ -398,6 +396,7 @@ export default function MapScreen() {
       ).length,
     [data, userId],
   );
+  const [clusterSection, setClusterSection] = useState<"Beacons" | "Friends">("Beacons");
   const [clusterActivityIds, setClusterActivityIds] = useState<string[] | null>(
     null,
   );
@@ -2307,6 +2306,7 @@ export default function MapScreen() {
     >
       {preferencesReady ? (
         <BeaconMap
+          friendsProminent={exploration.filters.audience === "Friends"}
           fullScreen
           contextPoints={[...contextPoints, ...publicPoints]}
           contextPaths={contextPaths}
@@ -2395,7 +2395,7 @@ export default function MapScreen() {
           onActivity={(id) => chooseBeacon(id)}
           onPerson={choosePerson}
           clusterPersonCount={countClusterPeople}
-          onCluster={(nextCluster, anchor) => {
+          onCluster={(nextCluster, anchor, section) => {
             setMapAnchor(anchor ?? null);
             setClusterCenter({
               latitude: nextCluster.latitude,
@@ -2437,6 +2437,7 @@ export default function MapScreen() {
                   ),
               );
             if (memberIds.length || peopleIds.length) {
+              setClusterSection(section ?? (memberIds.length ? "Beacons" : "Friends"));
               setClusterActivityIds(memberIds);
               setClusterPersonIds(peopleIds);
             } else {
@@ -3200,9 +3201,12 @@ export default function MapScreen() {
           }}
         >
           <MapNearbyPanel
-            key={`${clusterActivityIds.join()}:${clusterPersonIds.join()}`}
+            key={`${clusterSection}:${clusterActivityIds.join()}:${clusterPersonIds.join()}`}
+            initialSection={clusterSection}
             beaconIds={clusterActivityIds}
-            personIds={clusterPersonIds}
+            personIds={clusterPersonIds.filter((id) =>
+              mapLocations.some((row) => row.owner_id === id),
+            )}
             publicBeacons={publicMapRows.filter((row) =>
               clusterActivityIds.includes(row.activity_id),
             )}

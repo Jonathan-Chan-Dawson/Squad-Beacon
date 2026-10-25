@@ -206,7 +206,7 @@ export function ActivityNoteEditor({
           </View>
         </View>
         <Field
-          label="What are you doing?"
+          label="What are you up to?"
           value={draft.title}
           maxLength={120}
           onChangeText={(title) => update({ title })}
@@ -225,13 +225,6 @@ export function ActivityNoteEditor({
           }
           value={draft.category}
           onChange={(category) => update({ category })}
-        />
-        <Field
-          label="Emoji · Optional"
-          value={draft.emoji}
-          maxLength={24}
-          onChangeText={(emoji) => update({ emoji })}
-          placeholder="Use category artwork, or add an emoji"
         />
         {draft.endsAt ? (
           <>
@@ -270,6 +263,14 @@ export function ActivityNoteEditor({
         />
         {details && (
           <>
+            <Field
+              label="Emoji · Optional"
+              value={draft.emoji}
+              maxLength={24}
+              onChangeText={(emoji) => update({ emoji })}
+              placeholder="Use category artwork, or add an emoji"
+            />
+
             <Field
               label="Description · Optional"
               multiline
@@ -732,16 +733,21 @@ export function LivingActivitySection({
       if (epoch === getViewerEpoch()) setBusy(false);
     }
   };
-  const launch = (kind: "ping" | "council" | "beacon") => {
+  const launch = (kind: "ping" | "council" | "draw" | "beacon") => {
     setSocial(false);
     if (!current) return;
     const params = {
       activityNoteId: current.activity.id,
-      ...(kind !== "beacon" ? { newPing: "yes", creationKind: kind } : {}),
+      ...(kind !== "beacon"
+        ? {
+            kind: kind === "council" ? "vote" : kind === "draw" ? "draw" : "ping",
+            sessionId: randomUUID(),
+          }
+        : {}),
     };
     continuation.current = () =>
       router.push({
-        pathname: kind === "beacon" ? "/create" : "/councils",
+        pathname: kind === "beacon" ? "/create" : "/planning/create",
         params,
       });
   };
@@ -1029,14 +1035,15 @@ export function LivingActivitySection({
         </Txt>
         {[
           ["ping", "See who’s interested", "Create Ping"],
-          ["council", "Decide together", "Create Council · Vote or Draw"],
+          ["council", "Decide together", "Create Vote Council"],
+          ["draw", "Let chance choose", "Create Draw Council"],
           ["beacon", "Invite people to join", "Create Beacon"],
         ].map(([kind, title, detail]) => (
           <Pressable
             key={kind}
             accessibilityRole="button"
             accessibilityLabel={title}
-            onPress={() => launch(kind as "ping" | "council" | "beacon")}
+            onPress={() => launch(kind as "ping" | "council" | "draw" | "beacon")}
             style={{
               minHeight: 64,
               flexDirection: "row",
@@ -1055,7 +1062,7 @@ export function LivingActivitySection({
             >
               {kind === "ping" ? (
                 <Send size={21} color={colors.green} />
-              ) : kind === "council" ? (
+              ) : kind === "council" || kind === "draw" ? (
                 <Vote size={21} color={colors.green} />
               ) : (
                 <Radio size={21} color={colors.green} />

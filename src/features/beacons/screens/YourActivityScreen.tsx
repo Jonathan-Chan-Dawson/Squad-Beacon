@@ -9,6 +9,7 @@ import {
   Text,
   TextInput,
   View,
+  useWindowDimensions,
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import * as ExpoLinking from "expo-linking";
@@ -60,6 +61,7 @@ function backToBeacons() {
 export default function YourActivityScreen() {
   const { colors, tokens } = useDesignTheme();
   const insets = useSafeAreaInsets();
+  const compactHeader = useWindowDimensions().width < 380;
   const now = useNow();
   const params = useLocalSearchParams<{ historyExpanded?: string }>();
   const {
@@ -331,13 +333,16 @@ export default function YourActivityScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }} testID="your-activity-screen">
       <View style={{ paddingTop: insets.top, borderBottomWidth: 1, borderBottomColor: colors.border }}>
-        <View style={{ width: "100%", maxWidth: tokens.layout.contentMaxWidth, alignSelf: "center", minHeight: 58, paddingHorizontal: tokens.layout.screenGutter, flexDirection: "row", alignItems: "center", gap: tokens.space.sm }}>
+        <View style={{ width: "100%", maxWidth: tokens.layout.contentMaxWidth, alignSelf: "center", minHeight: 58, paddingHorizontal: tokens.layout.screenGutter, flexDirection: "row", alignItems: "center", gap: compactHeader ? 2 : tokens.space.xs }}>
           <Pressable accessibilityRole="button" accessibilityLabel="Back to Beacons" onPress={backToBeacons} style={{ width: 44, height: 44, alignItems: "center", justifyContent: "center" }}>
             <ArrowLeft size={21} color={colors.textPrimary} />
           </Pressable>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text testID="your-activity-header" accessibilityRole="header" numberOfLines={1} style={{ color: colors.textPrimary, ...tokens.type.titleSmall, fontWeight: "800" }}>Your Activity</Text>
+            <Text testID="your-activity-header" accessibilityRole="header" numberOfLines={1} style={{ color: colors.textPrimary, ...tokens.type.titleSmall, ...(compactHeader ? tokens.type.body : {}), fontWeight: "800" }}>Your Activity</Text>
           </View>
+          <Pressable accessibilityRole="button" accessibilityLabel="Create Beacon" onPress={createBeacon} style={{ minHeight: 44, paddingHorizontal: tokens.space.xs, alignItems: "center", justifyContent: "center" }}>
+            <Text style={{ color: colors.accent, ...tokens.type.caption, fontWeight: "700" }}>+ Create Beacon</Text>
+          </Pressable>
           <Pressable accessibilityRole="button" accessibilityLabel="Browse Beacons" onPress={exploreBeacons} style={{ minWidth: 44, height: 44, paddingHorizontal: tokens.space.xs, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: tokens.space.xxs }}>
             <Compass size={19} color={colors.accent} />
             <Text style={{ color: colors.accent, ...tokens.type.caption, fontWeight: "700" }}>Browse</Text>

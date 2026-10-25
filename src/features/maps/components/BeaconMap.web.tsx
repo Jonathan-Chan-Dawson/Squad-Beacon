@@ -1,3 +1,4 @@
+import { bloomGeometry } from "../clusterBloom";
 import { KeyedMapLayers } from "../keyedMapLayers";
 import { ClusterArtworkCache } from "../clusterArtwork";
 import {
@@ -12,7 +13,7 @@ import { useBeacon } from "@/src/shared/store";
 import {
   nativeMapMode,
   MapPresentationCache,
-  nativeAtmosphereRadius,
+  presentationArtworkPoints,
   type NativeMapMode,
 } from "../nativeMapPresentation";
 import { webConstellation } from "../webConstellation";
@@ -128,6 +129,9 @@ export default function BeaconMap(props: MapProps) {
     removeGestureListeners = useRef<(() => void) | null>(null),
     appliedControlRevision = useRef<number | null>(null);
   const presentationMode = useRef<NativeMapMode | undefined>(undefined);
+  const clusterOpenSection = useRef<"Beacons" | "Friends" | undefined>(
+    undefined,
+  );
   const [markerCache] = useState(() => new KeyedMapLayers<Leaflet.Layer>());
   const [decorationCache] = useState(() => new KeyedMapLayers<Leaflet.Layer>());
   const [presentationCache] = useState(() => new MapPresentationCache());
@@ -481,6 +485,7 @@ export default function BeaconMap(props: MapProps) {
     onPerson,
     onCluster,
     clusterPriorities = {},
+    friendsProminent = false,
     explorationTarget,
     onOptions,
     onRecenter,
@@ -676,25 +681,26 @@ export default function BeaconMap(props: MapProps) {
           entry.setLatLng([lat, lng]);
         return entry;
       }
+      const compact = detached && !fullMarker;
       const node = document.createElement("button");
       const dot =
         !friend && m.getZoom() < 12 && !detached && !owned && !fullMarker;
-      const visualSize = detached
+      const visualSize = compact
         ? 32
         : dot
           ? 10
           : markerVisualSize(friend ? "person" : "beacon");
-      const iconWidth = detached ? 32 : 64;
-      const iconHeight = detached ? 32 : friend ? 52 : timeChip ? 68 : 48;
+      const iconWidth = compact ? 32 : 64;
+      const iconHeight = compact ? 32 : friend ? 52 : timeChip ? 68 : 48;
       node.type = "button";
       node.setAttribute("aria-label", label);
       node.title = label;
       node.dataset.availability = availabilityLabel;
-      node.style.cssText = `position:relative;border:0;border-radius:0;background:transparent;color:${colors.ink};padding:0;width:${iconWidth}px;height:${iconHeight}px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;font:600 16px system-ui;cursor:pointer;opacity:${dimmed ? 0.7 : 1};transform:scale(${selectedPin && !detached ? 1.25 : 1});transform-origin:50% 50%;transition:${reducedMotion ? "none" : "transform 180ms cubic-bezier(.2,.8,.2,1),opacity 180ms ease"};`;
+      node.style.cssText = `position:relative;border:0;border-radius:0;background:transparent;color:${colors.ink};padding:0;width:${iconWidth}px;height:${iconHeight}px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;font:600 16px system-ui;cursor:pointer;opacity:${dimmed ? 0.7 : 1};transform:scale(${selectedPin && !compact ? 1.25 : 1});transform-origin:50% 50%;transition:${reducedMotion ? "none" : "transform 180ms cubic-bezier(.2,.8,.2,1),opacity 180ms ease"};`;
       if (friend) {
         const frame = document.createElement("span");
         frame.dataset.clusterFace = "true";
-        frame.style.cssText = `position:relative;box-sizing:border-box;flex-shrink:0;width:${visualSize}px;height:${visualSize}px;border:${detached ? 2 : 3}px solid ${tone};border-radius:50%;background:${colors.white};display:flex;align-items:center;justify-content:center;box-shadow:${detached ? "none" : "0 3px 10px #172c2940"};`;
+        frame.style.cssText = `position:relative;box-sizing:border-box;flex-shrink:0;width:${visualSize}px;height:${visualSize}px;border:${compact ? 2 : 3}px solid ${tone};border-radius:50%;background:${colors.white};display:flex;align-items:center;justify-content:center;box-shadow:${compact ? "none" : "0 3px 10px #172c2940"};`;
         const img = document.createElement("img");
         img.src =
           "data:image/svg+xml;charset=utf-8," +
@@ -729,17 +735,17 @@ export default function BeaconMap(props: MapProps) {
         }
         const notch = document.createElement("span");
         if (dot) notch.style.display = "none";
-        notch.style.cssText = `display:${dot || detached ? "none" : "block"};position:absolute;top:34px;width:12px;height:12px;background:${tone};transform:rotate(45deg);border-radius:2px;z-index:-1;`;
+        notch.style.cssText = `display:${dot || compact ? "none" : "block"};position:absolute;top:34px;width:12px;height:12px;background:${tone};transform:rotate(45deg);border-radius:2px;z-index:-1;`;
         node.append(notch);
         const badge = document.createElement("span");
         badge.textContent = dot ? "" : text;
-        badge.style.cssText = `position:relative;box-sizing:border-box;flex-shrink:0;width:${visualSize}px;height:${visualSize}px;border:${dot ? 1 : detached ? 2 : 3}px solid ${dot ? colors.white : tone};border-radius:50%;background:${dot ? tone : colors.white};display:flex;align-items:center;justify-content:center;box-shadow:${detached ? "none" : "0 3px 10px #172c2940"};font-size:${detached ? 20 : 22}px;`;
+        badge.style.cssText = `position:relative;box-sizing:border-box;flex-shrink:0;width:${visualSize}px;height:${visualSize}px;border:${dot ? 1 : compact ? 2 : 3}px solid ${dot ? colors.white : tone};border-radius:50%;background:${dot ? tone : colors.white};display:flex;align-items:center;justify-content:center;box-shadow:${compact ? "none" : "0 3px 10px #172c2940"};font-size:${compact ? 20 : 22}px;`;
         face.append(badge);
         if (identity && !dot) {
           const emblem = document.createElement("span");
           emblem.textContent = identity.glyph;
           emblem.setAttribute("aria-label", identity.label);
-          emblem.style.cssText = `position:absolute;${owned ? "left" : "right"}:${detached ? -2 : -7}px;bottom:${detached ? -2 : -4}px;width:${detached ? 12 : 21}px;height:${detached ? 12 : 21}px;border:2px solid ${colors.white};border-radius:${identity.kind === "community" ? 6 : 11}px;background:${identity.glyph === "♥" ? (resolvedAppearance === "dark" ? "#3D2430" : "#FFF0F5") : colors.ink};color:${identity.glyph === "♥" ? mapIdentityColors.heart[resolvedAppearance] : colors.white};display:flex;align-items:center;justify-content:center;font:700 12px system-ui;`;
+          emblem.style.cssText = `position:absolute;${owned ? "left" : "right"}:${compact ? -2 : -7}px;bottom:${compact ? -2 : -4}px;width:${compact ? 12 : 21}px;height:${compact ? 12 : 21}px;border:2px solid ${colors.white};border-radius:${identity.kind === "community" ? 6 : 11}px;background:${identity.glyph === "♥" ? (resolvedAppearance === "dark" ? "#3D2430" : "#FFF0F5") : colors.ink};color:${identity.glyph === "♥" ? mapIdentityColors.heart[resolvedAppearance] : colors.white};display:flex;align-items:center;justify-content:center;font:700 12px system-ui;`;
           face.append(emblem);
         }
         if (owned && !dot) {
@@ -747,7 +753,7 @@ export default function BeaconMap(props: MapProps) {
           star.textContent = "★";
           star.setAttribute("aria-label", "Your Beacon");
           star.dataset.testid = "beacon-ownership-star";
-          star.style.cssText = `position:absolute;right:${detached ? -3 : -6}px;bottom:${detached ? -2 : -4}px;width:${detached ? 12 : 16}px;height:${detached ? 12 : 16}px;border:2px solid ${colors.white};border-radius:50%;background:${mapIdentityColors.ownership};color:#fff;display:flex;align-items:center;justify-content:center;font:700 10px system-ui;`;
+          star.style.cssText = `position:absolute;right:${compact ? -3 : -6}px;bottom:${compact ? -2 : -4}px;width:${compact ? 12 : 16}px;height:${compact ? 12 : 16}px;border:2px solid ${colors.white};border-radius:50%;background:${mapIdentityColors.ownership};color:#fff;display:flex;align-items:center;justify-content:center;font:700 10px system-ui;`;
           face.append(star);
         }
         node.append(face);
@@ -869,12 +875,14 @@ export default function BeaconMap(props: MapProps) {
             0.75,
         ),
       ),
+      friendsProminent,
     );
-    const groups = presentations.map((item) => item.group);
     const renderedSingletonIds = new Set(
-      groups
-        .filter((item) => item.members.length === 1)
-        .map((item) => item.members[0].id),
+      presentations
+        .filter(
+          (item) => item.mode === "stack" && item.group.members.length === 1,
+        )
+        .map((item) => item.group.members[0].id),
     );
     for (const point of contextPoints) {
       if (
@@ -941,7 +949,7 @@ export default function BeaconMap(props: MapProps) {
       }
     }
     const models = artworkCache.build(
-      presentations.flatMap((item) => item.visible),
+      presentations.flatMap(presentationArtworkPoints),
       activities,
       profiles,
       freshLocations,
@@ -956,7 +964,7 @@ export default function BeaconMap(props: MapProps) {
         .filter((point) => point.publicBeaconId)
         .map((point) => [point.publicBeaconId, point]),
     );
-    const memberArtwork = (member: ClusterPoint) => {
+    const memberArtwork = (member: ClusterPoint, full = false) => {
       const id = member.id.slice(7);
       const model = models.get(member.id)!;
       const activity = activitiesById.get(id);
@@ -998,21 +1006,19 @@ export default function BeaconMap(props: MapProps) {
           : null,
         !!activity && ownsMapBeacon(identityData, activity, identityViewer),
         true,
+        full,
       ) as HTMLButtonElement;
     };
     for (const presentation of presentations.filter(
-      (item) => item.group.members.length > 1,
+      (item) => item.mode !== "stack" || item.group.members.length > 1,
     )) {
       const cluster = presentation.group;
       const open = () => {
         if (onPick) return;
-        const targetZoom =
-          presentation.mode === "atmosphere"
-            ? 13
-            : Math.min(
-                MAP_MAX_ZOOM,
-                m.getZoom() + (m.getZoom() < 16 ? 0.5 : 0),
-              );
+        const targetZoom = Math.min(
+          MAP_MAX_ZOOM,
+          m.getZoom() + (m.getZoom() < 16 ? 0.5 : 0),
+        );
         const target = adjustedMapCenter(
           cluster.latitude,
           cluster.longitude,
@@ -1022,43 +1028,13 @@ export default function BeaconMap(props: MapProps) {
           programmaticMove.current = true;
           m.flyTo(target, targetZoom, { duration: reducedMotion ? 0 : 0.3 });
         }
-        if (presentation.mode !== "atmosphere")
-          onCluster?.(
-            cluster,
-            m.latLngToContainerPoint([cluster.latitude, cluster.longitude]),
-          );
+        onCluster?.(
+          cluster,
+          m.latLngToContainerPoint([cluster.latitude, cluster.longitude]),
+          clusterOpenSection.current,
+        );
       };
       const clusterKey = `cluster:${cluster.id}`;
-      if (presentation.mode === "atmosphere") {
-        const radius = nativeAtmosphereRadius(cluster, m.getZoom());
-        for (const scale of [1.25, 1, 0.7]) {
-          const key = `${clusterKey}:atmosphere:${scale}`;
-          decorationCache.use(
-            key,
-            JSON.stringify([
-              cluster.latitude,
-              cluster.longitude,
-              radius,
-              scale,
-              colors.green,
-              !!onPick,
-            ]),
-            () =>
-              L.circle([cluster.latitude, cluster.longitude], {
-                radius: radius * scale,
-                stroke: false,
-                fillColor: colors.green,
-                fillOpacity:
-                  scale === 1.25 ? 0.025 : scale === 1 ? 0.035 : 0.047,
-                interactive: !onPick,
-                bubblingMouseEvents: false,
-              })
-                .on("click", () => decorationCache.activate(key))
-                .addTo(decorations),
-            open,
-          );
-        }
-      }
       const dimmed =
         contextPoints.some((point) => point.activityId) &&
         !cluster.members.some((member) =>
@@ -1069,8 +1045,12 @@ export default function BeaconMap(props: MapProps) {
       const visualRevision = JSON.stringify([
         presentation.mode,
         presentation.overflow,
+        presentation.people.map((point) => point.id),
+        presentation.friendsProminent,
+        bloomGeometry(presentation).satelliteOffsets,
+        bloomGeometry(presentation).friendBadge,
         presentation.owned.map((point) => point.id),
-        presentation.visible.map((point) => [
+        presentationArtworkPoints(presentation).map((point) => [
           point.id,
           models.get(point.id)?.revision,
           contextsById.get(point.id.slice(7))?.title,
@@ -1092,7 +1072,14 @@ export default function BeaconMap(props: MapProps) {
         () => {
           const rendered = webConstellation(presentation, {
             member: memberArtwork,
-            open: () => markerCache.activate(clusterKey),
+            open: (section) => {
+              clusterOpenSection.current = section;
+              try {
+                markerCache.activate(clusterKey);
+              } finally {
+                clusterOpenSection.current = undefined;
+              }
+            },
             ink: colors.ink,
             surface: colors.white,
             line: colors.line,
@@ -1337,6 +1324,7 @@ export default function BeaconMap(props: MapProps) {
     onPerson,
     onCluster,
     clusterPriorities,
+    friendsProminent,
     adjustedMapCenter,
     mapInsets.bottom,
     mapInsets.left,

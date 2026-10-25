@@ -1,6 +1,10 @@
 Planning feature
 
-- PlanningListScreen.tsx and PlanningDetailScreen.tsx: Pings & Decisions creation and voting/draw flows.
+- PlanningListScreen.tsx: organizer management, contributed proposals, and history; everyday participation lives in Responses & Invitations.
+- PlanningComposer.tsx and composerSession.ts: focused Ping/Vote/Draw creation, unique account-scoped in-memory sessions, stable option editor handoffs, and frozen publication recovery.
+- inbox.ts and DecisionRow.tsx: canonical decision grouping, flat action-first rows, inline context, and authoritative Draw results.
+- PlanningResponseControls.tsx, PingPreferences.tsx, and submission.ts: reusable response controls, explicit Ping preferences, and shared per-thread submission exclusion.
+- PlanningDetailScreen.tsx: retained advanced Council management and embedded decision details.
 - PlanningDetailScreen supports an embedded decision view in the Beacon sheet; PlanningEditor and ProposalEditor reuse the same actions with inline editors in that context.
 - Embedded Suggested Beacon focus delegates to the map's existing contextual filter callback; standalone detail keeps its existing map route.
 - PlanningInbox.tsx: reusable actionable decision previews and canonical inline Ping responses; Chats home now uses the compact Responses & Invitations entry.

@@ -255,7 +255,7 @@ export function CreationPeople({
         gap: 6,
         borderTopWidth: 1,
         borderColor: colors.line,
-        paddingTop: 12,
+        paddingTop: 14,
       }}
     >
       <Text accessibilityRole="header" style={styles.h2}>
@@ -285,7 +285,8 @@ export function CreationPeople({
           gap: 2,
           borderTopWidth: 1,
           borderColor: colors.line,
-          paddingTop: 8,
+          paddingTop: 10,
+          paddingBottom: 4,
         }}
       >
         <Text style={styles.label}>Invite People</Text>

@@ -1,3 +1,5 @@
+import { mapPointOffset as nativePointOffset } from "./mapPointOffset";
+import { bloomGeometry } from "./clusterBloom";
 import {
   clusterMapPoints,
   MAX_RENDERED_MAP_FEATURES,
@@ -7,10 +9,14 @@ import {
   type MapPointGroup,
   type MapPointPriority,
 } from "./cluster";
-import { clusterPetalOffset } from "./clusterLayout";
+import {
+  clusterPetalOffset,
+  beaconPetalLimit,
+  type BloomScale,
+} from "./clusterLayout";
 
-export type NativeMapMode = "stack" | "swarm" | "atmosphere";
-export const NATIVE_STACK_LIMIT = 10;
+export type NativeMapMode = "stack" | "swarm" | "atmosphere" | "micro";
+export const NATIVE_STACK_LIMIT = 7;
 export const NATIVE_EXPLORER_THRESHOLD = 6;
 export const NATIVE_DENSITY_MINIMUM = 6;
 const BUFFER = 0.35;
@@ -20,11 +26,25 @@ export function nativeMapMode(
   zoom: number,
   previous?: NativeMapMode,
 ): NativeMapMode {
-  if (previous === "stack" && zoom >= 16 - BUFFER) return "stack";
-  if (previous === "atmosphere" && zoom < 12 + BUFFER) return "atmosphere";
-  if (previous === "swarm" && zoom >= 12 - BUFFER && zoom < 16 + BUFFER)
-    return "swarm";
-  return zoom >= 16 ? "stack" : zoom >= 12 ? "swarm" : "atmosphere";
+  const thresholds = {
+    stack: [16 - BUFFER, Infinity],
+    swarm: [12 - BUFFER, 16 + BUFFER],
+    atmosphere: [9 - BUFFER, 12 + BUFFER],
+    micro: [-Infinity, 9 + BUFFER],
+  };
+  if (
+    previous &&
+    zoom >= thresholds[previous][0] &&
+    zoom < thresholds[previous][1]
+  )
+    return previous;
+  return zoom >= 16
+    ? "stack"
+    : zoom >= 12
+      ? "swarm"
+      : zoom >= 9
+        ? "atmosphere"
+        : "micro";
 }
 
 export type NativeMapPresentation = {
@@ -34,6 +54,13 @@ export type NativeMapPresentation = {
   overflow: number;
   owned: ClusterPoint[];
   featureCost: number;
+  scale: BloomScale;
+  beacons: ClusterPoint[];
+  people: ClusterPoint[];
+  satellites: ClusterPoint[];
+  friendOverflow: number;
+  friendsProminent: boolean;
+  forceExplorer?: boolean;
 };
 
 export function nativeStackOpensExplorer(count: number) {
@@ -70,6 +97,7 @@ export class MapPresentationCache {
       priorities = {},
       owned = new Set<string>(),
       budget,
+      friendsProminent,
     ] = args;
     const ordered = [...points].sort((a, b) => a.id.localeCompare(b.id));
     const spatialKey = JSON.stringify([
@@ -78,6 +106,7 @@ export class MapPresentationCache {
       mode,
       [...owned].sort(),
       budget,
+      friendsProminent,
       ordered
         .filter((point) => priorities[point.id]?.tier === -3)
         .map((point) => point.id),
@@ -91,7 +120,13 @@ export class MapPresentationCache {
       this.stats.spatialBuilds++;
     } else if (rankKey !== this.rankKey) {
       this.value = this.value.map((item) =>
-        nativePresentation(item.group, item.mode, priorities, owned),
+        nativePresentation(
+          item.group,
+          item.mode,
+          priorities,
+          owned,
+          friendsProminent,
+        ),
       );
     } else this.stats.hits++;
     this.rankKey = rankKey;
@@ -101,47 +136,118 @@ export class MapPresentationCache {
 
 export function nativePresentation(
   group: MapPointGroup,
-  requestedMode: NativeMapMode,
+  mode: NativeMapMode,
   priorities: Record<string, MapPointPriority>,
   ownedIds: ReadonlySet<string>,
+  friendsProminent = false,
 ): NativeMapPresentation {
-  const members = rankClusterMembers(group.members, priorities).sort((a, b) => {
-    const score = (point: ClusterPoint) =>
-      (priorities[point.id]?.tier ?? 7) === -3
-        ? 0
-        : ownedIds.has(point.id)
-          ? 1
-          : point.kind === "person"
+  const ranked = rankClusterMembers(group.members, priorities);
+  const score = (point: ClusterPoint) =>
+    priorities[point.id]?.tier === -3
+      ? 0
+      : ownedIds.has(point.id)
+        ? 1
+        : (priorities[point.id]?.tier ?? 7) === 0
+          ? 2
+          : 3;
+  const beacons = ranked
+    .filter((point) => point.kind === "beacon")
+    .sort((a, b) => score(a) - score(b));
+  const people = ranked.filter((point) => point.kind === "person");
+  const scale: BloomScale =
+    mode === "stack"
+      ? "close"
+      : mode === "swarm"
+        ? "medium"
+        : mode === "atmosphere"
+          ? "far"
+          : "micro";
+  const important = beacons.filter(
+    (point) => ownedIds.has(point.id) || (priorities[point.id]?.tier ?? 7) <= 0,
+  );
+  const importantIds = new Set(important.map((point) => point.id));
+  const rest = beacons.filter((point) => !importantIds.has(point.id));
+  const categories = new Set(important.map((point) => point.category));
+  const variety: ClusterPoint[] = [],
+    repeated: ClusterPoint[] = [];
+  for (const point of rest) {
+    if (!categories.has(point.category)) {
+      variety.push(point);
+      categories.add(point.category);
+    } else repeated.push(point);
+  }
+  const ordered = [...important, ...variety, ...repeated];
+  const beaconVisible = ordered.slice(
+    0,
+    beaconPetalLimit(beacons.length, scale),
+  );
+  const satellites = beacons.length
+    ? people.slice(0, scale === "micro" ? 2 : scale === "far" ? 3 : 7)
+    : [];
+  const friendVisible = beacons.length
+    ? []
+    : people.slice(
+        0,
+        people.length >= 5
+          ? 0
+          : scale === "micro"
             ? 2
-            : 3;
-    return score(a) - score(b);
-  });
-  const owned = members.filter((point) => ownedIds.has(point.id));
-  // People are never inputs to Beacon density, including under budget pressure.
-  const mode =
-    requestedMode !== "stack" &&
-    members.length >= NATIVE_DENSITY_MINIMUM &&
-    members.every((point) => point.kind === "beacon")
-      ? requestedMode
-      : "stack";
-  const visible = members.slice(0, mode === "stack" ? NATIVE_STACK_LIMIT : 24);
-  return {
-    group: { ...group, members },
+            : scale === "far"
+              ? 3
+              : 4,
+      );
+  const visible = [...beaconVisible, ...friendVisible, ...satellites];
+  const overflow = beacons.length ? beacons.length - beaconVisible.length : 0;
+  const item: NativeMapPresentation = {
+    group: { ...group, members: [...ordered, ...people] },
     mode,
+    scale,
+    beacons: ordered,
+    people,
+    satellites,
     visible,
-    overflow: Math.max(0, members.length - visible.length),
-    owned,
-    // Stack artwork is one bitmap, but count each visual conservatively too.
+    overflow,
+    owned: beacons.filter((point) => ownedIds.has(point.id)),
+    friendOverflow: Math.max(
+      0,
+      people.length - satellites.length - friendVisible.length,
+    ),
+    friendsProminent,
     featureCost:
-      mode === "atmosphere"
-        ? 3 + Number(owned.length > 0)
-        : mode === "stack"
-          ? visible.length
-          : 1,
+      Math.max(1, visible.length) +
+      Number(overflow > 0) +
+      Number(people.length > 0 && (beacons.length > 0 || people.length >= 5)),
   };
+  const geometry = bloomGeometry(item);
+  item.satellites = geometry.satellites;
+  item.visible = [...beaconVisible, ...friendVisible, ...item.satellites];
+  item.friendOverflow = Math.max(
+    0,
+    people.length - item.satellites.length - friendVisible.length,
+  );
+  item.featureCost =
+    Math.max(1, item.visible.length) +
+    Number(overflow > 0) +
+    Number(!!geometry.friendBadge || (!beacons.length && people.length >= 5));
+  return item;
 }
 
-/** Receives only the screen's already-authorized, filtered, current entities. */
+export function presentationOpensExplorer(item: NativeMapPresentation) {
+  return (
+    item.forceExplorer ||
+    (item.beacons.length ? item.beacons.length > 5 : item.people.length >= 5)
+  );
+}
+
+/** Small blooms expand every primary member even when the far-tier preview is truncated. */
+export function presentationArtworkPoints(item: NativeMapPresentation) {
+  if (presentationOpensExplorer(item)) return item.visible;
+  return item.beacons.length
+    ? [...item.beacons, ...item.satellites]
+    : item.people;
+}
+
+/** Authorized coordinates only. Beacon clustering is independent of friend positions. */
 export function nativeMapPresentations(
   points: ClusterPoint[],
   viewport: ClusterViewport,
@@ -149,6 +255,7 @@ export function nativeMapPresentations(
   priorities: Record<string, MapPointPriority> = {},
   ownedIds: ReadonlySet<string> = new Set(),
   budget = MAX_RENDERED_MAP_FEATURES,
+  friendsProminent = false,
 ) {
   const unique = [
     ...new Map(points.map((point) => [point.id, point])).values(),
@@ -159,79 +266,104 @@ export function nativeMapPresentations(
     1,
   ).flatMap((group) => group.members);
   const ordinary = unique.filter((point) => priorities[point.id]?.tier !== -3);
-  let budgetPressure = false;
-  const build = (radius: number, separatePeople: boolean) => {
-    const sets = separatePeople
-      ? [
-          ordinary.filter((point) => point.kind === "beacon"),
-          ordinary.filter((point) => point.kind === "person"),
-        ]
-      : [ordinary];
-    const groups = sets.flatMap((set) =>
-      clusterMapPoints(set, viewport, radius),
+  const beacons = ordinary.filter((point) => point.kind === "beacon");
+  const people = ordinary.filter((point) => point.kind === "person");
+  let pressured = false;
+  const build = (radius: number) => {
+    const groups = clusterMapPoints(beacons, viewport, radius);
+    const remaining: ClusterPoint[] = [];
+    // Grid lookup bounds the collision search, even with thousands of authorized friends.
+    const cell = 96,
+      buckets = new Map<string, MapPointGroup[]>();
+    const screen = (point: { latitude: number; longitude: number }) =>
+      nativePointOffset(
+        point,
+        {
+          latitude: viewport.centerLatitude,
+          longitude: viewport.centerLongitude,
+        },
+        viewport.zoom,
+      );
+    for (const group of groups) {
+      const p = screen(group),
+        key = `${Math.floor(p.x / cell)}:${Math.floor(p.y / cell)}`;
+      buckets.set(key, [...(buckets.get(key) ?? []), group]);
+    }
+    // Materialize the friend viewport once so distant/offscreen people cannot attach to an on-screen bloom.
+    const eligiblePeople = clusterMapPoints(people, viewport, 1).flatMap(
+      (group) => group.members,
     );
-    for (const point of selected)
-      groups.push({
-        id: `map-group:${point.id}`,
-        latitude: point.latitude,
-        longitude: point.longitude,
-        members: [point],
-      });
-    return groups.map((group) =>
+    for (const person of eligiblePeople) {
+      const p = screen(person);
+      let nearest: MapPointGroup | undefined,
+        distance = friendsProminent ? 42 : 48;
+      for (let x = -1; x <= 1; x++)
+        for (let y = -1; y <= 1; y++)
+          for (const group of buckets.get(
+            `${Math.floor(p.x / cell) + x}:${Math.floor(p.y / cell) + y}`,
+          ) ?? []) {
+            const anchor = screen(group),
+              d = Math.hypot(p.x - anchor.x, p.y - anchor.y);
+            if (
+              d < distance ||
+              (d === distance && nearest && group.id < nearest.id)
+            ) {
+              nearest = group;
+              distance = d;
+            }
+          }
+      if (nearest) nearest.members.push(person);
+      else remaining.push(person);
+    }
+    groups.push(...clusterMapPoints(remaining, viewport, radius));
+    const requested = pressured && mode === "stack" ? "swarm" : mode;
+    const result = groups.map((group) =>
       nativePresentation(
         group,
-        budgetPressure && mode === "stack" ? "swarm" : mode,
+        requested,
         priorities,
         ownedIds,
+        friendsProminent,
       ),
     );
+    for (const point of selected)
+      result.push(
+        nativePresentation(
+          {
+            id: `map-group:${point.id}`,
+            latitude: point.latitude,
+            longitude: point.longitude,
+            members: [point],
+          },
+          "stack",
+          priorities,
+          ownedIds,
+          friendsProminent,
+        ),
+      );
+    return result;
   };
-  let radius = mode === "stack" ? 40 : mode === "swarm" ? 72 : 96;
-  let presentations = build(radius, mode !== "stack");
-  if (presentations.reduce((sum, item) => sum + item.featureCost, 0) > budget) {
-    budgetPressure = true;
-    presentations = build(radius, true);
-  }
+  let radius =
+    mode === "stack"
+      ? 40
+      : mode === "swarm"
+        ? 72
+        : mode === "atmosphere"
+          ? 96
+          : 128;
+  let result = build(radius);
   while (
-    presentations.reduce((sum, item) => sum + item.featureCost, 0) > budget &&
-    radius < 4096
+    result.reduce((sum, item) => sum + item.featureCost, 0) > budget &&
+    radius < 65536
   ) {
+    pressured = true;
     radius *= 2;
-    presentations = build(radius, mode !== "stack" || budgetPressure);
+    result = build(radius);
   }
-  // Mixed fallback stays a stack, so private friend positions cannot affect density.
-  if (presentations.reduce((sum, item) => sum + item.featureCost, 0) > budget) {
-    // Reserve four primitives per potential atmospheric group. Querying the
-    // same viewport with a larger radius preserves its geographic membership.
-    presentations = build(radius, false);
-    while (
-      presentations.reduce((sum, item) => sum + item.featureCost, 0) > budget &&
-      radius < 65536
-    ) {
-      radius *= 2;
-      presentations = build(radius, false);
-    }
-  }
-  return presentations;
+  return result;
 }
 
-/** Local Mercator offsets for static swarms; derived exclusively from real positions. */
-export function nativePointOffset(
-  point: ClusterPoint,
-  group: MapPointGroup,
-  zoom: number,
-) {
-  const world = 256 * 2 ** zoom;
-  const y = (latitude: number) =>
-    Math.asinh(
-      Math.tan((Math.max(-85, Math.min(85, latitude)) * Math.PI) / 180),
-    );
-  return {
-    x:
-      ((((point.longitude - group.longitude + 540) % 360) - 180) / 360) * world,
-    y: ((y(group.latitude) - y(point.latitude)) / (2 * Math.PI)) * world,
-  };
-}
+export { mapPointOffset as nativePointOffset } from "./mapPointOffset";
 
 export function nativeAtmosphereRadius(group: MapPointGroup, zoom = 14) {
   const latitudeScale = Math.cos((group.latitude * Math.PI) / 180);

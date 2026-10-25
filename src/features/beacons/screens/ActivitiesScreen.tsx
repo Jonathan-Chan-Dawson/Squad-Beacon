@@ -500,7 +500,7 @@ export default function ActivitiesScreen() {
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{
           padding: PAGE_GUTTER,
-          gap: 12,
+          gap: 16,
           paddingBottom:
             tokens.layout.tabBarHeight +
             insets.bottom +
@@ -539,7 +539,7 @@ export default function ActivitiesScreen() {
             gap: 0,
             borderTopWidth: 1,
             borderTopColor: designColors.border,
-            paddingTop: 8,
+            paddingTop: 12,
           }}
         >
           {hubHeading("Your Activity", "My Activity →", () =>
@@ -568,14 +568,23 @@ export default function ActivitiesScreen() {
             </View>
           )}
         </View>
-        <SocialFriendsSection key={userId ?? "signed-out"} />
+        <View
+          testID="home-friends-section"
+          style={{
+            borderTopWidth: 1,
+            borderTopColor: designColors.border,
+            paddingTop: 16,
+          }}
+        >
+          <SocialFriendsSection key={userId ?? "signed-out"} />
+        </View>
         <View
           testID="home-explore-beacons"
           style={{
             gap: 4,
             borderTopWidth: 1,
             borderTopColor: designColors.border,
-            paddingTop: 8,
+            paddingTop: 12,
           }}
         >
           <View
@@ -670,7 +679,7 @@ export default function ActivitiesScreen() {
             borderTopWidth: 1,
             borderTopColor: designColors.border,
             marginTop: 6,
-            paddingTop: 8,
+            paddingTop: 12,
           }}
         >
           <Pressable

@@ -36,7 +36,8 @@ export function CreationDisclosure({
       style={{
         borderTopWidth: 1,
         borderColor: colors.line,
-        paddingTop: compact ? 2 : 8,
+        paddingTop: compact ? 6 : 8,
+        paddingBottom: compact ? 2 : 0,
         gap: compact ? 2 : 8,
       }}
     >

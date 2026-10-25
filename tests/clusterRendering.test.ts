@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  beaconPetalLimit,
   clusterLayout,
   clusterPetalOffset,
   CLUSTER_COUNT_ANCHOR,
@@ -12,19 +13,139 @@ import {
   nativePetalOffset,
 } from "../src/features/maps/nativeMapPresentation";
 import type { ClusterPoint } from "../src/features/maps/cluster";
-for (const count of [2, 5, 6, 10, 11, 25])
+import { bloomGeometry } from "../src/features/maps/clusterBloom";
+import { nativePresentation } from "../src/features/maps/nativeMapPresentation";
+
+test("adaptive friends preserve Beacon geometry and never combine icons with a count badge", () => {
+  for (const [beacons, friends] of [
+    [2, 2],
+    [2, 25],
+    [7, 18],
+    [20, 5],
+    [40, 60],
+    [2, 7],
+  ])
+    for (const mode of ["stack", "swarm", "atmosphere", "micro"] as const) {
+      const beaconPoints: ClusterPoint[] = Array.from(
+        { length: beacons },
+        (_, i) => ({
+          id: `beacon:${i}`,
+          kind: "beacon",
+          latitude: 0,
+          longitude: 0,
+        }),
+      );
+      const people: ClusterPoint[] = Array.from(
+        { length: friends },
+        (_, i) => ({
+          id: `person:${i}`,
+          kind: "person",
+          latitude: Math.sin(i * 2.4) * 0.001,
+          longitude: Math.cos(i * 2.4) * 0.001,
+        }),
+      );
+      const base = bloomGeometry(
+        nativePresentation(
+          { id: "test", latitude: 0, longitude: 0, members: beaconPoints },
+          mode,
+          {},
+          new Set(),
+        ),
+      );
+      const item = nativePresentation(
+        {
+          id: "test",
+          latitude: 0,
+          longitude: 0,
+          members: [...beaconPoints, ...people],
+        },
+        mode,
+        {},
+        new Set(),
+      );
+      const geometry = bloomGeometry(item);
+      assert.deepEqual(geometry.offsets, base.offsets);
+      assert.equal(geometry.shadowSize, base.shadowSize);
+      assert.equal(
+        geometry.shadowLeft - geometry.center,
+        base.shadowLeft - base.center,
+      );
+      assert.equal(
+        geometry.shadowTop - geometry.center,
+        base.shadowTop - base.center,
+      );
+      assert.ok(!(geometry.satellites.length && geometry.friendBadge));
+      if (mode === "micro") {
+        assert.equal(geometry.friendBadge, undefined);
+        assert.equal(geometry.satellites.length, Math.min(friends, 2));
+      } else if (friends > 7) {
+        assert.equal(geometry.satellites.length, 0);
+        assert.ok(geometry.friendBadge);
+      } else if (mode === "stack" || mode === "swarm")
+        assert.equal(geometry.satellites.length, friends);
+      for (let i = 0; i < geometry.satelliteOffsets.length; i++)
+        for (let j = i + 1; j < geometry.satelliteOffsets.length; j++)
+          assert.ok(
+            Math.hypot(
+              geometry.satelliteOffsets[i].x - geometry.satelliteOffsets[j].x,
+              geometry.satelliteOffsets[i].y - geometry.satelliteOffsets[j].y,
+            ) >=
+              geometry.satelliteSize + 3,
+          );
+    }
+});
+
+test("friend badges choose the nearest free edge from geographic direction rather than a fixed crown", () => {
+  const beacons: ClusterPoint[] = Array.from({ length: 2 }, (_, i) => ({
+    id: `beacon:${i}`,
+    kind: "beacon",
+    latitude: 0,
+    longitude: 0,
+  }));
+  const badge = (longitude: number) =>
+    bloomGeometry(
+      nativePresentation(
+        {
+          id: "same",
+          latitude: 0,
+          longitude: 0,
+          members: [
+            ...beacons,
+            ...Array.from({ length: 25 }, (_, i) => ({
+              id: `person:${i}`,
+              kind: "person" as const,
+              latitude: 0,
+              longitude,
+            })),
+          ],
+        },
+        "swarm",
+        {},
+        new Set(),
+      ),
+    ).friendBadge!;
+  assert.ok(badge(0.001).offset.x > 0);
+  assert.ok(badge(-0.001).offset.x < 0);
+});
+for (const count of [2, 3, 4, 5, 6, 10, 11, 25])
   test(`${count} petals share a fixed contained circle on both renderers`, () => {
     const layout = clusterLayout(count);
     assert.equal(layout.size, count < 6 ? 72 : 88);
-    for (let i = 0; i < Math.min(count, 10); i++) {
-      const offset = clusterPetalOffset(i, Math.min(count, 10));
+    for (let i = 0; i < beaconPetalLimit(count); i++) {
+      const offset = clusterPetalOffset(i, beaconPetalLimit(count));
       assert.deepEqual(
-        nativePetalOffset(i, false, Math.min(count, 10)),
+        nativePetalOffset(i, false, beaconPetalLimit(count)),
         offset,
       );
       assert.ok(Math.hypot(offset.x, offset.y) + 16 <= layout.size / 2);
     }
-    assert.deepEqual(clusterPetalOffset(0, count), { x: 0, y: 0 });
+    const offsets = Array.from({ length: beaconPetalLimit(count) }, (_, i) =>
+      clusterPetalOffset(i, beaconPetalLimit(count)),
+    );
+    assert.ok(Math.abs(offsets.reduce((sum, p) => sum + p.x, 0)) < 1e-8);
+    assert.ok(Math.abs(offsets.reduce((sum, p) => sum + p.y, 0)) < 1e-8);
+    if (count === 2) assert.equal(offsets[0].x, -offsets[1].x);
+    if (count === 3) assert.equal(new Set(offsets.map((p) => p.x)).size, 3);
     assert.equal(layout.shadowTop + layout.shadowSize, layout.size);
     assert.deepEqual(CLUSTER_COUNT_ANCHOR, { right: 0, bottom: 0 });
     assert.deepEqual(CLUSTER_OWNERSHIP_ANCHOR, { right: 0, top: 0 });

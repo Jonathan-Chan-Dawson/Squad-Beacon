@@ -1,3 +1,4 @@
+import { saveComposerOption } from "@/src/features/planning/composerSession";
 import { CreationDisclosure } from "../components/CreationDisclosure";
 import {
   CreationPeople,
@@ -185,6 +186,9 @@ function CreateEditor() {
     editor?: string;
     planId?: string;
     threadId?: string;
+    planningSessionId?: string;
+    planningOptionId?: string;
+    planningKind?: string;
     squadId?: string;
     spaceId?: string;
     organizationId?: string;
@@ -691,6 +695,7 @@ function CreateEditor() {
     draftToken,
     "label",
     params.placeLabel ??
+      (params.activityNoteId && statusSeed ? data.places.find(place => place.activity_id === params.activityNoteId)?.label : undefined) ??
       (previous
         ? data.places.find((place) => place.activity_id === previous.id)?.label
         : undefined) ??
@@ -1132,6 +1137,7 @@ function CreateEditor() {
     if (
       kind !== "Status" &&
       addTo !== "Vote / Draw" &&
+      !params.planningOptionId &&
       placeType === "In person" &&
       !pin
     ) {
@@ -1145,6 +1151,7 @@ function CreateEditor() {
     if (
       kind !== "Status" &&
       addTo !== "Vote / Draw" &&
+      !params.planningOptionId &&
       placeType === "Online" &&
       !validCreationMeetingLink(url)
     ) {
@@ -1219,6 +1226,14 @@ function CreateEditor() {
       throw new Error(
         "That community is no longer available for this Beacon. Clear the association or choose another community.",
       );
+    if (params.planningSessionId && params.planningOptionId) {
+      if (!userId || dataRef.current.viewer_id !== userId) throw new Error("Your account changed. Return to the original account.");
+      if (inviteeIds.length) throw new Error("Council options use their Council audience, without individual invitations.");
+      saveComposerOption(userId, params.planningSessionId, params.planningOptionId, payload as BeaconDraft);
+      if (router.canGoBack()) router.back();
+      else router.replace({ pathname: "/planning/create", params: { sessionId: params.planningSessionId, kind: params.planningKind ?? "vote" } });
+      return;
+    }
     if (addTo === "Vote / Draw") {
       if (start <= currentTime + 120000)
         throw new Error(
@@ -1629,7 +1644,7 @@ function CreateEditor() {
   const moduleNames = creationModules
     .filter((row) => beaconControls[row.field])
     .map((row) => row.name);
-  const primaryAction = templateEditor
+  const primaryAction = params.planningOptionId ? "Save Council Option" : templateEditor
     ? "Save Template"
     : addTo === "Plan"
       ? "Add Beacon Step"
@@ -1654,7 +1669,7 @@ function CreateEditor() {
     ) : null;
   return (
     <CreationKeyboardScreen
-      title={templateEditor ? "Beacon Template" : "Create Beacon"}
+      title={params.planningOptionId ? "Edit Council Option" : templateEditor ? "Beacon Template" : "Create Beacon"}
       eyebrow=""
       compactHeader
       iconOnlyBack
@@ -1724,14 +1739,14 @@ function CreateEditor() {
           maxLength={80}
         />
       ) : null}
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+      <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 12 }}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Choose artwork"
           onPress={() => setAppearanceOpen(true)}
           style={{
-            minWidth: 60,
-            minHeight: 60,
+            minWidth: 56,
+            minHeight: 56,
             alignItems: "center",
             justifyContent: "center",
           }}
@@ -1766,6 +1781,7 @@ function CreateEditor() {
         <View style={{ flex: 1, minWidth: 0 }}>
           <Field
             label="Activity title"
+            style={{ minHeight: 56, borderRadius: 12, paddingVertical: 16 }}
             inputRef={titleInput}
             placeholder="What are we doing?"
             value={title}
@@ -1885,6 +1901,7 @@ function CreateEditor() {
         {placeType === "Online" ? (
           <Field
             label="HTTPS meeting link"
+            style={{ minHeight: 44, paddingVertical: 10, borderRadius: 12 }}
             value={url}
             onChangeText={setUrl}
             autoCapitalize="none"

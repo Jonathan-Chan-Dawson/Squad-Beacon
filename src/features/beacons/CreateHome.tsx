@@ -1,3 +1,4 @@
+import { randomUUID } from "expo-crypto";
 import { useNow } from "@/src/shared/useNow";
 import { CreationSavedDrafts } from "./components/CreationSavedDrafts";
 import React, { useCallback, useState } from "react";
@@ -485,23 +486,23 @@ export function CreateHome({
       <Text style={styles.h2}>More ways to create</Text>
       {card("ping", "Ping", "See who's interested", () =>
         router.push({
-          pathname: "/councils",
-          params: { ...context, newPing: "yes", creationKind: "ping" },
+          pathname: "/planning/create",
+          params: { ...context, kind: "ping", sessionId: randomUUID() },
         }),
       )}
       {card("vote", "Vote Council", "Compare options together", () =>
         router.push({
-          pathname: "/councils",
-          params: { ...context, newPing: "yes", creationKind: "council" },
+          pathname: "/planning/create",
+          params: { ...context, kind: "vote", sessionId: randomUUID() },
         }),
       )}
       {card("draw", "Draw Council", "Let chance choose", () =>
         router.push({
-          pathname: "/councils",
+          pathname: "/planning/create",
           params: {
             ...context,
-            newPing: "yes",
-            creationKind: "draw",
+            kind: "draw",
+            sessionId: randomUUID(),
           },
         }),
       )}

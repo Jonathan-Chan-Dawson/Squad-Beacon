@@ -1,8 +1,8 @@
-import { PingAvailabilityEditor } from "./PingAvailabilityEditor";
+import { PlanningResponseControls } from "./PlanningResponseControls";
 import { canOpenSquadPing } from "@/src/features/people/communication";
 import { PlanningEditor } from "./PlanningEditor";
 import React, { useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import {
   CalendarClock,
@@ -57,9 +57,7 @@ export default function PlanningDetailScreen({
   const planning = normalizePlanningData(data);
   const thread = planning.planning_threads.find((item) => item.id === id);
   const [proposalOpen, setProposalOpen] = useState(false);
-  const [pingAutoRsvp, setPingAutoRsvp] = useState<boolean | null>(null);
   const [replaceConfirm, setReplaceConfirm] = useState(false);
-  const [availabilityOpen, setAvailabilityOpen] = useState(false);
 
   const accessible =
     !!userId &&
@@ -91,7 +89,6 @@ export default function PlanningDetailScreen({
   const myResponse = planning.planning_ping_responses.find(
     (response) => response.thread_id === id && response.user_id === userId,
   );
-  const autoRsvpChoice = pingAutoRsvp ?? !!myResponse?.auto_rsvp;
   const canRespond =
     !!thread && canRespondToPlanningThread(data, thread, userId ?? "", now);
   const winner = thread
@@ -272,7 +269,23 @@ export default function PlanningDetailScreen({
         </Txt>
       </View>
 
-      {manages&&currentActivity&&thread.materialized_activity_id&&<Button compact secondary title="Feature resulting Beacon" onPress={()=>router.push({pathname:"/activity-created",params:{id:thread.materialized_activity_id!,type:"beacon",intent:"feature"}})}/>}
+      {manages && currentActivity && thread.materialized_activity_id && (
+        <Button
+          compact
+          secondary
+          title="Feature resulting Beacon"
+          onPress={() =>
+            router.push({
+              pathname: "/activity-created",
+              params: {
+                id: thread.materialized_activity_id!,
+                type: "beacon",
+                intent: "feature",
+              },
+            })
+          }
+        />
+      )}
       {thread.kind === "ping" && thread.payload && (
         <View style={styles.card}>
           <Text style={styles.label}>IF CONVERTED TO A BEACON</Text>
@@ -305,97 +318,10 @@ export default function PlanningDetailScreen({
             </Txt>
           ) : null}
           {thread.status === "open" &&
-            userId !== thread.owner_id &&
-            canRespond && (
-              <>
-                <Pressable
-                  accessibilityRole="checkbox"
-                  accessibilityState={{ checked: autoRsvpChoice }}
-                  aria-checked={autoRsvpChoice}
-                  accessibilityLabel="Auto-RSVP if this ping becomes a beacon"
-                  onPress={() =>
-                    setPingAutoRsvp(
-                      (current) => !(current ?? !!myResponse?.auto_rsvp),
-                    )
-                  }
-                  style={({ pressed }) => ({
-                    minHeight: 48,
-                    borderRadius: 14,
-                    paddingHorizontal: 12,
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 10,
-                    borderWidth: 1,
-                    borderColor: colors.line,
-                    backgroundColor: colors.bg,
-                    opacity: pressed ? 0.75 : 1,
-                  })}
-                >
-                  <View
-                    style={{
-                      width: 21,
-                      height: 21,
-                      borderRadius: 6,
-                      borderWidth: 1,
-                      borderColor: autoRsvpChoice ? colors.green : colors.muted,
-                      backgroundColor: autoRsvpChoice
-                        ? colors.green
-                        : "transparent",
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    {autoRsvpChoice ? (
-                      <Check color={colors.white} size={15} />
-                    ) : null}
-                  </View>
-                  <Text style={[styles.body, { flex: 1 }]}>
-                    Auto-RSVP if this becomes a beacon
-                  </Text>
-                </Pressable>
-                {(["interested", "maybe", "pass"] as const).map((response) => (
-                  <Action
-                    key={response}
-                    title={
-                      myResponse?.response === response
-                        ? `${response[0].toUpperCase()}${response.slice(1)} · update`
-                        : `${response[0].toUpperCase()}${response.slice(1)}`
-                    }
-                    secondary={myResponse?.response !== response}
-                    run={() =>
-                      act("respond_planning_ping", {
-                        thread_id: thread.id,
-                        response,
-                        auto_rsvp: response === "interested" && autoRsvpChoice,
-                      })
-                    }
-                  />
-                ))}
-                <Button
-                  title="Interested After…"
-                  compact
-                  secondary
-                  onPress={() => setAvailabilityOpen(true)}
-                />
-                {availabilityOpen ? (
-                  <PingAvailabilityEditor
-                    inline={embedded}
-                    availableAfter={myResponse?.available_after}
-                    autoRsvp={autoRsvpChoice}
-                    startsAt={thread.payload.starts_at}
-                    onClose={() => setAvailabilityOpen(false)}
-                    onSave={(available_after) =>
-                      act("respond_planning_ping", {
-                        thread_id: thread.id,
-                        response: "interested",
-                        auto_rsvp: autoRsvpChoice,
-                        available_after,
-                      })
-                    }
-                  />
-                ) : null}
-              </>
-            )}
+          userId !== thread.owner_id &&
+          canRespond ? (
+            <PlanningResponseControls threadId={thread.id} />
+          ) : null}
           {thread.owner_id === userId && thread.status === "open" && (
             <Action
               title="Create a beacon from this ping"

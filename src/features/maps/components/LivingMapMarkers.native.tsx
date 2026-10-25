@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useRef } from "react";
 import { BackHandler, Pressable, Text, View } from "react-native";
+import { UserRound, UsersRound } from "lucide-react-native";
+import { bloomGeometry, bloomAccessibilityLabel } from "../clusterBloom";
 import { Marker, Polygon } from "react-native-maps";
 import { AvatarStatusBadge } from "@/src/features/profile/AvatarStatusBadge";
 import { ActivityBadge } from "@/src/features/beacons/ActivityBadge";
@@ -11,16 +13,13 @@ import type { ClusterPoint } from "../cluster";
 import type { ClusterMemberArtwork } from "../clusterArtwork";
 import { mapIdentityColors, friendLocationLabel } from "../markerIdentity";
 import {
-  clusterLayout,
-  CLUSTER_COUNT_ANCHOR,
   CLUSTER_OWNERSHIP_ANCHOR,
   CLUSTER_SHADOW_OPACITY,
 } from "../clusterLayout";
 import {
   nativeAtmosphereRadius,
   nativePetalOffset,
-  nativePointOffset,
-  nativeStackOpensExplorer,
+  presentationOpensExplorer,
   type NativeMapPresentation,
 } from "../nativeMapPresentation";
 import {
@@ -236,139 +235,210 @@ function LivingMapPinComponent({
   onMember: (member: ClusterPoint) => void;
 }) {
   const { colors } = useTheme();
-  const { group, visible, owned, overflow, mode } = presentation;
+  const { group, overflow } = presentation;
+  const geometry = bloomGeometry(presentation);
+  const explorer = !!presentationOpensExplorer(presentation);
   const [avatarRevision, setAvatarRevision] = React.useState(0);
   const loaded = useCallback(() => setAvatarRevision((value) => value + 1), []);
-  const layout = clusterLayout(group.members.length);
-  const size = mode === "stack" ? layout.size : 180;
-  const samples =
-    mode === "swarm"
-      ? [...group.members].sort((a, b) => a.id.localeCompare(b.id)).slice(0, 24)
-      : [];
-  const offsets = samples.map((point) => nativePointOffset(point, group, 14));
-  const revision = `${appearanceKey}:${mode}:${members.map((member) => member.visualRevision).join("|")}:${owned.length}:${overflow}:${avatarRevision}:${mode === "swarm" ? JSON.stringify([samples, offsets]) : ""}`;
-  const tracking = useMarkerTracking(revision);
-  const extent = Math.max(
-    1,
-    ...offsets.map((offset) =>
-      Math.max(Math.abs(offset.x), Math.abs(offset.y)),
-    ),
+  const tracking = useMarkerTracking(
+    `${appearanceKey}:${geometry.markerSize}:${geometry.satelliteSize}:${presentation.scale}:${presentation.people.length}:${overflow}:${members.map((member) => member.visualRevision).join("|")}:${avatarRevision}:${JSON.stringify(geometry.satelliteOffsets)}:${JSON.stringify(geometry.friendBadge)}`,
   );
-  const label = `${mode === "stack" ? "Map stack" : "Spark Swarm"}: ${group.members.length} items${owned.length ? `, ${owned.length} of your Beacons` : ""}${overflow && mode === "stack" ? `, ${overflow} hidden` : ""}. ${nativeStackOpensExplorer(group.members.length) ? "Open searchable cluster explorer" : "Expand to select an item"}`;
+  const badgeStyle = {
+    position: "absolute" as const,
+    bottom: 0,
+    minWidth: presentation.scale === "micro" ? 16 : 24,
+    height: presentation.scale === "micro" ? 14 : 20,
+    paddingHorizontal: 3,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.white,
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+    zIndex: 40,
+  };
   return (
     <Marker
-      coordinate={{ latitude: group.latitude, longitude: group.longitude }}
+      coordinate={group}
       anchor={{ x: 0.5, y: 0.5 }}
-      zIndex={owned.length ? 6 : 3}
+      zIndex={presentation.owned.length ? 6 : 3}
       tracksViewChanges={tracking}
-      accessibilityLabel={label}
-      accessibilityActions={
-        mode === "stack" && !nativeStackOpensExplorer(group.members.length)
-          ? members.map((model) => ({
-              name: model.id,
-              label: `Select ${model.label}`,
+      accessibilityLabel={bloomAccessibilityLabel(presentation)}
+      accessibilityActions={[
+        ...(!explorer
+          ? geometry.primary.map((point) => ({
+              name: point.id,
+              label: `Select ${members.find((model) => model.id === point.id)?.label ?? "Beacon"}`,
             }))
-          : [{ name: "activate", label: "Open searchable cluster explorer" }]
-      }
+          : [{ name: "activate", label: "Open searchable cluster explorer" }]),
+        ...(presentation.people.length && presentation.beacons.length
+          ? [
+              {
+                name: "friends",
+                label: `Explore ${presentation.people.length} nearby shared friend locations`,
+              },
+            ]
+          : []),
+      ]}
       onAccessibilityAction={(event) => {
-        const member = group.members.find(
+        const point = group.members.find(
           (point) => point.id === event.nativeEvent.actionName,
         );
-        if (member) onMember(member);
-        else onPress(presentation);
+        if (point) onMember(point);
+        else
+          onPress(
+            event.nativeEvent.actionName === "friends"
+              ? { ...presentation, forceExplorer: true }
+              : presentation,
+          );
       }}
       onPress={(event) => {
         event.stopPropagation();
         onPress(presentation);
       }}
     >
-      <View collapsable={false} style={{ width: size, height: size }}>
-        {mode === "stack" && (
-          <View
-            pointerEvents="none"
-            testID="cluster-circle-shadow"
-            style={{
-              position: "absolute",
-              width: layout.shadowSize,
-              height: layout.shadowSize,
-              left: layout.shadowLeft,
-              top: layout.shadowTop,
-              borderRadius: layout.shadowSize / 2,
-              backgroundColor: "black",
-              opacity: CLUSTER_SHADOW_OPACITY,
-            }}
-          />
-        )}
-        {mode === "stack"
-          ? visible.map((member, index) => {
-              const offset = nativePetalOffset(index, false, visible.length);
-              const model = members[index];
-              return model ? (
+      <View
+        collapsable={false}
+        style={{ width: geometry.size, height: geometry.size }}
+      >
+        <View
+          pointerEvents="none"
+          testID="cluster-circle-shadow"
+          style={{
+            position: "absolute",
+            width: geometry.shadowSize,
+            height: geometry.shadowSize,
+            left: geometry.shadowLeft,
+            top: geometry.shadowTop,
+            borderRadius: geometry.shadowSize / 2,
+            backgroundColor: "black",
+            opacity: geometry.friendsOnly
+              ? 0.1
+              : presentation.scale === "micro"
+                ? 0.14
+                : CLUSTER_SHADOW_OPACITY,
+          }}
+        />
+        {geometry.primary.map((point, index) => {
+          const model = members.find((member) => member.id === point.id),
+            offset = geometry.offsets[index];
+          if (!model) return null;
+          const dot =
+            geometry.friendsOnly &&
+            (presentation.scale === "far" || presentation.scale === "micro");
+          return (
+            <View
+              key={point.id}
+              style={{
+                position: "absolute",
+                left:
+                  geometry.center - (geometry.fullBeacon ? 29 : 16) + offset.x,
+                top:
+                  geometry.center - (geometry.fullBeacon ? 20 : 16) + offset.y,
+                zIndex: 20 - index,
+                transform: geometry.fullBeacon
+                  ? undefined
+                  : [{ scale: geometry.markerSize / 32 }],
+              }}
+            >
+              {dot ? (
                 <View
-                  key={member.id}
                   style={{
-                    position: "absolute",
-                    left: layout.center - 16 + offset.x,
-                    top: layout.center - 16 + offset.y,
-                    zIndex: visible.length - index,
+                    width: 32,
+                    height: 32,
+                    borderRadius: 16,
+                    backgroundColor: colors.ink,
+                    opacity: presentation.scale === "micro" ? 0.35 : 0.6,
                   }}
-                >
-                  <MemberArtwork
-                    model={model}
-                    compact
-                    categoryColors={categoryColors}
-                    availabilityColors={availabilityColors}
-                    onImageLoad={loaded}
-                  />
-                </View>
-              ) : null;
-            })
-          : samples.map((member, index) => (
-              <View
-                key={member.id}
-                style={{
-                  position: "absolute",
-                  left: 87 + (offsets[index].x / extent) * 49,
-                  top: 87 + (offsets[index].y / extent) * 49,
-                  width: 5,
-                  height: 5,
-                  borderRadius: 3,
-                  opacity: 0.75,
-                  backgroundColor: categoryColors[member.category ?? "Other"],
-                }}
-              />
-            ))}
-        {mode === "stack" && overflow > 0 && (
-          <View
-            style={{
-              position: "absolute",
-              ...CLUSTER_COUNT_ANCHOR,
-              zIndex: 101,
-              minWidth: 24,
-              height: 20,
-              paddingHorizontal: 4,
-              borderRadius: 10,
-              borderWidth: 1,
-              borderColor: colors.line,
-              backgroundColor: colors.white,
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
+                />
+              ) : (
+                <MemberArtwork
+                  model={model}
+                  compact={!geometry.fullBeacon}
+                  categoryColors={categoryColors}
+                  availabilityColors={availabilityColors}
+                  onImageLoad={loaded}
+                />
+              )}
+            </View>
+          );
+        })}
+        {geometry.satellites.map((point, index) => {
+          const offset = geometry.satelliteOffsets[index],
+            s = geometry.satelliteSize;
+          return (
+            <View
+              key={point.id}
+              pointerEvents="none"
+              testID="cluster-friend-satellite"
+              style={{
+                position: "absolute",
+                left: geometry.center + offset.x - s / 2,
+                top: geometry.center + offset.y - s / 2,
+                width: s,
+                height: s,
+                borderRadius: s / 2,
+                borderWidth: 1,
+                borderColor: colors.line,
+                backgroundColor: s >= 10 ? colors.white : colors.ink,
+                opacity: presentation.scale === "micro" ? 0.4 : 0.85,
+                alignItems: "center",
+                justifyContent: "center",
+                zIndex: 30,
+              }}
+            >
+              {s >= 10 && (
+                <UserRound size={s - 3} color={colors.ink} strokeWidth={2} />
+              )}
+            </View>
+          );
+        })}
+        {presentation.beacons.length > 0 && overflow > 0 && (
+          <View style={{ ...badgeStyle, right: geometry.overflowInset,bottom:geometry.overflowInset }}>
             <Text
-              style={{ color: colors.ink, fontSize: 10, fontWeight: "700" }}
+              style={{
+                color: colors.ink,
+                fontSize: presentation.scale === "micro" ? 8 : 10,
+                fontWeight: "700",
+              }}
             >
               +{overflow}
             </Text>
           </View>
         )}
-        {(mode === "swarm" || owned.length > 1) && owned.length > 0 && (
-          <OwnershipAnchor count={owned.length} compact={mode === "stack"} />
+        {geometry.friendsOnly && presentation.people.length >= 5 && (
+          <View
+            style={{
+              ...badgeStyle,
+              left: geometry.center - (presentation.scale === "micro" ? 8 : 15),
+              top: geometry.center - 10,
+              bottom: undefined,
+              minWidth: presentation.scale === "micro" ? 16 : 30,
+              opacity: presentation.scale === "micro" ? 0.45 : 1,
+              flexDirection: "row",
+              gap: 2,
+            }}
+          >
+            <UsersRound
+              size={presentation.scale === "micro" ? 7 : 10}
+              color={colors.ink}
+            />
+            <Text
+              style={{
+                color: colors.ink,
+                fontSize: presentation.scale === "micro" ? 8 : 10,
+                fontWeight: "700",
+              }}
+            >
+              {presentation.people.length}
+            </Text>
+          </View>
         )}
       </View>
     </Marker>
   );
 }
+
 export const LivingMapPin = React.memo(
   LivingMapPinComponent,
   (a, b) =>
@@ -443,6 +513,7 @@ export function ExpandedMapStack({
   size,
   onMember,
   onClose,
+  onPeople,
   members,
   categoryColors,
   availabilityColors,
@@ -452,6 +523,7 @@ export function ExpandedMapStack({
   size: { width: number; height: number };
   onMember: (member: ClusterPoint) => void;
   onClose: () => void;
+  onPeople?: () => void;
 }) {
   const { colors } = useTheme();
   const reducedMotion = useReducedMotion();
@@ -478,38 +550,69 @@ export function ExpandedMapStack({
         height: 256,
       }}
     >
-      {presentation.visible.map((member, index) => {
-        const offset = nativePetalOffset(index, true),
-          model = members[index];
-        if (!model) return null;
-        const label =
-          model.kind === "person"
-            ? friendLocationLabel(model.label, model.age)
-            : model.label;
-        return (
-          <Pressable
-            key={member.id}
-            accessibilityRole="button"
-            accessibilityLabel={`Open ${label}`}
-            onPress={() => onMember(member)}
-            style={({ pressed }) => ({
-              position: "absolute",
-              left: 99 + offset.x,
-              top: 100 + offset.y,
-              width: 58,
-              height: 56,
-              opacity: pressed && !reducedMotion ? 0.75 : 1,
-              zIndex: 10 - index,
-            })}
-          >
-            <MemberArtwork
-              model={model}
-              categoryColors={categoryColors}
-              availabilityColors={availabilityColors}
-            />
-          </Pressable>
-        );
-      })}
+      {(presentation.beacons.length
+        ? presentation.beacons
+        : presentation.people
+      )
+        .filter((point) =>
+          presentation.beacons.length
+            ? point.kind === "beacon"
+            : point.kind === "person",
+        )
+        .map((member, index) => {
+          const offset = nativePetalOffset(index, true),
+            model = members.find((model) => model.id === member.id);
+          if (!model) return null;
+          const label =
+            model.kind === "person"
+              ? friendLocationLabel(model.label, model.age)
+              : model.label;
+          return (
+            <Pressable
+              key={member.id}
+              accessibilityRole="button"
+              accessibilityLabel={`Open ${label}`}
+              onPress={() => onMember(member)}
+              style={({ pressed }) => ({
+                position: "absolute",
+                left: 99 + offset.x,
+                top: 100 + offset.y,
+                width: 58,
+                height: 56,
+                opacity: pressed && !reducedMotion ? 0.75 : 1,
+                zIndex: 10 - index,
+              })}
+            >
+              <MemberArtwork
+                model={model}
+                categoryColors={categoryColors}
+                availabilityColors={availabilityColors}
+              />
+            </Pressable>
+          );
+        })}
+      {presentation.people.length > 0 && presentation.beacons.length > 0 && (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Explore ${presentation.people.length} nearby friends; proximity is not attendance`}
+          onPress={onPeople}
+          style={{
+            position: "absolute",
+            bottom: 0,
+            left: 64,
+            minHeight: 44,
+            minWidth: 128,
+            borderRadius: 16,
+            backgroundColor: colors.white,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Text style={{ color: colors.ink, fontSize: 12 }}>
+            Nearby friends · {presentation.people.length}
+          </Text>
+        </Pressable>
+      )}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Collapse map stack"

@@ -30,10 +30,13 @@ test("Chats has one compact response row and a full-screen filtered inbox", asyn
       exact: true,
     })
     .click();
-  await expect(page).toHaveURL(/\/council\//);
+  await expect(page).toHaveURL(/\/responses/);
   await expect(
-    page.getByRole("button", { name: "Show Suggested Beacons", exact: true }),
-  ).toBeVisible();
+    page.getByRole("button", {
+      name: "Open Which weekend plan sounds best?",
+      exact: true,
+    }),
+  ).toHaveAttribute("aria-expanded", "true");
   await expect(
     page.getByRole("button", { name: "Resolve vote", exact: true }),
   ).toHaveCount(0);
@@ -63,9 +66,7 @@ test("Interested After saves availability independently and allows removal", asy
   await page
     .getByRole("button", { name: "Save Interested", exact: true })
     .click();
-  await expect(
-    page.getByText(/Your response: interested.*Available after/),
-  ).toBeVisible();
+  await expect(page.getByText(/^Available after /)).toBeVisible();
   await expect(
     page.getByRole("checkbox", { name: /Auto-RSVP/ }),
   ).toHaveAttribute("aria-checked", "false");
@@ -79,7 +80,7 @@ test("Interested After saves availability independently and allows removal", asy
     .getByRole("button", { name: "Save Interested", exact: true })
     .click();
   await expect(
-    page.getByText("Your response: interested", { exact: true }),
+    page.getByText(/Your response: interested.*Change until/),
   ).toBeVisible();
 });
 

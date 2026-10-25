@@ -35,6 +35,8 @@ export type MapViewportInsets = {
 };
 export interface MapProps {
   areaName?: string;
+  /** Friends filter increases presence prominence without changing attendance or coordinates. */
+  friendsProminent?: boolean;
   contextPoints?: readonly import("../contextFilters").MapContextPoint[];
   contextPaths?: readonly (readonly import("@/src/shared/exploration").Coordinate[])[];
   onContextPoint?: (point: import("../contextFilters").MapContextPoint) => void;
@@ -61,6 +63,7 @@ export interface MapProps {
   onCluster?: (
     cluster: MapPointGroup,
     anchor?: { x: number; y: number } | null,
+    section?: "Beacons" | "Friends",
   ) => void;
   clusterPersonCount?: (
     members: import("@/src/features/maps/cluster").ClusterPoint[],

@@ -19,9 +19,10 @@ import { matchesSearch } from "@/src/shared/search";
 
 export function MapNearbyPanel({
   beaconIds,
-  publicBeacons = [],
+  publicBeacons: publicRows = [],
   onPublicBeacon,
   personIds,
+  initialSection,
   onClose,
   onBeacon,
   onPerson,
@@ -31,6 +32,7 @@ export function MapNearbyPanel({
   publicBeacons?: PublicBeaconSummary[];
   onPublicBeacon?: (id: string) => void;
   personIds: string[];
+  initialSection?: "Beacons" | "Friends";
   onClose(): void;
   onBeacon(id: string): void;
   onPerson(id: string): void;
@@ -41,8 +43,8 @@ export function MapNearbyPanel({
   const now = useNow();
   const [expanded, setExpanded] = useState(false);
   const [query, setQuery] = useState("");
-  const [tab, setTab] = useState<"Beacons" | "People">(
-    beaconIds.length ? "Beacons" : "People",
+  const [tab, setTab] = useState<"Beacons" | "Friends">(
+    initialSection ?? (beaconIds.length ? "Beacons" : "Friends"),
   );
   const beacons = userId
     ? data.activities
@@ -58,7 +60,15 @@ export function MapNearbyPanel({
             Date.parse(a.starts_at) - Date.parse(b.starts_at),
         )
     : [];
-  const people = clusterPeople(data, beaconIds, personIds, userId);
+  const people = clusterPeople(data, [], personIds, userId);
+  const readableIds = new Set(beacons.map((row) => row.id));
+  const publicBeacons = [
+    ...new Map(
+      publicRows
+        .filter((row) => !readableIds.has(row.activity_id))
+        .map((row) => [row.activity_id, row]),
+    ).values(),
+  ];
   return (
     <View
       testID="map-nearby-panel"
@@ -72,7 +82,7 @@ export function MapNearbyPanel({
           </Text>
           <Text style={styles.muted}>
             {beacons.length + publicBeacons.length} Beacons · {people.length}{" "}
-            People
+            friends nearby
           </Text>
         </View>
         <IconButton label="Zoom to fit" onPress={onFit}>
@@ -83,7 +93,7 @@ export function MapNearbyPanel({
         </IconButton>
       </View>
       <TextInput
-        accessibilityLabel="Search nearby Beacons and people"
+        accessibilityLabel="Search nearby Beacons and friends"
         value={query}
         onChangeText={setQuery}
         placeholder="Search this cluster"
@@ -98,7 +108,7 @@ export function MapNearbyPanel({
         accessibilityLabel="Nearby sections"
         style={[styles.row, { justifyContent: "flex-start" }]}
       >
-        {(["Beacons", "People"] as const).map((value) => (
+        {(["Beacons", "Friends"] as const).map((value) => (
           <Pressable
             key={value}
             accessibilityRole="tab"
@@ -108,7 +118,7 @@ export function MapNearbyPanel({
             onPress={() => setTab(value)}
             style={{
               paddingHorizontal: 14,
-              minHeight: 36,
+              minHeight: 44,
               alignItems: "center",
               justifyContent: "center",
               borderRadius: tokens.radius.button,
@@ -185,7 +195,7 @@ export function MapNearbyPanel({
                 </View>
               </Pressable>
             ))}
-        {tab === "People" &&
+        {tab === "Friends" &&
           people
             .filter((person) =>
               matchesSearch(query, person.name, person.username),

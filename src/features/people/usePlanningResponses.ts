@@ -1,3 +1,5 @@
+import { requirePlanningSubmission } from "@/src/features/planning/planningInteraction";
+import { planningDestination } from "@/src/features/planning/inbox";
 import { useCallback, useRef, useState } from "react";
 import { router } from "expo-router";
 import { useBeacon } from "@/src/shared/store";
@@ -28,7 +30,7 @@ import type { ResponseInvitation } from "./components/ResponsesSheet";
 /** Canonical decision/invitation adapter for existing launchers and the full-screen inbox.
  * Responses use the same records as interactive Squad chat cards. */
 export function usePlanningResponses(now: number, onBeforeOpen?: () => void) {
-  const { data, userId, act } = useBeacon();
+  const { data, userId, act, getViewerEpoch } = useBeacon();
   const current = !!userId && data.viewer_id === userId;
   const count = pendingSocialCount(data, userId, now);
   const [retained, setRetained] = useState<PlanningThread[]>([]);
@@ -69,7 +71,7 @@ export function usePlanningResponses(now: number, onBeforeOpen?: () => void) {
     )
       return;
     onBeforeOpen?.();
-    router.push({ pathname: "/council/[id]", params: { id: thread.id } });
+    router.push(planningDestination(thread.id));
   }
   const respond = useCallback(
     async (thread: PlanningThread, response: PlanningResponse) => {
@@ -88,7 +90,11 @@ export function usePlanningResponses(now: number, onBeforeOpen?: () => void) {
         rows.some((row) => row.id === thread.id) ? rows : [...rows, thread],
       );
       try {
-        await act("respond_planning_ping", { thread_id: thread.id, response });
+        const state = requirePlanningSubmission(data, userId, thread.id);
+        const saved = state.responses.find(row => row.user_id === userId);
+        const epoch = getViewerEpoch();
+        await act("respond_planning_ping", { thread_id: thread.id, response, auto_rsvp: response === "interested" && !!saved?.auto_rsvp, available_after: response === "interested" ? saved?.available_after ?? null : null });
+        if (epoch !== getViewerEpoch()) return false;
         return true;
       } catch (failure) {
         setRetained((rows) => rows.filter((row) => row.id !== thread.id));
@@ -98,7 +104,7 @@ export function usePlanningResponses(now: number, onBeforeOpen?: () => void) {
         setPendingIds([...pending.current]);
       }
     },
-    [act, data, now, userId],
+    [act, data, getViewerEpoch, now, userId],
   );
   function card(thread: PlanningThread): PlanningResponseCardProps {
     const source =

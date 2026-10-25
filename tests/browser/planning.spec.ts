@@ -1,132 +1,175 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
-async function openPlanning(page: import("@playwright/test").Page) {
+async function openPlanning(page: Page) {
   await page.goto("/");
   await page.getByRole("button", { name: /Explore the demo/ }).click();
   await page.getByRole("tab", { name: "Squads", exact: true }).click();
   await page
-    .getByRole("button", {
-      name: /Responses & Invitations, \d+ pending/,
-    })
+    .getByRole("button", { name: /Responses & Invitations, \d+ pending/ })
     .click();
 }
 
-test("planning supports ping replies, conversion, and an approved vote option", async ({
+test("ordinary Council links focus the inbox while explicit management links remain dedicated", async ({ page }) => {
+  await page.goto("/council/demo-vote-weekend");
+  await page.getByRole("button", { name: /Explore the demo/ }).click();
+  await expect(page).toHaveURL(/responses\?threadId=demo-vote-weekend/);
+  await expect(page.getByTestId("decision-row-demo-vote-weekend").getByRole("button", { name: /^Open / })).toHaveAttribute("aria-expanded", "true");
+  await page.goto("/council/demo-vote-weekend?mode=manage");
+  await page.getByRole("button", { name: /Explore the demo/ }).click();
+  await expect(page).toHaveURL(/council\/demo-vote-weekend\?mode=manage/);
+  await expect(page.getByRole("button", { name: "Add option", exact: true })).toBeVisible();
+});
+
+test("new same-type drafts use independent sessions", async ({ page }) => {
+  await openPlanning(page);
+  await page.getByRole("button", { name: "+ New", exact: true }).click();
+  await page.getByRole("button", { name: "Ping", exact: true }).click();
+  const first = new URL(page.url()).searchParams.get("sessionId");
+  await page.getByLabel("What are you thinking?", { exact: true }).fill("Keep draft one");
+  await page.getByRole("button", { name: "Back", exact: true }).click();
+  await page.getByRole("button", { name: "+ New", exact: true }).click();
+  await page.getByRole("button", { name: "Ping", exact: true }).click();
+  await expect(page.getByLabel("What are you thinking?", { exact: true })).toHaveValue("");
+  expect(new URL(page.url()).searchParams.get("sessionId")).not.toBe(first);
+});
+
+test("collapsed Ping responses remain changeable and regroup only after filtering", async ({
   page,
 }) => {
   await openPlanning(page);
+  const row = page.getByTestId("decision-row-demo-ping-jordan");
+  await row.getByRole("button", { name: "Interested", exact: true }).click();
+  await expect(
+    row.getByRole("button", { name: "Interested", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(row.getByText(/Your response: interested/)).toBeVisible();
+  await row.getByRole("button", { name: "Maybe", exact: true }).click();
+  await expect(
+    row.getByRole("button", { name: "Maybe", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(row.getByRole("button", { name: /^Open / })).toHaveAttribute(
+    "aria-expanded",
+    "false",
+  );
+  await page.getByRole("button", { name: "Pings", exact: true }).click();
+  await expect(
+    page.getByText("Answered & Active", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    row.getByRole("button", { name: "Maybe", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+});
 
+test("Vote controls submit in place and a resolved Draw shows only its canonical result", async ({
+  page,
+}) => {
+  await openPlanning(page);
+  await page.getByRole("button", { name: "Votes", exact: true }).click();
+  const vote = page.getByTestId("decision-row-demo-vote-weekend");
+  const options = vote.locator('[role="button"][aria-pressed]');
+  await options.first().click();
+  await expect(options.first()).toHaveAttribute("aria-pressed", "true");
+  await expect(vote.getByText(/Your vote saved/)).toBeVisible();
+  await page.getByRole("button", { name: "Draws", exact: true }).click();
+  await page.getByRole("button", { name: "History", exact: true }).click();
+  await expect(page.getByText("Draw result", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Open winning Beacon", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.locator('[data-testid^="decision-row-"] [aria-pressed]'),
+  ).toHaveCount(0);
+});
+
+test("Ping creation uses the focused composer and preserves conversion management", async ({
+  page,
+}) => {
+  await openPlanning(page);
+  await page.getByRole("button", { name: "+ New", exact: true }).click();
+  await page.getByRole("button", { name: "Ping", exact: true }).click();
+  await page
+    .getByLabel("What are you thinking?", { exact: true })
+    .fill("Trail after work?");
+  await page.getByRole("button", { name: "Anyone Free?", exact: true }).click();
+  await expect(
+    page.getByLabel("What are you thinking?", { exact: true }),
+  ).toHaveValue("Trail after work?");
+  await page.getByRole("button", { name: "Create Ping", exact: true }).click();
+  await expect(page).toHaveURL(/activity-created/);
+  await page.getByRole("button", { name: "Continue", exact: true }).click();
   await page
     .getByRole("button", {
-      name: "Open A Saturday trail loop?",
+      name: "Create a beacon from this ping",
       exact: true,
     })
     .click();
-  await page
-    .getByRole("checkbox", { name: "Auto-RSVP if this ping becomes a beacon" })
-    .click();
-  await page.getByRole("button", { name: "Interested", exact: true }).click();
-  await expect(
-    page.getByRole("button", { name: "Interested · update", exact: true }),
-  ).toBeVisible();
+  await expect(page).toHaveURL(/\/activity\/[^/]+$/);
+});
 
-  await page
-    .getByRole("button", { name: "Pings & Decisions", exact: true })
-    .click();
-  await page
-    .getByRole("button", { name: "Start a ping, vote, or draw" })
-    .click();
-  await page
-    .getByLabel("Question or decision", { exact: true })
-    .fill("Trail after work?");
-  await page
-    .getByRole("button", { name: "Create ping or decision", exact: true })
-    .click();
-  await expect(
-    page.getByText("IF CONVERTED TO A BEACON", { exact: true }),
-  ).toBeVisible();
-  await page
-    .getByRole("button", { name: "Create a beacon from this ping" })
-    .click();
-  await expect(page).toHaveURL(/\/activity\/[^/]+$/i);
-  await expect(page.getByText("Friends only", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Back", exact: true }).click();
-  await page
-    .getByRole("button", { name: "Pings & Decisions", exact: true })
-    .click();
-  await page
-    .getByRole("button", { name: "Start a ping, vote, or draw" })
-    .click();
+test("Council option handoffs keep unsaved edits and publish only after returning", async ({
+  page,
+}) => {
+  await openPlanning(page);
+  await page.getByRole("button", { name: "+ New", exact: true }).click();
   await page.getByRole("button", { name: "Vote", exact: true }).click();
   await page
-    .getByLabel("Question or decision", { exact: true })
-    .fill("Pick our next crew plan");
+    .getByLabel("What are we deciding?", { exact: true })
+    .fill("Pick a crew plan");
   await page
-    .getByRole("button", { name: "Create ping or decision", exact: true })
-    .click();
-  await page.getByRole("button", { name: "Add option", exact: true }).click();
+    .getByLabel("Activity option", { exact: true })
+    .nth(0)
+    .fill("Basketball");
   await page
-    .getByLabel("Search activity ideas", { exact: true })
-    .fill("Birdwatching");
+    .getByLabel("Activity option", { exact: true })
+    .nth(1)
+    .fill("Bowling");
   await page
-    .getByRole("button", {
-      name: "Select Birdwatching, 90 minutes, Other",
-      exact: true,
-    })
+    .getByRole("button", { name: "Edit details: Basketball", exact: true })
     .click();
   await page
-    .getByLabel("Option title", { exact: true })
-    .fill("Birdwatching at the lake");
+    .getByLabel("Activity title", { exact: true })
+    .fill("Basketball at the park");
+  await page.getByRole("button", { name: "Back", exact: true }).click();
+  await expect(
+    page.getByLabel("What are we deciding?", { exact: true }),
+  ).toHaveValue("Pick a crew plan");
   await page
-    .getByRole("button", { name: "Advanced details", exact: true })
+    .getByRole("button", { name: "Edit details: Basketball", exact: true })
     .click();
+  await expect(page.getByLabel("Activity title", { exact: true })).toHaveValue(
+    "Basketball at the park",
+  );
   await page
-    .getByLabel("Description (optional)", { exact: true })
-    .fill("Bring binoculars and meet by the water.");
-  await page.getByRole("button", { name: "Fitness", exact: true }).click();
-  const starts = new Date(Date.now() + 48 * 60 * 60 * 1000);
-  const ends = new Date(starts.getTime() + 90 * 60 * 1000);
-  await page.getByLabel(/Option starts/).fill(starts.toISOString());
-  await page.getByLabel(/Option ends/).fill(ends.toISOString());
-  await page
-    .getByLabel("Place name (optional)", { exact: true })
-    .fill("Lakeshore trailhead");
-  await page.getByLabel("Latitude (optional)", { exact: true }).fill("41.88");
-  await page.getByLabel("Longitude (optional)", { exact: true }).fill("-87.63");
-  await page.getByRole("button", { name: "Back to idea", exact: true }).click();
-  await page
-    .getByRole("button", { name: "Add selected option", exact: true })
+    .getByRole("button", { name: "Save Council Option", exact: true })
     .click();
   await expect(
-    page.getByText("Birdwatching at the lake", { exact: true }),
-  ).toBeVisible();
-  await expect(page.getByText(/Fitness ·/).first()).toBeVisible();
-  await expect(page.getByText(/Lakeshore trailhead/).first()).toBeVisible();
-  await page.getByRole("button", { name: "Add option", exact: true }).click();
+    page.getByLabel("Activity option", { exact: true }).nth(0),
+  ).toHaveValue("Basketball at the park");
   await page
-    .getByRole("button", { name: "Quick add Study - 60 min", exact: true })
+    .getByRole("button", { name: "Create Vote Council", exact: true })
     .click();
-  await expect(page.getByText("Study together", { exact: true })).toBeVisible();
-  await expect(page.getByText(/Study ·/).first()).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Approve option", exact: true }),
-  ).toHaveCount(2);
-  await page
-    .getByRole("button", { name: "Approve option", exact: true })
-    .first()
-    .click();
-  await page
-    .getByRole("button", { name: "Approve option", exact: true })
-    .first()
-    .click();
-  await expect(
-    page.getByRole("button", { name: "Vote for this option", exact: true }),
-  ).toHaveCount(2);
-  await page
-    .getByRole("button", { name: "Vote for this option", exact: true })
-    .first()
-    .click();
-  await expect(
-    page.getByRole("button", { name: "Your vote · change vote", exact: true }),
-  ).toBeVisible();
+  await expect(page).toHaveURL(/activity-created/);
 });
+
+for (const width of [320, 390, 430]) {
+  test(`inbox fits ${width}px with touch targets and reduced motion`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await openPlanning(page);
+    const row = page.getByTestId("decision-row-demo-ping-jordan");
+    await row.scrollIntoViewIfNeeded();
+    const button = row.getByRole("button", { name: "Interested", exact: true });
+    const box = await button.boundingBox();
+    expect(box!.height).toBeGreaterThanOrEqual(44);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+    await page.screenshot({
+      path: test.info().outputPath(`inbox-${width}.png`),
+    });
+  });
+}

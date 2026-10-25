@@ -94,7 +94,7 @@ async function findStableUnobstructedMarker(
   return marker!;
 }
 
-test("constellation opens searchable Beacons and People and selects an exact item", async ({
+test("constellation opens searchable Beacons and nearby Friends and selects an exact item", async ({
   page,
 }) => {
   await startDemo(page);
@@ -103,7 +103,7 @@ test("constellation opens searchable Beacons and People and selects an exact ite
   ).toBeVisible();
   const settled = await findStableUnobstructedMarker(
     page,
-    '[role="button"][data-testid="map-constellation"][data-mode="stack"]',
+    '[role="button"][data-testid="map-constellation"]:not([data-friend-count="0"])',
     "aria-label",
   );
   await page.mouse.click(settled.x, settled.y);
@@ -113,18 +113,18 @@ test("constellation opens searchable Beacons and People and selects an exact ite
     page.locator(".leaflet-control-scale-line").first(),
   ).toBeVisible();
   await expect(panel.getByRole("tab", { name: /^Beacons,/ })).toBeVisible();
-  await panel.getByRole("tab", { name: /^People,/ }).click();
+  await panel.getByRole("tab", { name: /^Friends,/ }).click();
   await expect(
     panel.getByRole("button", { name: /^View .* profile$/ }).first(),
   ).toBeVisible();
   await panel
     .getByRole("textbox", {
-      name: "Search nearby Beacons and people",
+      name: "Search nearby Beacons and friends",
       exact: true,
     })
     .fill("no-person-matches-842312");
   await expect(
-    panel.getByText("No matching people.", { exact: true }),
+    panel.getByText("No matching friends.", { exact: true }),
   ).toBeVisible();
   await panel.getByRole("textbox").fill("");
   await panel

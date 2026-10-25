@@ -1,38 +1,97 @@
 import { BeaconParticipation } from "@/src/features/beacons/useBeaconParticipation";
 import { canReadBeaconActivity } from "@/src/features/beacons/beaconModules";
-import React, { useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
-import {
-  Bell,
-  ChevronRight,
-  CircleHelp,
-  Dices,
-  Vote,
-} from "lucide-react-native";
-import { router } from "expo-router";
+import { Bell, ChevronRight } from "lucide-react-native";
+import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { Action, Button, Empty, Screen, Txt, useTheme } from "@/src/shared/ui";
 import { useBeacon } from "@/src/shared/store";
 import { useNow } from "@/src/shared/useNow";
 import { usePlanningResponses } from "../usePlanningResponses";
+import {
+  planningInbox,
+  inboxSections,
+  type InboxSection,
+} from "@/src/features/planning/inbox";
+import { DecisionRow } from "@/src/features/planning/DecisionRow";
+import { randomUUID } from "expo-crypto";
 
 const filters = ["All", "Pings", "Votes", "Draws", "Invites"] as const;
 type Filter = (typeof filters)[number];
 
 export default function ResponsesScreen() {
+  const { userId } = useBeacon();
+  return <ResponsesContent key={userId ?? "signed-out"} />;
+}
+
+function ResponsesContent() {
   const { styles, colors } = useTheme();
   const { data, userId, loading, error, refresh } = useBeacon();
   const now = useNow();
-  const { cards, invitations } = usePlanningResponses(now);
+  const { invitations } = usePlanningResponses(now);
+  const params = useLocalSearchParams<{ threadId?: string }>();
   const [filter, setFilter] = useState<Filter>("All");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = invitations.find((item) => item.id === selectedId);
-  const rows = cards.filter(
+  const [expandedId, setExpandedId] = useState<string | null>(
+    params.threadId ?? null,
+  );
+  const [history, setHistory] = useState(!!params.threadId);
+  const [scrollRequest, setScrollRequest] = useState<{
+    y: number;
+    sequence: number;
+  }>();
+  const focusedLink = useRef<string | null>(null);
+  const positions = useRef({ list: 0, sections: {} as Record<string, number> });
+  const [creating, setCreating] = useState(false);
+  const [completedInvites, setCompletedInvites] = useState<
+    { id: string; title: string }[]
+  >([]);
+  const decisions = planningInbox(data, userId, now);
+  const [placement, setPlacement] = useState<{
+    viewer: string | null;
+    sections: Record<string, InboxSection>;
+  }>({ viewer: userId, sections: {} });
+  const regroup = useCallback(
+    () => setPlacement({ viewer: userId, sections: {} }),
+    [userId],
+  );
+  useFocusEffect(
+    useCallback(() => {
+      regroup();
+      focusedLink.current = null;
+      if (params.threadId) {
+        setExpandedId(params.threadId);
+        setFilter("All");
+        setHistory(true);
+      }
+    }, [regroup, params.threadId]),
+  );
+  const rows = decisions.filter(
     (item) =>
       filter === "All" ||
       filter ===
-        ({ ping: "Pings", vote: "Votes", draw: "Draws" } as const)[item.kind],
+        ({ ping: "Pings", vote: "Votes", draw: "Draws" } as const)[
+          item.thread.kind
+        ],
   );
   const showInvites = filter === "All" || filter === "Invites";
+  function freezePlacement() {
+    setPlacement((current) =>
+      current.viewer === userId && Object.keys(current.sections).length
+        ? current
+        : {
+            viewer: userId,
+            sections: Object.fromEntries(
+              decisions.map((item) => [item.thread.id, item.section]),
+            ),
+          },
+    );
+  }
+  const sectionFor = (item: (typeof decisions)[number]) =>
+    placement.viewer === userId
+      ? (placement.sections[item.thread.id] ?? item.section)
+      : item.section;
   const answered =
     data.viewer_id === userId && userId
       ? data.activities
@@ -97,7 +156,59 @@ export default function ResponsesScreen() {
     );
   }
   return (
-    <Screen title="Responses & Invitations" eyebrow="" showDemoNotice={false}>
+    <Screen
+      title="Responses & Invitations"
+      eyebrow=""
+      showDemoNotice={false}
+      compactHeader
+      scrollRequest={scrollRequest}
+      scrollStateKey="responses"
+    >
+      <View style={{ flexDirection: "row", gap: 8 }}>
+        <Button
+          compact
+          secondary
+          title="+ New"
+          onPress={() => setCreating(!creating)}
+        />
+        <Action
+          secondary
+          title="Refresh"
+          run={async () => {
+            await refresh();
+            regroup();
+          }}
+        />
+      </View>
+      {creating ? (
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+          {(["ping", "vote", "draw"] as const).map((kind) => (
+            <Button
+              key={kind}
+              compact
+              secondary
+              title={kind[0].toUpperCase() + kind.slice(1)}
+              onPress={() => {
+                setCreating(false);
+                router.push({
+                  pathname: "/planning/create",
+                  params: { kind, sessionId: randomUUID() },
+                });
+              }}
+            />
+          ))}
+        </View>
+      ) : null}
+      {params.threadId &&
+      !loading &&
+      !decisions.some((item) => item.thread.id === params.threadId) ? (
+        <Txt muted>
+          This decision is unavailable or you no longer have access.
+        </Txt>
+      ) : null}
+      {completedInvites.map((item) => (
+        <Txt key={item.id}>{item.title} � Updated</Txt>
+      ))}
       {selected ? (
         <View style={{ gap: 12 }}>
           <Button
@@ -129,6 +240,10 @@ export default function ResponsesScreen() {
               run={async () => {
                 if ((await action.onPress()) === false)
                   throw new Error("Invitation was not updated.");
+                setCompletedInvites((rows) => [
+                  ...rows,
+                  { id: selected.id, title: selected.title },
+                ]);
                 setSelectedId(null);
               }}
             />
@@ -148,7 +263,10 @@ export default function ResponsesScreen() {
                 accessibilityLabel={value}
                 accessibilityState={{ selected: filter === value }}
                 aria-selected={filter === value}
-                onPress={() => setFilter(value)}
+                onPress={() => {
+                  setFilter(value);
+                  regroup();
+                }}
                 style={{
                   minHeight: 44,
                   paddingHorizontal: 14,
@@ -174,28 +292,83 @@ export default function ResponsesScreen() {
           {error ? (
             <Action title="Retry loading requests" secondary run={refresh} />
           ) : null}
-          {loading && !cards.length && !invitations.length ? (
+          {loading && !decisions.length && !invitations.length ? (
             <Txt muted>Loading requests…</Txt>
           ) : (
-            <View>
-              {rows.map((item) =>
-                row(
-                  item.id,
-                  item.title,
-                  item.sourceLabel,
-                  item.disabled || Date.parse(item.deadline ?? "") <= now
-                    ? "Closed · awaiting organizer"
-                    : item.deadline
-                      ? `Respond by ${new Date(item.deadline).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}`
-                      : "Awaiting response",
-                  item.kind === "ping"
-                    ? CircleHelp
-                    : item.kind === "vote"
-                      ? Vote
-                      : Dices,
-                  () => item.onOpen?.(),
-                ),
-              )}
+            <View
+              onLayout={(event) => {
+                positions.current.list = event.nativeEvent.layout.y;
+              }}
+            >
+              {inboxSections.map((section) => {
+                const items = rows.filter(
+                  (item) => sectionFor(item) === section,
+                );
+                if (!items.length) return null;
+                return (
+                  <View
+                    key={section}
+                    onLayout={(event) => {
+                      positions.current.sections[section] =
+                        event.nativeEvent.layout.y;
+                    }}
+                    style={{ gap: 4, marginTop: 14 }}
+                  >
+                    {section === "History" ? (
+                      <Button
+                        compact
+                        secondary
+                        title={history ? "Hide history" : "History"}
+                        onPress={() => setHistory(!history)}
+                      />
+                    ) : (
+                      <Text style={styles.h2}>{section}</Text>
+                    )}
+                    {section !== "History" || history
+                      ? items.map((item) => (
+                          <View
+                            key={item.thread.id}
+                            onLayout={(event) => {
+                              const rowY = event.nativeEvent.layout.y;
+                              if (
+                                params.threadId === item.thread.id &&
+                                focusedLink.current !== item.thread.id
+                              ) {
+                                setTimeout(() => {
+                                  if (focusedLink.current === item.thread.id)
+                                    return;
+                                  focusedLink.current = item.thread.id;
+                                  setScrollRequest({
+                                    y:
+                                      positions.current.list +
+                                      (positions.current.sections[section] ??
+                                        0) +
+                                      rowY,
+                                    sequence: Date.now(),
+                                  });
+                                }, 0);
+                              }
+                            }}
+                          >
+                            <DecisionRow
+                              onBeforeRespond={freezePlacement}
+                              item={item}
+                              expanded={expandedId === item.thread.id}
+                              onExpand={() => {
+                                freezePlacement();
+                                setExpandedId((current) =>
+                                  current === item.thread.id
+                                    ? null
+                                    : item.thread.id,
+                                );
+                              }}
+                            />
+                          </View>
+                        ))
+                      : null}
+                  </View>
+                );
+              })}
               {showInvites
                 ? invitations.map((item) =>
                     row(
@@ -251,7 +424,7 @@ export default function ResponsesScreen() {
           <Button
             compact
             secondary
-            title="Decision history"
+            title="Manage my decisions"
             onPress={() => router.push("/councils")}
           />
         </>

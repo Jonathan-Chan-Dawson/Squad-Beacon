@@ -5,7 +5,7 @@ Implemented locally on October 24, 2026. No database migrations, backend APIs, d
 ## Changed areas
 
 - Saved Drafts: Content-sized hub pills capped at 200px with 44px independent Resume/Remove targets, 12px medium-weight titles, thinner borders, 6px rail gaps and reduced section spacing. The heading, dynamic See All count, full-list presentation, confirmations and protected recovery states remain intact. Blank Beacon, search, templates, starters and other hub sections are unchanged.
-- Artwork: an 18px decorative pencil badge shares the 60px artwork button and Appearance editor. Starts/Ends retain their existing side-by-side layout.
+- Artwork: an 18px decorative pencil badge shares the 56px artwork button and Appearance editor. Starts/Ends retain their existing side-by-side layout.
 - Location: accessible In person / Online radios preserve both place and meeting-link values. The search icon is inside the field; Map remains a separate action. Existing debounce, attribution, pin validation and Map-return sessions are unchanged.
 - People & Community: flat Visibility, Invite People and Community rows. Exactly one of Visibility, Community or Joining & Capacity expands inline at a time, independently of Modules/Advanced Options. Compact rows expose their current value as an accessibility hint. AudiencePicker has an opt-in inline presentation backed by its unchanged eligibility rules; other consumers keep the sheet presentation.
 - Community search uses existing authorized association candidates, prioritizes current/joined choices, shows six matches initially and supports Show more and Clear. Existing Network / Organization / Squad terminology and association-only semantics remain.
@@ -43,4 +43,6 @@ Browser keyboard/focus and local demo flows were exercised. Physical devices, na
 
 - Disclosure indicators use animated Lucide ChevronDown icons instead of text glyphs, preserving expanded states and reduced-motion behavior.
 - Add People is a quiet outlined button with a person-plus icon. Invitation status and selected avatars/count are grouped separately from the action. Selection and publication behavior are unchanged.
-- The In person / Online selector uses wider segments with a shorter 34px visible shape and extra vertical margin, retaining separate 44px touch targets. Artwork is 56px within a 60px target, with a 12px gap before the activity title.
+- The In person / Online selector uses wider segments with a shorter 34px visible shape and extra vertical margin, retaining separate 44px touch targets. Artwork and the title input align at 56px with a 12px gap. Separately, location search and its Map action align at 44px with matching 12px corners and an 8px gap.
+
+- Location search, selected-address row, Map action and online meeting link now use a compact 44px minimum height. Compact People & Community disclosures have a little more divider padding, with extra breathing room around Invite People.
