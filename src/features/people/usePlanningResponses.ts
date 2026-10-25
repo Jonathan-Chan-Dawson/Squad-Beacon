@@ -204,7 +204,7 @@ export function usePlanningResponses(now: number, onBeforeOpen?: () => void) {
       kind: thread.kind,
       counts: [
         { label: "Options", value: options.length },
-        ...(thread.kind === "vote"
+        ...(thread.kind === "vote" && (votes.some(v=>v.user_id===userId)||thread.owner_id===userId||thread.coowner_ids.includes(userId??"")||thread.status!=="open")
           ? [{ label: "Votes", value: votes.length }]
           : []),
       ],
@@ -392,11 +392,11 @@ export function usePlanningResponses(now: number, onBeforeOpen?: () => void) {
           })),
       ];
   const summary = [
-    ...(["ping", "vote", "draw"] as const).map((kind) => {
+    ...(["ping", "vote", "draw", "time"] as const).map((kind) => {
       const total = pendingThreads.filter(
         (thread) => thread.kind === kind,
       ).length;
-      const label = { ping: "Ping", vote: "Vote", draw: "Draw" }[kind];
+      const label = { ping: "Ping", vote: "Vote", draw: "Draw", time: "Find a Time" }[kind];
       return total ? `${total} ${label}${total === 1 ? "" : "s"}` : "";
     }),
     invitations.length

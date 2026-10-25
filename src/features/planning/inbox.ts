@@ -31,7 +31,11 @@ export function planningInbox(data: Data, viewer: string | null, now: number) {
       const vote = state.votes.find((row) => row.user_id === viewer);
       const actionable = pending.has(thread.id);
       const section: InboxSection =
-        thread.status !== "open"
+        thread.materialized_activity_id || thread.continuation_closed_at || thread.not_organized_at
+          ? "History"
+          : thread.kind === "time" && thread.selected_slot_id
+            ? manages ? "Organizer Actions" : "Answered & Active"
+          : thread.status !== "open"
           ? "History"
           : manages && actionable
             ? "Organizer Actions"

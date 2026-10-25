@@ -1,17 +1,17 @@
+import { CouncilChoices } from "./CouncilChoices";
+import { AvailabilityControls } from "./TimeFinder";
 import { submitPlanning } from "./submission";
-import React, { useState } from "react";
+import React from "react";
 import { View } from "react-native";
 import { useBeacon } from "@/src/shared/store";
 import { useNow } from "@/src/shared/useNow";
-import { Button, Txt } from "@/src/shared/ui";
+import { Txt } from "@/src/shared/ui";
 import { PlanningResponseCard } from "@/src/features/people/components/PlanningResponseCard";
-import { validateCouncilProposal } from "./domain";
 import {
   planningInteraction,
   requirePlanningSubmission,
 } from "./planningInteraction";
 import { PingPreferences } from "./PingPreferences";
-import { ProposalEditor } from "./ProposalEditor";
 
 export function PlanningResponseControls({
   threadId,
@@ -32,10 +32,9 @@ export function PlanningResponseControls({
 }) {
   const { data, userId, act, getViewerEpoch } = useBeacon();
   const now = useNow();
-  const [adding, setAdding] = useState(false);
   const state = planningInteraction(data, userId, threadId, now);
   if (!state) return <Txt muted>This activity is no longer available.</Txt>;
-  const { thread, eligible, options, responses, votes } = state;
+  const { thread, eligible, options, responses } = state;
   const common = {
     id: thread.id,
     title: thread.title,
@@ -98,103 +97,7 @@ export function PlanningResponseControls({
       </View>
     );
   }
-  const preview = expanded ? options : options.slice(0, 3);
-  const myVote = votes.find((row) => row.user_id === userId)?.proposal_id;
-  const selectedOutsidePreview =
-    !expanded && myVote && !preview.some((row) => row.id === myVote)
-      ? options.find((row) => row.id === myVote)
-      : undefined;
-  return (
-    <View style={{ gap: 10 }}>
-      <PlanningResponseCard
-          key={userId}
-        {...common}
-        kind={thread.kind}
-        selected={votes.find((row) => row.user_id === userId)?.proposal_id}
-        disabled={thread.kind === "vote" && closed}
-        counts={[
-          { label: "approved options", value: options.length },
-          ...(thread.kind === "vote"
-            ? [{ label: "votes", value: votes.length }]
-            : []),
-        ]}
-        actions={
-          thread.kind === "vote"
-            ? preview.map((option) => ({
-                id: option.id,
-                label: `${option.payload.title} · ${votes.filter((row) => row.proposal_id === option.id).length}`,
-                onPress: async () => {
-                  onBeforeRespond?.();
-                  const latest = requirePlanningSubmission(
-                    data,
-                    userId,
-                    threadId,
-                  );
-                  if (!latest.options.some((row) => row.id === option.id))
-                    throw new Error("This option is no longer available.");
-                  const epoch = getViewerEpoch();
-                  await submitPlanning(userId, threadId, () =>
-                    act("vote_council_proposal", {
-                      thread_id: thread.id,
-                      proposal_id: option.id,
-                    }),
-                  );
-                  if (epoch !== getViewerEpoch()) return false;
-                  onResponded?.();
-                  return true;
-                },
-              }))
-            : []
-        }
-      />
-      {selectedOutsidePreview ? (
-        <Txt muted>Your vote: {selectedOutsidePreview.payload.title}</Txt>
-      ) : null}
-      {!expanded && options.length > 3 ? (
-        <Button compact secondary title="Show All Options" onPress={onOpen} />
-      ) : null}
-      {thread.kind === "draw" &&
-        preview.map((option) => (
-          <Txt key={option.id}>{option.payload.title}</Txt>
-        ))}
-      {!options.length && (
-        <Txt muted>No eligible approved options right now.</Txt>
-      )}
-      {closed && (
-        <Txt muted>
-          {thread.kind === "draw" && thread.status === "open"
-            ? "Awaiting organizer draw. No entries are needed."
-            : "Responses are closed."}
-        </Txt>
-      )}
-      {expanded && eligible && (
-        <Button
-          secondary
-          compact
-          title="Add option"
-          onPress={() => setAdding((value) => !value)}
-        />
-      )}
-      {adding && eligible && (
-        <ProposalEditor
-          inline
-          onOpenBeaconEditor={onOpenBeaconEditor}
-          thread={thread}
-          visible
-          onClose={() => setAdding(false)}
-          onSave={async (payload) => {
-            requirePlanningSubmission(data, userId, threadId);
-            validateCouncilProposal(thread, payload, Date.now());
-            await submitPlanning(userId, threadId, () =>
-              act("add_council_proposal", {
-                thread_id: thread.id,
-                payload,
-              }),
-            );
-            setAdding(false);
-          }}
-        />
-      )}
-    </View>
-  );
+  if (thread.kind === "time") return <AvailabilityControls key={`${userId}:${thread.id}:${thread.slots_revision}:${data.planning_availability?.find(a=>a.thread_id===thread.id&&a.user_id===userId)?.updated_at??""}`} thread={thread} expanded={expanded} onExpand={onOpen} onBeforeRespond={onBeforeRespond}/>;
+  if (thread.kind === "vote") return <CouncilChoices key={`${userId}:${thread.id}:${data.planning_approval_ballots?.find(b=>b.thread_id===thread.id&&b.user_id===userId)?.updated_at??""}`} threadId={thread.id} expanded={expanded} onExpand={onOpen} onBeforeRespond={onBeforeRespond}/>;
+  return <View style={{gap:8}}>{(expanded?options:options.slice(0,3)).map(option=><Txt key={option.id}>{option.payload.title}</Txt>)}<Txt muted>{thread.status === "resolved" ? "Draw selected" : "The organizer runs the server Draw after the deadline. No response is needed."}</Txt></View>;
 }

@@ -12,3 +12,8 @@ Planning feature
 - domain.ts and types.ts: pure audience/deadline/draft logic and planning contracts.
 
 - creationSession.ts and PlanningTimeField(.web).tsx: account-scoped session drafts, resumable Council publication steps, and platform-native local date/time entry.
+
+- TimeFinder.tsx and ZonedTimeField(.web).tsx: scheduling composer, inline availability, explicit final-time selection, and time-zone-safe amendments.
+- CouncilChoices.tsx: compact Pick One/approval choices and authorized inline proposal review.
+- ConnectedPlanningActions.tsx and PlanningControls.tsx: canonical result doorway, continuation/backup-host actions, private replies, and compact native controls.
+- connected.ts, handoff.ts, and demoConnected.ts: scheduling rules, reviewed Beacon editor handoffs, and demo action parity. Hosted authority remains in the additive connected_planning migration.

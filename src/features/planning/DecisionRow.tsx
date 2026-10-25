@@ -1,85 +1,27 @@
+import { CouncilProposalReview } from "./CouncilChoices";
+import { PlanningLink } from "./PlanningControls";
+import {
+  ConnectedPlanningActions,
+  OrganizerMessageEditor,
+} from "./ConnectedPlanningActions";
 import { useNow } from "@/src/shared/useNow";
-import React, { useEffect, useState } from "react";
-import { Animated, Pressable, Text, View } from "react-native";
+import React from "react";
+import { Pressable, Text, View } from "react-native";
 import {
   ChevronDown,
   ChevronRight,
   CircleHelp,
   Dices,
+  CalendarClock,
   Vote,
 } from "lucide-react-native";
 import { router } from "expo-router";
-import { Action, Button, Txt, useTheme } from "@/src/shared/ui";
+import { Action, Txt, useTheme } from "@/src/shared/ui";
 import { useBeacon } from "@/src/shared/store";
-import { useReducedMotion } from "@/src/shared/design-system";
-import { canReadBeaconActivity } from "@/src/features/beacons/beaconModules";
-import { BeaconIcon } from "@/src/features/beacons/components/BeaconIcon";
-import { canReadPlanningThread, visiblePlanningProposals } from "./domain";
 import { PlanningResponseControls } from "./PlanningResponseControls";
 import { planningDestination, type planningInbox } from "./inbox";
 
 type Decision = ReturnType<typeof planningInbox>[number];
-const revealed = new Set<string>();
-
-function DrawResult({ item }: { item: Decision }) {
-  const { data, userId } = useBeacon();
-  const reduced = useReducedMotion();
-  const resultKey = `${userId}:${item.thread.id}:${item.thread.winner_proposal_id}`;
-  const [opacity] = useState(
-    () => new Animated.Value(reduced || revealed.has(resultKey) ? 1 : 0),
-  );
-  useEffect(() => {
-    revealed.add(resultKey);
-    const animation = Animated.timing(opacity, {
-      toValue: 1,
-      duration: reduced ? 0 : 180,
-      useNativeDriver: true,
-    });
-    animation.start();
-    return () => animation.stop();
-  }, [opacity, reduced, resultKey]);
-  const activity = data.activities.find(
-    (row) => row.id === item.thread.materialized_activity_id,
-  );
-  const winner = visiblePlanningProposals(
-    data,
-    data.planning_proposals,
-    item.thread.id,
-    userId ?? "",
-  ).find(
-    (row) =>
-      row.id === item.thread.winner_proposal_id &&
-      canReadPlanningThread(data, item.thread, row.author_id),
-  );
-  const readable =
-    activity && userId && canReadBeaconActivity(data, activity, userId);
-  return (
-    <Animated.View accessibilityLiveRegion="polite" style={{ opacity, gap: 8 }}>
-      <Txt>Draw result</Txt>
-      {winner ? (
-        <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
-          <BeaconIcon category={winner.payload.category} size={36} />
-          <Txt>{winner.payload.title}</Txt>
-        </View>
-      ) : (
-        <Txt muted>The Draw has been resolved.</Txt>
-      )}
-      {readable ? (
-        <Button
-          compact
-          title="Open winning Beacon"
-          onPress={() =>
-            router.push({
-              pathname: "/activity/[id]",
-              params: { id: activity.id },
-            })
-          }
-        />
-      ) : null}
-    </Animated.View>
-  );
-}
-
 export function DecisionRow({
   item,
   expanded,
@@ -95,8 +37,27 @@ export function DecisionRow({
   const { data, userId, act, getViewerEpoch } = useBeacon();
   const now = useNow();
   const { thread, response, vote, manages, eligible } = item;
+  const kindLabel =
+    thread.kind === "time"
+      ? "Find a Time"
+      : thread.kind === "vote"
+        ? "Vote"
+        : thread.kind === "draw"
+          ? "Draw"
+          : "Ping";
+  const interested = new Set(
+    item.responses
+      .filter((r) => r.response === "interested")
+      .map((r) => r.user_id),
+  ).size;
   const Icon =
-    thread.kind === "ping" ? CircleHelp : thread.kind === "vote" ? Vote : Dices;
+    thread.kind === "ping"
+      ? CircleHelp
+      : thread.kind === "vote"
+        ? Vote
+        : thread.kind === "time"
+          ? CalendarClock
+          : Dices;
   const creator =
     data.profiles.find((row) => row.id === thread.owner_id)?.name ??
     "Organizer";
@@ -140,6 +101,7 @@ export function DecisionRow({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`Open ${thread.title}`}
+        accessibilityHint={`${kindLabel}. Expand to view details and available actions.`}
         accessibilityState={{ expanded }}
         aria-expanded={expanded}
         onPress={onExpand}
@@ -156,7 +118,7 @@ export function DecisionRow({
             {thread.title}
           </Text>
           <Text style={styles.muted}>
-            {creator} · {audience}
+            {kindLabel} · {creator} · {audience}
           </Text>
         </View>
         {expanded ? (
@@ -166,17 +128,33 @@ export function DecisionRow({
         )}
       </Pressable>
       <Text accessibilityLiveRegion="polite" style={styles.muted}>
-        {saved
-          ? `${saved} · ${open ? `Change until ${deadline}` : "Responses closed"}`
-          : thread.status !== "open"
-            ? thread.status.replaceAll("_", " ")
-            : open
-              ? thread.kind === "draw"
-                ? `Draw closes ${deadline} · No response needed`
-                : `Respond by ${deadline}`
-              : "Responses closed · Awaiting organizer"}
+        {thread.materialized_activity_id
+          ? data.activities.find(
+              (a) => a.id === thread.materialized_activity_id,
+            )?.status === "cancelled"
+            ? "Beacon cancelled"
+            : "Beacon created"
+          : thread.not_organized_at
+            ? "Not Organized"
+            : thread.continuation_closed_at
+              ? "Closed without a Beacon"
+              : thread.kind === "time" && thread.selected_slot_id
+                ? manages
+                  ? "Time selected · Ready for Beacon review"
+                  : "Time selected · Waiting for Organizer"
+                : saved
+                  ? `${saved} · ${open ? `Change until ${deadline}` : "Responses closed"}`
+                  : thread.status !== "open"
+                    ? thread.status.replaceAll("_", " ")
+                    : open
+                      ? thread.kind === "draw"
+                        ? `Draw closes ${deadline} · No response needed`
+                        : `Respond by ${deadline}`
+                      : "Responses closed · Awaiting organizer"}
       </Text>
-      {thread.status === "open" && !(thread.kind === "ping" && thread.owner_id === userId) ? (
+      {!thread.materialized_activity_id &&
+      thread.status === "open" &&
+      !(thread.kind === "ping" && thread.owner_id === userId) ? (
         <PlanningResponseControls
           threadId={thread.id}
           showDeadline={false}
@@ -191,56 +169,83 @@ export function DecisionRow({
           }
         />
       ) : null}
-      {thread.kind === "draw" && thread.status === "resolved" ? (
-        <DrawResult key={thread.winner_proposal_id} item={item} />
-      ) : null}
+      {thread.interest_target && (
+        <View style={{ gap: 6 }}>
+          <Text style={styles.muted}>
+            {interested} Interested ·{" "}
+            {interested >= thread.interest_target
+              ? "Enough interest"
+              : `${thread.interest_target - interested} more needed`}
+          </Text>
+          <View
+            accessibilityRole="progressbar"
+            accessibilityLabel="Interest target"
+            accessibilityValue={{
+              min: 0,
+              max: thread.interest_target,
+              now: Math.min(interested, thread.interest_target),
+              text: `${interested} interested out of ${thread.interest_target} needed`,
+            }}
+            style={{
+              height: 3,
+              borderRadius: 2,
+              backgroundColor: colors.line,
+              overflow: "hidden",
+            }}
+          >
+            <View
+              style={{
+                height: 3,
+                width: `${Math.min(100, (interested / thread.interest_target) * 100)}%`,
+                backgroundColor: colors.green,
+              }}
+            />
+          </View>
+        </View>
+      )}
+      {thread.materialized_activity_id && (
+        <ConnectedPlanningActions
+          thread={thread}
+          onBeforeAction={onBeforeRespond}
+        />
+      )}
       {expanded ? (
         <View style={{ gap: 10 }}>
           {thread.body ? <Txt>{thread.body}</Txt> : null}
-          <Txt muted>Responses close {deadline}</Txt>
-          {thread.payload ? (
+          {thread.payload &&
+          thread.kind === "ping" &&
+          !thread.materialized_activity_id ? (
             <>
-              <Txt>{thread.payload.title}</Txt>
+              {thread.payload.title !== thread.title && (
+                <Txt>{thread.payload.title}</Txt>
+              )}
               <Txt muted>
                 {new Date(thread.payload.starts_at).toLocaleString()}
                 {thread.payload.label ? ` · ${thread.payload.label}` : ""}
               </Txt>
             </>
           ) : null}
-          {manages
-            ? visiblePlanningProposals(
-                data,
-                data.planning_proposals,
-                thread.id,
-                userId ?? "",
-              )
-                .filter(
-                  (row) =>
-                    !row.approved &&
-                    !row.disqualified_at &&
-                    canReadPlanningThread(data, thread, row.author_id),
-                )
-                .map((proposal) => (
-                  <View key={proposal.id} style={{ gap: 6 }}>
-                    <Txt>{proposal.payload.title} · Pending approval</Txt>
-                    <Action
-                      secondary
-                      title={`Approve ${proposal.payload.title}`}
-                      run={() =>
-                        organizerAction("approve_council_proposal", {
-                          thread_id: thread.id,
-                          proposal_id: proposal.id,
-                          approved: true,
-                        })
-                      }
-                    />
-                  </View>
-                ))
-            : null}
+          <CouncilProposalReview
+            thread={thread}
+            onBeforeAction={onBeforeRespond}
+          />
+          {!thread.materialized_activity_id && (
+            <ConnectedPlanningActions
+              thread={thread}
+              onBeforeAction={onBeforeRespond}
+            />
+          )}
+          <OrganizerMessageEditor
+            key={`${userId}:${thread.id}`}
+            thread={thread}
+          />
+
           {manages &&
           thread.status === "open" &&
           Date.parse(thread.deadline_at) <= now &&
           thread.kind !== "ping" &&
+          thread.kind !== "time" &&
+          thread.resolution_policy !== "explicit" &&
           item.options.length ? (
             <Action
               title={
@@ -254,33 +259,10 @@ export function DecisionRow({
             />
           ) : null}
           {manages ? (
-            <Button
-              compact
-              secondary
-              title="Manage decision"
-              onPress={manage}
-            />
+            <PlanningLink title="Manage decision" onPress={manage} />
           ) : null}
           {!manages && thread.kind !== "ping" && !eligible ? (
-            <Button
-              compact
-              secondary
-              title="View decision details"
-              onPress={manage}
-            />
-          ) : null}
-          {thread.materialized_activity_id && thread.kind !== "draw" ? (
-            <Button
-              compact
-              secondary
-              title="Open resulting Beacon"
-              onPress={() =>
-                router.push({
-                  pathname: "/activity/[id]",
-                  params: { id: thread.materialized_activity_id! },
-                })
-              }
-            />
+            <PlanningLink title="View decision details" onPress={manage} />
           ) : null}
         </View>
       ) : null}

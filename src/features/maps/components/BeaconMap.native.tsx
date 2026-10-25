@@ -1,3 +1,10 @@
+import Svg, { Path as CountPath } from "react-native-svg";
+import {
+  CLUSTER_COUNT_PATHS,
+  clusterCountAccessibilityLabel,
+  type ClusterCountPart,
+  type ClusterCountAction,
+} from "../clusterLayout";
 import { ClusterArtworkCache } from "../clusterArtwork";
 import { bloomGeometry } from "../clusterBloom";
 import {
@@ -723,9 +730,10 @@ export default function BeaconMap({
       y: number;
       width: number;
       height: number;
-      text: string;
       peopleCount: number;
-      beaconOverflow: number;
+      beaconTotal: number;
+      parts: ClusterCountPart[];
+      activation: ClusterCountAction;
       fontSize: number;
     }[]
   >([]);
@@ -748,9 +756,10 @@ export default function BeaconMap({
                 y: anchor.y + badge.offset.y,
                 width: badge.width,
                 height: badge.height,
-                text: badge.text,
                 peopleCount: badge.peopleCount,
-                beaconOverflow: badge.beaconOverflow,
+                beaconTotal: badge.beaconTotal,
+                parts: badge.parts,
+                activation: badge.activation,
                 fontSize: badge.fontSize,
               }
             : null;
@@ -1309,17 +1318,18 @@ export default function BeaconMap({
             <Pressable
               key={`counts:${badge.item.group.id}`}
               accessibilityRole="button"
-              accessibilityLabel={`${badge.peopleCount ? `${badge.peopleCount} nearby friends. ` : ""}${badge.beaconOverflow ? `${badge.beaconOverflow} hidden Beacons. ` : ""}Explore cluster`}
+              accessibilityLabel={`${clusterCountAccessibilityLabel(badge.peopleCount, badge.beaconTotal)}. Explore cluster; nearby does not mean attending`}
               testID="map-cluster-count"
               onPress={() => {
                 closeStack();
-                if (badge.peopleCount)
+                if (badge.activation === "expand")
+                  void pressPresentation(badge.item);
+                else
                   void pressCluster(
                     badge.item.group,
                     false,
-                    badge.beaconOverflow ? undefined : "Friends",
+                    badge.activation === "friends" ? "Friends" : undefined,
                   );
-                else void pressPresentation(badge.item);
               }}
               style={{
                 position: "absolute",
@@ -1346,15 +1356,53 @@ export default function BeaconMap({
                   backgroundColor: colors.white,
                 }}
               >
-                <Text
-                  style={{
-                    fontSize: badge.fontSize,
-                    fontWeight: "700",
-                    color: colors.ink,
-                  }}
-                >
-                  {badge.text}
-                </Text>
+                {badge.parts.map((part, index) => (
+                  <React.Fragment key={part.kind}>
+                    {index > 0 && (
+                      <Text
+                        accessible={false}
+                        style={{ fontSize: badge.fontSize, color: colors.ink }}
+                      >
+                        {" "}
+                        ·{" "}
+                      </Text>
+                    )}
+                    <View
+                      accessible={false}
+                      style={{
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 3,
+                      }}
+                    >
+                      <Svg
+                        width={badge.fontSize}
+                        height={badge.fontSize}
+                        viewBox="0 0 24 24"
+                        accessible={false}
+                      >
+                        <CountPath
+                          d={CLUSTER_COUNT_PATHS[part.kind]}
+                          fill="none"
+                          stroke={colors.ink}
+                          strokeWidth={1.8}
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </Svg>
+                      <Text
+                        style={{
+                          fontSize: badge.fontSize,
+                          fontWeight: "700",
+                          fontVariant: ["tabular-nums"],
+                          color: colors.ink,
+                        }}
+                      >
+                        {part.count}
+                      </Text>
+                    </View>
+                  </React.Fragment>
+                ))}
               </View>
             </Pressable>
           ))}

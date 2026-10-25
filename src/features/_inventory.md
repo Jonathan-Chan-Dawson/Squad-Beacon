@@ -3,7 +3,7 @@ Feature map
 - auth/: Auth.tsx — authentication and account entry UI.
 - beacons/: activity browsing, compact homepage and feed cards, response/tools, timing, checklist/note module helpers, controls, and permissions.
 - help/: help and tutorial screen.
-- library/: LibraryScreen, helpers, and Past-only LibraryToolkit.
+- library/: LibraryScreen and shared library grouping/folder helpers.
 - maps/: map screen, panel/tooltip, and BeaconMap platform variants. BeaconMap.tsx, BeaconMap.native.tsx, and BeaconMap.web.tsx are a single sibling set.
 - messages/: shared chat thread component used by activity and person routes.
 - people/: squads/friends directory, directory controls, invite QR, mini avatars, and its screen.

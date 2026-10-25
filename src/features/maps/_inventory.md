@@ -34,9 +34,10 @@ Maps feature
 
 - components/BeaconLocationPreview.native.tsx: shared noninteractive, permission-gated physical-location mini map used by native detail and Overview; caller controls Map focus.
 
-- nativeMapPresentation.ts: native petal stacks (ten previews, explorer at six), hysteretic density modes, entity deduplication, priority, ownership anchors and conservative rendering budget; friend positions never feed Beacon density.
-- components/LivingMapMarkers.native.tsx: original-artwork native constellation stacks, accessible expanded touch targets, static geographic atmosphere and ownership anchors.
+- nativeMapPresentation.ts: shared zoom modes, selected-marker protection, ranked Beacon grouping, neighbor-aware count placement and rendering budget; friend positions never feed Beacon density.
+- clusterLayout.ts, clusterBloom.ts: shared petal geometry, compact shadows, adaptive close-zoom friends and unified total-count badges; far/micro modes omit friend satellite rings.
+- components/LivingMapMarkers.native.tsx: original-artwork native blooms, shared shadow/count styling and accessible expanded touch targets.
 
 - Community discovery: Map previews and Beacon Overview use BeaconCommunityRow, batched viewer-authorized associations and canonical profile routes. communityReturnState.ts retains viewer/Beacon sheet position; camera, filters and contextual selection remain Map-owned.
 
-- webConstellation.ts: Leaflet DOM adapter for the shared constellation policy; ten visible petal previews, exact overflow, accessible expansion/explorer actions, Spark Swarms and ownership anchors. BeaconMap.web.tsx adds static geographic atmosphere and excludes friend locations from activity density.
+- webConstellation.ts: Leaflet DOM adapter for the shared bloom geometry, progressive far/micro previews, exact accessible counts and expansion/explorer actions.

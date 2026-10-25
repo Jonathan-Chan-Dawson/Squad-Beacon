@@ -307,6 +307,9 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
           void refresh();
         },
       )
+      .on("postgres_changes", {event:"*",schema:"public",table:"planning_threads"},()=>{void refresh();})
+      .on("postgres_changes", {event:"*",schema:"public",table:"planning_availability"},()=>{void refresh();})
+      .on("postgres_changes", {event:"*",schema:"public",table:"planning_approval_ballots"},()=>{void refresh();})
       .subscribe();
     const listener = AppState.addEventListener("change", (state) => {
       epoch.current++;
@@ -492,6 +495,15 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
           if(requestKey)demoRequests.current.set(requestKey,result);
           return result;
         }
+        if (action === "claim_planning_host") {
+          const claim = next.planning_claims?.find(c => c.thread_id === payload.thread_id && c.user_id === next.viewer_id);
+          const thread = next.planning_threads.find(t=>t.id===payload.thread_id);
+          return thread?.materialized_activity_id ? {id:thread.materialized_activity_id,already_published:true} : {thread_id:payload.thread_id,claim_token:claim?.token,expires_at:claim?.expires_at};
+        }
+        if (action === "publish_planning_beacon") {
+          const thread=next.planning_threads.find(t=>t.id===payload.thread_id);
+          return {id:thread?.materialized_activity_id,activity_id:thread?.materialized_activity_id,already_published:baseData.planning_threads.some(t=>t.id===payload.thread_id&&!!t.materialized_activity_id)};
+        }
         if (action === "convert_planning_ping") {
           const thread = next.planning_threads.find(
             (item) => item.id === payload.thread_id,
@@ -535,7 +547,7 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
       const generation = epoch.current;
       const viewer = session.user.id;
       const atomicCreation = action === "create_activity_with_invitees" || action === "create_plan_beacon_with_invitees";
-      const actorScoped = atomicCreation || action === "create_activity" || action === "create_plan_beacon" || ["rsvp","start_location","stop_location","save_activity_note","end_activity_note","update_presence","save_status_note","create_planning_thread","add_council_proposal"].includes(action);
+      const actorScoped = action.includes("planning") || action.includes("council") || atomicCreation || action === "create_activity" || action === "create_plan_beacon" || ["rsvp","start_location","stop_location","save_activity_note","end_activity_note","update_presence","save_status_note","create_planning_thread","add_council_proposal"].includes(action);
       const assertAtomicViewer = () => {
         if (actorScoped && (generation !== epoch.current || dataRef.current.viewer_id !== viewer)) throw new Error(action === "rsvp" ? "Your account changed. Refresh before responding." : "Your account changed before publication. Return to the account that started this Beacon.");
       };

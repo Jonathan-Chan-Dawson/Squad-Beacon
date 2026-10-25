@@ -484,6 +484,7 @@ export function CreateHome({
         </View>
       </View>
       <Text style={styles.h2}>More ways to create</Text>
+      <Text style={styles.label}>Plan with Others</Text>
       {card("ping", "Ping", "See who's interested", () =>
         router.push({
           pathname: "/planning/create",
@@ -506,6 +507,7 @@ export function CreateHome({
           },
         }),
       )}
+      {(data.is_demo === true || data.capabilities?.connected_planning === true) && card("time", "Find a Time", "When works?", () => router.push({pathname:"/planning/create",params:{...context,kind:"time",sessionId:randomUUID()}}))}
       {card(
         "note",
         "Activity Note",

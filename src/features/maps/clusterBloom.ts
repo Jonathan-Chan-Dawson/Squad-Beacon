@@ -4,6 +4,8 @@ import {
   friendSatelliteLimit,
   clusterCountLabel,
   clusterCountWidth,
+  clusterCountParts,
+  type ClusterCountAction,
 } from "./clusterLayout";
 import { mapPointOffset } from "./mapPointOffset";
 import type { NativeMapPresentation } from "./nativeMapPresentation";
@@ -74,12 +76,12 @@ function calculateBloomGeometry(item: NativeMapPresentation) {
   }
   const satelliteSize =
     item.scale === "micro"
-      ? 5
+      ? 3
       : item.scale === "far"
-        ? 8
+        ? 5
         : item.friendsProminent
-          ? 14
-          : 13;
+          ? 12
+          : 11;
   const radius = layout.size / 2 - satelliteSize / 2 - 1;
   const clear = (p: Offset, width: number, height: number) => {
     const box = { ...p, width, height };
@@ -108,11 +110,20 @@ function calculateBloomGeometry(item: NativeMapPresentation) {
   const micro = item.scale === "micro";
   const makeCountBadge = (peopleCount: number) => {
     if (friendsOnly || (!peopleCount && !item.overflow)) return undefined;
+    const beaconTotal = item.beacons.length;
+    const displayedPeople = micro && !item.friendsProminent ? 0 : peopleCount;
+    const fontSize = micro ? 8 : item.scale === "far" ? 9 : 10;
     const width = Math.max(
       micro ? 18 : 24,
-      clusterCountWidth(peopleCount, item.overflow, micro),
+      clusterCountWidth(displayedPeople, beaconTotal, fontSize),
     );
-    const height = micro ? 16 : 20;
+    const height = micro ? 14 : item.scale === "far" ? 18 : 20;
+    const activation: ClusterCountAction =
+      displayedPeople && !item.overflow
+        ? "friends"
+        : beaconTotal <= 5 && !displayedPeople
+          ? "expand"
+          : "cluster";
     const artworkBottom = Math.max(
       fullBeacon ? 36 : 0,
       ...occupiedCircles.map((point) => point.y + point.radius),
@@ -133,17 +144,24 @@ function calculateBloomGeometry(item: NativeMapPresentation) {
       offset: { x: best.x, y: best.y },
       width,
       height,
-      text: clusterCountLabel(peopleCount, item.overflow),
+      text: clusterCountLabel(displayedPeople, beaconTotal),
+      parts: clusterCountParts(displayedPeople, beaconTotal),
+      activation,
       peopleCount,
-      beaconOverflow: item.overflow,
-      fontSize: micro ? 8 : 10,
+      beaconTotal,
+      fontSize,
     };
   };
-  let countBadge = makeCountBadge(0);
+  let countBadge: ReturnType<typeof makeCountBadge>;
   let satellites: NativeMapPresentation["people"] = [];
   let satelliteOffsets: Offset[] = [];
   let effectiveLimit = limit;
-  if (!friendsOnly && item.people.length && item.people.length <= limit) {
+  if (
+    !friendsOnly &&
+    !item.overflow &&
+    item.people.length &&
+    item.people.length <= limit
+  ) {
     const positions: Offset[] = [];
     for (const person of item.people) {
       const angle = bearing(person);
@@ -180,7 +198,10 @@ function calculateBloomGeometry(item: NativeMapPresentation) {
       satelliteOffsets = positions;
     } else effectiveLimit = positions.length;
   }
-  if (!friendsOnly && item.people.length && !satellites.length)
+  if (
+    !friendsOnly &&
+    (item.overflow || (item.people.length && !satellites.length))
+  )
     countBadge = makeCountBadge(item.people.length);
   return {
     ...layout,

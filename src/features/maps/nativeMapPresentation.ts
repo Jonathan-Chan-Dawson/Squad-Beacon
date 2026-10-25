@@ -12,6 +12,7 @@ import {
 import {
   clusterPetalOffset,
   beaconPetalLimit,
+  friendGroupUsesCount,
   type BloomScale,
 } from "./clusterLayout";
 
@@ -202,7 +203,7 @@ export function nativePresentation(
     ? []
     : people.slice(
         0,
-        people.length >= 5
+        friendGroupUsesCount(people.length, scale)
           ? 0
           : scale === "micro"
             ? 2
@@ -241,7 +242,10 @@ export function nativePresentation(
   );
   item.featureCost =
     Math.max(1, item.visible.length) +
-    Number(!!geometry.countBadge || (!beacons.length && people.length >= 5));
+    Number(
+      !!geometry.countBadge ||
+        (!beacons.length && friendGroupUsesCount(people.length, scale)),
+    );
   return item;
 }
 
@@ -296,7 +300,10 @@ function avoidNeighborArtwork(
           });
       }
 
-      if (geometry.friendsOnly && item.people.length >= 5)
+      if (
+        geometry.friendsOnly &&
+        friendGroupUsesCount(item.people.length, item.scale)
+      )
         rectangles.push({
           x: 0,
           y: 0,
@@ -309,7 +316,8 @@ function avoidNeighborArtwork(
   const placed: { x: number; y: number; width: number; height: number }[] = [];
   for (const entry of entries) {
     const { item, anchor } = entry;
-    if (!item.beacons.length || !item.people.length) continue;
+    if (!item.beacons.length || (!item.people.length && !item.overflow))
+      continue;
     const neighbors = entries
       .filter(
         (other) =>
@@ -472,12 +480,12 @@ export function nativeMapPresentations(
   };
   let radius =
     mode === "stack"
-      ? 40
+      ? 48
       : mode === "swarm"
-        ? 72
+        ? 80
         : mode === "atmosphere"
-          ? 96
-          : 128;
+          ? 120
+          : 160;
   let result = build(radius);
   while (
     result.reduce((sum, item) => sum + item.featureCost, 0) > budget &&

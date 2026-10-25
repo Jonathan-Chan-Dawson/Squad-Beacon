@@ -1,10 +1,12 @@
 import {
-  clusterCountLabel,
+  clusterCountParts,
+  clusterCountAccessibilityLabel,
+  CLUSTER_COUNT_PATHS,
   clusterCountWidth,
-  friendCountLabel,
-  friendCountWidth,
   CLUSTER_FRIEND_SHADOW_OPACITY,
   CLUSTER_MICRO_SHADOW_OPACITY,
+  CLUSTER_FAR_SHADOW_OPACITY,
+  friendGroupUsesCount,
   CLUSTER_SHADOW_OPACITY,
 } from "./clusterLayout";
 import { bloomGeometry, bloomAccessibilityLabel } from "./clusterBloom";
@@ -59,7 +61,9 @@ export function webConstellation(
     ? CLUSTER_FRIEND_SHADOW_OPACITY
     : presentation.scale === "micro"
       ? CLUSTER_MICRO_SHADOW_OPACITY
-      : CLUSTER_SHADOW_OPACITY;
+      : presentation.scale === "far"
+        ? CLUSTER_FAR_SHADOW_OPACITY
+        : CLUSTER_SHADOW_OPACITY;
   shadow.style.cssText = `position:absolute;left:${geometry.shadowLeft}px;top:${geometry.shadowTop}px;width:${geometry.shadowSize}px;height:${geometry.shadowSize}px;border-radius:50%;background:radial-gradient(circle,rgba(0,0,0,${shadowOpacity}) 0%,rgba(0,0,0,${shadowOpacity * 0.5}) 55%,rgba(0,0,0,0) 100%);pointer-events:none;`;
   node.append(shadow);
   const items: HTMLElement[] = [];
@@ -122,7 +126,7 @@ export function webConstellation(
     dot.dataset.testid = "cluster-friend-satellite";
     dot.dataset.memberId = point.id;
     dot.setAttribute("aria-hidden", "true");
-    dot.style.cssText = `position:absolute;left:${center + offset.x - s / 2}px;top:${center + offset.y - s / 2}px;width:${s}px;height:${s}px;box-sizing:border-box;border-radius:50%;background:${options.surface};color:${options.ink};border:1px solid ${options.ownership};padding:1px;z-index:30;pointer-events:none;opacity:${presentation.scale === "micro" ? 0.8 : 1};`;
+    dot.style.cssText = `position:absolute;left:${center + offset.x - s / 2}px;top:${center + offset.y - s / 2}px;width:${s}px;height:${s}px;box-sizing:border-box;border-radius:50%;background:${options.surface};color:${options.ink};border:1px solid ${options.line};padding:1px;z-index:30;pointer-events:none;opacity:${presentation.friendsProminent ? 0.8 : 0.62};`;
     if (s >= 10) dot.innerHTML = personSvg;
     else {
       dot.style.background = options.ownership;
@@ -143,6 +147,53 @@ export function webConstellation(
     button.append(target, document.createTextNode(text));
     return button;
   };
+  const renderCount = (
+    button: HTMLButtonElement,
+    parts: ReturnType<typeof clusterCountParts>,
+    fontSize: number,
+  ) => {
+    button.querySelector("[data-count-content]")?.remove();
+    for (const child of Array.from(button.childNodes))
+      if (child.nodeType === 3) child.remove();
+    const content = document.createElement("span");
+    content.dataset.countContent = "true";
+    content.setAttribute("aria-hidden", "true");
+    content.style.cssText =
+      "display:inline-flex;align-items:center;justify-content:center;height:100%;pointer-events:none;font-variant-numeric:tabular-nums;";
+    parts.forEach((part, index) => {
+      if (index) {
+        const separator = document.createElement("span");
+        separator.textContent = " · ";
+        separator.style.cssText = "white-space:pre;margin:0 1px;";
+        content.append(separator);
+      }
+      const segment = document.createElement("span");
+      segment.dataset.countKind = part.kind;
+      segment.dataset.countValue = String(part.count);
+      segment.style.cssText = "display:inline-flex;align-items:center;gap:3px;";
+      const icon = document.createElementNS(
+        "http://www.w3.org/2000/svg",
+        "svg",
+      );
+      icon.setAttribute("viewBox", "0 0 24 24");
+      icon.setAttribute("width", String(fontSize));
+      icon.setAttribute("height", String(fontSize));
+      icon.setAttribute("fill", "none");
+      icon.setAttribute("stroke", "currentColor");
+      icon.setAttribute("stroke-width", "1.8");
+      icon.setAttribute("stroke-linecap", "round");
+      icon.setAttribute("stroke-linejoin", "round");
+      const path = document.createElementNS(
+        "http://www.w3.org/2000/svg",
+        "path",
+      );
+      path.setAttribute("d", CLUSTER_COUNT_PATHS[part.kind]);
+      icon.append(path);
+      segment.append(icon, document.createTextNode(String(part.count)));
+      content.append(segment);
+    });
+    button.append(content);
+  };
   let clusterBadge: HTMLButtonElement | undefined;
   const restoreCount = () => {
     if (!clusterBadge) return;
@@ -159,10 +210,10 @@ export function webConstellation(
     clusterBadge.style.width = `${anchor.width}px`;
     clusterBadge.style.height = `${anchor.height}px`;
     clusterBadge.style.font = `700 ${anchor.fontSize}px/${anchor.height - 2}px system-ui`;
-    clusterBadge.lastChild!.nodeValue = anchor.text;
+    renderCount(clusterBadge, anchor.parts, anchor.fontSize);
     clusterBadge.setAttribute(
       "aria-label",
-      `${anchor.peopleCount ? `${anchor.peopleCount} nearby friends. ` : ""}${anchor.beaconOverflow ? `${anchor.beaconOverflow} hidden Beacons. ` : ""}${anchor.peopleCount || explorer ? "Open searchable cluster explorer" : "Expand to select every Beacon"}`,
+      `${clusterCountAccessibilityLabel(anchor.peopleCount, anchor.beaconTotal)}. Nearby does not mean attending. ${anchor.activation === "expand" ? "Expand to select every Beacon" : "Open searchable cluster explorer"}`,
     );
   };
   if (
@@ -170,8 +221,7 @@ export function webConstellation(
     (!explorer && presentation.people.length && presentation.beacons.length)
   ) {
     clusterBadge = badge(
-      geometry.countBadge?.text ??
-        clusterCountLabel(presentation.people.length, 0),
+      geometry.countBadge?.text ?? "",
       "right",
       "Explore cluster",
     );
@@ -182,25 +232,37 @@ export function webConstellation(
     clusterBadge.style.boxSizing = "border-box";
     clusterBadge.onclick = (event) => {
       event.stopPropagation();
-      if (
-        expanded ||
-        (geometry.countBadge?.peopleCount &&
-          !geometry.countBadge.beaconOverflow)
-      )
+      if (expanded || geometry.countBadge?.activation === "friends")
         options.open("Friends");
-      else if (geometry.countBadge?.peopleCount || explorer) options.open();
+      else if (geometry.countBadge?.activation === "cluster") options.open();
       else expand();
     };
     node.append(clusterBadge);
     restoreCount();
   }
-  if (geometry.friendsOnly && presentation.people.length >= 5) {
+  if (
+    geometry.friendsOnly &&
+    friendGroupUsesCount(presentation.people.length, presentation.scale)
+  ) {
     const count = badge(
-      friendCountLabel(presentation.people.length),
+      "",
       "right",
       `${presentation.people.length} nearby friends; open cluster explorer`,
     );
-    count.style.minWidth = `${friendCountWidth(presentation.people.length, presentation.scale === "micro")}px`;
+    const fontSize =
+      presentation.scale === "micro"
+        ? 8
+        : presentation.scale === "far"
+          ? 9
+          : 10;
+    count.style.minWidth = `${clusterCountWidth(presentation.people.length, 0, fontSize)}px`;
+    count.style.padding = "0";
+    renderCount(
+      count,
+      clusterCountParts(presentation.people.length, 0),
+      fontSize,
+    );
+    count.style.boxSizing = "border-box";
     count.style.left = "50%";
     count.style.right = "auto";
     count.style.bottom = "auto";
@@ -209,7 +271,7 @@ export function webConstellation(
     if (presentation.scale === "micro") {
       count.style.height = "14px";
       count.style.font = "700 8px/12px system-ui";
-      count.style.opacity = ".8";
+      count.style.opacity = ".5";
     }
     count.dataset.testid = "cluster-friend-count";
     count.dataset.friends = "true";
@@ -217,6 +279,11 @@ export function webConstellation(
       event.stopPropagation();
       options.open("Friends");
     };
+    if (presentation.scale === "far") {
+      count.style.height = "18px";
+      count.style.font = "700 9px/16px system-ui";
+      count.style.opacity = ".65";
+    }
     node.append(count);
   }
   let expanded = false;
@@ -263,9 +330,10 @@ export function webConstellation(
         clusterBadge.style.font = "700 10px/18px system-ui";
         clusterBadge.style.left = `${center - width / 2}px`;
         clusterBadge.style.top = `${center + 96}px`;
-        clusterBadge.lastChild!.nodeValue = clusterCountLabel(
-          presentation.people.length,
-          0,
+        renderCount(
+          clusterBadge,
+          clusterCountParts(presentation.people.length, 0),
+          10,
         );
         clusterBadge.setAttribute(
           "aria-label",

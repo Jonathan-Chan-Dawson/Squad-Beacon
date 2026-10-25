@@ -55,6 +55,8 @@ export function normalizePlanningData(data: Data): PlanningData {
     planning_proposals: Array.isArray(source.planning_proposals)
       ? source.planning_proposals
       : [],
+    planning_availability: data.planning_availability ?? [],
+    planning_approval_ballots: data.planning_approval_ballots ?? [],
     planning_votes: Array.isArray(source.planning_votes)
       ? source.planning_votes
       : [],
@@ -229,6 +231,9 @@ export function canReadPlanningThread(
 ) {
   if (thread.owner_id === userId) return true;
   if (blockedBetween(data, thread.owner_id, userId)) return false;
+  // Other participants may have private relationship rows. This projection comes
+  // from can_read_planning_member, the same server helper used by Planning RLS.
+  if (data.viewer_id && userId !== data.viewer_id && data.planning_member_access?.some(row=>row.thread_id===thread.id && row.user_id===userId)) return true;
   if (thread.audience === "private") return false;
   if (thread.audience === "friends")
     return acceptedFriend(data, thread.owner_id, userId);
@@ -365,6 +370,8 @@ export function pendingPlanningThreads(
 ) {
   return planning.planning_threads.filter((thread) => {
     if (!canReadPlanningThread(accessData, thread, userId)) return false;
+    if (thread.materialized_activity_id || thread.continuation_closed_at || thread.not_organized_at) return false;
+    if (thread.kind === "time" && thread.selected_slot_id) return thread.owner_id === userId;
     if (thread.status !== "open") return false;
     const manages = canManagePlanningThread(thread, userId);
     const deadline = Date.parse(thread.deadline_at),
@@ -384,6 +391,12 @@ export function pendingPlanningThreads(
           proposal.disqualified_at == null &&
           Date.parse(proposal.payload.starts_at) > now,
       );
+    if (thread.materialized_activity_id || thread.continuation_closed_at || thread.not_organized_at) return false;
+    if (thread.kind === "time") {
+      if (manages) return deadline <= now && !thread.finalized_at;
+      const saved = (planning as PlanningData & {planning_availability?: import("./types").PlanningAvailability[]}).planning_availability?.find(a => a.thread_id === thread.id && a.user_id === userId);
+      return deadline > now && (!saved || saved.slots_revision !== (thread.slots_revision ?? 1));
+    }
     if (thread.kind === "ping") {
       if (manages)
         return (
@@ -409,6 +422,10 @@ export function pendingPlanningThreads(
     const currentVote = planning.planning_votes.find(
       (vote) => vote.thread_id === thread.id && vote.user_id === userId,
     );
+    if (thread.vote_method === "approval") {
+      const ballot = planning.planning_approval_ballots?.find(b => b.thread_id === thread.id && b.user_id === userId);
+      return !ballot || !ballot.none_work && !ballot.proposal_ids.some(id => approvedOptions.some(p => p.id === id));
+    }
     return !approvedOptions.some(
       (proposal) => proposal.id === currentVote?.proposal_id,
     );

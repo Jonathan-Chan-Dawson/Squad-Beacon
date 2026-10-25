@@ -57,7 +57,7 @@ export type PlanningResponseCardProps = PlanningCardBase &
         onAcknowledged?: (response: PlanningResponse) => void;
       }
     | {
-        kind: "vote" | "draw";
+        kind: "vote" | "draw" | "time";
         selected?: string | null;
         actions: PlanningCardAction[];
       }

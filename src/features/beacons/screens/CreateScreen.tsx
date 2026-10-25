@@ -1,3 +1,4 @@
+import { LinkedPlanningBeacon } from "@/src/features/planning/ConnectedPlanningActions";
 import { saveComposerOption } from "@/src/features/planning/composerSession";
 import { CreationDisclosure } from "../components/CreationDisclosure";
 import {
@@ -189,6 +190,10 @@ function CreateEditor() {
     planningSessionId?: string;
     planningOptionId?: string;
     planningKind?: string;
+    sourcePlanningId?: string;
+    planningClaimToken?: string;
+    planningProposalId?: string;
+    planningSlotId?: string;
     squadId?: string;
     spaceId?: string;
     organizationId?: string;
@@ -209,6 +214,8 @@ function CreateEditor() {
     fromMap?: string;
     timezone?: string;
   }>();
+  const planningSource = data.planning_threads.find(t=>t.id===params.sourcePlanningId);
+  const allowedPlanningInvitees = planningSource ? data.planning_backup_invitees?.find(row=>row.thread_id===planningSource.id)?.user_ids ?? data.profiles.filter(p=>canReadPlanningThread(data,planningSource,p.id)).map(p=>p.id) : undefined;
   const [draftToken] = useState(
     () => params.planSession ?? startCreationDraft(userId),
   );
@@ -1226,6 +1233,14 @@ function CreateEditor() {
       throw new Error(
         "That community is no longer available for this Beacon. Clear the association or choose another community.",
       );
+    if (params.sourcePlanningId) {
+
+      const result = await durableAction("publish_planning_beacon", {thread_id: params.sourcePlanningId, claim_token: params.planningClaimToken || undefined, proposal_id: params.planningProposalId || undefined, slot_id: params.planningSlotId || undefined, invitee_ids: inviteeIds, payload, confirmed: true});
+      if (typeof result.id !== "string") throw new Error("Could not verify the resulting Beacon. Keep this draft and retry.");
+      if (result.already_published) return;
+      router.replace({pathname:"/activity/[id]",params:{id:result.id}});
+      return;
+    }
     if (params.planningSessionId && params.planningOptionId) {
       if (!userId || dataRef.current.viewer_id !== userId) throw new Error("Your account changed. Return to the original account.");
       if (inviteeIds.length) throw new Error("Council options use their Council audience, without individual invitations.");
@@ -1442,6 +1457,11 @@ function CreateEditor() {
               attempt.payload,
               attempt.requestId,
             );
+            if (attempt.action === "create_planning_thread" && attempt.payload.kind === "time") {
+              completePlanningDraft(userId,draftToken);
+              router.replace({pathname:"/responses",params:{threadId:String(result.id)}});
+              return;
+            }
             if (attempt.action === "create_planning_thread") {
               setDecisionId(String(result.id));
               await checkpoint();
@@ -1592,7 +1612,7 @@ function CreateEditor() {
     return (
       <CreateHome
         inviteeControl={
-          <CreationInvitees ids={inviteeIds} onChange={setInviteeIds} />
+          <CreationInvitees ids={inviteeIds} onChange={setInviteeIds} allowedIds={allowedPlanningInvitees} />
         }
         context={handoff}
         selectedFriends={inviteeIds.map((id) => ({
@@ -1631,6 +1651,8 @@ function CreateEditor() {
         }}
       />
     );
+  const publishedSource = data.planning_threads.find(t => t.id === params.sourcePlanningId && t.materialized_activity_id && userId && canReadPlanningThread(data,t,userId));
+  if (publishedSource) return <Screen title="Plan became a Beacon" eyebrow=""><LinkedPlanningBeacon thread={publishedSource} reviewConflict/><Txt muted>Your local draft edits are preserved.</Txt></Screen>;
   const audienceName =
     audience === "list"
       ? "Private list"
@@ -1719,6 +1741,8 @@ function CreateEditor() {
           review them before creating.
         </Txt>
       ) : null}
+      {(data.is_demo === true || data.capabilities?.connected_planning === true) && !params.sourcePlanningId && !params.planningOptionId && !templateEditor && kind !== "Status" && <Action secondary title="Not sure when? Find a Time" run={async()=>{await checkpoint();router.push({pathname:"/planning/create",params:{kind:"time",sessionId:randomUUID(),beaconDraftToken:draftToken,timezone:creationTimezone}});}}/>}
+      {params.planningClaimToken && <Txt muted>You are reviewing this plan as its new host. Review the audience and publish before your claim expires.</Txt>}
       {previous ? (
         <Txt muted>
           Reusing {previous.title} · Review time, location, and access.
@@ -1971,7 +1995,7 @@ function CreateEditor() {
           }}
           notice={defaultNotice}
           invitations={
-            <CreationInvitees ids={inviteeIds} onChange={setInviteeIds} />
+            <CreationInvitees ids={inviteeIds} onChange={setInviteeIds} allowedIds={allowedPlanningInvitees} />
           }
           community={
             selectedAssociationRow

@@ -6,14 +6,14 @@ Project entry and configuration:
 - tsconfig.json, eslint.config.js: TypeScript aliases/checks and lint rules.
 - playwright.config.ts: browser smoke-test configuration.
 - eas.json: EAS build profiles.
-- README.md, APP_OVERVIEW.md, APP_OVERVIEW_SHORT.md, CLAUDE.md, LICENSE: setup and implementation guide, comprehensive feature guide, concise product summary, contributor guidance, and license.
+- README.md: setup and operational guidance. AGENTS.md: concise contributor entry guide; CLAUDE.md forwards to it. LICENSE: license.
+- APP_OVERVIEW.md and APP_OVERVIEW_SHORT.md: optional local product summaries excluded by .gitignore; not required for a fresh checkout.
 - REMAINING_UI_CHANGES.md: blueprint checkpoint status, remaining work, priorities, and dependencies.
 
 Authored product areas:
 - app/: Expo Router route files; see app/_inventory.md.
 - src/: shared contracts, feature implementations, and platform adapters; see src/_inventory.md.
-- components/: Expo-shared inputs and starter components. Platform-specific siblings stay together.
-- constants/: app-wide static constants.
+- components/: shared date inputs, not-found theme compatibility, and web map styling. Platform-specific siblings stay together.
 - assets/: app icons, splash artwork, and fonts; see assets/_inventory.md.
 - public/: static web support files.
 - tests/: unit, database, and browser tests; see tests/_inventory.md.

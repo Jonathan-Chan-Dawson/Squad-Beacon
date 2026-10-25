@@ -64,20 +64,20 @@ test("Vote controls submit in place and a resolved Draw shows only its canonical
   page,
 }) => {
   await openPlanning(page);
-  await page.getByRole("button", { name: "Votes", exact: true }).click();
+  await page.getByRole("button", { name: "Decisions", exact: true }).click();
   const vote = page.getByTestId("decision-row-demo-vote-weekend");
-  const options = vote.locator('[role="button"][aria-pressed]');
+  const options = vote.getByRole("radio");
   await options.first().click();
-  await expect(options.first()).toHaveAttribute("aria-pressed", "true");
+  await expect(options.first()).toHaveAttribute("aria-checked", "true");
   await expect(vote.getByText(/Your vote saved/)).toBeVisible();
-  await page.getByRole("button", { name: "Draws", exact: true }).click();
+  await page.getByRole("button", { name: "Decisions", exact: true }).click();
   await page.getByRole("button", { name: "History", exact: true }).click();
-  await expect(page.getByText("Draw result", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("decision-row-demo-draw-result").getByText("This became a Beacon", { exact: true })).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Open winning Beacon", exact: true }),
+    page.getByRole("button", { name: "View Beacon", exact: true }),
   ).toBeVisible();
   await expect(
-    page.locator('[data-testid^="decision-row-"] [aria-pressed]'),
+    page.getByTestId("decision-row-demo-draw-result").locator('[aria-pressed]'),
   ).toHaveCount(0);
 });
 
@@ -99,10 +99,11 @@ test("Ping creation uses the focused composer and preserves conversion managemen
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await page
     .getByRole("button", {
-      name: "Create a beacon from this ping",
+      name: "Review & Create Beacon",
       exact: true,
     })
     .click();
+  await page.getByRole("button",{name:"Create Beacon",exact:true}).click();
   await expect(page).toHaveURL(/\/activity\/[^/]+$/);
 });
 

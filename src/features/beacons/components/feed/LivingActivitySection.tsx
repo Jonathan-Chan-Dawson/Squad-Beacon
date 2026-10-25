@@ -1,3 +1,4 @@
+import {canReadPlanningThread} from "@/src/features/planning/domain";
 import { ProfileSonarCard } from "@/src/features/profile/components/ProfileSonarCard";
 import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
 import { eligibleDefaultTargets } from "@/src/features/profile/settings/beaconDefaults";
@@ -1001,6 +1002,7 @@ export function LivingActivitySection({
                   </Pressable>
                 )}
               </View>
+              {data.planning_threads.filter(t=>t.source_activity_note_id===current.activity.id && userId && canReadPlanningThread(data,t,userId)).slice(-1).map(t=><Button key={t.id} compact secondary title={`Continue planning: ${t.title}`} onPress={()=>router.push({pathname:"/responses",params:{threadId:t.id}})}/>)}
               {own && (
                 <Pressable
                   accessibilityRole="button"

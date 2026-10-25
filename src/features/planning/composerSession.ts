@@ -8,6 +8,11 @@ export type ComposerOption = {
   editorToken?: string;
 };
 export type ComposerDraft = {
+  recoveryToken?: string;
+  timeSlots?: import("./types").PlanningSlot[];
+  allowBackupHosting?: boolean;
+  voteMethod?: "pick_one" | "approval";
+  interestTarget?: string;
   title: string;
   body: string;
   audience: Audience;

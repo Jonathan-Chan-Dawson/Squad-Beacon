@@ -23,8 +23,10 @@ import { SocialSelector } from "@/src/features/people/components/SocialSelector"
 export function CreationInvitees({
   ids,
   onChange,
+  allowedIds,
 }: {
   ids: string[];
+  allowedIds?: string[];
   onChange: (ids: string[]) => void;
 }) {
   const { data, userId } = useBeacon();
@@ -34,8 +36,8 @@ export function CreationInvitees({
   const [open, setOpen] = useState(false);
   const [selectionError, setSelectionError] = useState("");
   const friends = useMemo(
-    () => socialFriends(data, userId, now),
-    [data, userId, now],
+    () => socialFriends(data, userId, now).filter(friend=>!allowedIds||allowedIds.includes(friend.id)),
+    [data, userId, now, allowedIds],
   );
   const unavailable = ids.filter(
     (id) => !friends.some((friend) => friend.id === id),

@@ -155,7 +155,7 @@ Map workspace migration: apply `supabase/migrations/202609290002_map_workspace.s
 - Friends Now uses compact vertical status rows with direct stars, message/profile targets and Free/Starred filters. Demo Find Friends uses fictional profiles; no real accounts are created.
 - Test fixture data lives in `tests/fixtures/neighborhood.ts`; test instructions live in `tests/README.md`.
 - Tap your Profile avatar to style the built-in SVG character (216 combinations). Uploaded photos remain supported in Edit profile. Apply `202609290003_mini_avatars.sql` to persist choices for real accounts.
-- Mint, Sunset, Midnight, Ocean and Berry each have light/dark versions, with Midnight/Dark as the fresh-install default. Settings → Appearance saves the palette and Device/Light/Dark choice separately. Device follows system changes; legacy saved themes retain their former appearance.
+- Essential, Mint, Sunset, Midnight, Ocean and Berry each have light/dark versions, with Essential/Dark as the fresh-install default. Settings → Appearance saves the palette and Device/Light/Dark choice separately. Device follows system changes; legacy saved themes retain their former appearance.
 - Map selection opens an inline RSVP tooltip positioned relative to the map coordinate. Details opens a separate translucent workspace with Overview, People, Comments and Chat. No native callout or modal is used for RSVP.
 
 Avatar art is generated locally from a bounded numeric seed; this is an original simple illustration system, not a Snapchat/Bitmoji integration. Web map avatars are illustrated; private uploaded photos remain in app profile views. Live-location illustrations still respect permission and freshness checks. Theme transparency is a tinted overlay, not a native blur effect.

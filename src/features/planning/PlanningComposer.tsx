@@ -1,3 +1,5 @@
+import { interestTarget } from "./connected";
+import { PlanningDisclosure, PlanningToggle } from "./PlanningControls";
 import React, { useCallback, useRef, useState } from "react";
 import { Text, View } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
@@ -306,6 +308,12 @@ export function PlanningComposer({ sessionId }: { sessionId: string }) {
           audience_id: draft.audienceId,
           deadline_at: draft.deadline,
           coowner_ids: kind === "ping" ? [] : (draft.coownerIds ?? []),
+          source_activity_note_id: params.activityNoteId,
+          connected_version: 1,
+          vote_method: draft.voteMethod ?? "pick_one",
+          interest_target: interestTarget(draft.interestTarget),
+          allow_backup_hosting:
+            draft.allowBackupHosting ?? draft.audience === "squad",
           ...(kind === "ping" ? { payload: beacon } : {}),
         };
       }
@@ -374,6 +382,24 @@ export function PlanningComposer({ sessionId }: { sessionId: string }) {
       >
         {kind === "ping" ? (
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+            {(data.is_demo === true ||
+              data.capabilities?.connected_planning === true) && (
+              <Button
+                compact
+                secondary
+                title="When Works?"
+                onPress={() =>
+                  router.push({
+                    pathname: "/planning/create",
+                    params: {
+                      kind: "time",
+                      sessionId,
+                      activityNoteId: params.activityNoteId,
+                    },
+                  })
+                }
+              />
+            )}
             {pingStarters.map((starter) => (
               <Button
                 key={starter.id}
@@ -477,6 +503,50 @@ export function PlanningComposer({ sessionId }: { sessionId: string }) {
               }
             />
           </View>
+        )}
+        {kind === "vote" &&
+          (data.is_demo === true ||
+            data.capabilities?.connected_planning === true) && (
+            <View style={{ gap: 6 }}>
+              <Txt>How should people choose?</Txt>
+              <Chips
+                options={["Pick One", "I'm Good With…"]}
+                value={
+                  draft.voteMethod === "approval"
+                    ? "I'm Good With…"
+                    : "Pick One"
+                }
+                onChange={(v) =>
+                  update(
+                    "voteMethod",
+                    v === "Pick One" ? "pick_one" : "approval",
+                  )
+                }
+              />
+            </View>
+          )}
+        {(data.is_demo === true ||
+          data.capabilities?.connected_planning === true) && (
+          <PlanningDisclosure
+            title="Organizer options"
+            summary={`Backup hosting ${(draft.allowBackupHosting ?? draft.audience === "squad") ? "on" : "off"}`}
+          >
+            {kind === "ping" && (
+              <Field
+                label="Need X People · Optional"
+                value={draft.interestTarget ?? ""}
+                keyboardType="number-pad"
+                onChangeText={(v) => update("interestTarget", v)}
+              />
+            )}
+            <PlanningToggle
+              title="Allow Backup Hosting"
+              description="Eligible participants may volunteer if you are unavailable."
+              value={draft.allowBackupHosting ?? draft.audience === "squad"}
+              disabled={frozen || busy}
+              onChange={(v) => update("allowBackupHosting", v)}
+            />
+          </PlanningDisclosure>
         )}
         <AudiencePicker
           value={draft.audience}

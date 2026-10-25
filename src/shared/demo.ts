@@ -1,3 +1,4 @@
+import { demoConnected } from "@/src/features/planning/demoConnected";
 import { applyDemoLivingActivity } from "@/src/features/beacons/demoLivingActivity";
 import { applyDemoSupplyAction, eligibleSupplyClaim } from "@/src/features/beacons/supplies";
 import { validateCreationInvitees } from "@/src/features/beacons/createHandoff";
@@ -3692,4 +3693,4 @@ function demoActionInner(previous: Data, action: string, p: Payload): Data {
   return d;
 }
 
-export function demoAction(previous: Data, action: string, payload: Payload): Data { const next = applyDemoLivingActivity(previous, DEMO_ID, action, payload) ?? demoActionInner(previous, action, payload); next.beacon_supply_claims = next.beacon_supply_claims.filter(row => eligibleSupplyClaim(next,row)); return next; }
+export function demoAction(previous: Data, action: string, payload: Payload): Data { const next = demoConnected(previous, DEMO_ID, action, payload, demoActionInner) ?? applyDemoLivingActivity(previous, DEMO_ID, action, payload) ?? demoActionInner(previous, action, payload); next.beacon_supply_claims = next.beacon_supply_claims.filter(row => eligibleSupplyClaim(next,row)); return next; }

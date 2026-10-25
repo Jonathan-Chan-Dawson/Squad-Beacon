@@ -17,6 +17,76 @@ import type { ClusterPoint } from "../src/features/maps/cluster";
 import { bloomGeometry } from "../src/features/maps/clusterBloom";
 import { nativePresentation } from "../src/features/maps/nativeMapPresentation";
 
+test("badge totals, satellite collapse, and micro Friends mode are independent of preview overflow", () => {
+  const make = (
+    beacons: number,
+    people: number,
+    mode: "stack" | "swarm" | "atmosphere" | "micro" = "swarm",
+    friendsProminent = false,
+  ) =>
+    nativePresentation(
+      {
+        id: "totals",
+        latitude: 0,
+        longitude: 0,
+        members: [
+          ...Array.from({ length: beacons }, (_, i) => ({
+            id: `beacon:${i}`,
+            kind: "beacon" as const,
+            latitude: 0,
+            longitude: 0,
+          })),
+          ...Array.from({ length: people }, (_, i) => ({
+            id: `person:${i}`,
+            kind: "person" as const,
+            latitude: Math.sin(i) * 0.0001,
+            longitude: Math.cos(i) * 0.0001,
+          })),
+        ],
+      },
+      mode,
+      {},
+      new Set(),
+      friendsProminent,
+    );
+  const dense = make(40, 60),
+    badge = bloomGeometry(dense).countBadge!;
+  assert.equal(dense.overflow, 33);
+  assert.equal(badge.beaconTotal, 40);
+  assert.equal(badge.peopleCount, 60);
+  assert.equal(badge.text, "👥 60 · ✦ 40");
+  assert.deepEqual(badge.parts, [
+    { kind: "friends", count: 60 },
+    { kind: "beacons", count: 40 },
+  ]);
+  assert.equal(badge.activation, "cluster");
+  assert.equal(dense.satellites.length, 0);
+  const fitting = make(20, 5);
+  assert.equal(fitting.satellites.length, 0);
+  assert.deepEqual(bloomGeometry(fitting).countBadge?.parts, [
+    { kind: "friends", count: 5 },
+    { kind: "beacons", count: 20 },
+  ]);
+  assert.equal(bloomGeometry(make(40, 0)).countBadge?.text, "✦ 40");
+  assert.equal(bloomGeometry(make(1, 0)).countBadge, undefined);
+  assert.equal(bloomGeometry(make(2, 2)).countBadge, undefined);
+  assert.equal(make(2, 2).satellites.length, 2);
+  assert.equal(bloomGeometry(make(2, 25)).countBadge?.activation, "friends");
+  const micro = bloomGeometry(make(40, 60, "micro")).countBadge!;
+  assert.deepEqual(micro.parts, [{ kind: "beacons", count: 40 }]);
+  assert.equal(micro.peopleCount, 60);
+  assert.equal(micro.fontSize, 8);
+  assert.equal(micro.height, 14);
+  assert.deepEqual(
+    bloomGeometry(make(40, 60, "micro", true)).countBadge?.parts,
+    badge.parts,
+  );
+  assert.equal(
+    bloomGeometry(make(2, 25, "micro")).countBadge?.activation,
+    "expand",
+  );
+});
+
 test("adaptive friend previews preserve Beacon geometry and keep totals when space is limited", () => {
   for (const [beacons, friends] of [
     [2, 2],
@@ -148,7 +218,7 @@ test("unified totals stay bottom-right regardless of the friend bearing", () => 
   assert.equal(combined.offset.x + combined.width / 2, 36);
   assert.ok(combined.offset.y > 0);
   assert.equal(combined.peopleCount, 25);
-  assert.equal(combined.text, "👥 +25");
+  assert.equal(combined.text, "👥 25 · ✦ 2");
 });
 for (const count of [2, 3, 4, 5, 6, 10, 11, 25])
   test(`${count} petals share a fixed contained circle on both renderers`, () => {
@@ -343,7 +413,7 @@ test("shared clock changes update location accessibility without restarting bitm
   assert.equal(after.visualRevision, before.visualRevision);
 });
 
-test("satellite capacities follow 3/5/7 petals and simplify at distant zooms", () => {
+test("satellite capacities follow 3/5/7 petals and disappear at distant zooms", () => {
   for (const [petals, limit] of [
     [1, 3],
     [2, 3],
@@ -354,8 +424,8 @@ test("satellite capacities follow 3/5/7 petals and simplify at distant zooms", (
   ]) {
     assert.equal(friendSatelliteLimit(petals, "close"), limit);
     assert.equal(friendSatelliteLimit(petals, "medium"), limit);
-    assert.equal(friendSatelliteLimit(petals, "far"), 3);
-    assert.equal(friendSatelliteLimit(petals, "micro"), 1);
+    assert.equal(friendSatelliteLimit(petals, "far"), 0);
+    assert.equal(friendSatelliteLimit(petals, "micro"), 0);
   }
 });
 test("small Beacon shadows follow artwork rather than the empty cluster footprint", () => {
@@ -396,7 +466,7 @@ test("small Beacon shadows follow artwork rather than the empty cluster footprin
 });
 test("nearby artwork reduces satellites without shifting petals or mutating authorized locations", () => {
   const members: ClusterPoint[] = [
-    ...Array.from({ length: 7 }, (_, i) => ({
+    ...Array.from({ length: 6 }, (_, i) => ({
       id: `beacon:${i}`,
       kind: "beacon" as const,
       latitude: 0,
@@ -476,7 +546,7 @@ test("satellite thresholds switch the entire friend set to a total, not just ove
       } else {
         assert.equal(geometry.satellites.length, 0);
         assert.equal(geometry.countBadge?.peopleCount, people);
-        assert.equal(geometry.countBadge?.text, `👥 +${people}`);
+        assert.equal(geometry.countBadge?.text, `👥 ${people} · ✦ ${beacons}`);
       }
     }
 });

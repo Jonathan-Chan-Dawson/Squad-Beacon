@@ -1,3 +1,3 @@
-import SettingsScreen from "@/src/features/profile/screens/SettingsScreen";
+import SettingsScreen from "@/src/features/profile/settings/SettingsScreen";
 
 export default SettingsScreen;

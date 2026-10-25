@@ -19,11 +19,13 @@ import type { ClusterPoint } from "../cluster";
 import type { ClusterMemberArtwork } from "../clusterArtwork";
 import { mapIdentityColors, friendLocationLabel } from "../markerIdentity";
 import {
-  friendCountLabel,
-  friendCountWidth,
+  CLUSTER_COUNT_PATHS,
+  clusterCountWidth,
   CLUSTER_OWNERSHIP_ANCHOR,
   CLUSTER_FRIEND_SHADOW_OPACITY,
   CLUSTER_MICRO_SHADOW_OPACITY,
+  CLUSTER_FAR_SHADOW_OPACITY,
+  friendGroupUsesCount,
   CLUSTER_SHADOW_OPACITY,
 } from "../clusterLayout";
 import {
@@ -247,13 +249,22 @@ function LivingMapPinComponent({
   const { colors } = useTheme();
   const { group, overflow } = presentation;
   const geometry = bloomGeometry(presentation);
+  const countFontSize =
+    presentation.scale === "micro" ? 8 : presentation.scale === "far" ? 9 : 10;
+  const friendCountSize = clusterCountWidth(
+    presentation.people.length,
+    0,
+    countFontSize,
+  );
   const explorer = !!presentationOpensExplorer(presentation);
   const shadowGradientId = React.useId().replace(/:/g, "");
   const shadowOpacity = geometry.friendsOnly
     ? CLUSTER_FRIEND_SHADOW_OPACITY
     : presentation.scale === "micro"
       ? CLUSTER_MICRO_SHADOW_OPACITY
-      : CLUSTER_SHADOW_OPACITY;
+      : presentation.scale === "far"
+        ? CLUSTER_FAR_SHADOW_OPACITY
+        : CLUSTER_SHADOW_OPACITY;
   const [avatarRevision, setAvatarRevision] = React.useState(0);
   const loaded = useCallback(() => setAvatarRevision((value) => value + 1), []);
   const tracking = useMarkerTracking(
@@ -282,10 +293,12 @@ function LivingMapPinComponent({
       accessibilityLabel={bloomAccessibilityLabel(presentation)}
       accessibilityActions={[
         ...(!explorer
-          ? geometry.primary.map((point) => ({
-              name: point.id,
-              label: `Select ${members.find((model) => model.id === point.id)?.label ?? "Beacon"}`,
-            }))
+          ? (geometry.friendsOnly ? presentation.people : geometry.primary).map(
+              (point) => ({
+                name: point.id,
+                label: `Select ${members.find((model) => model.id === point.id)?.label ?? "Beacon"}`,
+              }),
+            )
           : [{ name: "activate", label: "Open searchable cluster explorer" }]),
         ...(presentation.people.length && presentation.beacons.length
           ? [
@@ -413,11 +426,10 @@ function LivingMapPinComponent({
                 height: s,
                 borderRadius: s / 2,
                 borderWidth: 1,
-                borderColor:
-                  s >= 10 ? mapIdentityColors.ownership : colors.white,
+                borderColor: colors.line,
                 backgroundColor:
                   s >= 10 ? colors.white : mapIdentityColors.ownership,
-                opacity: presentation.scale === "micro" ? 0.8 : 1,
+                opacity: presentation.friendsProminent ? 0.8 : 0.62,
                 alignItems: "center",
                 justifyContent: "center",
                 zIndex: 30,
@@ -437,39 +449,67 @@ function LivingMapPinComponent({
             </View>
           );
         })}
-        {geometry.friendsOnly && presentation.people.length >= 5 && (
-          <View
-            style={{
-              ...badgeStyle,
-              left:
-                geometry.center -
-                friendCountWidth(
-                  presentation.people.length,
-                  presentation.scale === "micro",
-                ) /
-                  2,
-              top: geometry.center - 10,
-              bottom: undefined,
-              minWidth: friendCountWidth(
-                presentation.people.length,
-                presentation.scale === "micro",
-              ),
-              opacity: presentation.scale === "micro" ? 0.8 : 1,
-              flexDirection: "row",
-              gap: 2,
-            }}
-          >
-            <Text
+        {geometry.friendsOnly &&
+          friendGroupUsesCount(
+            presentation.people.length,
+            presentation.scale,
+          ) && (
+            <View
               style={{
-                color: colors.ink,
-                fontSize: presentation.scale === "micro" ? 8 : 10,
-                fontWeight: "700",
+                ...badgeStyle,
+                paddingHorizontal: 0,
+                left: geometry.center - friendCountSize / 2,
+                top:
+                  geometry.center -
+                  (presentation.scale === "micro"
+                    ? 7
+                    : presentation.scale === "far"
+                      ? 9
+                      : 10),
+                height:
+                  presentation.scale === "micro"
+                    ? 14
+                    : presentation.scale === "far"
+                      ? 18
+                      : 20,
+                bottom: undefined,
+                minWidth: friendCountSize,
+                opacity:
+                  presentation.scale === "micro"
+                    ? 0.5
+                    : presentation.scale === "far"
+                      ? 0.65
+                      : 1,
+                flexDirection: "row",
+                gap: 2,
               }}
             >
-              {friendCountLabel(presentation.people.length)}
-            </Text>
-          </View>
-        )}
+              <Svg
+                width={countFontSize}
+                height={countFontSize}
+                viewBox="0 0 24 24"
+                accessible={false}
+              >
+                <Path
+                  d={CLUSTER_COUNT_PATHS.friends}
+                  fill="none"
+                  stroke={colors.ink}
+                  strokeWidth={1.8}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </Svg>
+              <Text
+                style={{
+                  color: colors.ink,
+                  fontSize: countFontSize,
+                  fontWeight: "700",
+                }}
+              >
+                {presentation.people.length}
+              </Text>
+            </View>
+          )}
       </View>
     </Marker>
   );

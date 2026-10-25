@@ -7,6 +7,7 @@ const strings = (value: unknown): value is string[] =>
   Array.isArray(value) && value.every((item) => typeof item === "string");
 const actions = [
   "create_activity",
+  "publish_planning_beacon",
   "create_plan_beacon",
   "create_activity_with_invitees",
   "create_plan_beacon_with_invitees",

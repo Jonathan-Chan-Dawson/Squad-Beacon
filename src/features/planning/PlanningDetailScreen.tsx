@@ -1,3 +1,6 @@
+import {EarlierTimeSlots} from "./TimeFinder";
+import {CouncilProposalReview} from "./CouncilChoices";
+import { ConnectedPlanningActions, OrganizerMessageEditor, LinkedPlanningBeacon } from "./ConnectedPlanningActions";
 import { canOpenSquadPing } from "@/src/features/people/communication";
 import { ConfirmDialog } from "@/src/shared/Dialogs";
 import { useBeacon } from "@/src/shared/store";
@@ -222,6 +225,15 @@ export default function PlanningDetailScreen({
       </PlanningFrame>
     );
 
+  if (thread.kind === "time" || thread.resolution_policy === "explicit") return <PlanningFrame embedded={embedded} title={thread.title} eyebrow={thread.kind === "time" ? "FIND A TIME" : thread.kind.toUpperCase()}>
+    {thread.body && <Txt>{thread.body}</Txt>}
+    {!thread.materialized_activity_id && <PlanningResponseControls threadId={thread.id}/>}
+    <CouncilProposalReview thread={thread}/>
+    <ConnectedPlanningActions thread={thread}/>
+    {thread.materialized_activity_id && thread.kind === "time" && <EarlierTimeSlots thread={thread}/>}
+    <OrganizerMessageEditor key={`${userId}:${thread.id}`} thread={thread}/>
+  </PlanningFrame>;
+
   const Icon =
     thread.kind === "ping" ? CircleHelp : thread.kind === "vote" ? Vote : Dices;
 
@@ -337,19 +349,7 @@ export default function PlanningDetailScreen({
               }}
             />
           )}
-          {thread.status === "resolved" && thread.materialized_activity_id && (
-            <Button
-              title="Open beacon"
-              onPress={() => {
-                const activityId = thread.materialized_activity_id;
-                if (activityId)
-                  router.push({
-                    pathname: "/activity/[id]",
-                    params: { id: activityId },
-                  });
-              }}
-            />
-          )}
+          {thread.materialized_activity_id && <LinkedPlanningBeacon thread={thread}/>}
           <Txt muted>
             {
               planning.planning_ping_responses.filter(
@@ -434,17 +434,7 @@ export default function PlanningDetailScreen({
             <View style={styles.card}>
               <Text style={styles.label}>SELECTED BEACON</Text>
               <Text style={styles.h2}>{winner.payload.title}</Text>
-              {thread.materialized_activity_id && (
-                <Button
-                  title="Open beacon"
-                  onPress={() =>
-                    router.push({
-                      pathname: "/activity/[id]",
-                      params: { id: thread.materialized_activity_id! },
-                    })
-                  }
-                />
-              )}
+              <LinkedPlanningBeacon thread={thread}/>
               {replacementAvailable && manages && (
                 <Button
                   title="Replace with next option"

@@ -16,7 +16,7 @@ import {
 import { DecisionRow } from "@/src/features/planning/DecisionRow";
 import { randomUUID } from "expo-crypto";
 
-const filters = ["All", "Pings", "Votes", "Draws", "Invites"] as const;
+const filters = ["All", "Pings", "Decisions", "Invites"] as const;
 type Filter = (typeof filters)[number];
 
 export default function ResponsesScreen() {
@@ -71,7 +71,7 @@ function ResponsesContent() {
     (item) =>
       filter === "All" ||
       filter ===
-        ({ ping: "Pings", vote: "Votes", draw: "Draws" } as const)[
+        ({ ping: "Pings", vote: "Decisions", draw: "Decisions", time: "Decisions" } as const)[
           item.thread.kind
         ],
   );
@@ -182,12 +182,12 @@ function ResponsesContent() {
       </View>
       {creating ? (
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-          {(["ping", "vote", "draw"] as const).map((kind) => (
+          {(["ping", "vote", "draw", "time"] as const).filter(kind=>kind !== "time" || (data.is_demo === true || data.capabilities?.connected_planning === true)).map((kind) => (
             <Button
               key={kind}
               compact
               secondary
-              title={kind[0].toUpperCase() + kind.slice(1)}
+              title={kind === "time" ? "Find a Time" : kind[0].toUpperCase() + kind.slice(1)}
               onPress={() => {
                 setCreating(false);
                 router.push({

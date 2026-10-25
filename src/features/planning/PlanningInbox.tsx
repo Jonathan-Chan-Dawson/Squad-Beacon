@@ -211,10 +211,7 @@ export function PlanningInbox({
               kind={thread.kind}
               counts={
                 thread.kind === "vote"
-                  ? [
-                      { label: "options", value: options.length },
-                      { label: "votes", value: votes.length },
-                    ]
+                  ? [{ label: "options", value: options.length }, ...(votes.some(v=>v.user_id===userId)||thread.owner_id===userId||thread.coowner_ids.includes(userId??"")||thread.status!=="open"?[{label:"votes",value:votes.length}]:[])]
                   : [{ label: "approved options", value: options.length }]
               }
               selected={

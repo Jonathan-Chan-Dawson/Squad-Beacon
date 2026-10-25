@@ -90,7 +90,7 @@ test("priority puts selected, owned and joined Beacons before category variety a
   );
   assert.equal(result.owned[0].id, "beacon:011");
   assert.equal(result.overflow, 7);
-  assert.equal(result.satellites.length, 2);
+  assert.equal(result.satellites.length, 0);
   assert.deepEqual(
     nativePresentation(
       group([...members].reverse()),
@@ -162,7 +162,7 @@ test("20 Beacons and 11 friends show seven petals and one combined total with no
   assert.equal(item.overflow, 13);
   assert.equal(item.people.length, 11);
   assert.equal(item.satellites.length, 0);
-  assert.equal(bloomGeometry(item).countBadge?.text, "👥 +11 · +13");
+  assert.equal(bloomGeometry(item).countBadge?.text, "👥 11 · ✦ 20");
   assert.equal(item.friendOverflow, 11);
   assert.equal(item.featureCost, 8);
   assert.equal(item.visible.filter((p) => p.kind === "beacon").length, 7);
@@ -243,7 +243,7 @@ test("small far-zoom expansions retain every Beacon and friend artwork model", (
     {},
     new Set(),
   );
-  assert.equal(friendItem.visible.length, 2);
+  assert.equal(friendItem.visible.length, 0);
   assert.equal(presentationArtworkPoints(friendItem).length, 4);
 });
 
@@ -450,4 +450,59 @@ test("dense neighboring blooms reserve friend decorations while a separate frien
         );
   }
   assert.deepEqual(input, snapshot);
+});
+
+test("far tiers group loose Beacons, retain every authorized member, and never render friend rings", () => {
+  const camera = {
+    centerLatitude: 0,
+    centerLongitude: 0,
+    zoom: 10,
+    width: 375,
+    height: 740,
+  };
+  const input: ClusterPoint[] = [
+    {
+      id: "beacon:a",
+      kind: "beacon",
+      latitude: 0,
+      longitude: (-54 * 360) / (256 * 2 ** 10),
+    },
+    {
+      id: "beacon:b",
+      kind: "beacon",
+      latitude: 0,
+      longitude: (54 * 360) / (256 * 2 ** 10),
+    },
+  ];
+  const grouped = nativeMapPresentations(input, camera, "atmosphere");
+  assert.equal(grouped.length, 1);
+  assert.equal(grouped[0].beacons.length, 2);
+  const selected = nativeMapPresentations(input, camera, "atmosphere", {
+    "beacon:a": { tier: -3 },
+  });
+  assert.equal(
+    selected.find((item) => item.group.members[0].id === "beacon:a")?.scale,
+    "close",
+  );
+  for (const mode of ["atmosphere", "micro"] as const) {
+    const item = nativePresentation(
+      group([...points(20), ...points(3, "person")]),
+      mode,
+      {},
+      new Set(),
+    );
+    const geometry = bloomGeometry(item);
+    assert.equal(geometry.satellites.length, 0);
+    assert.equal(geometry.countBadge?.peopleCount, 3);
+    assert.equal(geometry.countBadge?.beaconTotal, 20);
+    const friends = nativePresentation(
+      group(points(3, "person")),
+      mode,
+      {},
+      new Set(),
+    );
+    assert.equal(friends.visible.length, 0);
+    assert.equal(presentationArtworkPoints(friends).length, 3);
+    assert.equal(presentationOpensExplorer(friends), false);
+  }
 });

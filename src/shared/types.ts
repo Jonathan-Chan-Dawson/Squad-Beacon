@@ -1,3 +1,4 @@
+import type { PlanningThread, PlanningPingResponse, PlanningProposal, PlanningVote } from "@/src/features/planning/types";
 import type {
   BeaconMemory,
   BeaconTeam,
@@ -408,72 +409,7 @@ export interface BeaconFavorite {
   activity_id: ID;
   created_at: string;
 }
-export type PlanningThreadKind = "ping" | "vote" | "draw";
-export type PlanningThreadStatus =
-  "open" | "resolved" | "no_options" | "expired" | "cancelled";
-export type PlanningResponse = "interested" | "maybe" | "pass";
-export interface BeaconDraft {
-  title: string;
-  description: string;
-  category: Category;
-  mode: "squad" | "invite";
-  starts_at: string;
-  ends_at: string;
-  timezone: string;
-  approval_required: boolean;
-  audience: Audience;
-  audience_id: ID | null;
-  target_count: number | null;
-  label: string;
-  online_url: string | null;
-  latitude: number | null;
-  longitude: number | null;
-  aspiration_ids: ID[];
-}
-export interface PlanningThread {
-  id: ID;
-  owner_id: ID;
-  coowner_ids: ID[];
-  kind: PlanningThreadKind;
-  title: string;
-  body: string;
-  audience: Audience;
-  audience_id: ID | null;
-  deadline_at: string;
-  status: PlanningThreadStatus;
-  payload: BeaconDraft | null;
-  winner_proposal_id: ID | null;
-  replaced_from_proposal_id: ID | null;
-  materialized_activity_id: ID | null;
-  created_at: string;
-  resolved_at: string | null;
-}
-export interface PlanningPingResponse {
-  thread_id: ID;
-  user_id: ID;
-  response: PlanningResponse;
-  auto_rsvp: boolean;
-  available_after?: string | null;
-  created_at: string;
-  updated_at: string;
-}
-export interface PlanningProposal {
-  id: ID;
-  thread_id: ID;
-  author_id: ID;
-  payload: BeaconDraft;
-  approved: boolean;
-  disqualified_at: string | null;
-  created_at: string;
-  activity_id: ID | null;
-}
-export interface PlanningVote {
-  thread_id: ID;
-  proposal_id: ID;
-  user_id: ID;
-  created_at: string;
-  updated_at?: string;
-}
+export type { PlanningThreadKind, PlanningThreadStatus, PlanningResponse, BeaconDraft, PlanningThread, PlanningPingResponse, PlanningProposal, PlanningVote } from "@/src/features/planning/types";
 export interface BeaconRole {
   activity_id: ID;
   user_id: ID;
@@ -539,6 +475,15 @@ export interface Data {
   planning_ping_responses: PlanningPingResponse[];
   planning_proposals: PlanningProposal[];
   planning_votes: PlanningVote[];
+  planning_slots?: import("@/src/features/planning/types").PlanningSlot[];
+  planning_availability?: import("@/src/features/planning/types").PlanningAvailability[];
+  planning_approval_ballots?: import("@/src/features/planning/types").ApprovalBallot[];
+  planning_organizer_messages?: import("@/src/features/planning/types").OrganizerMessage[];
+  planning_member_access?: {thread_id:string; user_id:string}[];
+  planning_option_counts?: {thread_id:string; proposal_id:string; total:number}[];
+  planning_backup_invitees?: {thread_id:string; user_ids:string[]}[];
+  planning_recovery?: {thread_id: string; owner_id: string; context: Partial<import("@/src/features/planning/types").BeaconDraft> & {local_draft_token?:string}}[];
+  planning_claims?: import("@/src/features/planning/types").PlanningClaim[];
   beacon_roles: BeaconRole[];
   beacon_attendance: BeaconAttendance[];
   beacon_invitation_grants: BeaconInvitationGrant[];
@@ -567,7 +512,7 @@ export interface Data {
   rsvps: RSVP[];
   resolved_beacon_responses?: RSVP[];
   presence?: Presence[];
-  capabilities?: { living_activity?: boolean; rsvp_decline?: boolean; beacon_supplies?: boolean; status_privacy?: boolean; status_attachments?: boolean; status_current_beacon?: boolean };
+  capabilities?: { connected_planning?: boolean; living_activity?: boolean; rsvp_decline?: boolean; beacon_supplies?: boolean; status_privacy?: boolean; status_attachments?: boolean; status_current_beacon?: boolean };
   comments: Comment[];
   reactions: Reaction[];
   locations: LocationSession[];
@@ -675,7 +620,7 @@ export function normalizeData(value: Partial<Data> | null | undefined): Data {
   data.beacon_supply_requests = Array.isArray(data.beacon_supply_requests) ? data.beacon_supply_requests : [];
   data.beacon_supply_claims = Array.isArray(data.beacon_supply_claims) ? data.beacon_supply_claims : [];
   data.presence = Array.isArray(data.presence) ? data.presence : [];
-  data.capabilities = { living_activity: data.is_demo === true || data.capabilities?.living_activity === true, status_attachments: data.is_demo === true || data.capabilities?.status_attachments === true, beacon_supplies: data.is_demo === true || data.capabilities?.beacon_supplies === true, status_privacy: data.is_demo === true || data.capabilities?.status_privacy === true, status_current_beacon: data.is_demo === true || data.capabilities?.status_current_beacon === true, rsvp_decline: data.is_demo === true || data.capabilities?.rsvp_decline === true };
+  data.capabilities = { connected_planning: data.is_demo === true || data.capabilities?.connected_planning === true, living_activity: data.is_demo === true || data.capabilities?.living_activity === true, status_attachments: data.is_demo === true || data.capabilities?.status_attachments === true, beacon_supplies: data.is_demo === true || data.capabilities?.beacon_supplies === true, status_privacy: data.is_demo === true || data.capabilities?.status_privacy === true, status_current_beacon: data.is_demo === true || data.capabilities?.status_current_beacon === true, rsvp_decline: data.is_demo === true || data.capabilities?.rsvp_decline === true };
   data.dm_message_reads = Array.isArray(data.dm_message_reads) ? data.dm_message_reads : [];
   data.plan_members = Array.isArray(data.plan_members) ? data.plan_members : [];
   data.plan_routines = Array.isArray(data.plan_routines)
@@ -892,6 +837,15 @@ export function normalizeData(value: Partial<Data> | null | undefined): Data {
   data.planning_votes = Array.isArray(data.planning_votes)
     ? data.planning_votes
     : [];
+  data.planning_slots = Array.isArray(data.planning_slots) ? data.planning_slots : [];
+  data.planning_availability = Array.isArray(data.planning_availability) ? data.planning_availability : [];
+  data.planning_approval_ballots = Array.isArray(data.planning_approval_ballots) ? data.planning_approval_ballots : [];
+  data.planning_organizer_messages = Array.isArray(data.planning_organizer_messages) ? data.planning_organizer_messages : [];
+  data.planning_member_access = Array.isArray(data.planning_member_access) ? data.planning_member_access : [];
+  data.planning_option_counts = Array.isArray(data.planning_option_counts) ? data.planning_option_counts : [];
+  data.planning_backup_invitees = Array.isArray(data.planning_backup_invitees) ? data.planning_backup_invitees : [];
+  data.planning_claims = Array.isArray(data.planning_claims) ? data.planning_claims : [];
+  data.planning_recovery = Array.isArray(data.planning_recovery) ? data.planning_recovery : [];
   data.beacon_roles = Array.isArray(data.beacon_roles) ? data.beacon_roles : [];
   data.beacon_attendance = Array.isArray(data.beacon_attendance)
     ? data.beacon_attendance

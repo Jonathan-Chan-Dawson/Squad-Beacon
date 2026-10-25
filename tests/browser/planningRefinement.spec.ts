@@ -20,9 +20,9 @@ test("Chats has one compact response row and a full-screen filtered inbox", asyn
     .click();
   await expect(page).toHaveURL(/\/responses/);
   await expect(page.getByRole("dialog")).toHaveCount(0);
-  await page.getByRole("button", { name: "Votes", exact: true }).click();
+  await page.getByRole("button", { name: "Decisions", exact: true }).click();
   await expect(
-    page.getByRole("button", { name: "Votes", exact: true }),
+    page.getByRole("button", { name: "Decisions", exact: true }),
   ).toHaveAttribute("aria-selected", "true");
   await page
     .getByRole("button", {

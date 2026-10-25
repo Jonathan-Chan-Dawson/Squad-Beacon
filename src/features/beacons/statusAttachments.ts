@@ -24,7 +24,7 @@ export function eligibleStatusAttachments(data: Data, viewer: string | null, now
   if (!viewer || data.viewer_id !== viewer) return [];
   const candidates: StatusAttachment[] = [
     ...data.activities.filter(row => row.mode !== "solo" && ["owner", "coowner"].includes(beaconRoleFor(data, row, viewer))).map(row => ({ type: "beacon" as const, id: row.id })),
-    ...data.planning_threads.filter(row => canManagePlanningThread(row, viewer)).map(row => ({ type: row.kind, id: row.id })),
+    ...data.planning_threads.filter(row => row.kind !== "time" && canManagePlanningThread(row, viewer)).map(row => ({ type: row.kind as "ping" | "vote" | "draw", id: row.id })),
   ];
   return candidates.flatMap(row => { const resolved = resolveStatusAttachment(data, row, viewer, now); return resolved ? [resolved] : []; })
     .sort((a, b) => Number(b.state === "Live") - Number(a.state === "Live") || a.time.localeCompare(b.time) || a.id.localeCompare(b.id));

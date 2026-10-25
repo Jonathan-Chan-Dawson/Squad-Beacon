@@ -1,3 +1,4 @@
+import {LinkedPlanningBeacon} from "@/src/features/planning/ConnectedPlanningActions";
 import React, { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { useRouter } from "expo-router";
@@ -138,7 +139,7 @@ export function GroupChatThread({
       id: thread.id,
       createdAt: thread.created_at,
       content: (
-        <Pressable
+        <View><Pressable
           accessibilityRole="button"
           accessibilityLabel={`Open ${thread.kind} ${thread.title}`}
           onPress={() => openItem(thread.id)}
@@ -172,7 +173,7 @@ export function GroupChatThread({
           <Text style={{ color: colors.accent, fontSize: 12 }}>
             {canReply ? "Respond" : "Open"} ›
           </Text>
-        </Pressable>
+        </Pressable>{thread.materialized_activity_id && <LinkedPlanningBeacon thread={thread}/>}</View>
       ),
     });
   }

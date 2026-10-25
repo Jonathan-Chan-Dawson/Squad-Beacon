@@ -11,9 +11,9 @@ test("bloom counts, direct exploration, reduced motion and phone layouts", async
       contents: `
     import {webConstellation} from './src/features/maps/webConstellation';
     import {nativePresentation} from './src/features/maps/nativeMapPresentation';
-    window.renderBloom=(count,mode,dark,friends=11)=>{
+    window.renderBloom=(count,mode,dark,friends=11,prominent=false)=>{
       const members=[...Array.from({length:count},(_,i)=>({id:'beacon:'+i,kind:'beacon',latitude:41.88,longitude:-87.64,category:'Social'})),...Array.from({length:friends},(_,i)=>({id:'person:'+i,kind:'person',latitude:41.88+Math.sin(i*2.4)*.0001,longitude:-87.64+Math.cos(i*2.4)*.0001}))];
-      const presentation=nativePresentation({id:'fixture',latitude:41.88,longitude:-87.64,members},mode,{},new Set(['beacon:0']));
+      const presentation=nativePresentation({id:'fixture',latitude:41.88,longitude:-87.64,members},mode,{},new Set(['beacon:0']),prominent);
       return webConstellation(presentation,{
         ink:dark?'#eef5f3':'#163830',surface:dark?'#192e29':'#ffffff',line:dark?'#456157':'#c5d8d0',ownership:'#168c80',categoryColor:()=> '#26b39d',reducedMotion:matchMedia('(prefers-reduced-motion: reduce)').matches,
         open:(section)=>{window.opened=(window.opened||0)+1;window.section=section;},
@@ -55,12 +55,14 @@ test("bloom counts, direct exploration, reduced motion and phone layouts", async
                 [1, 0],
                 [1, 2],
                 [0, 12],
+                [0, 2],
                 [2, 2],
                 [2, 25],
                 [2, 7],
                 [7, 18],
                 [20, 5],
                 [40, 60],
+                [40, 0],
                 [3, 11],
                 [5, 11],
                 [20, 11],
@@ -87,9 +89,26 @@ test("bloom counts, direct exploration, reduced motion and phone layouts", async
         );
         assert.equal(
           await dense.getByTestId("map-cluster-count").textContent(),
-          "👥 +11 · +13",
+          "11 · 20",
         );
         assert.equal(await dense.getByTestId("map-cluster-count").count(), 1);
+        assert.equal(
+          await dense
+            .locator('[data-count-kind="friends"]')
+            .getAttribute("data-count-value"),
+          "11",
+        );
+        assert.equal(
+          await dense
+            .locator('[data-count-kind="beacons"]')
+            .getAttribute("data-count-value"),
+          "20",
+        );
+        assert.equal(
+          await dense.locator("[data-count-content] svg").count(),
+          2,
+        );
+
         assert.equal(
           await dense.getByTestId("cluster-friend-count").count(),
           0,
@@ -103,12 +122,99 @@ test("bloom counts, direct exploration, reduced motion and phone layouts", async
           0,
         );
         assert.equal(await dense.locator(".map-petal-item").count(), 7);
+        for (const tier of ["atmosphere", "micro"]) {
+          assert.equal(
+            await page
+              .locator(
+                `section[data-mode="${tier}"] [data-testid="cluster-friend-satellite"]`,
+              )
+              .count(),
+            0,
+          );
+          const friends = page.locator(
+            `section[data-mode="${tier}"][data-count="0"][data-friends="2"]`,
+          );
+          assert.equal(
+            await friends.getByTestId("cluster-friend-count").textContent(),
+            "2",
+          );
+          assert.equal(
+            await friends.locator(".map-petal-item:visible").count(),
+            0,
+          );
+        }
         const microDense = page.locator(
           'section[data-mode="micro"][data-count="20"][data-friends="11"]',
         );
         assert.equal(
           await microDense.getByTestId("map-cluster-count").textContent(),
-          "👥 +11 · +18",
+          "20",
+        );
+        assert.equal(
+          await microDense.locator('[data-count-kind="friends"]').count(),
+          0,
+        );
+        assert.match(
+          (await microDense
+            .getByTestId("map-cluster-count")
+            .getAttribute("aria-label"))!,
+          /11 nearby friends.*20 Beacons/,
+        );
+        await page.evaluate(
+          ({ dark }) => {
+            const host = document.createElement("div");
+            host.id = "micro-friends-mode";
+            host.append(
+              (window as any).renderBloom(40, "micro", dark, 60, true),
+            );
+            document.querySelector("main")!.append(host);
+          },
+          { dark },
+        );
+        const friendsMode = page.locator("#micro-friends-mode");
+        assert.equal(
+          await friendsMode.getByTestId("map-cluster-count").textContent(),
+          "60 · 40",
+        );
+        assert.equal(
+          await friendsMode.locator("[data-count-content] svg").count(),
+          2,
+        );
+        await friendsMode.evaluate((node) => node.remove());
+        const fitting = page.locator(
+          'section[data-mode="swarm"][data-count="20"][data-friends="5"]',
+        );
+        assert.equal(
+          await fitting.getByTestId("cluster-friend-satellite").count(),
+          0,
+        );
+        assert.equal(
+          await fitting.getByTestId("map-cluster-count").textContent(),
+          "5 · 20",
+        );
+        const beaconOnly = page.locator(
+          'section[data-mode="swarm"][data-count="40"][data-friends="0"]',
+        );
+        assert.equal(
+          await beaconOnly.getByTestId("map-cluster-count").textContent(),
+          "40",
+        );
+        assert.equal(
+          await beaconOnly.locator('[data-count-kind="friends"]').count(),
+          0,
+        );
+        assert.equal(
+          await page
+            .locator("[data-count-content]")
+            .evaluateAll(
+              (nodes) =>
+                nodes.filter(
+                  (node) =>
+                    node.getBoundingClientRect().width >
+                    node.parentElement!.clientWidth,
+                ).length,
+            ),
+          0,
         );
         assert.equal(
           await page
@@ -178,7 +284,7 @@ test("bloom counts, direct exploration, reduced motion and phone layouts", async
         );
         assert.equal(
           await microSmall.getByTestId("map-cluster-count").textContent(),
-          "👥 +11",
+          "11",
         );
         assert.equal(
           await microSmall.getByTestId("map-cluster-count").isVisible(),
@@ -245,7 +351,7 @@ test("bloom counts, direct exploration, reduced motion and phone layouts", async
         );
         assert.equal(
           await friendOnly.getByTestId("cluster-friend-count").textContent(),
-          "👥12",
+          "12",
         );
         await friendOnly.getByTestId("cluster-friend-count").click();
         assert.equal(
