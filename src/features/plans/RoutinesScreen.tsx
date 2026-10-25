@@ -1,10 +1,8 @@
-import React, { useState } from "react";
-import { Text, View } from "react-native";
-import { router, useLocalSearchParams } from "expo-router";
-import { useBeacon } from "@/src/shared/store";
 import type { PlanRoutine } from "@/src/features/plans/routines";
 import { isLocalDate } from "@/src/features/plans/routines";
 import { RoutineScheduleSheet } from "@/src/features/plans/RoutineScheduleSheet";
+import { ConfirmDialog, QuickChoiceDialog } from "@/src/shared/Dialogs";
+import { useBeacon } from "@/src/shared/store";
 import {
   Action,
   Button,
@@ -14,6 +12,9 @@ import {
   Txt,
   useTheme,
 } from "@/src/shared/ui";
+import { router, useLocalSearchParams } from "expo-router";
+import { useState } from "react";
+import { Text, View } from "react-native";
 
 const dayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -26,7 +27,13 @@ export default function RoutinesScreen() {
     startDate?: string;
     timezone?: string;
   }>();
-  const calendarContext = typeof startDate === "string" && isLocalDate(startDate) ? { startDate, ...(typeof timezone === "string" && timezone ? { timezone } : {}) } : {};
+  const calendarContext =
+    typeof startDate === "string" && isLocalDate(startDate)
+      ? {
+          startDate,
+          ...(typeof timezone === "string" && timezone ? { timezone } : {}),
+        }
+      : {};
   const [createOpen, setCreateOpen] = useState(create === "yes");
   const [sourcePlanId, setSourcePlanId] = useState("");
   const [editing, setEditing] = useState("");
@@ -280,40 +287,26 @@ export default function RoutinesScreen() {
                   })
                 }
               />
-              <Sheet
+              <QuickChoiceDialog
                 title="Routine actions"
                 visible={moreOpen}
                 onClose={() => setMore("")}
-              >
-                {routine.status !== "ended" && (
-                  <Button
-                    compact
-                    secondary
-                    title="Edit schedule"
-                    onPress={() => {
-                      setMore("");
-                      setEditing(routine.id);
-                    }}
-                  />
-                )}
-                {routine.status !== "ended" && (
-                  <Button
-                    compact
-                    secondary
-                    title="End Routine…"
-                    onPress={() => {
-                      setMore("");
-                      setEnding(routine.id);
-                    }}
-                  />
-                )}
-                <Button
-                  compact
-                  secondary
-                  title="Close"
-                  onPress={() => setMore("")}
-                />
-              </Sheet>
+                items={
+                  routine.status === "ended"
+                    ? []
+                    : [
+                        {
+                          label: "Edit schedule",
+                          onPress: () => setEditing(routine.id),
+                        },
+                        {
+                          label: "End Routine…",
+                          destructive: true,
+                          onPress: () => setEnding(routine.id),
+                        },
+                      ]
+                }
+              />
             </View>
           );
         })
@@ -335,24 +328,24 @@ export default function RoutinesScreen() {
           onClose={() => setEditing("")}
         />
       )}
-      <Sheet
+      <ConfirmDialog
         title="End this Routine?"
         visible={!!ending}
         onClose={() => setEnding("")}
+        onConfirm={async () => {
+          await act("end_routine", { id: ending });
+          setEnding("");
+        }}
+        confirmLabel={"End Routine"}
+        cancelLabel={"Keep Routine"}
+        closeOnConfirm={false}
+        destructive
       >
         <Txt>
           Ending stops future occurrences. Plans and Beacons already created
           from this Routine remain.
         </Txt>
-        <Action
-          title="End Routine"
-          run={async () => {
-            await act("end_routine", { id: ending });
-            setEnding("");
-          }}
-        />
-        <Button title="Keep Routine" secondary onPress={() => setEnding("")} />
-      </Sheet>
+      </ConfirmDialog>
     </Screen>
   );
 }

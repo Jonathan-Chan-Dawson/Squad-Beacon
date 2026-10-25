@@ -7,10 +7,12 @@ export function NoteSpeechBubble({
   children,
   compact = false,
   tailTowardIdentity = false,
+  dense = false,
 }: {
   children: React.ReactNode;
   compact?: boolean;
   tailTowardIdentity?: boolean;
+  dense?: boolean;
 }) {
   const { colors } = useTheme();
   const gradientId = React.useId().replace(/:/g, "");
@@ -18,14 +20,15 @@ export function NoteSpeechBubble({
     <View
       testID="status-note-speech-bubble"
       style={{
-        paddingTop: tailTowardIdentity ? 9 : 0,
-        paddingBottom: tailTowardIdentity ? 0 : 9,
+        paddingTop: dense ? 0 : tailTowardIdentity ? 9 : 0,
+        paddingBottom: dense ? 0 : tailTowardIdentity ? 0 : 9,
         alignSelf: "stretch",
       }}
     >
       <View
         style={{
           padding: compact ? 10 : 16,
+          ...(dense ? { paddingVertical: 6, paddingHorizontal: 10 } : {}),
           borderRadius: compact ? 18 : 22,
           gap: 8,
           backgroundColor: colors.green + "18",
@@ -48,21 +51,26 @@ export function NoteSpeechBubble({
         </Svg>
         {children}
       </View>
-      <View
-        pointerEvents="none"
-        style={{
-          position: "absolute",
-          ...(tailTowardIdentity ? { top: 0 } : { bottom: 0 }),
-          ...(I18nManager.isRTL ? { right: 24 } : { left: 24 }),
-          borderLeftWidth: 9,
-          borderRightWidth: 9,
-          ...(tailTowardIdentity
-            ? { borderBottomWidth: 10, borderBottomColor: colors.green + "18" }
-            : { borderTopWidth: 10, borderTopColor: colors.green + "18" }),
-          borderLeftColor: "transparent",
-          borderRightColor: "transparent",
-        }}
-      />
+      {!dense && (
+        <View
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            ...(tailTowardIdentity ? { top: 0 } : { bottom: 0 }),
+            ...(I18nManager.isRTL ? { right: 24 } : { left: 24 }),
+            borderLeftWidth: 9,
+            borderRightWidth: 9,
+            ...(tailTowardIdentity
+              ? {
+                  borderBottomWidth: 10,
+                  borderBottomColor: colors.green + "18",
+                }
+              : { borderTopWidth: 10, borderTopColor: colors.green + "18" }),
+            borderLeftColor: "transparent",
+            borderRightColor: "transparent",
+          }}
+        />
+      )}
     </View>
   );
 }

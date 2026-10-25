@@ -7,7 +7,6 @@ import React, {
   useState,
 } from "react";
 import {
-  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -15,9 +14,12 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
+import { DialogPortal } from "./DialogPortal";
+import { useOverlayKeyboardFocus } from "./overlayFocus";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Sheet, useOverlayPresence } from "./ui";
 import { useDesignTheme } from "./design-system";
+import { Sheet } from "./ui";
+import { useOverlayPresence, useTopOverlay } from "./overlays";
 
 export function ActionRow({
   label,
@@ -169,7 +171,9 @@ export function ContextMenu({
     restore: null as HTMLElement | null,
   });
   const callbacks = useRef({ onClose, onDismiss });
-  useLayoutEffect(() => { callbacks.current = { onClose, onDismiss }; }, [onClose, onDismiss]);
+  useLayoutEffect(() => {
+    callbacks.current = { onClose, onDismiss };
+  }, [onClose, onDismiss]);
   const phoneSheet = mode === "context" && width < 768;
   const sheet = phoneSheet || fallback;
   const anchored = !sheet;
@@ -196,6 +200,7 @@ export function ContextMenu({
     ),
   );
   useOverlayPresence(id, visible && anchored, title);
+  const topOverlay = useTopOverlay(id);
   useLayoutEffect(() => {
     if (!visible || phoneSheet) return;
     if (!anchorRef.current) {
@@ -222,8 +227,13 @@ export function ContextMenu({
     lifecycle.current.open = false;
     const target = lifecycle.current.restore;
     lifecycle.current.restore = null;
-    if (target?.isConnected) target.focus({ preventScroll: true });
-    callbacks.current.onDismiss?.();
+    const complete = () => {
+      if (target?.isConnected && !target.closest('[aria-hidden="true"]'))
+        target.focus({ preventScroll: true });
+      callbacks.current.onDismiss?.();
+    };
+    if (Platform.OS === "web") requestAnimationFrame(complete);
+    else complete();
   }, []);
   useLayoutEffect(() => {
     if (!anchored) return;
@@ -252,11 +262,28 @@ export function ContextMenu({
       const rectangle = target?.getBoundingClientRect?.();
       // Follow the trigger through focus/scroll adjustments while it remains
       // visible. Background-tab scrolling must not dismiss a foreground menu.
-      if (!rectangle || rectangle.bottom < 0 || rectangle.top > height || rectangle.right < 0 || rectangle.left > width) dismiss();
-      else if (!anchor || Math.abs(rectangle.x - anchor.x) > 1 || Math.abs(rectangle.y - anchor.y) > 1)
-        setAnchor({ x: rectangle.x, y: rectangle.y, width: rectangle.width, height: rectangle.height });
+      if (
+        !rectangle ||
+        rectangle.bottom < 0 ||
+        rectangle.top > height ||
+        rectangle.right < 0 ||
+        rectangle.left > width
+      )
+        dismiss();
+      else if (
+        !anchor ||
+        Math.abs(rectangle.x - anchor.x) > 1 ||
+        Math.abs(rectangle.y - anchor.y) > 1
+      )
+        setAnchor({
+          x: rectangle.x,
+          y: rectangle.y,
+          width: rectangle.width,
+          height: rectangle.height,
+        });
     };
     const keydown = (event: KeyboardEvent) => {
+      if (!topOverlay) return;
       if (event.key === "Escape") {
         event.preventDefault();
         event.stopPropagation();
@@ -290,7 +317,7 @@ export function ContextMenu({
       window.removeEventListener("scroll", scroll, true);
       document.removeEventListener("keydown", keydown, true);
     };
-  }, [visible, anchored, anchor, anchorRef, height, width]);
+  }, [visible, anchored, anchor, anchorRef, height, width, topOverlay]);
   const focus = useCallback(() => {
     if (Platform.OS !== "web") return;
     const root = dialogRef.current as unknown as HTMLElement | null;
@@ -300,6 +327,12 @@ export function ContextMenu({
       )
       ?.focus({ preventScroll: true });
   }, []);
+  useOverlayKeyboardFocus(
+    dialogRef,
+    visible && anchored && topOverlay,
+    onClose,
+    focus,
+  );
   if (sheet)
     return (
       <Sheet
@@ -313,17 +346,24 @@ export function ContextMenu({
       </Sheet>
     );
   return (
-    <Modal
+    <DialogPortal
       visible={visible && !!anchor}
       transparent
       animationType="none"
-      onRequestClose={onClose}
+      onRequestClose={() => {
+        if (topOverlay) onClose();
+      }}
       onShow={focus}
       onDismiss={finishDismiss}
       accessibilityLabel={title}
       statusBarTranslucent
     >
-      <View style={{ flex: 1 }}>
+      <View
+        style={{ flex: 1 }}
+        aria-hidden={!topOverlay}
+        accessibilityElementsHidden={!topOverlay}
+        pointerEvents={topOverlay ? "auto" : "none"}
+      >
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={`Dismiss ${title}`}
@@ -336,9 +376,11 @@ export function ContextMenu({
         />
         <View
           ref={dialogRef}
-          role={Platform.OS === "web" ? undefined : "dialog"}
-          accessibilityLabel={Platform.OS === "web" ? undefined : title}
-          accessibilityViewIsModal
+          role="dialog"
+          accessibilityLabel={title}
+          accessibilityViewIsModal={topOverlay}
+          aria-modal={topOverlay}
+          tabIndex={-1}
           testID="anchored-context-menu"
           onLayout={(event) =>
             setContentHeight(event.nativeEvent.layout.height)
@@ -376,6 +418,6 @@ export function ContextMenu({
           </ScrollView>
         </View>
       </View>
-    </Modal>
+    </DialogPortal>
   );
 }

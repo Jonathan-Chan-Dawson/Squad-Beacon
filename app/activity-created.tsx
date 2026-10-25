@@ -3,6 +3,7 @@ import { useNow } from "@/src/shared/useNow";
 import React, { useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
 import { useBeacon } from "@/src/shared/store";
+import { ConfirmDialog } from "@/src/shared/Dialogs";
 import { AudiencePicker, Button, Screen, Txt } from "@/src/shared/ui";
 import { eligibleCurrentBeacons } from "@/src/features/beacons/currentStatusBeacon";
 import {
@@ -46,9 +47,9 @@ export default function ActivityCreated() {
       pathname: type === "beacon" ? "/activity/[id]" : "/council/[id]",
       params: { id },
     });
-  const link = async () => {
+  const link = async (replaceConfirmed = false) => {
     if (busy || !userId) return;
-    if (!live && status?.status_attachment && !confirm) {
+    if (!live && status?.status_attachment && !replaceConfirmed) {
       setConfirm(true);
       return;
     }
@@ -84,7 +85,10 @@ export default function ActivityCreated() {
         );
         if (result.message) throw new Error(result.message);
       }
-      if (epoch === getViewerEpoch()) open();
+      if (epoch === getViewerEpoch()) {
+        setConfirm(false);
+        open();
+      }
     } catch (e) {
       if (epoch === getViewerEpoch())
         setError(
@@ -92,6 +96,7 @@ export default function ActivityCreated() {
             ? e.message
             : "Created successfully, but linking failed. Try again.",
         );
+      if (replaceConfirmed) throw e;
     } finally {
       if (epoch === getViewerEpoch()) setBusy(false);
     }
@@ -119,9 +124,6 @@ export default function ActivityCreated() {
           }}
         />
       )}
-      {confirm && (
-        <Txt>Replace your existing Featured activity with this one?</Txt>
-      )}
       {(live || eligible) && (
         <Button
           title={
@@ -129,9 +131,7 @@ export default function ActivityCreated() {
               ? "Updating…"
               : live
                 ? "Use as My Current Activity"
-                : confirm
-                  ? "Replace Featured Activity"
-                  : "Feature on Status"
+                : "Feature on Status"
           }
           disabled={busy}
           onPress={() => void link()}
@@ -139,6 +139,16 @@ export default function ActivityCreated() {
       )}
       {!!error && <Txt>{error}</Txt>}
       <Button secondary title="Continue" disabled={busy} onPress={open} />
+      <ConfirmDialog
+        title="Replace Featured activity?"
+        visible={confirm}
+        onClose={() => setConfirm(false)}
+        message="Replace your existing Featured activity with this one?"
+        confirmLabel="Replace Featured Activity"
+        cancelLabel="Keep Featured activity"
+        closeOnConfirm={false}
+        onConfirm={() => link(true)}
+      />
     </Screen>
   );
 }

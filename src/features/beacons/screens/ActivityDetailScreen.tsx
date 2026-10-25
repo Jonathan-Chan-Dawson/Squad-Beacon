@@ -1,36 +1,75 @@
-import { BeaconOrganizerRoles } from "../components/BeaconOrganizerRoles";
-import { pageAnimation } from "@/src/shared/mobilePresentation";
-import { BeaconSupplies, BeaconReadiness } from "../components/BeaconSupplies";
-import { BeaconCardEngagement } from "../components/BeaconCardEngagement";
-import {
-  useBeaconParticipation,
-  ParticipationButtons,
-} from "../useBeaconParticipation";
-import React, { useEffect, useRef, useState } from "react";
+import DateField from "@/components/DateField";
 import {
   resolveActivityToolEntry,
   type BeaconToolId as ToolId,
 } from "@/src/features/beacons/activityToolEntry";
+import { AttendanceControls } from "@/src/features/beacons/AttendanceControls";
+import { BeaconMemories } from "@/src/features/beacons/BeaconMemories";
 import {
-  Animated,
-  I18nManager,
-  KeyboardAvoidingView,
-  Linking,
-  Platform,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  Share,
-  Text,
-  View,
-  useWindowDimensions,
-} from "react-native";
+  canReadBeaconActivity,
+  canReadBeaconModuleEntry,
+  canReadBeaconNote,
+  canUseBeaconModules,
+} from "@/src/features/beacons/beaconModules";
+import { BeaconScoreboard } from "@/src/features/beacons/BeaconScoreboard";
+import { BeaconSettings } from "@/src/features/beacons/BeaconSettings";
+import { BeaconTools } from "@/src/features/beacons/BeaconTools";
+import { ActivityDetailHero } from "@/src/features/beacons/components/activity-detail/ActivityDetailHero";
+import { ActivityDetailInfo } from "@/src/features/beacons/components/activity-detail/ActivityDetailInfo";
 import {
-  SafeAreaView,
-  useSafeAreaInsets,
-} from "react-native-safe-area-context";
-import { Stack, router, useLocalSearchParams } from "expo-router";
+  ActivityDetailPeople,
+  type SafeRsvpRow,
+} from "@/src/features/beacons/components/activity-detail/ActivityDetailPeople";
+import { ActivityDetailProgress } from "@/src/features/beacons/components/activity-detail/ActivityDetailProgress";
+import {
+  ActivityDetailTools,
+  type ActivityDetailToolDescriptor,
+} from "@/src/features/beacons/components/activity-detail/ActivityDetailTools";
+import { ReactionPicker } from "@/src/features/beacons/components/feed/ReactionPicker";
+import { beaconSettingsDraftKey } from "@/src/features/beacons/controls";
+import {
+  canReadMemory,
+  mediaForActivity,
+  type BeaconMemory,
+} from "@/src/features/beacons/models";
+import {
+  beaconCapacity,
+  canAdmitBeaconParticipants,
+  canManageBeacon,
+  canManageBeaconSettings,
+  canRemoveBeaconParticipant,
+  canWriteBeaconModule,
+  isBeaconModuleEnabled,
+} from "@/src/features/beacons/permissions";
+import { physicalDirectionsUrl } from "@/src/features/maps/directions";
+import { canReadBeaconMeetingDetails } from "@/src/features/maps/filtering";
+import { PersonProfilePreview } from "@/src/features/people/previews/PersonProfilePreview";
+import { canReadPlanningThread } from "@/src/features/planning/domain";
+import { canViewProfile } from "@/src/features/profile/privacy";
+import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
+import {
+  GlassBar,
+  Skeleton,
+  useReducedMotion,
+} from "@/src/shared/design-system";
+import { ConfirmDialog, QuickChoiceDialog } from "@/src/shared/Dialogs";
+import { friendIds, validateActivity } from "@/src/shared/domain";
+import { pageAnimation } from "@/src/shared/mobilePresentation";
+import { useBeacon } from "@/src/shared/store";
+import type { Activity, Profile, RSVP } from "@/src/shared/types";
+import {
+  Action,
+  Button,
+  Empty,
+  Field,
+  Sheet,
+  Txt,
+  uiHaptics,
+  useTheme,
+} from "@/src/shared/ui";
+import { useNow } from "@/src/shared/useNow";
 import * as ExpoLinking from "expo-linking";
+import { Stack, router, useLocalSearchParams } from "expo-router";
 import {
   Bookmark,
   Camera,
@@ -50,70 +89,32 @@ import {
   UsersRound,
   Wrench,
 } from "lucide-react-native";
-import DateField from "@/components/DateField";
-import { ActivityDetailHero } from "@/src/features/beacons/components/activity-detail/ActivityDetailHero";
-import { ActivityDetailInfo } from "@/src/features/beacons/components/activity-detail/ActivityDetailInfo";
-import { ActivityDetailProgress } from "@/src/features/beacons/components/activity-detail/ActivityDetailProgress";
+import React, { useEffect, useRef, useState } from "react";
 import {
-  ActivityDetailPeople,
-  type SafeRsvpRow,
-} from "@/src/features/beacons/components/activity-detail/ActivityDetailPeople";
+  Animated,
+  I18nManager,
+  KeyboardAvoidingView,
+  Linking,
+  Platform,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  Share,
+  Text,
+  View,
+  useWindowDimensions,
+} from "react-native";
 import {
-  ActivityDetailTools,
-  type ActivityDetailToolDescriptor,
-} from "@/src/features/beacons/components/activity-detail/ActivityDetailTools";
-import { ReactionPicker } from "@/src/features/beacons/components/feed/ReactionPicker";
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
+import { BeaconCardEngagement } from "../components/BeaconCardEngagement";
+import { BeaconOrganizerRoles } from "../components/BeaconOrganizerRoles";
+import { BeaconReadiness, BeaconSupplies } from "../components/BeaconSupplies";
 import {
-  canReadBeaconActivity,
-  canReadBeaconModuleEntry,
-  canReadBeaconNote,
-  canUseBeaconModules,
-} from "@/src/features/beacons/beaconModules";
-import { BeaconSettings } from "@/src/features/beacons/BeaconSettings";
-import { BeaconTools } from "@/src/features/beacons/BeaconTools";
-import { BeaconMemories } from "@/src/features/beacons/BeaconMemories";
-import { BeaconScoreboard } from "@/src/features/beacons/BeaconScoreboard";
-import { AttendanceControls } from "@/src/features/beacons/AttendanceControls";
-import { beaconSettingsDraftKey } from "@/src/features/beacons/controls";
-import {
-  beaconCapacity,
-  canAdmitBeaconParticipants,
-  canManageBeacon,
-  canManageBeaconSettings,
-  canRemoveBeaconParticipant,
-  canWriteBeaconModule,
-  isBeaconModuleEnabled,
-} from "@/src/features/beacons/permissions";
-import { canReadBeaconMeetingDetails } from "@/src/features/maps/filtering";
-import { physicalDirectionsUrl } from "@/src/features/maps/directions";
-import { canReadPlanningThread } from "@/src/features/planning/domain";
-import { canViewProfile } from "@/src/features/profile/privacy";
-import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
-import { PersonProfilePreview } from "@/src/features/people/previews/PersonProfilePreview";
-import { useBeacon } from "@/src/shared/store";
-import type { Activity, Profile, RSVP } from "@/src/shared/types";
-import { friendIds, validateActivity } from "@/src/shared/domain";
-import { useNow } from "@/src/shared/useNow";
-import {
-  Action,
-  Button,
-  Empty,
-  Field,
-  Sheet,
-  Txt,
-  uiHaptics,
-  useTheme,
-} from "@/src/shared/ui";
-import {
-  GlassBar,
-  Skeleton,
-  useReducedMotion,
-} from "@/src/shared/design-system";
-import {
-  canReadMemory,
-  mediaForActivity,
-  type BeaconMemory,
-} from "@/src/features/beacons/models";
+  ParticipationButtons,
+  useBeaconParticipation,
+} from "../useBeaconParticipation";
 
 type DetailTab = "Overview" | "People" | "Activity" | "Memories" | "Chat";
 const tabIcons = {
@@ -233,7 +234,13 @@ export default function ActivityDetail() {
   }>();
   const reducedMotion = useReducedMotion();
   const detailAnimation =
-    Platform.OS !== "web" ? pageAnimation(reducedMotion, I18nManager.isRTL) : from === "map" ? (reducedMotion ? "none" : "fade") : undefined;
+    Platform.OS !== "web"
+      ? pageAnimation(reducedMotion, I18nManager.isRTL)
+      : from === "map"
+        ? reducedMotion
+          ? "none"
+          : "fade"
+        : undefined;
   const { data, userId, demo, loading, error, refresh, act } = useBeacon();
   const activityId = Array.isArray(id) ? id[0] : id;
   const activity = data.activities.find((item) => item.id === activityId);
@@ -570,9 +577,13 @@ export default function ActivityDetail() {
   function scrollToComments() {
     const scroll = detailScrollRef.current;
     if (!canReadComments || !scroll || !commentsSectionRef.current) return;
-    commentsSectionRef.current.measureLayout(scroll.getInnerViewNode(), (_x, y) => {
-      scroll.scrollTo({ y: Math.max(0, y - 68), animated: !reducedMotion });
-    }, () => {});
+    commentsSectionRef.current.measureLayout(
+      scroll.getInnerViewNode(),
+      (_x, y) => {
+        scroll.scrollTo({ y: Math.max(0, y - 68), animated: !reducedMotion });
+      },
+      () => {},
+    );
   }
   function focusComments() {
     if (
@@ -666,13 +677,22 @@ export default function ActivityDetail() {
     (activityHasTools(activity) || hasPausedHistory || chatEnabled)
   )
     options.push("Activity");
-  if (canAccess && isBeaconModuleEnabled(activity,"experiences")) options.push("Memories");
+  if (canAccess && isBeaconModuleEnabled(activity, "experiences"))
+    options.push("Memories");
   const requestedTab =
     selectedTab.activityId === activity.id ? selectedTab.tab : "Overview";
-  const visibleTab = requestedTab === "Chat" && canAccess && (chatEnabled || hasChatHistory) ? "Chat" : options.includes(requestedTab) ? requestedTab : "Overview";
+  const visibleTab =
+    requestedTab === "Chat" && canAccess && (chatEnabled || hasChatHistory)
+      ? "Chat"
+      : options.includes(requestedTab)
+        ? requestedTab
+        : "Overview";
   const selectTab = (tab: DetailTab) => {
     if (Platform.OS !== "web" && tab === "Chat") {
-      router.push({ pathname: "/activity/[id]/chat", params: { id: activity.id } });
+      router.push({
+        pathname: "/activity/[id]/chat",
+        params: { id: activity.id },
+      });
       return;
     }
     setSelectedTab({ activityId: activity.id, tab });
@@ -918,7 +938,12 @@ export default function ActivityDetail() {
     if (tool === "music") return isBeaconModuleEnabled(activity, "music");
     return isBeaconModuleEnabled(activity, tool);
   };
-  const toolOrder: ToolId[] = activity.category === "Fitness" ? ["scoreboard","checklist","focus","journal","music"] : activity.category === "Study" ? ["focus","journal","checklist","music","scoreboard"] : ["checklist","journal","focus","music","scoreboard"];
+  const toolOrder: ToolId[] =
+    activity.category === "Fitness"
+      ? ["scoreboard", "checklist", "focus", "journal", "music"]
+      : activity.category === "Study"
+        ? ["focus", "journal", "checklist", "music", "scoreboard"]
+        : ["checklist", "journal", "focus", "music", "scoreboard"];
   const checklistHistory = data.beacon_checklist_items
     .filter(
       (item) =>
@@ -983,10 +1008,7 @@ export default function ActivityDetail() {
   };
   const tools: ActivityDetailToolDescriptor[] = canAccess
     ? toolOrder
-        .filter(
-          (tool) =>
-            enabledFor(tool),
-        )
+        .filter((tool) => enabledFor(tool))
         .map((tool) => ({
           id: tool,
           icon: toolIcons[tool],
@@ -999,7 +1021,10 @@ export default function ActivityDetail() {
           },
         }))
     : [];
-  const activeTool = selectedTool && tools.some(tool=>tool.id===selectedTool) ? selectedTool : tools[0]?.id as ToolId | undefined;
+  const activeTool =
+    selectedTool && tools.some((tool) => tool.id === selectedTool)
+      ? selectedTool
+      : (tools[0]?.id as ToolId | undefined);
   const contentWidth = Math.min(width, tokens.layout.contentMaxWidth ?? width);
   const bottomClearance = 90 + Math.max(insets.bottom, 8);
 
@@ -1050,190 +1075,238 @@ export default function ActivityDetail() {
               reducedMotion={reducedMotion}
             />
 
-            {visibleTab === "Overview" ? <>
-            <ActivityDetailInfo
-              startsAt={activity.starts_at}
-              endsAt={activity.ends_at}
-              timezone={
-                activity.timezone ===
-                Intl.DateTimeFormat().resolvedOptions().timeZone
-                  ? null
-                  : activity.timezone
-              }
-              place={
-                place
-                  ? {
-                      label: place.label,
-                      latitude: place.latitude,
-                      longitude: place.longitude,
-                      onlineUrl: place.online_url,
-                    }
-                  : undefined
-              }
-              canReadLocation={canSeeMeeting}
-              onOpenMap={openMap}
-              onOpenOnline={(url) => void openOnline(url)}
-              onOpenDirections={() => void openDirections()}
-            />
-
-            <View style={[styles.card, styles.row, { gap: 11 }]}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="View host profile"
-                onPress={() => setHostSheet(true)}
-                style={[styles.row, { flex: 1, gap: 11 }]}
-              >
-                <ProfileAvatar profile={ownerVisible ? owner : undefined} />
-                <View style={{ flex: 1, gap: 2 }}>
-                  <Text style={styles.muted}>Hosted by</Text>
-                  <Text style={styles.body}>{hostName}</Text>
-                </View>
-              </Pressable>
-              {canShareHost && owner ? (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Message host"
-                  onPress={() =>
-                    router.push({
-                      pathname: "/messages/[id]",
-                      params: { id: owner.id },
-                    })
+            {visibleTab === "Overview" ? (
+              <>
+                <ActivityDetailInfo
+                  startsAt={activity.starts_at}
+                  endsAt={activity.ends_at}
+                  timezone={
+                    activity.timezone ===
+                    Intl.DateTimeFormat().resolvedOptions().timeZone
+                      ? null
+                      : activity.timezone
                   }
-                  style={{
-                    minWidth: 44,
-                    minHeight: 44,
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  <MessageCircle size={19} color={colors.green} />
-                </Pressable>
-              ) : null}
-            </View>
+                  place={
+                    place
+                      ? {
+                          label: place.label,
+                          latitude: place.latitude,
+                          longitude: place.longitude,
+                          onlineUrl: place.online_url,
+                        }
+                      : undefined
+                  }
+                  canReadLocation={canSeeMeeting}
+                  onOpenMap={openMap}
+                  onOpenOnline={(url) => void openOnline(url)}
+                  onOpenDirections={() => void openDirections()}
+                />
 
-            {activity.mode !== "solo" ? (
-              <ActivityDetailProgress
-                avatars={progressAvatars}
-                count={capacity.count}
-                capacity={capacity.limit}
-                target={activity.target_count ?? null}
-                joining={joining}
-              />
-            ) : null}
-
-            {activity.description ? (
-              <DescriptionCard description={activity.description} />
-            ) : null}
-            {aspirations.length > 0 ? (
-              <Txt muted>
-                For: {aspirations.map((goal) => goal.title).join(" · ")}
-              </Txt>
-            ) : null}
-            {plan ? (
-              <Button
-                title={"Part of " + plan.title}
-                secondary
-                onPress={() =>
-                  router.push({
-                    pathname: "/plan/[id]",
-                    params: { id: plan.id },
-                  })
-                }
-              />
-            ) : null}
-            {decision ? (
-              <Button
-                compact
-                secondary
-                title={
-                  "View " +
-                  (decision.kind === "vote" ? "Vote" : "Draw") +
-                  " decision"
-                }
-                onPress={() =>
-                  router.push({
-                    pathname: "/council/[id]",
-                    params: { id: decision.id },
-                  })
-                }
-              />
-            ) : null}
-
-            <View style={Platform.OS !== "web" ? { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 6 } : undefined}>
-            {Platform.OS !== "web" && canAccess && <>
-              {chatEnabled && <Button title="Chat" compact secondary icon={<MessagesSquare size={16} color={colors.primary} />} onPress={() => selectTab("Chat")} />}
-              {canReadComments && <Button title={`Comments · ${comments.length}`} compact secondary icon={<MessageCircle size={16} color={colors.primary} />} onPress={scrollToComments} />}
-            </>}
-            {activity.enable_reactions !== false && canAccess ? (
-              <ReactionPicker
-                selectedEmoji={selectedReaction?.emoji}
-                disabled={reactionBusy || activity.status === "cancelled"}
-                error={interactionError}
-                onSelect={sendReaction}
-                onOpen={() => setInteractionError("")}
-                trigger={
+                <View style={[styles.card, styles.row, { gap: 11 }]}>
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel={
-                      selectedReaction?.emoji
-                        ? `Reacted with ${selectedReaction.emoji}. ${reactionCount} reactions. Choose another reaction or remove it.`
-                        : `Choose a reaction. ${reactionCount} reactions.`
-                    }
-                    accessibilityState={{
-                      selected: !!selectedReaction?.emoji,
-                      disabled: reactionBusy || activity.status === "cancelled",
-                    }}
-                    style={[
-                      styles.card,
-                      styles.row,
-                      { minHeight: 48, padding: 12 },
-                      Platform.OS !== "web" ? { minHeight: 44, paddingHorizontal: 10, paddingVertical: 8 } : undefined,
-                    ]}
+                    accessibilityLabel="View host profile"
+                    onPress={() => setHostSheet(true)}
+                    style={[styles.row, { flex: 1, gap: 11 }]}
                   >
-                    <Text style={styles.body}>
-                      {selectedReaction?.emoji
-                        ? `${selectedReaction.emoji} Reacted`
-                        : "🙌 React"}
-                    </Text>
-                    <Text style={styles.muted}>{reactionCount}</Text>
-                    {floatingReaction ? (
-                      <Animated.Text
-                        pointerEvents="none"
-                        accessibilityLabel="Reaction sent"
-                        style={{
-                          position: "absolute",
-                          top: -20,
-                          right: 24,
-                          fontSize: 25,
-                          opacity: floatingReactionProgress.interpolate({
-                            inputRange: [0, 1],
-                            outputRange: [1, 0],
-                          }),
-                          transform: [
-                            {
-                              translateY: floatingReactionProgress.interpolate({
-                                inputRange: [0, 1],
-                                outputRange: [0, -24],
-                              }),
-                            },
-                          ],
-                        }}
-                      >
-                        {floatingReactionEmoji}
-                      </Animated.Text>
-                    ) : null}
+                    <ProfileAvatar profile={ownerVisible ? owner : undefined} />
+                    <View style={{ flex: 1, gap: 2 }}>
+                      <Text style={styles.muted}>Hosted by</Text>
+                      <Text style={styles.body}>{hostName}</Text>
+                    </View>
                   </Pressable>
-                }
-              />
-            ) : null}
-            </View>
+                  {canShareHost && owner ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Message host"
+                      onPress={() =>
+                        router.push({
+                          pathname: "/messages/[id]",
+                          params: { id: owner.id },
+                        })
+                      }
+                      style={{
+                        minWidth: 44,
+                        minHeight: 44,
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    >
+                      <MessageCircle size={19} color={colors.green} />
+                    </Pressable>
+                  ) : null}
+                </View>
 
-              <BeaconReadiness activity={activity} onNavigate={selectTab} />
-            </> : null}
+                {activity.mode !== "solo" ? (
+                  <ActivityDetailProgress
+                    avatars={progressAvatars}
+                    count={capacity.count}
+                    capacity={capacity.limit}
+                    target={activity.target_count ?? null}
+                    joining={joining}
+                  />
+                ) : null}
+
+                {activity.description ? (
+                  <DescriptionCard description={activity.description} />
+                ) : null}
+                {aspirations.length > 0 ? (
+                  <Txt muted>
+                    For: {aspirations.map((goal) => goal.title).join(" · ")}
+                  </Txt>
+                ) : null}
+                {plan ? (
+                  <Button
+                    title={"Part of " + plan.title}
+                    secondary
+                    onPress={() =>
+                      router.push({
+                        pathname: "/plan/[id]",
+                        params: { id: plan.id },
+                      })
+                    }
+                  />
+                ) : null}
+                {decision ? (
+                  <Button
+                    compact
+                    secondary
+                    title={
+                      "View " +
+                      (decision.kind === "vote" ? "Vote" : "Draw") +
+                      " decision"
+                    }
+                    onPress={() =>
+                      router.push({
+                        pathname: "/council/[id]",
+                        params: { id: decision.id },
+                      })
+                    }
+                  />
+                ) : null}
+
+                <View
+                  style={
+                    Platform.OS !== "web"
+                      ? {
+                          flexDirection: "row",
+                          flexWrap: "wrap",
+                          alignItems: "center",
+                          gap: 6,
+                        }
+                      : undefined
+                  }
+                >
+                  {Platform.OS !== "web" && canAccess && (
+                    <>
+                      {chatEnabled && (
+                        <Button
+                          title="Chat"
+                          compact
+                          secondary
+                          icon={
+                            <MessagesSquare size={16} color={colors.primary} />
+                          }
+                          onPress={() => selectTab("Chat")}
+                        />
+                      )}
+                      {canReadComments && (
+                        <Button
+                          title={`Comments · ${comments.length}`}
+                          compact
+                          secondary
+                          icon={
+                            <MessageCircle size={16} color={colors.primary} />
+                          }
+                          onPress={scrollToComments}
+                        />
+                      )}
+                    </>
+                  )}
+                  {activity.enable_reactions !== false && canAccess ? (
+                    <ReactionPicker
+                      selectedEmoji={selectedReaction?.emoji}
+                      disabled={reactionBusy || activity.status === "cancelled"}
+                      error={interactionError}
+                      onSelect={sendReaction}
+                      onOpen={() => setInteractionError("")}
+                      trigger={
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={
+                            selectedReaction?.emoji
+                              ? `Reacted with ${selectedReaction.emoji}. ${reactionCount} reactions. Choose another reaction or remove it.`
+                              : `Choose a reaction. ${reactionCount} reactions.`
+                          }
+                          accessibilityState={{
+                            selected: !!selectedReaction?.emoji,
+                            disabled:
+                              reactionBusy || activity.status === "cancelled",
+                          }}
+                          style={[
+                            styles.card,
+                            styles.row,
+                            { minHeight: 48, padding: 12 },
+                            Platform.OS !== "web"
+                              ? {
+                                  minHeight: 44,
+                                  paddingHorizontal: 10,
+                                  paddingVertical: 8,
+                                }
+                              : undefined,
+                          ]}
+                        >
+                          <Text style={styles.body}>
+                            {selectedReaction?.emoji
+                              ? `${selectedReaction.emoji} Reacted`
+                              : "🙌 React"}
+                          </Text>
+                          <Text style={styles.muted}>{reactionCount}</Text>
+                          {floatingReaction ? (
+                            <Animated.Text
+                              pointerEvents="none"
+                              accessibilityLabel="Reaction sent"
+                              style={{
+                                position: "absolute",
+                                top: -20,
+                                right: 24,
+                                fontSize: 25,
+                                opacity: floatingReactionProgress.interpolate({
+                                  inputRange: [0, 1],
+                                  outputRange: [1, 0],
+                                }),
+                                transform: [
+                                  {
+                                    translateY:
+                                      floatingReactionProgress.interpolate({
+                                        inputRange: [0, 1],
+                                        outputRange: [0, -24],
+                                      }),
+                                  },
+                                ],
+                              }}
+                            >
+                              {floatingReactionEmoji}
+                            </Animated.Text>
+                          ) : null}
+                        </Pressable>
+                      }
+                    />
+                  ) : null}
+                </View>
+
+                <BeaconReadiness activity={activity} onNavigate={selectTab} />
+              </>
+            ) : null}
 
             {visibleTab === "Overview" || visibleTab === "Memories" ? (
               <View style={{ gap: tokens.space.md }}>
-                {visibleTab === "Memories" && <><BeaconMemories activity={activity} /><BeaconCardEngagement activityId={activity.id} /></>}
+                {visibleTab === "Memories" && (
+                  <>
+                    <BeaconMemories activity={activity} />
+                    <BeaconCardEngagement activityId={activity.id} />
+                  </>
+                )}
                 {canReadComments ? (
                   <View
                     ref={commentsSectionRef}
@@ -1591,7 +1664,9 @@ export default function ActivityDetail() {
             ) : null}
 
             {visibleTab === "Chat" && canAccess ? (
-              <View style={{ height: Math.max(400,height - 200), minHeight: 320 }}>
+              <View
+                style={{ height: Math.max(400, height - 200), minHeight: 320 }}
+              >
                 <ActivityChatPanel activity={activity} />
               </View>
             ) : null}
@@ -1612,8 +1687,12 @@ export default function ActivityDetail() {
             chips={audienceChips}
             demo={demo}
             scrollY={scrollY}
-            onChat={canAccess && chatEnabled ? () => selectTab("Chat") : undefined}
-            onBack={() => visibleTab === "Chat" ? selectTab("Overview") : router.back()}
+            onChat={
+              canAccess && chatEnabled ? () => selectTab("Chat") : undefined
+            }
+            onBack={() =>
+              visibleTab === "Chat" ? selectTab("Overview") : router.back()
+            }
             onOverflow={() => setOverflow(true)}
           />
 
@@ -1716,16 +1795,59 @@ export default function ActivityDetail() {
         </View>
       </SafeAreaView>
 
-      <Sheet
+      <QuickChoiceDialog
         title="Activity actions"
         visible={overflow}
         onClose={() => setOverflow(false)}
+        items={[
+          {
+            label: saveBusy
+              ? "Saving…"
+              : savedBeacon
+                ? "Remove saved Beacon"
+                : "Save Beacon",
+            disabled: saveBusy,
+            icon: <Bookmark size={17} />,
+            onPress: () => void toggleSavedBeacon(),
+          },
+          {
+            label: "Save as a template",
+            icon: <ClipboardCheck size={17} />,
+            onPress: () =>
+              router.push({
+                pathname: "/create",
+                params: { repeat: activity.id, saveTemplate: "yes" },
+              }),
+          },
+          ...(activity.status !== "scheduled"
+            ? [
+                {
+                  label: "Do this again",
+                  onPress: () =>
+                    router.push({
+                      pathname: "/create",
+                      params: { repeat: activity.id },
+                    }),
+                },
+              ]
+            : []),
+          ...(!mine
+            ? [
+                {
+                  label: "Report this Beacon",
+                  icon: <Flag size={17} />,
+                  onPress: () => {
+                    setReason("");
+                    setReport(true);
+                  },
+                },
+              ]
+            : []),
+        ]}
       >
         {interactionError ? (
-          <View
-            style={[styles.row, { gap: 8, justifyContent: "space-between" }]}
-          >
-            <Text accessibilityRole="alert" style={[styles.error, { flex: 1 }]}>
+          <View style={[styles.row, { gap: 8 }]}>
+            <Text accessibilityRole="alert" style={styles.error}>
               {interactionError}
             </Text>
             {retryAction ? (
@@ -1738,102 +1860,35 @@ export default function ActivityDetail() {
             ) : null}
           </View>
         ) : null}
-        <Button
-          title={
-            saveBusy
-              ? "Saving…"
-              : savedBeacon
-                ? "Remove saved Beacon"
-                : "Save Beacon"
-          }
-          secondary
-          disabled={saveBusy}
-          icon={<Bookmark size={17} />}
-          onPress={() => void toggleSavedBeacon()}
-        />
-        <Button
-          title="Save as a template"
-          secondary
-          icon={<ClipboardCheck size={17} />}
-          onPress={() => {
-            setOverflow(false);
-            router.push({
-              pathname: "/create",
-              params: { repeat: activity.id, saveTemplate: "yes" },
-            });
-          }}
-        />
-        {activity.status !== "scheduled" ? (
-          <Button
-            title="Do this again"
-            secondary
-            onPress={() => {
-              setOverflow(false);
-              router.push({
-                pathname: "/create",
-                params: { repeat: activity.id },
-              });
-            }}
-          />
-        ) : null}
-        {!mine ? (
-          <Button
-            title="Report this Beacon"
-            secondary
-            icon={<Flag size={17} />}
-            onPress={() => {
-              setOverflow(false);
-              setReason("");
-              setReport(true);
-            }}
-          />
-        ) : null}
-      </Sheet>
+      </QuickChoiceDialog>
 
-      <Sheet
+      <QuickChoiceDialog
         title="Manage Beacon"
         visible={manage}
         onClose={() => setManage(false)}
-      >
-        {mine && activity.status === "scheduled" ? (
-          <Button
-            title="Edit title or time"
-            secondary
-            icon={<Pencil size={17} />}
-            onPress={() => {
-              setTitle(activity.title);
-              setStarts(activity.starts_at);
-              setEnds(activity.ends_at);
-              setManage(false);
-              setEdit(true);
-            }}
-          />
-        ) : null}
-        <Button
-          title="Attendance and requests"
-          secondary
-          onPress={() => {
-            setManage(false);
-            selectTab("People");
-          }}
-        />
-        <Button
-          title="Tools and settings"
-          secondary
-          onPress={() => {
-            setManage(false);
-            selectTab("Activity");
-          }}
-        />
-        <Button
-          title="Invite people"
-          secondary
-          onPress={() => {
-            setManage(false);
-            selectTab("People");
-          }}
-        />
-      </Sheet>
+        items={[
+          ...(mine && activity.status === "scheduled"
+            ? [
+                {
+                  label: "Edit title or time",
+                  icon: <Pencil size={17} />,
+                  onPress: () => {
+                    setTitle(activity.title);
+                    setStarts(activity.starts_at);
+                    setEnds(activity.ends_at);
+                    setEdit(true);
+                  },
+                },
+              ]
+            : []),
+          {
+            label: "Attendance and requests",
+            onPress: () => selectTab("People"),
+          },
+          { label: "Tools and settings", onPress: () => selectTab("Activity") },
+          { label: "Invite people", onPress: () => selectTab("People") },
+        ]}
+      />
 
       {owner ? (
         <PersonProfilePreview
@@ -1883,30 +1938,34 @@ export default function ActivityDetail() {
           onPress={() => setConfirmReport(true)}
         />
       </Sheet>
-      <Sheet
+      <ConfirmDialog
         title="Confirm report"
         visible={confirmReport}
         onClose={() => setConfirmReport(false)}
+        onConfirm={async () => {
+          await act("report", {
+            id: activity.id,
+            reason: reason.trim(),
+          });
+          setConfirmReport(false);
+          setReport(false);
+        }}
+        confirmLabel={"Send report"}
+        cancelLabel={"Cancel"}
+        closeOnConfirm={false}
       >
         <Txt>Your report will be sent to the Squad Beacon team for review.</Txt>
         <Txt muted>{reason.trim()}</Txt>
-        <Action
-          title="Send report"
-          feedback="warning"
-          run={async () => {
-            await act("report", {
-              id: activity.id,
-              reason: reason.trim(),
-            });
-            setConfirmReport(false);
-            setReport(false);
-          }}
-        />
-      </Sheet>
-      <Sheet
+      </ConfirmDialog>
+      <ConfirmDialog
         title="Deny request?"
         visible={!!denyTarget}
         onClose={() => setDenyTarget(null)}
+        onConfirm={denyRequest}
+        confirmLabel={"Deny request"}
+        cancelLabel={"Cancel"}
+        closeOnConfirm={false}
+        destructive
       >
         <Txt>
           {denyTarget
@@ -1915,12 +1974,16 @@ export default function ActivityDetail() {
               "'s pending request from this Beacon?"
             : ""}
         </Txt>
-        <Action title="Deny request" feedback="warning" run={denyRequest} />
-      </Sheet>
-      <Sheet
+      </ConfirmDialog>
+      <ConfirmDialog
         title="Remove participant?"
         visible={!!removeTarget}
         onClose={() => setRemoveTarget(null)}
+        onConfirm={removeParticipant}
+        confirmLabel={"Remove participant"}
+        cancelLabel={"Cancel"}
+        closeOnConfirm={false}
+        destructive
       >
         <Txt>
           {removeTarget
@@ -1929,33 +1992,29 @@ export default function ActivityDetail() {
               " from this Beacon? Their RSVP and Beacon role will be removed."
             : ""}
         </Txt>
-        <Action
-          title="Remove participant"
-          feedback="warning"
-          run={removeParticipant}
-        />
-      </Sheet>
-      <Sheet
+      </ConfirmDialog>
+      <ConfirmDialog
         title="Send a new invitation?"
         visible={!!reinviteTarget && canAdmit}
         onClose={() => setReinviteTarget(null)}
+        onConfirm={async () => {
+          await act("invite_activity", {
+            id: activity.id,
+            user_id: reinviteTarget!,
+            reinvite: true,
+          });
+          setReinviteTarget(null);
+        }}
+        confirmLabel={"Send new invitation"}
+        cancelLabel={"Cancel"}
+        closeOnConfirm={false}
+        destructive
       >
         <Txt>
           This will reopen their resolved invitation. Their previous response
           will no longer be current.
         </Txt>
-        <Action
-          title="Send new invitation"
-          run={async () => {
-            await act("invite_activity", {
-              id: activity.id,
-              user_id: reinviteTarget!,
-              reinvite: true,
-            });
-            setReinviteTarget(null);
-          }}
-        />
-      </Sheet>
+      </ConfirmDialog>
       {participation.dialogs}
     </>
   );

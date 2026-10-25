@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { bloomGeometry } from "../src/features/maps/clusterBloom";
 import test from "node:test";
 import {
   presentationOpensExplorer,
@@ -139,7 +140,11 @@ test("all groups use their requested zoom tier and actual nearby friends never m
     );
     assert.equal(mixed.overflow, 5 - visible);
     assert.equal(mixed.people.length, 11);
-    assert.equal(mixed.satellites.length, mode === "micro" ? 2 : 0);
+    assert.ok(
+      mixed.satellites.length <=
+        (mode === "micro" ? 1 : mode === "atmosphere" ? 3 : 5),
+    );
+    assert.equal(mixed.friendOverflow, 11 - mixed.satellites.length);
     assert.equal(mixed.group.latitude, base.group.latitude);
     assert.equal(mixed.group.longitude, base.group.longitude);
     assert.equal(mixed.group.id, base.group.id);
@@ -148,7 +153,7 @@ test("all groups use their requested zoom tier and actual nearby friends never m
   }
 });
 
-test("20 Beacons and 11 authorized friends show seven petals, +13, and one friend badge totaling 11", () => {
+test("20 Beacons and 11 friends show seven petals and one combined total with no satellites", () => {
   const [item] = nativeMapPresentations(
     [...points(20), ...points(11, "person")],
     { ...viewport, zoom: 14 },
@@ -157,6 +162,9 @@ test("20 Beacons and 11 authorized friends show seven petals, +13, and one frien
   assert.equal(item.overflow, 13);
   assert.equal(item.people.length, 11);
   assert.equal(item.satellites.length, 0);
+  assert.equal(bloomGeometry(item).countBadge?.text, "👥 +11 · +13");
+  assert.equal(item.friendOverflow, 11);
+  assert.equal(item.featureCost, 8);
   assert.equal(item.visible.filter((p) => p.kind === "beacon").length, 7);
   assert.equal(presentationOpensExplorer(item), true);
 });
@@ -376,4 +384,70 @@ test("budget pressure permits close-zoom swarms without dropping any items", () 
     result.flatMap((item) => item.group.members).length,
     input.length,
   );
+});
+
+test("dense neighboring blooms reserve friend decorations while a separate friend group stays independent", () => {
+  const unit = 360 / (256 * 2 ** 17);
+  const beacon = (id: string, x: number): ClusterPoint => ({
+    id: `beacon:${id}`,
+    kind: "beacon",
+    latitude: 0,
+    longitude: x * unit,
+  });
+  const person = (id: string, x: number, y = 0): ClusterPoint => ({
+    id: `person:${id}`,
+    kind: "person",
+    latitude: -y * unit,
+    longitude: x * unit,
+  });
+  const input = [
+    ...Array.from({ length: 6 }, (_, i) => beacon(`left${i}`, -100)),
+    ...Array.from({ length: 6 }, (_, i) => beacon(`right${i}`, 0)),
+    ...Array.from({ length: 7 }, (_, i) => person(`left${i}`, -100)),
+    ...Array.from({ length: 7 }, (_, i) => person(`right${i}`, 0)),
+    ...Array.from({ length: 8 }, (_, i) => person(`separate${i}`, 120, 120)),
+  ];
+  const snapshot = structuredClone(input);
+  const result = nativeMapPresentations(
+    input,
+    {
+      centerLatitude: 0,
+      centerLongitude: 0,
+      zoom: 17,
+      width: 375,
+      height: 812,
+    },
+    "stack",
+  );
+  assert.equal(result.length, 3);
+  assert.equal(
+    result.filter(
+      (item) => item.beacons.length === 0 && item.people.length === 8,
+    ).length,
+    1,
+  );
+  for (const item of result.filter((item) => item.beacons.length > 0)) {
+    const geometry = bloomGeometry(item);
+    assert.ok(item.decorationObstacles?.length);
+    const marks = geometry.satelliteOffsets.map((point) => ({
+      ...point,
+      width: geometry.satelliteSize,
+      height: geometry.satelliteSize,
+    }));
+    if (geometry.countBadge)
+      marks.push({
+        ...geometry.countBadge.offset,
+        width: geometry.countBadge.width,
+        height: geometry.countBadge.height,
+      });
+    for (const mark of marks)
+      for (const obstacle of item.decorationObstacles!)
+        assert.ok(
+          Math.abs(mark.x - obstacle.x) >=
+            (mark.width + obstacle.width) / 2 + 2 - 1e-7 ||
+            Math.abs(mark.y - obstacle.y) >=
+              (mark.height + obstacle.height) / 2 + 2 - 1e-7,
+        );
+  }
+  assert.deepEqual(input, snapshot);
 });

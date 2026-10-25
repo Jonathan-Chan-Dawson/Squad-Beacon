@@ -162,7 +162,8 @@ test("Private Lists creates, edits, filters, sends a DM and deletes without chan
     .click();
   await page.getByRole("button", { name: "Delete list", exact: true }).click();
   await page
-    .getByRole("button", { name: "Confirm delete list", exact: true })
+    .getByRole("dialog", { name: "Delete this list?", exact: true })
+    .getByRole("button", { name: "Delete list", exact: true })
     .click();
   await expect(
     page.getByRole("button", {

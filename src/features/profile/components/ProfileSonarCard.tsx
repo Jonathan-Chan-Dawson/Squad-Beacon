@@ -30,9 +30,11 @@ type Duration = SonarDuration;
 function ProfileSonarControl({
   compact = false,
   row = false,
+  pill = false,
 }: {
   compact?: boolean;
   row?: boolean;
+  pill?: boolean;
 }) {
   const { data, userId, demo, act } = useBeacon();
   const { styles, semanticColors: colors, tokens } = useTheme();
@@ -67,12 +69,12 @@ function ProfileSonarControl({
       : undefined;
   useEffect(() => {
     pulse.set(
-      session && !reducedMotion && !row
+      session && !reducedMotion && !row && !pill
         ? withRepeat(withTiming(0.45, { duration: 900 }), -1, true)
         : 1,
     );
     return () => cancelAnimation(pulse);
-  }, [session, reducedMotion, pulse, row]);
+  }, [session, reducedMotion, pulse, row, pill]);
   const accepted = userId
     ? friendIds(data, userId).filter(
         (id) =>
@@ -249,10 +251,56 @@ function ProfileSonarControl({
 
   return (
     <View
-      style={compact ? { gap: 0 } : [styles.card, { gap: 12 }]}
+      style={
+        compact
+          ? { gap: 0, ...(pill ? { flexShrink: 1, minWidth: 0 } : {}) }
+          : [styles.card, { gap: 12 }]
+      }
       testID={compact ? "home-sonar-control" : "profile-sonar-card"}
     >
-      {row ? (
+      {pill ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={session ? "Manage active Sonar" : "Open Sonar"}
+          accessibilityState={{ disabled: busy }}
+          disabled={busy}
+          onPress={openConfirmation}
+          style={{ minHeight: 44, justifyContent: "center", flexShrink: 1 }}
+        >
+          <View
+            testID="sonar-pill-visual"
+            style={{
+              minHeight: 30,
+              flexShrink: 1,
+              paddingHorizontal: 8,
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 4,
+              borderRadius: 999,
+              borderWidth: 1,
+              borderColor: session ? colors.accent + "35" : colors.border,
+              backgroundColor: session ? colors.accent + "12" : colors.surface,
+            }}
+          >
+            <Radio
+              size={12}
+              color={session ? colors.accent : colors.textSecondary}
+            />
+            <Text
+              style={{
+                color: session ? colors.accent : colors.textSecondary,
+                fontSize: 11,
+                fontWeight: "500",
+                flexShrink: 1,
+              }}
+            >
+              {session
+                ? `Sonar ${sonarMinutesRemaining(session.expires_at, now)}m`
+                : "Sonar Off"}
+            </Text>
+          </View>
+        </Pressable>
+      ) : row ? (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={session ? "Manage active Sonar" : "Open Sonar"}

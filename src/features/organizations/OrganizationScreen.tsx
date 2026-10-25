@@ -1,5 +1,52 @@
-import React, { useRef, useState } from "react";
+import { canReadBeaconActivity } from "@/src/features/beacons/beaconModules";
+import { CommunityPublicBeacons } from "@/src/features/discovery/CommunityPublicBeacons";
+import { CommunityPublicProfile } from "@/src/features/discovery/CommunityPublicProfile";
+import { communityProfileMode } from "@/src/features/discovery/communityPublicProfileAccess";
+import {
+  ProfileActions,
+  ProfileLink,
+  ProfileSection,
+} from "@/src/features/people/components/ProfilePrimitives";
+import { canOpenSquadProfile } from "@/src/features/people/squadProfile";
+import { VirtualizedCommunityDirectory } from "@/src/features/people/VirtualizedCommunityDirectory";
+import {
+  normalizePlanningData,
+  pendingPlanningThreads,
+} from "@/src/features/planning/domain";
+import { canViewProfile } from "@/src/features/profile/privacy";
+import { communityTypeLabel } from "@/src/features/social/communityPresentation";
+import { useCommunitySummary } from "@/src/features/social/CommunityProfileAccess";
+import { SOCIAL_ROLE_RANK } from "@/src/features/social/domain";
+import {
+  SocialPolicyFields,
+  type SocialPolicyValue,
+} from "@/src/features/social/SocialPolicyControls";
+import { canManageSpace, canReadSpace } from "@/src/features/spaces/domain";
+import { ConfirmDialog, useConfirmation } from "@/src/shared/Dialogs";
+import { matchesSearch } from "@/src/shared/search";
+import { useBeacon } from "@/src/shared/store";
+import {
+  Action,
+  BackButton,
+  Button,
+  Chips,
+  Empty,
+  Field,
+  IconButton,
+  Screen,
+  Sheet,
+  Txt,
+  useTheme,
+} from "@/src/shared/ui";
+import { useNow } from "@/src/shared/useNow";
 import { FlashList } from "@shopify/flash-list";
+import { router, useLocalSearchParams, useNavigation } from "expo-router";
+import {
+  usePreventRemove,
+  type NavigationAction,
+} from "expo-router/react-navigation";
+import { ArrowUpRight, Building2, Settings2 } from "lucide-react-native";
+import { useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -7,71 +54,26 @@ import {
   Text,
   View,
 } from "react-native";
-import { router, useLocalSearchParams, useNavigation } from "expo-router";
-import {
-  usePreventRemove,
-  type NavigationAction,
-} from "expo-router/react-navigation";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { ArrowUpRight, Building2, Settings2 } from "lucide-react-native";
-import { useBeacon } from "@/src/shared/store";
-import { canReadBeaconActivity } from "@/src/features/beacons/beaconModules";
-import { canOpenSquadProfile } from "@/src/features/people/squadProfile";
-import { canManageSpace, canReadSpace } from "@/src/features/spaces/domain";
-import { VirtualizedCommunityDirectory } from "@/src/features/people/VirtualizedCommunityDirectory";
-import { OrganizationRelatedPreview } from "./OrganizationRelatedPreview";
-import { CommunityPublicBeacons } from "@/src/features/discovery/CommunityPublicBeacons";
-import { CommunityPublicProfile } from "@/src/features/discovery/CommunityPublicProfile";
-import { communityProfileMode } from "@/src/features/discovery/communityPublicProfileAccess";
-import { communityTypeLabel } from "@/src/features/social/communityPresentation";
-import {
-  ProfileActions,
-  ProfileLink,
-  ProfileSection,
-} from "@/src/features/people/components/ProfilePrimitives";
-import {
-  normalizePlanningData,
-  pendingPlanningThreads,
-} from "@/src/features/planning/domain";
-import { useNow } from "@/src/shared/useNow";
-import { matchesSearch } from "@/src/shared/search";
-import { canViewProfile } from "@/src/features/profile/privacy";
-import { SOCIAL_ROLE_RANK } from "@/src/features/social/domain";
-import {
-  SocialPolicyFields,
-  type SocialPolicyValue,
-} from "@/src/features/social/SocialPolicyControls";
-import { useCommunitySummary } from "@/src/features/social/CommunityProfileAccess";
-import {
-  BackButton,
-  IconButton,
-  Action,
-  Button,
-  Chips,
-  Empty,
-  Field,
-  Screen,
-  Sheet,
-  Txt,
-  useTheme,
-} from "@/src/shared/ui";
 import {
   activeOrganizationRole,
-  canReadOrganization,
-  canReadOrganizationMembers,
   canChangeOrganizationMemberRole,
   canInviteOrganizationRole,
   canLeaveOrganization,
   canManageOrganization,
   canManageOrganizationMember,
   canManageOrganizationSquads,
+  canReadOrganization,
+  canReadOrganizationMembers,
   organizationActiveMemberCount,
 } from "./domain";
 import { GroupChatThread } from "./GroupChatThread";
+import { OrganizationRelatedPreview } from "./OrganizationRelatedPreview";
 import type { Organization, OrganizationMemberRole } from "./types";
 
 const tabs = ["overview", "squads", "activity"] as const;
-type OrganizationTab = (typeof tabs)[number] | "members" | "chat" | "manage" | "directSquads";
+type OrganizationTab =
+  (typeof tabs)[number] | "members" | "chat" | "manage" | "directSquads";
 const tabTitle: Record<OrganizationTab, string> = {
   overview: "Overview",
   members: "Members",
@@ -114,41 +116,63 @@ const shortTime = (value: string) =>
 export default function OrganizationScreen() {
   const { styles, colors } = useTheme();
   const navigation = useNavigation();
-  const { id, tab: queryTab, view: queryView, section: sectionParam } = useLocalSearchParams<{
+  const {
+    id,
+    tab: queryTab,
+    view: queryView,
+    section: sectionParam,
+  } = useLocalSearchParams<{
     id: string;
     tab?: string;
     view?: string;
     section?: string;
   }>();
   const { data, userId, act } = useBeacon();
-  const { summary: safeSummary, loading: summaryLoading, refresh: refreshSummary } =
-    useCommunitySummary("organization", id);
+  const {
+    summary: safeSummary,
+    loading: summaryLoading,
+    refresh: refreshSummary,
+  } = useCommunitySummary("organization", id);
   const now = useNow();
-  const memberOrganizationRecord = data.organizations.find((item) => item.id === id);
+  const memberOrganizationRecord = data.organizations.find(
+    (item) => item.id === id,
+  );
   const hasReadableMemberRecord = !!(
     safeSummary?.membership_status === "active" &&
-    memberOrganizationRecord && userId &&
+    memberOrganizationRecord &&
+    userId &&
     canReadOrganization(data, memberOrganizationRecord.id, userId)
   );
-  const profileMode = communityProfileMode(safeSummary, hasReadableMemberRecord, summaryLoading);
-  const organization = profileMode === "member"
-    ? memberOrganizationRecord
-    : safeSummary
-      ? ({
-        id: safeSummary.entity_id,
-        owner_id: "",
-        name: safeSummary.name,
-        description: safeSummary.description,
-        created_at: "",
-        member_count: safeSummary.member_count,
-        discoverability: safeSummary.discoverability,
-        join_mode: safeSummary.join_mode,
-      } satisfies Organization)
-      : undefined;
+  const profileMode = communityProfileMode(
+    safeSummary,
+    hasReadableMemberRecord,
+    summaryLoading,
+  );
+  const organization =
+    profileMode === "member"
+      ? memberOrganizationRecord
+      : safeSummary
+        ? ({
+            id: safeSummary.entity_id,
+            owner_id: "",
+            name: safeSummary.name,
+            description: safeSummary.description,
+            created_at: "",
+            member_count: safeSummary.member_count,
+            discoverability: safeSummary.discoverability,
+            join_mode: safeSummary.join_mode,
+          } satisfies Organization)
+        : undefined;
   const legacyTab = queryTab ?? queryView;
   const tab: OrganizationTab =
-    legacyTab === "manage" || legacyTab === "members" || legacyTab === "chat" || legacyTab === "directSquads" || legacyTab === "direct-squads"
-      ? legacyTab === "direct-squads" ? "directSquads" : legacyTab
+    legacyTab === "manage" ||
+    legacyTab === "members" ||
+    legacyTab === "chat" ||
+    legacyTab === "directSquads" ||
+    legacyTab === "direct-squads"
+      ? legacyTab === "direct-squads"
+        ? "directSquads"
+        : legacyTab
       : legacyTab === "home"
         ? "overview"
         : legacyTab === "beacons"
@@ -166,6 +190,7 @@ export default function OrganizationScreen() {
     "invite" | "attach" | "attachSpace" | "member" | null
   >(null);
   const [invitee, setInvitee] = useState("");
+  const { requestConfirmation, confirmationDialog } = useConfirmation();
   const [inviteRole, setInviteRole] =
     useState<OrganizationMemberRole>("member");
   const [memberRole, setMemberRole] =
@@ -184,7 +209,9 @@ export default function OrganizationScreen() {
     name: string;
     description: string;
   } | null>(null);
-  const [policyDraft, setPolicyDraft] = useState<SocialPolicyValue | null>(null);
+  const [policyDraft, setPolicyDraft] = useState<SocialPolicyValue | null>(
+    null,
+  );
   const [discardOpen, setDiscardOpen] = useState(false);
   const [pendingDestination, setPendingDestination] = useState<
     OrganizationSettingsSection | null | undefined
@@ -197,7 +224,10 @@ export default function OrganizationScreen() {
   );
   const currentMemberAccess = profileMode === "member";
   const role =
-    organization && userId && currentMemberAccess && canReadOrganization(data, organization.id, userId)
+    organization &&
+    userId &&
+    currentMemberAccess &&
+    canReadOrganization(data, organization.id, userId)
       ? activeOrganizationRole(
           organization,
           data.organization_members,
@@ -205,7 +235,8 @@ export default function OrganizationScreen() {
         )
       : null;
   const count = organization
-    ? (safeSummary?.member_count ?? organization.member_count ??
+    ? (safeSummary?.member_count ??
+      organization.member_count ??
       organizationActiveMemberCount(
         organization.id,
         organization.owner_id,
@@ -216,9 +247,13 @@ export default function OrganizationScreen() {
     .filter((link) => link.organization_id === organization?.id)
     .filter((link) => canOpenSquadProfile(data, link.squad_id, userId))
     .map((link) => link.squad_id);
-  const directSquadIds = [...new Set(data.organization_squads
-    .filter((link) => link.organization_id === organization?.id)
-    .map((link) => link.squad_id))];
+  const directSquadIds = [
+    ...new Set(
+      data.organization_squads
+        .filter((link) => link.organization_id === organization?.id)
+        .map((link) => link.squad_id),
+    ),
+  ];
   const linkedSquads = data.squads.filter((squad) =>
     linkedSquadIds.includes(squad.id),
   );
@@ -259,13 +294,14 @@ export default function OrganizationScreen() {
         )
     : [];
   const planning = normalizePlanningData(data);
-  const orgThreads = userId && role
-    ? pendingPlanningThreads(data, planning, userId, now).filter(
-        (thread) =>
-          thread.audience === "organization" &&
-          thread.audience_id === organization?.id,
-      )
-    : [];
+  const orgThreads =
+    userId && role
+      ? pendingPlanningThreads(data, planning, userId, now).filter(
+          (thread) =>
+            thread.audience === "organization" &&
+            thread.audience_id === organization?.id,
+        )
+      : [];
   const visibleMemberRows = members
     .filter((member) => member.status === "active")
     .filter((member) => {
@@ -303,25 +339,28 @@ export default function OrganizationScreen() {
     name: organization?.name ?? "",
     description: organization?.description ?? "",
   };
-  const detailsDirty = !!detailsDraft && (
-    detailsDraft.name !== (organization?.name ?? "") ||
-    detailsDraft.description !== (organization?.description ?? "")
-  );
+  const detailsDirty =
+    !!detailsDraft &&
+    (detailsDraft.name !== (organization?.name ?? "") ||
+      detailsDraft.description !== (organization?.description ?? ""));
   const policyValues = policyDraft ?? policyInitial;
-  const policyDirty = !!policyDraft && (
-    policyDraft.discoverability !== policyInitial.discoverability ||
-    policyDraft.join_mode !== policyInitial.join_mode ||
-    policyDraft.invite_policy !== policyInitial.invite_policy
-  );
+  const policyDirty =
+    !!policyDraft &&
+    (policyDraft.discoverability !== policyInitial.discoverability ||
+      policyDraft.join_mode !== policyInitial.join_mode ||
+      policyDraft.invite_policy !== policyInitial.invite_policy);
   const settingsDirty = tab === "manage" && (detailsDirty || policyDirty);
 
   const canManageCurrentNetworkSettings =
     role === "owner" || role === "coowner" || role === "admin";
-  usePreventRemove(settingsDirty && canManageCurrentNetworkSettings, ({ data: { action } }) => {
-    pendingRemoveAction.current = action;
-    setPendingDestination(undefined);
-    setDiscardOpen(true);
-  });
+  usePreventRemove(
+    settingsDirty && canManageCurrentNetworkSettings,
+    ({ data: { action } }) => {
+      pendingRemoveAction.current = action;
+      setPendingDestination(undefined);
+      setDiscardOpen(true);
+    },
+  );
 
   if (profileMode === "loading")
     return (
@@ -333,14 +372,8 @@ export default function OrganizationScreen() {
   const profileSummary = safeSummary;
   if (profileMode === "unavailable" || !organization || !profileSummary) {
     return (
-      <Screen
-        title="Network unavailable"
-        eyebrow="NETWORKS"
-        create={false}
-      >
-        <Txt>
-          This Network is no longer available to your account.
-        </Txt>
+      <Screen title="Network unavailable" eyebrow="NETWORKS" create={false}>
+        <Txt>This Network is no longer available to your account.</Txt>
         <Button
           title="Back to Networks"
           onPress={() => router.replace("/organizations")}
@@ -356,27 +389,32 @@ export default function OrganizationScreen() {
         showDemoNotice={false}
         create={false}
       >
-        <CommunityPublicProfile summary={profileSummary} onSummaryChanged={refreshSummary} />
+        <CommunityPublicProfile
+          summary={profileSummary}
+          onSummaryChanged={refreshSummary}
+        />
       </Screen>
     );
 
-  const canManage = !!role && canManageOrganization(organization, members, userId ?? "");
-  const canManageSquads = !!role && canManageOrganizationSquads(
-    organization,
-    members,
-    userId ?? "",
-  );
-  const canReadMembers = !!currentMemberAccess &&
+  const canManage =
+    !!role && canManageOrganization(organization, members, userId ?? "");
+  const canManageSquads =
+    !!role && canManageOrganizationSquads(organization, members, userId ?? "");
+  const canReadMembers =
+    !!currentMemberAccess &&
     canReadOrganizationMembers(data, organization.id, userId);
-  const canLeaveNetwork = !!currentMemberAccess &&
+  const canLeaveNetwork =
+    !!currentMemberAccess &&
     canLeaveOrganization(organization, members, userId ?? "");
-  const canAccessManagement =
-    canManage ||
-    canManageSquads ||
-    canLeaveNetwork;
+  const canAccessManagement = canManage || canManageSquads || canLeaveNetwork;
   const inviteRoles = role
     ? roleOptions.filter((candidate) =>
-        canInviteOrganizationRole(organization, members, userId ?? "", candidate),
+        canInviteOrganizationRole(
+          organization,
+          members,
+          userId ?? "",
+          candidate,
+        ),
       )
     : [];
   const activeMembers = members.filter((member) => member.status === "active");
@@ -417,10 +455,12 @@ export default function OrganizationScreen() {
           link.space_id === space.id,
       ) &&
       canManageSpace(data, space.id, userId) &&
-      !!role && canManageOrganization(organization, members, userId ?? ""),
+      !!role &&
+      canManageOrganization(organization, members, userId ?? ""),
   );
   const canManageLinkedSquad = (squadId: string) =>
-    !!role && canManageOrganizationSquads(organization, members, userId ?? "") &&
+    !!role &&
+    canManageOrganizationSquads(organization, members, userId ?? "") &&
     !!data.squad_members.find(
       (member) =>
         member.squad_id === squadId &&
@@ -570,15 +610,17 @@ export default function OrganizationScreen() {
           ban.organization_id === organization.id && ban.user_id === profile.id,
       ),
   );
-  const nextRoleOptions = role ? roleOptions.filter((candidate) =>
-    canChangeOrganizationMemberRole(
-      organization,
-      members,
-      userId ?? "",
-      selectedMember,
-      candidate,
-    ),
-  ) : [];
+  const nextRoleOptions = role
+    ? roleOptions.filter((candidate) =>
+        canChangeOrganizationMemberRole(
+          organization,
+          members,
+          userId ?? "",
+          selectedMember,
+          candidate,
+        ),
+      )
+    : [];
   const manageableMember = members.find(
     (member) => member.user_id === selectedMember,
   );
@@ -599,7 +641,8 @@ export default function OrganizationScreen() {
 
   const managementSheets = (
     <>
-      <Sheet
+      {confirmationDialog}
+      <ConfirmDialog
         title="Discard settings changes?"
         visible={discardOpen}
         onClose={() => {
@@ -607,40 +650,43 @@ export default function OrganizationScreen() {
           setPendingDestination(undefined);
           pendingRemoveAction.current = null;
         }}
+        onConfirm={confirmDiscardSettings}
+        confirmLabel={"Discard changes"}
+        cancelLabel={"Keep editing"}
+        closeOnConfirm={false}
+        destructive
       >
         <View style={{ gap: 10 }}>
           <Txt>Your Network settings have unsaved changes.</Txt>
-          <Button secondary title="Keep editing" onPress={() => setDiscardOpen(false)} />
-          <Button title="Discard changes" onPress={confirmDiscardSettings} />
         </View>
-      </Sheet>
-      <Sheet
+      </ConfirmDialog>
+      <ConfirmDialog
         title="Leave this Network?"
         visible={leaveConfirmOpen}
         onClose={() => setLeaveConfirmOpen(false)}
+        onConfirm={async () => {
+          await act("leave_organization", { organization_id: organization.id });
+          setLeaveConfirmOpen(false);
+          router.replace("/organizations");
+        }}
+        confirmLabel={"Leave Network"}
+        cancelLabel={"Cancel"}
+        closeOnConfirm={false}
+        destructive
       >
         <View style={{ gap: 10 }}>
-          <Txt>You will lose access to member-only settings and private activity.</Txt>
-          <Button secondary title="Cancel" onPress={() => setLeaveConfirmOpen(false)} />
-          <Action
-            title="Leave Network"
-            run={async () => {
-              await act("leave_organization", { organization_id: organization.id });
-              setLeaveConfirmOpen(false);
-              router.replace("/organizations");
-            }}
-          />
+          <Txt>
+            You will lose access to member-only settings and private activity.
+          </Txt>
         </View>
-      </Sheet>
+      </ConfirmDialog>
       <Sheet
         title="Invite someone"
         visible={sheet === "invite" && inviteRoles.length > 0}
         onClose={() => setSheet(null)}
       >
         {!inviteRoles.length ? (
-          <Txt muted>
-            Your current role cannot invite Network members.
-          </Txt>
+          <Txt muted>Your current role cannot invite Network members.</Txt>
         ) : (
           <>
             <Txt muted>
@@ -753,14 +799,22 @@ export default function OrganizationScreen() {
       </Sheet>
       <Sheet
         title={`Manage ${memberName(selectedMember)}`}
-        visible={sheet === "member" && !!role && canManageOrganizationMember(organization, members, userId ?? "", selectedMember)}
+        visible={
+          sheet === "member" &&
+          !!role &&
+          canManageOrganizationMember(
+            organization,
+            members,
+            userId ?? "",
+            selectedMember,
+          )
+        }
         onClose={() => setSheet(null)}
       >
         {manageableMember && nextRoleOptions.length > 0 && (
           <>
             <Txt muted>
-              Set a role below your own. The Network owner cannot be
-              changed.
+              Set a role below your own. The Network owner cannot be changed.
             </Txt>
             <Chips
               options={nextRoleOptions}
@@ -772,42 +826,69 @@ export default function OrganizationScreen() {
               onChange={setMemberRole}
               accessibilityPrefix="Member role"
             />
-            <Action
+            <Button
               title="Save role"
-              run={async () => {
-                await act("set_organization_member_role", {
-                  organization_id: organization.id,
-                  user_id: selectedMember,
-                  role: memberRole,
-                });
-                setSheet(null);
-              }}
+              onPress={() =>
+                requestConfirmation({
+                  title: "Change this member’s role?",
+                  message:
+                    "Change this member’s role to " + memberRole + "? This changes their permissions.",
+                  confirmLabel: "Save role",
+                  destructive: false,
+                  onConfirm: async () => {
+                    await act("set_organization_member_role", {
+                      organization_id: organization.id,
+                      user_id: selectedMember,
+                      role: memberRole,
+                    });
+                    setSheet(null);
+                  },
+                })
+              }
             />
           </>
         )}
         {manageableMember && (
           <>
-            <Action
+            <Button
               secondary
               title="Remove from Network"
-              run={async () => {
-                await act("remove_organization_member", {
-                  organization_id: organization.id,
-                  user_id: selectedMember,
-                });
-                setSheet(null);
-              }}
+              onPress={() =>
+                requestConfirmation({
+                  title: "Remove this member from the Network?",
+                  message:
+                    "This removes the membership or invitation and its access to this Network.",
+                  confirmLabel: "Remove from Network",
+                  destructive: true,
+                  onConfirm: async () => {
+                    await act("remove_organization_member", {
+                      organization_id: organization.id,
+                      user_id: selectedMember,
+                    });
+                    setSheet(null);
+                  },
+                })
+              }
             />
-            <Action
+            <Button
               secondary
               title="Ban from Network"
-              run={async () => {
-                await act("ban_organization_member", {
-                  organization_id: organization.id,
-                  user_id: selectedMember,
-                });
-                setSheet(null);
-              }}
+              onPress={() =>
+                requestConfirmation({
+                  title: "Ban this member from the Network?",
+                  message:
+                    "This member will lose access and be banned from this Network.",
+                  confirmLabel: "Ban from Network",
+                  destructive: true,
+                  onConfirm: async () => {
+                    await act("ban_organization_member", {
+                      organization_id: organization.id,
+                      user_id: selectedMember,
+                    });
+                    setSheet(null);
+                  },
+                })
+              }
             />
           </>
         )}
@@ -834,8 +915,12 @@ export default function OrganizationScreen() {
                 <Building2 size={25} color={colors.green} />
               </View>
               <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
-                <Text style={styles.h2} numberOfLines={2}>{organization.name}</Text>
-                <Text style={styles.body}>{profileSummary.member_count.toLocaleString()} members</Text>
+                <Text style={styles.h2} numberOfLines={2}>
+                  {organization.name}
+                </Text>
+                <Text style={styles.body}>
+                  {profileSummary.member_count.toLocaleString()} members
+                </Text>
                 <Txt muted>
                   {role
                     ? `Joined · ${role === "coowner" ? "Co-owner" : role[0].toUpperCase() + role.slice(1)}`
@@ -844,7 +929,9 @@ export default function OrganizationScreen() {
               </View>
             </View>
             {profileSummary.description.trim() ? (
-              <Text style={styles.muted} numberOfLines={2}>{profileSummary.description}</Text>
+              <Text style={styles.muted} numberOfLines={2}>
+                {profileSummary.description}
+              </Text>
             ) : null}
             <ProfileActions>
               <Button
@@ -873,9 +960,12 @@ export default function OrganizationScreen() {
               onPress={() => selectTab("squads")}
             />
           </ProfileSection>
-          {(directSquadIds.length > 0 || canManageSquads) ? (
+          {directSquadIds.length > 0 || canManageSquads ? (
             <ProfileSection title="Squads directly linked to this Network">
-              <Txt muted>Direct links create association only. Squad membership and chat remain separate.</Txt>
+              <Txt muted>
+                Direct links create association only. Squad membership and chat
+                remain separate.
+              </Txt>
               <OrganizationRelatedPreview
                 organizationId={organization.id}
                 entityType="squad"
@@ -961,7 +1051,9 @@ export default function OrganizationScreen() {
         <CommunityPublicBeacons
           type="organization"
           entityId={organization.id}
-          excludeActivityIds={organizationActivities.map((activity) => activity.id)}
+          excludeActivityIds={organizationActivities.map(
+            (activity) => activity.id,
+          )}
         />
       ) : null}
 
@@ -970,151 +1062,181 @@ export default function OrganizationScreen() {
           title="Members are private"
           body="Join this Network to view its member directory."
         />
-      ) : tab === "members" && (
-        <FlashList
-          style={{ flex: 1, minHeight: 0 }}
-          data={memberSearch.trim() ? visibleMemberRows : directoryMembers}
-          keyExtractor={(member) => member.user_id}
-          ListHeaderComponent={
-            <View style={{ gap: 10, paddingBottom: 10 }}>
-              <View style={styles.between}>
-                <View>
-                  <Text style={styles.h2}>{count.toLocaleString()} members</Text>
-                  <Text style={styles.muted}>Active members</Text>
-                </View>
-                {inviteRoles.length > 0 && (
-                  <Button compact title="+ Invite" onPress={openInvite} />
-                )}
-              </View>
-              <Field
-                label="Search visible member names"
-                placeholder="Name"
-                value={memberSearch}
-                onChangeText={setMemberSearch}
-              />
-            </View>
-          }
-          renderItem={({ item }) => peopleRows([item])[0]}
-          ListEmptyComponent={
-            <Empty
-              title={memberSearch.trim() ? "No matching members" : "No visible members"}
-              body="Member profiles are shown here when they are visible to you."
-            />
-          }
-          ListFooterComponent={
-            <View style={{ gap: 10, paddingTop: 10 }}>
-          {invitedMembers.length > 0 && (
-            <>
-              <Text style={styles.label}>INVITATIONS</Text>
-              {invitedMembers.map((member) => (
-                <View
-                  key={member.user_id}
-                  style={[styles.card, { padding: 12 }]}
-                >
-                  <View style={styles.between}>
-                    <Text style={styles.h2}>{memberName(member.user_id)}</Text>
-                    <Text style={styles.muted}>{member.role} · invited</Text>
+      ) : (
+        tab === "members" && (
+          <FlashList
+            style={{ flex: 1, minHeight: 0 }}
+            data={memberSearch.trim() ? visibleMemberRows : directoryMembers}
+            keyExtractor={(member) => member.user_id}
+            ListHeaderComponent={
+              <View style={{ gap: 10, paddingBottom: 10 }}>
+                <View style={styles.between}>
+                  <View>
+                    <Text style={styles.h2}>
+                      {count.toLocaleString()} members
+                    </Text>
+                    <Text style={styles.muted}>Active members</Text>
                   </View>
-                  {canManageOrganizationMember(
-                    organization,
-                    members,
-                    userId ?? "",
-                    member.user_id,
-                  ) && (
-                    <Action
-                      compact
-                      secondary
-                      title="Cancel invitation"
-                      run={() =>
-                        act("remove_organization_member", {
-                          organization_id: organization.id,
-                          user_id: member.user_id,
-                        })
-                      }
-                    />
+                  {inviteRoles.length > 0 && (
+                    <Button compact title="+ Invite" onPress={openInvite} />
                   )}
                 </View>
-              ))}
-            </>
-          )}
-          {canManage && requestedMembers.length > 0 && (
-            <View style={[styles.card, { gap: 8 }]}>
-              <Text style={styles.h2}>Join requests</Text>
-              {requestedMembers.map((member) => (
-                <View
-                  key={member.user_id}
-                  style={[
-                    styles.row,
-                    { flexWrap: "wrap", justifyContent: "space-between" },
-                  ]}
-                >
-                  <Text style={[styles.body, { flex: 1 }]}>
-                    {memberName(member.user_id)}
-                  </Text>
-                  <Action
-                    compact
-                    title="Approve"
-                    run={() =>
-                      act("approve_organization_join_request", {
-                        organization_id: organization.id,
-                        user_id: member.user_id,
-                      })
-                    }
-                  />
-                  <Action
-                    compact
-                    secondary
-                    title="Decline"
-                    run={() =>
-                      act("deny_organization_join_request", {
-                        organization_id: organization.id,
-                        user_id: member.user_id,
-                      })
-                    }
-                  />
-                </View>
-              ))}
-            </View>
-          )}
-          {canManage &&
-            data.organization_bans.some(
-              (ban) => ban.organization_id === organization.id,
-            ) && (
-              <>
-                <Text style={styles.label}>BANNED</Text>
-                {data.organization_bans
-                  .filter(
-                    (ban) =>
-                      ban.organization_id === organization.id &&
-                      canUnban(ban.user_id),
-                  )
-                  .map((ban) => (
-                    <View
-                      key={ban.user_id}
-                      style={[styles.card, { padding: 12 }]}
-                    >
-                      <View style={styles.between}>
-                        <Text style={styles.h2}>{memberName(ban.user_id)}</Text>
+                <Field
+                  label="Search visible member names"
+                  placeholder="Name"
+                  value={memberSearch}
+                  onChangeText={setMemberSearch}
+                />
+              </View>
+            }
+            renderItem={({ item }) => peopleRows([item])[0]}
+            ListEmptyComponent={
+              <Empty
+                title={
+                  memberSearch.trim()
+                    ? "No matching members"
+                    : "No visible members"
+                }
+                body="Member profiles are shown here when they are visible to you."
+              />
+            }
+            ListFooterComponent={
+              <View style={{ gap: 10, paddingTop: 10 }}>
+                {invitedMembers.length > 0 && (
+                  <>
+                    <Text style={styles.label}>INVITATIONS</Text>
+                    {invitedMembers.map((member) => (
+                      <View
+                        key={member.user_id}
+                        style={[styles.card, { padding: 12 }]}
+                      >
+                        <View style={styles.between}>
+                          <Text style={styles.h2}>
+                            {memberName(member.user_id)}
+                          </Text>
+                          <Text style={styles.muted}>
+                            {member.role} · invited
+                          </Text>
+                        </View>
+                        {canManageOrganizationMember(
+                          organization,
+                          members,
+                          userId ?? "",
+                          member.user_id,
+                        ) && (
+                          <Button
+                            compact
+                            secondary
+                            title="Cancel invitation"
+                            onPress={() =>
+                              requestConfirmation({
+                                title: "Remove this member from the Network?",
+                                message:
+                                  "This removes the membership or invitation and its access to this Network.",
+                                confirmLabel: "Cancel invitation",
+                                destructive: true,
+                                onConfirm: () =>
+                                  act("remove_organization_member", {
+                                    organization_id: organization.id,
+                                    user_id: member.user_id,
+                                  }),
+                              })
+                            }
+                          />
+                        )}
+                      </View>
+                    ))}
+                  </>
+                )}
+                {canManage && requestedMembers.length > 0 && (
+                  <View style={[styles.card, { gap: 8 }]}>
+                    <Text style={styles.h2}>Join requests</Text>
+                    {requestedMembers.map((member) => (
+                      <View
+                        key={member.user_id}
+                        style={[
+                          styles.row,
+                          { flexWrap: "wrap", justifyContent: "space-between" },
+                        ]}
+                      >
+                        <Text style={[styles.body, { flex: 1 }]}>
+                          {memberName(member.user_id)}
+                        </Text>
+                        <Action
+                          compact
+                          title="Approve"
+                          run={() =>
+                            act("approve_organization_join_request", {
+                              organization_id: organization.id,
+                              user_id: member.user_id,
+                            })
+                          }
+                        />
                         <Action
                           compact
                           secondary
-                          title="Unban"
+                          title="Decline"
                           run={() =>
-                            act("unban_organization_member", {
+                            act("deny_organization_join_request", {
                               organization_id: organization.id,
-                              user_id: ban.user_id,
+                              user_id: member.user_id,
                             })
                           }
                         />
                       </View>
-                      {!!ban.reason && <Txt muted>{ban.reason}</Txt>}
-                    </View>
-                  ))}
-              </>
-            )}
-            </View>
-          }
-        />
+                    ))}
+                  </View>
+                )}
+                {canManage &&
+                  data.organization_bans.some(
+                    (ban) => ban.organization_id === organization.id,
+                  ) && (
+                    <>
+                      <Text style={styles.label}>BANNED</Text>
+                      {data.organization_bans
+                        .filter(
+                          (ban) =>
+                            ban.organization_id === organization.id &&
+                            canUnban(ban.user_id),
+                        )
+                        .map((ban) => (
+                          <View
+                            key={ban.user_id}
+                            style={[styles.card, { padding: 12 }]}
+                          >
+                            <View style={styles.between}>
+                              <Text style={styles.h2}>
+                                {memberName(ban.user_id)}
+                              </Text>
+                              <Button
+                                compact
+                                secondary
+                                title="Unban"
+                                onPress={() =>
+                                  requestConfirmation({
+                                    title: "Unban this member?",
+                                    message:
+                                      "This removes the Network ban. Review access before continuing.",
+                                    confirmLabel: "Unban",
+                                    destructive: false,
+                                    onConfirm: () =>
+                                      act("unban_organization_member", {
+                                        organization_id: organization.id,
+                                        user_id: ban.user_id,
+                                      }),
+                                  })
+                                }
+                              />
+                            </View>
+                            {!!ban.reason && <Txt muted>{ban.reason}</Txt>}
+                          </View>
+                        ))}
+                    </>
+                  )}
+              </View>
+            }
+          />
+        )
       )}
 
       {(tab === "squads" || tab === "directSquads") && (
@@ -1122,7 +1244,9 @@ export default function OrganizationScreen() {
           <View style={styles.between}>
             <View style={{ flex: 1, gap: 3 }}>
               <Text style={styles.h2}>
-                {tab === "squads" ? "Organizations in this Network" : "Squads directly linked to this Network"}
+                {tab === "squads"
+                  ? "Organizations in this Network"
+                  : "Squads directly linked to this Network"}
               </Text>
               <Txt muted>
                 {tab === "squads"
@@ -1131,27 +1255,56 @@ export default function OrganizationScreen() {
               </Txt>
             </View>
             {tab === "squads" && canManage ? (
-              <Button compact secondary title="+ Organization" onPress={() => { setSelectedSpace(""); setSheet("attachSpace"); }} />
+              <Button
+                compact
+                secondary
+                title="+ Organization"
+                onPress={() => {
+                  setSelectedSpace("");
+                  setSheet("attachSpace");
+                }}
+              />
             ) : tab === "directSquads" && canManageSquads ? (
-              <Button compact title="+ Squad" onPress={() => { setSelectedSquad(""); setSheet("attach"); }} />
+              <Button
+                compact
+                title="+ Squad"
+                onPress={() => {
+                  setSelectedSquad("");
+                  setSheet("attach");
+                }}
+              />
             ) : null}
           </View>
           <Field
-            label={tab === "squads" ? "Search Organizations" : "Search direct Squads"}
-            placeholder={tab === "squads" ? "Organization name or description" : "Squad name or description"}
+            label={
+              tab === "squads" ? "Search Organizations" : "Search direct Squads"
+            }
+            placeholder={
+              tab === "squads"
+                ? "Organization name or description"
+                : "Squad name or description"
+            }
             value={squadSearch}
             onChangeText={setSquadSearch}
           />
           <VirtualizedCommunityDirectory
             query={squadSearch}
-            queryLabel={tab === "squads" ? "Organizations linked directly to this Network" : "Network-linked Squads are a separate association"}
+            queryLabel={
+              tab === "squads"
+                ? "Organizations linked directly to this Network"
+                : "Network-linked Squads are a separate association"
+            }
             entityType={tab === "squads" ? "space" : "squad"}
             parentType="organization"
             parentId={organization.id}
-            allowedEntityIds={tab === "directSquads" ? directSquadIds : undefined}
+            allowedEntityIds={
+              tab === "directSquads" ? directSquadIds : undefined
+            }
             onOpen={(summary) => {
-              if (summary.entity_type === "space") setPreviewSpaceId(summary.entity_id);
-              else if (summary.entity_type === "squad") setPreviewSquadId(summary.entity_id);
+              if (summary.entity_type === "space")
+                setPreviewSpaceId(summary.entity_id);
+              else if (summary.entity_type === "squad")
+                setPreviewSquadId(summary.entity_id);
             }}
           />
         </View>
@@ -1161,10 +1314,10 @@ export default function OrganizationScreen() {
         <View style={{ gap: 10 }}>
           <View style={styles.between}>
             <View style={{ flex: 1, gap: 4 }}>
-          <Text style={styles.h2}>Network activity</Text>
+              <Text style={styles.h2}>Network activity</Text>
               <Txt muted>
-                Network Beacons and Pings live here. Squad activity
-                stays in each Squad.
+                Network Beacons and Pings live here. Squad activity stays in
+                each Squad.
               </Txt>
             </View>
             {role ? (
@@ -1254,19 +1407,35 @@ export default function OrganizationScreen() {
         </View>
       )}
 
-      {tab === "manage" && (
-        settingsSection === "details" ? (
+      {tab === "manage" &&
+        (settingsSection === "details" ? (
           <View style={{ gap: 10 }}>
             <Text style={styles.h2}>Network details</Text>
             {canManage ? (
               <>
-                <Field label="Name" value={detailValues.name} maxLength={60} onChangeText={(value) => setDetailsDraft({ ...detailValues, name: value })} />
-                <Field label="Description" value={detailValues.description} maxLength={500} multiline onChangeText={(value) => setDetailsDraft({ ...detailValues, description: value })} />
+                <Field
+                  label="Name"
+                  value={detailValues.name}
+                  maxLength={60}
+                  onChangeText={(value) =>
+                    setDetailsDraft({ ...detailValues, name: value })
+                  }
+                />
+                <Field
+                  label="Description"
+                  value={detailValues.description}
+                  maxLength={500}
+                  multiline
+                  onChangeText={(value) =>
+                    setDetailsDraft({ ...detailValues, description: value })
+                  }
+                />
                 <Action
                   title="Save details"
                   disabled={!detailsDirty || !detailValues.name.trim()}
                   run={async () => {
-                    if (!detailValues.name.trim()) throw new Error("Give this Network a name.");
+                    if (!detailValues.name.trim())
+                      throw new Error("Give this Network a name.");
                     await act("update_organization", {
                       organization_id: organization.id,
                       name: detailValues.name.trim(),
@@ -1277,15 +1446,30 @@ export default function OrganizationScreen() {
                   }}
                 />
               </>
-            ) : <Txt muted>Only Network owners, co-owners, and admins can edit these details.</Txt>}
-            <Button secondary title="Cancel" onPress={() => { setDetailsDraft(null); navigateSettings(); }} />
+            ) : (
+              <Txt muted>
+                Only Network owners, co-owners, and admins can edit these
+                details.
+              </Txt>
+            )}
+            <Button
+              secondary
+              title="Cancel"
+              onPress={() => {
+                setDetailsDraft(null);
+                navigateSettings();
+              }}
+            />
           </View>
         ) : settingsSection === "access" ? (
           <View style={{ gap: 10 }}>
             <Text style={styles.h2}>Access & membership</Text>
             {canManage ? (
               <>
-                <SocialPolicyFields value={policyValues} onChange={setPolicyDraft} />
+                <SocialPolicyFields
+                  value={policyValues}
+                  onChange={setPolicyDraft}
+                />
                 <Action
                   title="Save access settings"
                   disabled={!policyDirty}
@@ -1300,71 +1484,174 @@ export default function OrganizationScreen() {
                   }}
                 />
               </>
-            ) : <Txt muted>Only Network owners, co-owners, and admins can edit access settings.</Txt>}
-            <Button secondary title="Cancel" onPress={() => { setPolicyDraft(null); navigateSettings(); }} />
+            ) : (
+              <Txt muted>
+                Only Network owners, co-owners, and admins can edit access
+                settings.
+              </Txt>
+            )}
+            <Button
+              secondary
+              title="Cancel"
+              onPress={() => {
+                setPolicyDraft(null);
+                navigateSettings();
+              }}
+            />
           </View>
         ) : settingsSection === "connections" ? (
           <View style={{ gap: 10 }}>
             <Text style={styles.h2}>Connections</Text>
-            <Txt muted>Linked Organizations and direct Squad associations remain separate from membership and ownership.</Txt>
-            {canManageSquads ? <Button secondary title="Link a Squad" onPress={() => { setSelectedSquad(""); setSheet("attach"); }} /> : null}
-            {canManage ? <Button secondary title="Link an Organization" onPress={() => { setSelectedSpace(""); setSheet("attachSpace"); }} /> : null}
+            <Txt muted>
+              Linked Organizations and direct Squad associations remain separate
+              from membership and ownership.
+            </Txt>
+            {canManageSquads ? (
+              <Button
+                secondary
+                title="Link a Squad"
+                onPress={() => {
+                  setSelectedSquad("");
+                  setSheet("attach");
+                }}
+              />
+            ) : null}
+            {canManage ? (
+              <Button
+                secondary
+                title="Link an Organization"
+                onPress={() => {
+                  setSelectedSpace("");
+                  setSheet("attachSpace");
+                }}
+              />
+            ) : null}
             {linkedSquads.map((squad) => (
               <View key={`squad:${squad.id}`} style={styles.card}>
-                <ProfileLink title={squad.name} detail="Direct Squad association" onPress={() => setPreviewSquadId(squad.id)} />
+                <ProfileLink
+                  title={squad.name}
+                  detail="Direct Squad association"
+                  onPress={() => setPreviewSquadId(squad.id)}
+                />
                 {canManageLinkedSquad(squad.id) ? (
-                  <Action compact secondary title={`Unlink ${squad.name}`} run={() => act("detach_organization_squad", { organization_id: organization.id, squad_id: squad.id })} />
+                  <Action
+                    compact
+                    secondary
+                    title={`Unlink ${squad.name}`}
+                    run={() =>
+                      act("detach_organization_squad", {
+                        organization_id: organization.id,
+                        squad_id: squad.id,
+                      })
+                    }
+                  />
                 ) : null}
               </View>
             ))}
             {linkedSpaces.map((space) => (
               <View key={`space:${space.id}`} style={styles.card}>
-                <ProfileLink title={space.name} detail="Linked Organization" onPress={() => setPreviewSpaceId(space.id)} />
+                <ProfileLink
+                  title={space.name}
+                  detail="Linked Organization"
+                  onPress={() => setPreviewSpaceId(space.id)}
+                />
                 {canManage ? (
-                  <Action compact secondary title={`Unlink ${space.name}`} run={() => act("detach_organization_space", { organization_id: organization.id, space_id: space.id })} />
+                  <Action
+                    compact
+                    secondary
+                    title={`Unlink ${space.name}`}
+                    run={() =>
+                      act("detach_organization_space", {
+                        organization_id: organization.id,
+                        space_id: space.id,
+                      })
+                    }
+                  />
                 ) : null}
               </View>
             ))}
-            <Button secondary title="Browse Organizations and direct Squads" onPress={() => selectTab("squads")} />
+            <Button
+              secondary
+              title="Browse Organizations and direct Squads"
+              onPress={() => selectTab("squads")}
+            />
           </View>
         ) : settingsSection === "members" ? (
           <View style={{ gap: 10 }}>
             <Text style={styles.h2}>Members & invitations</Text>
-            {canReadMembers ? <Button title="Manage members, requests & bans" onPress={() => selectTab("members")} /> : null}
-            {inviteRoles.length ? <Button secondary title="Invite a member" onPress={openInvite} /> : null}
-            {!canReadMembers && !inviteRoles.length ? <Txt muted>Member administration is only visible to eligible Network members.</Txt> : null}
+            {canReadMembers ? (
+              <Button
+                title="Manage members, requests & bans"
+                onPress={() => selectTab("members")}
+              />
+            ) : null}
+            {inviteRoles.length ? (
+              <Button secondary title="Invite a member" onPress={openInvite} />
+            ) : null}
+            {!canReadMembers && !inviteRoles.length ? (
+              <Txt muted>
+                Member administration is only visible to eligible Network
+                members.
+              </Txt>
+            ) : null}
           </View>
         ) : settingsSection === "actions" ? (
           <View style={{ gap: 10 }}>
             <Text style={styles.h2}>Actions</Text>
             {canLeaveNetwork ? (
-              <Button secondary title="Leave Network" onPress={() => setLeaveConfirmOpen(true)} />
-            ) : <Txt muted>{role === "owner" ? "The owner role stays with the Network owner." : "There is no membership action available for this account."}</Txt>}
+              <Button
+                secondary
+                title="Leave Network"
+                onPress={() => setLeaveConfirmOpen(true)}
+              />
+            ) : (
+              <Txt muted>
+                {role === "owner"
+                  ? "The owner role stays with the Network owner."
+                  : "There is no membership action available for this account."}
+              </Txt>
+            )}
           </View>
         ) : (
           <View style={{ gap: 10 }}>
             <View style={styles.card}>
               <Text style={styles.h2}>Network settings</Text>
-              <Txt muted>{role ? `Your role: ${role === "coowner" ? "Co-owner" : role}` : "Public profile settings"}</Txt>
+              <Txt muted>
+                {role
+                  ? `Your role: ${role === "coowner" ? "Co-owner" : role}`
+                  : "Public profile settings"}
+              </Txt>
             </View>
-            {settingsSections.filter((section) =>
-                    section === "details" || section === "access" ? canManage :
-                section === "connections" ? canManage || canManageSquads :
-                  section === "members" ? canReadMembers || inviteRoles.length > 0 :
-                    canLeaveNetwork,
-            ).map((section) => (
-              <ProfileLink key={section} title={settingsSectionTitles[section]} onPress={() => requestSettings(section)} />
-            ))}
+            {settingsSections
+              .filter((section) =>
+                section === "details" || section === "access"
+                  ? canManage
+                  : section === "connections"
+                    ? canManage || canManageSquads
+                    : section === "members"
+                      ? canReadMembers || inviteRoles.length > 0
+                      : canLeaveNetwork,
+              )
+              .map((section) => (
+                <ProfileLink
+                  key={section}
+                  title={settingsSectionTitles[section]}
+                  onPress={() => requestSettings(section)}
+                />
+              ))}
           </View>
-        )
-      )}
+        ))}
     </>
   );
 
   if (tab === "chat") {
     if (!role) {
       return (
-        <Screen title="Chat unavailable" eyebrow={organization.name} create={false}>
+        <Screen
+          title="Chat unavailable"
+          eyebrow={organization.name}
+          create={false}
+        >
           <Empty
             title="Network chat is for active members"
             body="This profile only shows chat access to current Network members."
@@ -1423,7 +1710,9 @@ export default function OrganizationScreen() {
         create={false}
         scroll={tab !== "members" && tab !== "squads" && tab !== "directSquads"}
         compactHeader={
-          tab === "members" || tab === "squads" || tab === "directSquads" ||
+          tab === "members" ||
+          tab === "squads" ||
+          tab === "directSquads" ||
           (tab === "manage" && !!settingsSection)
         }
         headerAction={

@@ -1,4 +1,12 @@
-import React, {
+import { ActionRow } from "@/src/shared/ContextMenu";
+import { useDesignTheme } from "@/src/shared/design-system";
+import { ConfirmDialog } from "@/src/shared/Dialogs";
+import { useBeacon } from "@/src/shared/store";
+import { Sheet, Txt } from "@/src/shared/ui";
+import { useNow } from "@/src/shared/useNow";
+import { randomUUID } from "expo-crypto";
+import { Check, CircleHelp, LogOut, X } from "lucide-react-native";
+import {
   useEffect,
   useLayoutEffect,
   useRef,
@@ -6,13 +14,6 @@ import React, {
   useSyncExternalStore,
 } from "react";
 import { Text, View } from "react-native";
-import { randomUUID } from "expo-crypto";
-import { Check, CircleHelp, LogOut, X } from "lucide-react-native";
-import { useBeacon } from "@/src/shared/store";
-import { Sheet, Txt } from "@/src/shared/ui";
-import { ActionRow } from "@/src/shared/ContextMenu";
-import { useDesignTheme } from "@/src/shared/design-system";
-import { useNow } from "@/src/shared/useNow";
 import { HomeAction } from "./components/HomeAction";
 import {
   beaconParticipation,
@@ -166,30 +167,31 @@ export function useBeaconParticipation(id: string) {
           after={afterChoices}
         />
       </Sheet>
-      <Sheet
+      <ConfirmDialog
         title={confirmation === "maybe" ? "Change to Maybe?" : "Leave Beacon?"}
         visible={!!confirmation && !!state}
         onClose={() => setConfirmation(null)}
+        confirmLabel={
+          confirmation === "maybe" ? "Change to Maybe" : "Leave Beacon"
+        }
+        cancelLabel="Keep my response"
+        closeOnConfirm={false}
+        onConfirm={async () => {
+          if (!confirmation) return;
+          if (!(await perform(confirmation, true))) {
+            throw new Error(
+              operations.get(key)?.error ||
+                "Could not update your response. Try again.",
+            );
+          }
+          setConfirmation(null);
+        }}
       >
         {state?.reasons.map((reason) => (
           <Txt key={reason}>{reason}</Txt>
         ))}
         <Txt muted>Rejoining depends on access and available places.</Txt>
-        <HomeAction
-          title={confirmation === "maybe" ? "Change to Maybe" : "Leave Beacon"}
-          primary
-          disabled={operation.busy}
-          onPress={() => {
-            const intent = confirmation!;
-            setConfirmation(null);
-            void perform(intent, true);
-          }}
-        />
-        <HomeAction
-          title="Keep my response"
-          onPress={() => setConfirmation(null)}
-        />
-      </Sheet>
+      </ConfirmDialog>
     </>
   );
   const feedback = operation.error ? (

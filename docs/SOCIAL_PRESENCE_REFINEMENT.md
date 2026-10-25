@@ -2,7 +2,8 @@
 
 ## Identity and status
 
-Beacons uses a compact shared identity/status pattern: a 44px profile avatar and name on the left, availability aligned to the top right, and the editable note spanning the full width beneath that identity row. The availability pill uses the existing status colors and a quiet tint; its menu shows descriptive rows with a checkmark on the selected status. The avatar opens Profile. Current Activity and Sonar remain below the identity block.
+Beacons uses one compact identity row: a 34px avatar, a truncating name, availability, and Sonar. The pills are independently tappable with 44px targets and display actual sharing states. A slim editable note spans the width directly below. The empty Current Activity uses one 48px row without a separate heading or explanation; Choose live Beacon remains an eligible-only secondary link. Populated previews reuse the existing Activity and Beacon controls. Sonar has no separate homepage row. Featured remains independently selected in the activity area below.
+
 
 Profile puts location beside the handle, availability at the top-right of the identity row, and the editable note across the full width underneath. Both screens use a slim 30px visual availability pill inside a 44px touch target. Bio, counts, and Edit/Share/QR follow; Current Activity and Sonar remain outside and below that header. Visitor notes use the same attached placement, without owner editing controls.
 
@@ -17,6 +18,8 @@ The Sonar sheet has duration below the roster and a fixed confirmation footer. O
 The existing service and its 1–50 individual-recipient contract are retained, with no migration. The shared service limit remains 24 hours; the existing duration presets remain unchanged. Native permission/start failure and Stop handling use the existing device service.
 
 ## Verification boundaries
+
+The compact homepage follow-up passed TypeScript, focused lint, web export, and six browser checks covering 320/430px light/dark, 1024px dark, larger text, independent status/Sonar menus, compact empty state, Activity Note editing, and explicit Current Beacon takeover. Profile keeps its expanded presentation.
 
 - Passed: TypeScript, focused lint, web static export, and 25 domain tests.
 - Passed browser checks: 5 identity/status cases at 320/430px in light/dark and 1024px in dark; 8 existing Activity/Status flows; 4 Sonar cases at 320/430px in light/dark; 3 existing Friends selector cases at 320/375/430px.

@@ -1,27 +1,45 @@
-import { sheetSurface } from "./mobilePresentation";
-import { ImmersiveStatusBar } from "./SystemBars";
-import React, { useCallback, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
-  Animated,
-  BackHandler,
-  Platform,
-  Pressable,
-  StyleSheet,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
-  useWindowDimensions,
-  type NativeScrollEvent,
-  type NativeSyntheticEvent,
-  type TextInputProps,
-} from "react-native";
+  getOverlayTitle,
+  subscribeToSheetStack,
+  registerActiveSheet,
+  unregisterActiveSheet,
+  isTopActiveSheet,
+  setSheetVisibility,
+  setSheetLabel,
+  lockWebSheetScroll,
+  unlockWebSheetScroll,
+  useTopOverlay,
+} from "./overlays";
+import { pendingSocialCount } from "@/src/features/people/communication";
 import {
-  SafeAreaView,
-  useSafeAreaInsets,
-} from "react-native-safe-area-context";
-import { BlurView } from "expo-blur";
+  Card,
+  Avatar as DesignAvatar,
+  Chip as DesignChip,
+  IconButton as DesignIconButton,
+  EmptyState,
+  GlassBar,
+  PrimaryButton,
+  SecondaryButton,
+  uiHaptics,
+  useReducedMotion,
+} from "@/src/shared/design-system";
+import { usePreferences } from "@/src/shared/preferences";
+import { useBeacon } from "@/src/shared/store";
+import {
+  themeNames,
+  themeVariants,
+  themes,
+  type ResolvedAppearance,
+  type ThemeName,
+} from "@/src/shared/themes";
+import type { Audience, Category } from "@/src/shared/types";
+import { useNow } from "@/src/shared/useNow";
+import {
+  getDesignTheme,
+  useDesignTheme,
+  type DesignTokens,
+  type SemanticColors,
+} from "@/src/theme";
 import {
   BottomSheetBackdrop,
   BottomSheetFooter,
@@ -32,7 +50,13 @@ import {
   type BottomSheetBackdropProps,
   type BottomSheetFooterProps,
 } from "@gorhom/bottom-sheet";
-import { ReduceMotion } from "react-native-reanimated";
+import { BlurView } from "expo-blur";
+import {
+  router,
+  useFocusEffect,
+  useLocalSearchParams,
+  useSegments,
+} from "expo-router";
 import {
   ArrowLeft,
   Bell,
@@ -42,152 +66,34 @@ import {
   Users,
   X,
 } from "lucide-react-native";
-import { pendingSocialCount } from "@/src/features/people/communication";
-import { useNow } from "@/src/shared/useNow";
+import React, { useCallback, useMemo, useState } from "react";
 import {
-  router,
-  useSegments,
-  useFocusEffect,
-  useLocalSearchParams,
-} from "expo-router";
-import { useBeacon } from "@/src/shared/store";
-import type { Audience, Category } from "@/src/shared/types";
-import { usePreferences } from "@/src/shared/preferences";
+  ActivityIndicator,
+  Animated,
+  BackHandler,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  useWindowDimensions,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+  type TextInputProps,
+} from "react-native";
+import { ReduceMotion } from "react-native-reanimated";
 import {
-  getDesignTheme,
-  useDesignTheme,
-  type DesignTokens,
-  type SemanticColors,
-} from "@/src/theme";
-import {
-  Avatar as DesignAvatar,
-  Card,
-  Chip as DesignChip,
-  EmptyState,
-  GlassBar,
-  IconButton as DesignIconButton,
-  PrimaryButton,
-  SecondaryButton,
-  useReducedMotion,
-  uiHaptics,
-} from "@/src/shared/design-system";
-import {
-  themes,
-  themeNames,
-  themeVariants,
-  type ResolvedAppearance,
-  type ThemeName,
-} from "@/src/shared/themes";
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
+import { sheetSurface } from "./mobilePresentation";
+import { focusOverlay, useOverlayKeyboardFocus } from "./overlayFocus";
+import { ImmersiveStatusBar } from "./SystemBars";
+export { SheetIsolation, useOverlayPresence, useTopOverlay } from "./overlays";
 export { uiHaptics };
 export const colors = themes.Essential;
-let webSheetScrollLocks = 0;
-let previousWebBodyOverflow = "";
-const activeSheetStack: string[] = [];
-const sheetVisibility = new Map<string, boolean>();
-const sheetLabels = new Map<string, string>();
-const sheetStackSubscribers = new Set<() => void>();
-
-function subscribeToSheetStack(callback: () => void) {
-  sheetStackSubscribers.add(callback);
-  return () => {
-    sheetStackSubscribers.delete(callback);
-  };
-}
-
-function notifySheetStackChanged() {
-  sheetStackSubscribers.forEach((callback) => callback());
-}
-
-function registerActiveSheet(sheetId: string) {
-  const previousLength = activeSheetStack.length;
-  const existingIndex = activeSheetStack.indexOf(sheetId);
-  if (existingIndex >= 0) activeSheetStack.splice(existingIndex, 1);
-  activeSheetStack.push(sheetId);
-  if (activeSheetStack.length !== previousLength || existingIndex >= 0) {
-    notifySheetStackChanged();
-  }
-}
-
-function unregisterActiveSheet(sheetId: string) {
-  const index = activeSheetStack.indexOf(sheetId);
-  const hadVisibility = sheetVisibility.delete(sheetId);
-  const hadLabel = sheetLabels.delete(sheetId);
-  if (index >= 0) activeSheetStack.splice(index, 1);
-  if (index >= 0 || hadVisibility || hadLabel) notifySheetStackChanged();
-}
-
-function isTopActiveSheet(sheetId: string) {
-  return (
-    activeSheetStack.at(-1) === sheetId && sheetVisibility.get(sheetId) === true
-  );
-}
-
-function setSheetVisibility(sheetId: string, visible: boolean) {
-  if (sheetVisibility.get(sheetId) === visible) return;
-  sheetVisibility.set(sheetId, visible);
-  notifySheetStackChanged();
-}
-
-function setSheetLabel(sheetId: string, title: string) {
-  if (sheetLabels.get(sheetId) === title) return;
-  sheetLabels.set(sheetId, title);
-  notifySheetStackChanged();
-}
-
-/** Register anchored overlays with the existing sheet isolation and scroll lock. */
-export function useOverlayPresence(
-  id: string,
-  visible: boolean,
-  title: string,
-) {
-  React.useLayoutEffect(() => {
-    if (!visible) return;
-    registerActiveSheet(id);
-    setSheetVisibility(id, true);
-    setSheetLabel(id, title);
-    if (Platform.OS === "web") lockWebSheetScroll();
-    return () => {
-      unregisterActiveSheet(id);
-      if (Platform.OS === "web") unlockWebSheetScroll();
-    };
-  }, [id, visible, title]);
-}
-
-export function SheetIsolation({ children }: { children: React.ReactNode }) {
-  const hasOpenSheet = React.useSyncExternalStore(
-    subscribeToSheetStack,
-    () => activeSheetStack.length > 0,
-    () => false,
-  );
-  return (
-    <View
-      accessibilityElementsHidden={hasOpenSheet}
-      importantForAccessibility={hasOpenSheet ? "no-hide-descendants" : "auto"}
-      aria-hidden={hasOpenSheet}
-      style={{ flex: 1 }}
-    >
-      {children}
-    </View>
-  );
-}
-
-function lockWebSheetScroll() {
-  if (typeof document === "undefined") return;
-  if (webSheetScrollLocks === 0) {
-    previousWebBodyOverflow = document.body.style.overflow;
-  }
-  webSheetScrollLocks += 1;
-  document.body.style.overflow = "hidden";
-}
-
-function unlockWebSheetScroll() {
-  if (typeof document === "undefined" || webSheetScrollLocks === 0) return;
-  webSheetScrollLocks -= 1;
-  if (webSheetScrollLocks === 0) {
-    document.body.style.overflow = previousWebBodyOverflow;
-  }
-}
-
 const makeStyles = (colors: SemanticColors, tokens: DesignTokens) =>
   StyleSheet.create({
     screen: { flex: 1, backgroundColor: colors.bg },
@@ -710,18 +616,10 @@ export function Sheet({
   const modalStyle = {
     marginHorizontal: (width - sheetWidth) / 2,
   };
+  const topOverlay = useTopOverlay(sheetId);
   const focusDialog = useCallback(() => {
-    if (Platform.OS !== "web" || typeof document === "undefined") return;
-    const dialog = dialogRef.current as unknown as HTMLElement | null;
-    if (!dialog) return;
-    const target =
-      dialog.querySelector<HTMLElement>('[aria-label="Close"]') ??
-      dialog.querySelector<HTMLElement>(
-        'button:not([disabled]), [role="button"][tabindex="0"], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex="0"]',
-      ) ??
-      dialog;
-    target.focus({ preventScroll: true });
-  }, []);
+    if (isTopActiveSheet(sheetId)) focusOverlay(dialogRef, "Close");
+  }, [sheetId]);
   const dialogContainerComponent = useMemo(() => {
     function SheetDialogContainer({
       children: content,
@@ -733,7 +631,7 @@ export function Sheet({
       );
       const dialogTitle = React.useSyncExternalStore(
         subscribeToSheetStack,
-        () => sheetLabels.get(sheetId) ?? "",
+        () => getOverlayTitle(sheetId),
         () => "",
       );
       return (
@@ -859,68 +757,12 @@ export function Sheet({
     }
   }, [requestDismiss, sheetId, visible]);
 
-  React.useEffect(() => {
-    if (!visible || Platform.OS !== "web" || typeof document === "undefined") {
-      return;
-    }
-    const dialog = () => dialogRef.current as unknown as HTMLElement | null;
-    const isTopSheet = () => visibleRef.current && isTopActiveSheet(sheetId);
-    const focusInSheet = (event: FocusEvent) => {
-      const node = dialog();
-      if (
-        node &&
-        isTopSheet() &&
-        event.target instanceof Node &&
-        !node.contains(event.target)
-      ) {
-        focusDialog();
-      }
-    };
-    const keepKeyboardInSheet = (event: KeyboardEvent) => {
-      const node = dialog();
-      if (!node || !isTopSheet()) return;
-      if (event.key === "Escape") {
-        event.preventDefault();
-        event.stopPropagation();
-        requestDismiss();
-        return;
-      }
-      if (event.key !== "Tab") return;
-      const focusable = Array.from(
-        node.querySelectorAll<HTMLElement>(
-          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [role="button"][tabindex="0"], [tabindex="0"]',
-        ),
-      ).filter(
-        (element) =>
-          element.getClientRects().length > 0 &&
-          element.getAttribute("aria-label") !== "Dismiss sheet",
-      );
-      if (focusable.length === 0) {
-        event.preventDefault();
-        node.focus({ preventScroll: true });
-        return;
-      }
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      const active = document.activeElement;
-      if (event.shiftKey && (active === first || !node.contains(active))) {
-        event.preventDefault();
-        last.focus();
-      } else if (
-        !event.shiftKey &&
-        (active === last || !node.contains(active))
-      ) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-    document.addEventListener("focusin", focusInSheet, true);
-    document.addEventListener("keydown", keepKeyboardInSheet, true);
-    return () => {
-      document.removeEventListener("focusin", focusInSheet, true);
-      document.removeEventListener("keydown", keepKeyboardInSheet, true);
-    };
-  }, [sheetId, visible, focusDialog, requestDismiss]);
+  useOverlayKeyboardFocus(
+    dialogRef,
+    visible && topOverlay,
+    requestDismiss,
+    focusDialog,
+  );
 
   React.useEffect(
     () => () => {
@@ -931,7 +773,7 @@ export function Sheet({
   );
 
   React.useEffect(() => {
-    if (!visible || Platform.OS !== "android") return;
+    if (!visible || !topOverlay || Platform.OS !== "android") return;
     const subscription = BackHandler.addEventListener(
       "hardwareBackPress",
       () => {
@@ -940,7 +782,7 @@ export function Sheet({
       },
     );
     return () => subscription.remove();
-  }, [visible, requestDismiss]);
+  }, [visible, topOverlay, requestDismiss]);
 
   const SheetContent = scrollable ? BottomSheetScrollView : BottomSheetView;
 
@@ -1018,7 +860,10 @@ export function Sheet({
         releaseWebScrollLock();
         const returnFocus = returnFocusRef.current;
         returnFocusRef.current = null;
-        if (returnFocus?.isConnected) {
+        if (
+          returnFocus?.isConnected &&
+          !returnFocus.closest('[aria-hidden="true"]')
+        ) {
           returnFocus.focus({ preventScroll: true });
         }
         if (visibleRef.current) onClose();

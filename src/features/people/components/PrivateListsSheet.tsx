@@ -1,6 +1,6 @@
-import React, { useState } from "react";
-import { Pressable, Text, View } from "react-native";
-import { MoreVertical, Star, Users, ChevronRight } from "lucide-react-native";
+import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
+import { canViewProfile } from "@/src/features/profile/privacy";
+import { ConfirmDialog } from "@/src/shared/Dialogs";
 import { useBeacon } from "@/src/shared/store";
 import {
   Action,
@@ -11,14 +11,15 @@ import {
   Txt,
   useTheme,
 } from "@/src/shared/ui";
-import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
-import { canViewProfile } from "@/src/features/profile/privacy";
-import { PrivateListAvatar } from "./PrivateListAvatar";
+import { ChevronRight, MoreVertical, Star, Users } from "lucide-react-native";
+import { useState } from "react";
+import { Pressable, Text, View } from "react-native";
 import {
   privateListName,
   selectListPeople,
   type PeopleListSelection,
 } from "../privateLists";
+import { PrivateListAvatar } from "./PrivateListAvatar";
 
 export function PrivateListsSheet({
   visible,
@@ -217,36 +218,29 @@ export function PrivateListsSheet({
                 </View>
               );
             })}
-            {deleting ? (
-              <>
-                <Txt>
-                  Delete this list? Lists still used for sharing must be removed
-                  from those audiences first.
-                </Txt>
-                <Action
-                  title="Confirm delete list"
-                  run={async () => {
-                    await act("delete_list", { id: edited.id });
-                    setEditing(null);
-                    setDeleting(false);
-                  }}
-                />
-                <Button
-                  secondary
-                  title="Cancel deletion"
-                  onPress={() => setDeleting(false)}
-                />
-              </>
-            ) : (
-              <Button
-                secondary
-                title="Delete list"
-                onPress={() => setDeleting(true)}
-              />
-            )}
+            <Button
+              secondary
+              title="Delete list"
+              onPress={() => setDeleting(true)}
+            />
           </>
         ) : null}
       </Sheet>
+      <ConfirmDialog
+        title="Delete this list?"
+        visible={deleting && !!edited}
+        onClose={() => setDeleting(false)}
+        destructive
+        confirmLabel="Delete list"
+        message="Lists still used for sharing must be removed from those audiences first."
+        closeOnConfirm={false}
+        onConfirm={async () => {
+          if (!edited) throw new Error("This list is no longer available.");
+          await act("delete_list", { id: edited.id });
+          setEditing(null);
+          setDeleting(false);
+        }}
+      />
     </>
   );
 }

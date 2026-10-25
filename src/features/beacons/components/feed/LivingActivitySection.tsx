@@ -1,23 +1,9 @@
+import { ProfileSonarCard } from "@/src/features/profile/components/ProfileSonarCard";
 import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
-import { randomUUID } from "expo-crypto";
-import React, { useRef, useState } from "react";
-import { Pressable, Text, View } from "react-native";
-import { router } from "expo-router";
-import {
-  Check,
-  ChevronDown,
-  ChevronRight,
-  EyeOff,
-  MoreHorizontal,
-  Pencil,
-  Plus,
-  Send,
-  Vote,
-  Radio,
-  Zap,
-} from "lucide-react-native";
+import { eligibleDefaultTargets } from "@/src/features/profile/settings/beaconDefaults";
+import { QuickChoiceDialog } from "@/src/shared/Dialogs";
 import { useBeacon } from "@/src/shared/store";
-import { useNow } from "@/src/shared/useNow";
+import type { Activity, Audience, Category, Payload } from "@/src/shared/types";
 import {
   AudiencePicker,
   Button,
@@ -27,25 +13,40 @@ import {
   Txt,
   useTheme,
 } from "@/src/shared/ui";
-import type { Activity, Audience, Category, Payload } from "@/src/shared/types";
+import { useNow } from "@/src/shared/useNow";
+import { randomUUID } from "expo-crypto";
+import { router } from "expo-router";
 import {
+  Check,
+  ChevronDown,
+  ChevronRight,
+  EyeOff,
+  MoreHorizontal,
+  Pencil,
+  Plus,
+  Radio,
+  Send,
+  Vote,
+  Zap,
+} from "lucide-react-native";
+import React, { useRef, useState } from "react";
+import { Modal, Pressable, ScrollView, Text, View, useWindowDimensions } from "react-native";
+import { eligibleCurrentBeacons } from "../../currentStatusBeacon";
+import {
+  activeAt,
   currentActivity,
   isStatusNote,
-  activeAt,
   presenceFor,
   upNext,
 } from "../../livingActivity";
-import { eligibleCurrentBeacons } from "../../currentStatusBeacon";
-import { CurrentBeaconPreview } from "./CurrentBeaconPreview";
-import { BeaconIcon } from "../BeaconIcon";
-import { NoteSpeechBubble } from "./StatusNoteBubble";
-import { ProfileSonarCard } from "@/src/features/profile/components/ProfileSonarCard";
 import {
   statusNoteText,
   visibleStatusAttachment,
 } from "../../statusAttachments";
+import { BeaconIcon } from "../BeaconIcon";
+import { CurrentBeaconPreview } from "./CurrentBeaconPreview";
 import { StatusAttachmentPreview } from "./StatusAttachmentEditor";
-import { eligibleDefaultTargets } from "@/src/features/profile/settings/beaconDefaults";
+import { NoteSpeechBubble } from "./StatusNoteBubble";
 
 type NoteDraft = {
   id?: string;
@@ -317,6 +318,9 @@ export function LivingStatusHeader({
 }) {
   const { data, userId, act } = useBeacon();
   const now = useNow(1000);
+  const availabilityAnchor = useRef<View>(null);
+  const viewport = useWindowDimensions();
+  const [anchor, setAnchor] = useState({ x: 0, y: 0, width: 0, height: 0 });
   const { colors, styles, tokens } = useTheme();
   const [open, setOpen] = useState(false),
     [busy, setBusy] = useState(false),
@@ -384,16 +388,23 @@ export function LivingStatusHeader({
         alignItems: "center",
         alignSelf: "flex-start",
         gap: 8,
+        flexShrink: variant === "compact" ? 1 : 0,
+        minWidth: 0,
       }}
     >
       <Pressable
         accessibilityRole="button"
+        ref={availabilityAnchor}
         accessibilityLabel="Change availability"
         accessibilityState={{ expanded: open, disabled: busy }}
         disabled={busy}
-        onPress={() => setOpen(true)}
+        onPress={() => availabilityAnchor.current?.measureInWindow((x, y, width, height) => {
+          setAnchor({ x, y, width, height });
+          setOpen(true);
+        })}
         style={{
           minHeight: 44,
+          flexShrink: 1,
           flexDirection: "row",
           alignItems: "center",
           gap: 6,
@@ -404,10 +415,11 @@ export function LivingStatusHeader({
           testID="availability-pill-visual"
           style={{
             minHeight: 30,
-            paddingHorizontal: 9,
+            flexShrink: 1,
+            paddingHorizontal: variant === "compact" ? 7 : 9,
             flexDirection: "row",
             alignItems: "center",
-            gap: 6,
+            gap: variant === "compact" ? 4 : 6,
             borderWidth: 1,
             borderColor: availabilityTone.color + "35",
             backgroundColor: availabilityTone.tint,
@@ -422,12 +434,23 @@ export function LivingStatusHeader({
               backgroundColor: availabilityTone.color,
             }}
           />
-          <Text style={{ fontSize: 12, fontWeight: "500", color: colors.ink }}>
+          <Text
+            style={{
+              fontSize: 12,
+              fontWeight: "500",
+              color: colors.ink,
+              flexShrink: 1,
+            }}
+          >
             {availability === "available"
-              ? "Available"
+              ? variant === "compact"
+                ? "Free"
+                : "Available"
               : availability === "busy"
                 ? "Busy"
-                : "Not sharing"}
+                : variant === "compact"
+                  ? "Hidden"
+                  : "Not sharing"}
           </Text>
           <ChevronDown size={13} color={colors.muted} />
         </View>
@@ -441,9 +464,18 @@ export function LivingStatusHeader({
       accessibilityRole="button"
       accessibilityLabel="Edit Status Note"
       onPress={onEditStatus}
-      style={{ minHeight: 44, alignSelf: "stretch", minWidth: 0 }}
+      style={{
+        minHeight: 44,
+        alignSelf: "stretch",
+        minWidth: 0,
+        justifyContent: "center",
+      }}
     >
-      <NoteSpeechBubble compact tailTowardIdentity>
+      <NoteSpeechBubble
+        compact
+        tailTowardIdentity
+        dense={variant === "compact"}
+      >
         <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
           <Text
             style={[
@@ -476,9 +508,7 @@ export function LivingStatusHeader({
     >
       {variant === "compact" ? (
         <View>
-          <View
-            style={{ flexDirection: "row", alignItems: "flex-start", gap: 10 }}
-          >
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
             <Pressable
               testID="home-status-avatar"
               accessibilityRole="button"
@@ -488,12 +518,13 @@ export function LivingStatusHeader({
                 minWidth: 44,
                 minHeight: 44,
                 justifyContent: "center",
-                paddingTop: 4,
               }}
             >
-              <ProfileAvatar profile={profile} size={44} />
+              <ProfileAvatar profile={profile} size={34} />
             </Pressable>
             <Text
+              numberOfLines={1}
+              ellipsizeMode="tail"
               style={{
                 flex: 1,
                 minWidth: 0,
@@ -506,6 +537,7 @@ export function LivingStatusHeader({
               {profile?.name || "Your status"}
             </Text>
             {availabilityControl}
+            <ProfileSonarCard compact pill />
           </View>
           {noteControl}
         </View>
@@ -516,14 +548,19 @@ export function LivingStatusHeader({
           {!renderIdentity && availabilityControl}
         </View>
       )}
-      <Sheet
-        title="Availability & sharing"
-        visible={open}
-        onClose={() => {
-          if (!busy) setOpen(false);
-        }}
-      >
-        <Txt muted>Let friends know if you’re free.</Txt>
+      <Modal transparent visible={open} animationType="none" onRequestClose={() => setOpen(false)}>
+        <Pressable accessibilityLabel="Dismiss availability menu" onPress={() => setOpen(false)} style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0 }} />
+        <View role="dialog" accessibilityViewIsModal accessibilityLabel="Availability & sharing" style={{
+          position: "absolute",
+          top: anchor.y + anchor.height + 2,
+          left: Math.max(8, Math.min(anchor.x + anchor.width - 280, viewport.width - Math.min(280, viewport.width - 16) - 8)),
+          width: Math.min(280, viewport.width - 16),
+          maxHeight: Math.max(120, viewport.height - anchor.y - anchor.height - 18),
+          backgroundColor: colors.surface, borderRadius: 16, borderWidth: 1,
+          borderColor: colors.muted + "40", padding: 8,
+          boxShadow: "0px 8px 28px rgba(0,0,0,0.25)",
+        }}>
+        <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 4 }}>
         <View style={{ gap: 3 }}>
           {(["available", "busy", null] as const).map((value) => {
             const tone =
@@ -557,13 +594,13 @@ export function LivingStatusHeader({
                   })
                 }
                 style={{
-                  minHeight: 54,
+                  minHeight: 44,
                   flexDirection: "row",
                   alignItems: "center",
-                  gap: 12,
-                  paddingVertical: 8,
-                  paddingHorizontal: 10,
-                  borderRadius: 14,
+                  gap: 7,
+                  paddingVertical: 5,
+                  paddingHorizontal: 7,
+                  borderRadius: 10,
                   backgroundColor: selected ? tone.tint : "transparent",
                   borderWidth: 1,
                   borderColor: selected ? tone.color + "35" : "transparent",
@@ -571,12 +608,12 @@ export function LivingStatusHeader({
               >
                 <View
                   style={{
-                    width: 28,
-                    height: 28,
+                    width: 16,
+                    height: 16,
                     borderRadius: 14,
                     alignItems: "center",
                     justifyContent: "center",
-                    backgroundColor: tone.tint,
+                    backgroundColor: "transparent",
                   }}
                 >
                   <View
@@ -591,11 +628,11 @@ export function LivingStatusHeader({
                     }}
                   />
                 </View>
-                <View style={{ flex: 1, gap: 3 }}>
+                <View style={{ flex: 1, gap: 0 }}>
                   <Text
                     style={{
                       color: colors.ink,
-                      fontSize: 15,
+                      fontSize: 13,
                       fontWeight: "500",
                     }}
                   >
@@ -665,16 +702,18 @@ export function LivingStatusHeader({
             void setPresence({ sharing: presence?.sharing === false })
           }
         />
-        <Txt muted>
+        {settings && <Txt muted>
           Pause hides your Status Note, Featured, and Current Activity. Sonar
           and Beacon participation stay independent.
-        </Txt>
+        </Txt>}
         {!!error && (
           <Text accessibilityRole="alert" style={styles.error}>
             {error}
           </Text>
         )}
-      </Sheet>
+        </ScrollView>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -683,10 +722,12 @@ export function LivingActivitySection({
   personId,
   showLower = true,
   sonar = true,
+  compact = false,
 }: {
   personId: string;
   showLower?: boolean;
   sonar?: boolean;
+  compact?: boolean;
 }) {
   const { data, userId, act, getViewerEpoch } = useBeacon();
   const now = useNow(1000);
@@ -702,8 +743,6 @@ export function LivingActivitySection({
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [details, setDetails] = useState(false);
-  const continuation = useRef<(() => void) | null>(null);
-  const menuContinuation = useRef<(() => void) | null>(null);
   const ownerPresence = presenceFor(data, personId);
   const [currentAudience, setCurrentAudience] = useState<Audience>(
     ownerPresence?.current_audience ?? "friends",
@@ -740,16 +779,16 @@ export function LivingActivitySection({
       activityNoteId: current.activity.id,
       ...(kind !== "beacon"
         ? {
-            kind: kind === "council" ? "vote" : kind === "draw" ? "draw" : "ping",
+            kind:
+              kind === "council" ? "vote" : kind === "draw" ? "draw" : "ping",
             sessionId: randomUUID(),
           }
         : {}),
     };
-    continuation.current = () =>
-      router.push({
-        pathname: kind === "beacon" ? "/create" : "/planning/create",
-        params,
-      });
+    router.push({
+      pathname: kind === "beacon" ? "/create" : "/planning/create",
+      params,
+    });
   };
   const categoryTone =
     tokens.categories[current?.activity.category ?? "Social"];
@@ -760,12 +799,14 @@ export function LivingActivitySection({
     backgroundColor: colors.surfaceRaised,
   };
   return (
-    <View style={{ gap: 12 }}>
+    <View style={{ gap: compact ? 4 : 12 }}>
       {(own || current) && (
         <View style={{ gap: 8 }}>
-          <Text style={[styles.label, { color: colors.ink }]}>
-            Current Activity
-          </Text>
+          {!compact && (
+            <Text style={[styles.label, { color: colors.ink }]}>
+              Current Activity
+            </Text>
+          )}
           {!current && own ? (
             <View style={{ gap: 4 }}>
               <Pressable
@@ -779,18 +820,18 @@ export function LivingActivitySection({
                 style={[
                   surface,
                   {
-                    minHeight: 80,
-                    padding: 12,
+                    minHeight: compact ? 48 : 80,
+                    padding: compact ? 8 : 12,
                     flexDirection: "row",
                     alignItems: "center",
-                    gap: 12,
+                    gap: compact ? 8 : 12,
                   },
                 ]}
               >
                 <View
                   style={{
-                    width: 34,
-                    height: 34,
+                    width: compact ? 24 : 34,
+                    height: compact ? 24 : 34,
                     borderRadius: 11,
                     backgroundColor: colors.green + "10",
                     alignItems: "center",
@@ -800,12 +841,22 @@ export function LivingActivitySection({
                   <Zap size={18} color={colors.green} />
                 </View>
                 <View style={{ flex: 1, gap: 3 }}>
-                  <Text style={[styles.body, { fontWeight: "600" }]}>
+                  <Text
+                    style={[
+                      styles.body,
+                      {
+                        fontWeight: "600",
+                        ...(compact ? { fontSize: 14 } : {}),
+                      },
+                    ]}
+                  >
                     What are you up to?
                   </Text>
-                  <Text style={[styles.muted, { fontSize: 12 }]}>
-                    Share what you’re doing right now
-                  </Text>
+                  {!compact && (
+                    <Text style={[styles.muted, { fontSize: 12 }]}>
+                      Share what you’re doing right now
+                    </Text>
+                  )}
                 </View>
                 <Plus size={18} color={colors.muted} />
               </Pressable>
@@ -828,8 +879,9 @@ export function LivingActivitySection({
               )}
             </View>
           ) : current?.type === "beacon" ? (
-            <View style={[surface, { padding: 12, gap: 4 }]}>
+            <View style={[surface, { padding: compact ? 8 : 12, gap: 4 }]}>
               <CurrentBeaconPreview
+                compact={compact}
                 activity={current.activity}
                 role={current.role ?? "going"}
                 now={now}
@@ -857,8 +909,8 @@ export function LivingActivitySection({
                 {
                   backgroundColor: colors.surfaceRaised,
                   borderColor: categoryTone.color + "28",
-                  padding: 12,
-                  gap: 8,
+                  padding: compact ? 8 : 12,
+                  gap: compact ? 4 : 8,
                 },
               ]}
             >
@@ -884,7 +936,7 @@ export function LivingActivitySection({
                   }}
                   style={{
                     flex: 1,
-                    minHeight: 64,
+                    minHeight: compact ? 48 : 64,
                     flexDirection: "row",
                     gap: 12,
                     alignItems: "center",
@@ -893,7 +945,7 @@ export function LivingActivitySection({
                   <BeaconIcon
                     category={current.activity.category}
                     emoji={current.activity.decoration_emoji}
-                    size={46}
+                    size={compact ? 30 : 46}
                   />
                   <View style={{ flex: 1, gap: 3 }}>
                     <Text
@@ -908,7 +960,7 @@ export function LivingActivitySection({
                     <Text style={[styles.body, { fontWeight: "600" }]}>
                       {current.activity.title}
                     </Text>
-                    {!!place?.label && (
+                    {!compact && !!place?.label && (
                       <Text
                         numberOfLines={1}
                         style={[styles.muted, { fontSize: 12 }]}
@@ -916,14 +968,17 @@ export function LivingActivitySection({
                         {place.label}
                       </Text>
                     )}
-                    <Text style={[styles.muted, { fontSize: 12 }]}>
-                      Until{" "}
+                    <Text
+                      numberOfLines={compact ? 1 : undefined}
+                      style={[styles.muted, { fontSize: 12 }]}
+                    >
+                      {compact && place?.label ? `${place.label} · ` : ""}Until{" "}
                       {new Date(current.activity.ends_at).toLocaleTimeString(
                         [],
                         { hour: "numeric", minute: "2-digit" },
                       )}
                     </Text>
-                    {!!current.activity.description && (
+                    {!compact && !!current.activity.description && (
                       <Text numberOfLines={2} style={styles.muted}>
                         {current.activity.description}
                       </Text>
@@ -990,92 +1045,61 @@ export function LivingActivitySection({
           onClose={() => setEditor(false)}
         />
       )}
-      <Sheet
+      <QuickChoiceDialog
         title="Activity Note"
         visible={menu}
-        onDismiss={() => {
-          const callback = menuContinuation.current;
-          menuContinuation.current = null;
-          callback?.();
-        }}
         onClose={() => setMenu(false)}
-      >
-        {options.length > 0 && (
-          <Button
-            secondary
-            title="Switch to live Beacon"
-            onPress={() => {
-              menuContinuation.current = () => setChoose(true);
-              setMenu(false);
-            }}
-          />
-        )}
-        <Button
-          secondary
-          title="End Activity"
-          disabled={busy}
-          onPress={() =>
-            current &&
-            void perform("end_activity_note", { id: current.activity.id })
-          }
-        />
-      </Sheet>
-      <Sheet
+        items={[
+          ...(options.length
+            ? [
+                {
+                  label: "Switch to live Beacon",
+                  onPress: () => setChoose(true),
+                },
+              ]
+            : []),
+          {
+            label: "End Activity",
+            disabled: busy,
+            onPress: () => {
+              if (current)
+                void perform("end_activity_note", { id: current.activity.id });
+            },
+          },
+        ]}
+      />
+      <QuickChoiceDialog
         title="Do with others"
         visible={social}
-        onDismiss={() => {
-          const callback = continuation.current;
-          continuation.current = null;
-          callback?.();
-        }}
         onClose={() => setSocial(false)}
-      >
-        <Txt muted>
-          Planning something ahead keeps your current activity active.
-        </Txt>
-        {[
-          ["ping", "See who’s interested", "Create Ping"],
-          ["council", "Decide together", "Create Vote Council"],
-          ["draw", "Let chance choose", "Create Draw Council"],
-          ["beacon", "Invite people to join", "Create Beacon"],
-        ].map(([kind, title, detail]) => (
-          <Pressable
-            key={kind}
-            accessibilityRole="button"
-            accessibilityLabel={title}
-            onPress={() => launch(kind as "ping" | "council" | "draw" | "beacon")}
-            style={{
-              minHeight: 64,
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 12,
-              paddingVertical: 8,
-            }}
-          >
-            <View
-              style={{
-                width: 40,
-                height: 40,
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              {kind === "ping" ? (
-                <Send size={21} color={colors.green} />
-              ) : kind === "council" || kind === "draw" ? (
-                <Vote size={21} color={colors.green} />
-              ) : (
-                <Radio size={21} color={colors.green} />
-              )}
-            </View>
-            <View style={{ flex: 1, gap: 4 }}>
-              <Txt>{title}</Txt>
-              <Txt muted>{detail}</Txt>
-            </View>
-            <ChevronRight size={18} color={colors.muted} />
-          </Pressable>
-        ))}
-      </Sheet>
+        description="Planning something ahead keeps your current activity active."
+        items={[
+          {
+            label: "Ping",
+            description: "See who’s interested",
+            icon: <Send size={21} color={colors.green} />,
+            onPress: () => launch("ping"),
+          },
+          {
+            label: "Vote",
+            description: "Decide together",
+            icon: <Vote size={21} color={colors.green} />,
+            onPress: () => launch("council"),
+          },
+          {
+            label: "Draw",
+            description: "Let chance choose",
+            icon: <Vote size={21} color={colors.green} />,
+            onPress: () => launch("draw"),
+          },
+          {
+            label: "Beacon",
+            description: "Invite people to join",
+            icon: <Radio size={21} color={colors.green} />,
+            onPress: () => launch("beacon"),
+          },
+        ]}
+      />
       <Sheet
         title="Choose live Beacon"
         visible={choose}

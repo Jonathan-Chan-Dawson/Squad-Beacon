@@ -1,43 +1,40 @@
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
-import { FlashList, type FlashListRef } from "@shopify/flash-list";
-import { router } from "expo-router";
-import {
-  Bell,
-  ChevronRight,
-  Building2,
-  ChevronDown,
-  Layers3,
-  MessageCircle,
-  UserPlus,
-} from "lucide-react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useBeacon } from "@/src/shared/store";
-import { useNow } from "@/src/shared/useNow";
-import { selectListPeople, type PeopleListSelection } from "../privateLists";
-import { matchesSearch } from "@/src/shared/search";
-import { Skeleton } from "@/src/shared/design-system";
-import { Button, Sheet, Txt, useTheme } from "@/src/shared/ui";
-import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
 import { OrganizationDirectory } from "@/src/features/organizations/OrganizationDirectory";
+import {
+  activeOrganizationRole,
+  canReadOrganization,
+} from "@/src/features/organizations/domain";
+import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
+import type { SocialEntityType } from "@/src/features/social/types";
 import { SpacesDirectory } from "@/src/features/spaces/SpacesDirectory";
 import {
   activeSpaceRole,
   canReadSpace,
   visibleSpaceSquads,
 } from "@/src/features/spaces/domain";
+import { QuickChoiceDialog } from "@/src/shared/Dialogs";
+import { Skeleton } from "@/src/shared/design-system";
+import { matchesSearch } from "@/src/shared/search";
+import { useBeacon } from "@/src/shared/store";
+import { Button, Txt, useTheme } from "@/src/shared/ui";
+import { useNow } from "@/src/shared/useNow";
+import { FlashList, type FlashListRef } from "@shopify/flash-list";
+import { router } from "expo-router";
 import {
-  activeOrganizationRole,
-  canReadOrganization,
-} from "@/src/features/organizations/domain";
-import { canOpenSquadProfile } from "../squadProfile";
-import { usePlanningResponses } from "../usePlanningResponses";
+  Bell,
+  Building2,
+  ChevronDown,
+  ChevronRight,
+  Layers3,
+  MessageCircle,
+} from "lucide-react-native";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { communityTypeLabel } from "../components/CommunityCard";
+import { HubConversationRow } from "../components/HubConversationRow";
+import { HubDirectory } from "../components/HubDirectory";
+import { ProfileActions, ProfileLink } from "../components/ProfilePrimitives";
+import { ResponsesSheet } from "../components/ResponsesSheet";
 import {
   filterHubConversations,
   selectHubConversations,
@@ -45,12 +42,9 @@ import {
   type ChatFilter,
   type HubConversation,
 } from "../hubState";
-import type { SocialEntityType } from "@/src/features/social/types";
-import { ResponsesSheet } from "../components/ResponsesSheet";
-import { communityTypeLabel } from "../components/CommunityCard";
-import { ProfileActions, ProfileLink } from "../components/ProfilePrimitives";
-import { HubConversationRow } from "../components/HubConversationRow";
-import { HubDirectory } from "../components/HubDirectory";
+import { selectListPeople, type PeopleListSelection } from "../privateLists";
+import { canOpenSquadProfile } from "../squadProfile";
+import { usePlanningResponses } from "../usePlanningResponses";
 
 export type { ChatFilter } from "../hubState";
 type Section = "Chats" | "Communities";
@@ -789,85 +783,48 @@ export function CommunicationHub({
           onCreateOpenChange={onCreateOrganizationOpenChange}
         />
       </View>
-      <Sheet
+      <QuickChoiceDialog
         title={section === "Chats" ? "New conversation" : "Create community"}
         visible={newMenuOpen}
         onClose={() => onNewMenuOpenChange(false)}
-      >
-        {section === "Chats" ? (
-          <>
-            <Button
-              title="New message"
-              onPress={() => {
-                onNewMenuOpenChange(false);
-                changeSection("Chats");
-                onClearList?.();
-                onConversationFilterChange("Friends");
-                onSearchOpenChange(true);
-                onQueryChange("", "Chats");
-              }}
-            />
-          </>
-        ) : null}
-        <Button
-          secondary
-          title="Create a Squad"
-          onPress={() => {
-            onNewMenuOpenChange(false);
-            createSquad();
-          }}
-        />
-        {section === "Chats" ? (
-          <>
-            <Button
-              secondary
-              title="Add friend"
-              onPress={() => {
-                onNewMenuOpenChange(false);
-                findFriends();
-              }}
-            />
-          </>
-        ) : null}
-        {section === "Communities" ? (
-          <>
-            <View style={styles.row}>
-              <Layers3 size={18} color={colors.green} />
-              <Button
-                secondary
-                title="Create Organization"
-                onPress={() => {
-                  onNewMenuOpenChange(false);
-                  onCreateSpaceOpenChange(true);
-                }}
-              />
-            </View>
-            <View style={styles.row}>
-              <Building2 size={18} color={colors.green} />
-              <Button
-                secondary
-                title="Create Network"
-                onPress={() => {
-                  onNewMenuOpenChange(false);
-                  onCreateOrganizationOpenChange(true);
-                }}
-              />
-            </View>
-          </>
-        ) : (
-          <View style={styles.row}>
-            <UserPlus size={18} color={colors.green} />
-            <Button
-              secondary
-              title="Invite friends"
-              onPress={() => {
-                onNewMenuOpenChange(false);
-                (inviteFriends ?? findFriends)();
-              }}
-            />
-          </View>
-        )}
-      </Sheet>
+        items={[
+          ...(section === "Chats"
+            ? [
+                {
+                  label: "New message",
+                  onPress: () => {
+                    changeSection("Chats");
+                    onClearList?.();
+                    onConversationFilterChange("Friends");
+                    onSearchOpenChange(true);
+                    onQueryChange("", "Chats");
+                  },
+                },
+              ]
+            : []),
+          { label: "Create a Squad", onPress: createSquad },
+          ...(section === "Chats"
+            ? [{ label: "Add friend", onPress: findFriends }]
+            : []),
+          ...(section === "Communities"
+            ? [
+                {
+                  label: "Create Organization",
+                  onPress: () => onCreateSpaceOpenChange(true),
+                },
+                {
+                  label: "Create Network",
+                  onPress: () => onCreateOrganizationOpenChange(true),
+                },
+              ]
+            : [
+                {
+                  label: "Invite friends",
+                  onPress: () => (inviteFriends ?? findFriends)(),
+                },
+              ]),
+        ]}
+      />
     </View>
   );
 }

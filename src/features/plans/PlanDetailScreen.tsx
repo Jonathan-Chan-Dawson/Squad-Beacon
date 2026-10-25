@@ -1,11 +1,8 @@
-import React, { useState } from "react";
-import { Linking, Text, View } from "react-native";
-import { router, useLocalSearchParams } from "expo-router";
-import { useBeacon } from "@/src/shared/store";
-import { stepsFromPlan } from "@/src/features/plans/domain";
-import { useNow } from "@/src/shared/useNow";
 import { physicalDirectionsUrl } from "@/src/features/maps/directions";
+import { stepsFromPlan } from "@/src/features/plans/domain";
 import { RoutineScheduleSheet } from "@/src/features/plans/RoutineScheduleSheet";
+import { ConfirmDialog } from "@/src/shared/Dialogs";
+import { useBeacon } from "@/src/shared/store";
 import {
   Action,
   Button,
@@ -15,6 +12,10 @@ import {
   Txt,
   useTheme,
 } from "@/src/shared/ui";
+import { useNow } from "@/src/shared/useNow";
+import { router, useLocalSearchParams } from "expo-router";
+import { useState } from "react";
+import { Linking, Text, View } from "react-native";
 
 const dayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -400,28 +401,24 @@ export default function PlanDetailScreen() {
           onPress={() => setMoreOpen(false)}
         />
       </Sheet>
-      <Sheet
+      <ConfirmDialog
         title="Cancel this Plan?"
         visible={confirmCancel}
         onClose={() => setConfirmCancel(false)}
+        onConfirm={async () => {
+          await act("cancel_plan", { id: plan.id });
+          setConfirmCancel(false);
+        }}
+        confirmLabel={"Cancel Plan and its scheduled Beacons"}
+        cancelLabel={"Keep Plan"}
+        closeOnConfirm={false}
+        destructive
       >
         <Txt>
           All scheduled Beacons in this Plan will be canceled. Completed Beacons
           and their history remain. This can’t be undone.
         </Txt>
-        <Action
-          title="Cancel Plan and its scheduled Beacons"
-          run={async () => {
-            await act("cancel_plan", { id: plan.id });
-            setConfirmCancel(false);
-          }}
-        />
-        <Button
-          title="Keep Plan"
-          secondary
-          onPress={() => setConfirmCancel(false)}
-        />
-      </Sheet>
+      </ConfirmDialog>
     </Screen>
   );
 }

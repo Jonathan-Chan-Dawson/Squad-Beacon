@@ -1,4 +1,12 @@
-import { CLUSTER_SHADOW_OPACITY } from "./clusterLayout";
+import {
+  clusterCountLabel,
+  clusterCountWidth,
+  friendCountLabel,
+  friendCountWidth,
+  CLUSTER_FRIEND_SHADOW_OPACITY,
+  CLUSTER_MICRO_SHADOW_OPACITY,
+  CLUSTER_SHADOW_OPACITY,
+} from "./clusterLayout";
 import { bloomGeometry, bloomAccessibilityLabel } from "./clusterBloom";
 import type { ClusterPoint } from "./cluster";
 import {
@@ -18,15 +26,13 @@ type Options = {
   reducedMotion: boolean;
 };
 const personSvg =
-  '<svg aria-hidden="true" viewBox="0 0 24 24" width="100%" height="100%" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="7" r="4"/><path d="M5 22v-4a7 7 0 0 1 14 0v4"/></svg>';
-const peopleSvg =
-  '<svg aria-hidden="true" viewBox="0 0 24 24" width="100%" height="100%" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="7" r="4"/><path d="M2 22v-4a7 7 0 0 1 14 0v4M17 3a4 4 0 0 1 0 8M22 22v-4a7 7 0 0 0-4-6"/></svg>';
+  '<svg aria-hidden="true" viewBox="0 0 24 24" width="100%" height="100%" fill="currentColor"><circle cx="12" cy="7" r="4"/><path d="M5 21v-3a7 7 0 0 1 14 0v3Z"/></svg>';
 /** Same bloom metrics, preview limits and satellites as native; no density disks or avatar piles. */
 export function webConstellation(
   presentation: NativeMapPresentation,
   options: Options,
 ) {
-  const { group, mode, overflow } = presentation;
+  const { group, mode } = presentation;
   const geometry = bloomGeometry(presentation),
     { size, center, markerSize } = geometry;
   const explorer = !!presentationOpensExplorer(presentation);
@@ -49,7 +55,12 @@ export function webConstellation(
   const shadow = document.createElement("span");
   shadow.dataset.testid = "cluster-circle-shadow";
   shadow.setAttribute("aria-hidden", "true");
-  shadow.style.cssText = `position:absolute;left:${geometry.shadowLeft}px;top:${geometry.shadowTop}px;width:${geometry.shadowSize}px;height:${geometry.shadowSize}px;border-radius:50%;background:black;opacity:${geometry.friendsOnly ? 0.1 : presentation.scale === "micro" ? 0.14 : CLUSTER_SHADOW_OPACITY};pointer-events:none;`;
+  const shadowOpacity = geometry.friendsOnly
+    ? CLUSTER_FRIEND_SHADOW_OPACITY
+    : presentation.scale === "micro"
+      ? CLUSTER_MICRO_SHADOW_OPACITY
+      : CLUSTER_SHADOW_OPACITY;
+  shadow.style.cssText = `position:absolute;left:${geometry.shadowLeft}px;top:${geometry.shadowTop}px;width:${geometry.shadowSize}px;height:${geometry.shadowSize}px;border-radius:50%;background:radial-gradient(circle,rgba(0,0,0,${shadowOpacity}) 0%,rgba(0,0,0,${shadowOpacity * 0.5}) 55%,rgba(0,0,0,0) 100%);pointer-events:none;`;
   node.append(shadow);
   const items: HTMLElement[] = [];
   const dotArtwork = new Map<HTMLElement, Node[]>();
@@ -111,9 +122,12 @@ export function webConstellation(
     dot.dataset.testid = "cluster-friend-satellite";
     dot.dataset.memberId = point.id;
     dot.setAttribute("aria-hidden", "true");
-    dot.style.cssText = `position:absolute;left:${center + offset.x - s / 2}px;top:${center + offset.y - s / 2}px;width:${s}px;height:${s}px;box-sizing:border-box;border-radius:50%;background:${options.surface};color:${options.ink};border:1px solid ${options.line};padding:1px;z-index:30;pointer-events:none;opacity:${presentation.scale === "micro" ? 0.4 : 0.85};`;
+    dot.style.cssText = `position:absolute;left:${center + offset.x - s / 2}px;top:${center + offset.y - s / 2}px;width:${s}px;height:${s}px;box-sizing:border-box;border-radius:50%;background:${options.surface};color:${options.ink};border:1px solid ${options.ownership};padding:1px;z-index:30;pointer-events:none;opacity:${presentation.scale === "micro" ? 0.8 : 1};`;
     if (s >= 10) dot.innerHTML = personSvg;
-    else dot.style.background = options.ink;
+    else {
+      dot.style.background = options.ownership;
+      dot.style.borderColor = options.surface;
+    }
     satelliteNodes.push(dot);
     node.append(dot);
   });
@@ -129,76 +143,80 @@ export function webConstellation(
     button.append(target, document.createTextNode(text));
     return button;
   };
-  let overflowBadge: HTMLButtonElement | undefined;
-  let friendBadge: HTMLButtonElement | undefined;
-  if (presentation.beacons.length && overflow) {
-    const count = badge(
-      `+${overflow}`,
+  let clusterBadge: HTMLButtonElement | undefined;
+  const restoreCount = () => {
+    if (!clusterBadge) return;
+    const anchor = geometry.countBadge;
+    if (!anchor) {
+      clusterBadge.style.display = "none";
+      return;
+    }
+    clusterBadge.style.display = "block";
+    clusterBadge.style.left = `${center + anchor.offset.x - anchor.width / 2}px`;
+    clusterBadge.style.top = `${center + anchor.offset.y - anchor.height / 2}px`;
+    clusterBadge.style.right = "auto";
+    clusterBadge.style.bottom = "auto";
+    clusterBadge.style.width = `${anchor.width}px`;
+    clusterBadge.style.height = `${anchor.height}px`;
+    clusterBadge.style.font = `700 ${anchor.fontSize}px/${anchor.height - 2}px system-ui`;
+    clusterBadge.lastChild!.nodeValue = anchor.text;
+    clusterBadge.setAttribute(
+      "aria-label",
+      `${anchor.peopleCount ? `${anchor.peopleCount} nearby friends. ` : ""}${anchor.beaconOverflow ? `${anchor.beaconOverflow} hidden Beacons. ` : ""}${anchor.peopleCount || explorer ? "Open searchable cluster explorer" : "Expand to select every Beacon"}`,
+    );
+  };
+  if (
+    geometry.countBadge ||
+    (!explorer && presentation.people.length && presentation.beacons.length)
+  ) {
+    clusterBadge = badge(
+      geometry.countBadge?.text ??
+        clusterCountLabel(presentation.people.length, 0),
       "right",
-      `${overflow} more Beacons; ${explorer ? "open cluster explorer" : "expand to select every Beacon"}`,
+      "Explore cluster",
     );
-    if (presentation.scale === "micro") {
-      count.style.minWidth = "16px";
-      count.style.height = "14px";
-      count.style.font = "700 8px/12px system-ui";
-    }
-    count.dataset.testid = "map-constellation-overflow";
-    count.style.right = `${geometry.overflowInset}px`;
-    count.style.bottom = `${geometry.overflowInset}px`;
-    overflowBadge = count;
-    node.append(count);
-  }
-  if (presentation.people.length && presentation.beacons.length) {
-    const friends = badge(
-      `${presentation.people.length}`,
-      "left",
-      `${presentation.people.length} nearby friends; shared locations, not Beacon attendance`,
-    );
-    const glyph = document.createElement("span");
-    glyph.innerHTML = peopleSvg;
-    glyph.style.cssText =
-      "display:inline-block;width:9px;height:9px;margin-right:2px;";
-    friends.insertBefore(glyph, friends.firstChild);
-    friends.dataset.friends = "true";
-    friends.dataset.testid = "cluster-friend-count";
-    friendBadge = friends;
-    if (geometry.friendBadge) {
-      const anchor = geometry.friendBadge;
-      friends.style.left = `${center + anchor.offset.x - anchor.width / 2}px`;
-      friends.style.top = `${center + anchor.offset.y - anchor.height / 2}px`;
-      friends.style.bottom = "auto";
-      friends.style.width = `${anchor.width}px`;
-      friends.style.height = `${anchor.height}px`;
-      friends.style.minWidth = "0";
-      friends.style.padding = "0";
-      friends.style.boxSizing = "border-box";
-      friends.style.lineHeight = `${anchor.height - 2}px`;
-    }
-    if (!geometry.friendBadge) friends.style.display = "none";
-    friends.onclick = (e) => {
-      e.stopPropagation();
-      options.open("Friends");
+    clusterBadge.dataset.testid = "map-cluster-count";
+    clusterBadge.dataset.clusterCount = "true";
+    clusterBadge.style.minWidth = "0";
+    clusterBadge.style.padding = "0";
+    clusterBadge.style.boxSizing = "border-box";
+    clusterBadge.onclick = (event) => {
+      event.stopPropagation();
+      if (
+        expanded ||
+        (geometry.countBadge?.peopleCount &&
+          !geometry.countBadge.beaconOverflow)
+      )
+        options.open("Friends");
+      else if (geometry.countBadge?.peopleCount || explorer) options.open();
+      else expand();
     };
-    node.append(friends);
+    node.append(clusterBadge);
+    restoreCount();
   }
   if (geometry.friendsOnly && presentation.people.length >= 5) {
     const count = badge(
-      String(presentation.people.length),
+      friendCountLabel(presentation.people.length),
       "right",
       `${presentation.people.length} nearby friends; open cluster explorer`,
     );
+    count.style.minWidth = `${friendCountWidth(presentation.people.length, presentation.scale === "micro")}px`;
     count.style.left = "50%";
     count.style.right = "auto";
     count.style.bottom = "auto";
     count.style.top = "50%";
     count.style.transform = "translate(-50%,-50%)";
     if (presentation.scale === "micro") {
-      count.style.minWidth = "16px";
       count.style.height = "14px";
       count.style.font = "700 8px/12px system-ui";
-      count.style.opacity = ".45";
+      count.style.opacity = ".8";
     }
     count.dataset.testid = "cluster-friend-count";
+    count.dataset.friends = "true";
+    count.onclick = (event) => {
+      event.stopPropagation();
+      options.open("Friends");
+    };
     node.append(count);
   }
   let expanded = false;
@@ -206,9 +224,7 @@ export function webConstellation(
     expanded = false;
     delete node.dataset.expanded;
     shadow.style.display = "";
-    if (overflowBadge) overflowBadge.style.display = "";
-    if (friendBadge && !geometry.friendBadge)
-      friendBadge.style.display = "none";
+    restoreCount();
     satelliteNodes.forEach((node) => (node.style.display = ""));
     items.forEach((item, index) => {
       const offset = geometry.offsets[index] ?? { x: 0, y: 0 };
@@ -238,8 +254,25 @@ export function webConstellation(
     expanded = true;
     node.dataset.expanded = "true";
     shadow.style.display = "none";
-    if (overflowBadge) overflowBadge.style.display = "none";
-    if (friendBadge) friendBadge.style.display = "inline-block";
+    if (clusterBadge) {
+      if (presentation.people.length) {
+        const width = clusterCountWidth(presentation.people.length, 0);
+        clusterBadge.style.display = "block";
+        clusterBadge.style.width = `${width}px`;
+        clusterBadge.style.height = "20px";
+        clusterBadge.style.font = "700 10px/18px system-ui";
+        clusterBadge.style.left = `${center - width / 2}px`;
+        clusterBadge.style.top = `${center + 96}px`;
+        clusterBadge.lastChild!.nodeValue = clusterCountLabel(
+          presentation.people.length,
+          0,
+        );
+        clusterBadge.setAttribute(
+          "aria-label",
+          `Explore ${presentation.people.length} nearby friends`,
+        );
+      } else clusterBadge.style.display = "none";
+    }
     satelliteNodes.forEach((node) => (node.style.display = "none"));
     if (node.parentElement) node.parentElement.style.zIndex = "1000";
     items.forEach((item, index) => {
@@ -264,11 +297,15 @@ export function webConstellation(
   node.addEventListener(
     "click",
     (event) => {
-      if ((event.target as HTMLElement).closest('[data-friends="true"]'))
+      if (
+        (event.target as HTMLElement).closest(
+          '[data-friends="true"],[data-cluster-count="true"]',
+        )
+      )
         return;
       if (explorer) {
         event.stopPropagation();
-        options.open();
+        options.open(geometry.friendsOnly ? "Friends" : undefined);
       } else if (!expanded) {
         event.preventDefault();
         event.stopImmediatePropagation();
@@ -288,7 +325,7 @@ export function webConstellation(
     ) {
       event.preventDefault();
       event.stopPropagation();
-      if (explorer) options.open();
+      if (explorer) options.open(geometry.friendsOnly ? "Friends" : undefined);
       else expand();
     }
   });

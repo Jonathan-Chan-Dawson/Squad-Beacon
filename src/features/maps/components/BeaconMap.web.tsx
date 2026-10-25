@@ -1048,7 +1048,7 @@ export default function BeaconMap(props: MapProps) {
         presentation.people.map((point) => point.id),
         presentation.friendsProminent,
         bloomGeometry(presentation).satelliteOffsets,
-        bloomGeometry(presentation).friendBadge,
+        bloomGeometry(presentation).countBadge,
         presentation.owned.map((point) => point.id),
         presentationArtworkPoints(presentation).map((point) => [
           point.id,

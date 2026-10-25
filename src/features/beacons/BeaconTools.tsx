@@ -1,6 +1,41 @@
-import React, { useEffect, useRef, useState } from "react";
-import { Pressable, Text, View } from "react-native";
-import Svg, { Circle as SvgCircle } from "react-native-svg";
+import {
+  beaconChecklistLabel,
+  canAddBeaconNote,
+  canDeleteBeaconModuleEntry,
+  canEditBeaconChecklist,
+  canReadBeaconModuleEntry,
+  canReadBeaconNote,
+  canUseBeaconModules,
+} from "@/src/features/beacons/beaconModules";
+import {
+  createFocusTimer,
+  pauseFocusTimer,
+  startFocusTimer,
+  tickFocusTimer,
+} from "@/src/features/beacons/focusTimer";
+import {
+  canManageBeacon,
+  isApprovedGoing,
+  isBeaconModuleEnabled,
+} from "@/src/features/beacons/permissions";
+import { canViewProfile } from "@/src/features/profile/privacy";
+import { useConfirmation } from "@/src/shared/Dialogs";
+import { useBeacon } from "@/src/shared/store";
+import type {
+  Activity,
+  BeaconChecklistItem,
+  BeaconChecklistSection,
+  Payload,
+} from "@/src/shared/types";
+import {
+  Action,
+  Button,
+  Chips,
+  Field,
+  Sheet,
+  Txt,
+  useTheme,
+} from "@/src/shared/ui";
 import * as Crypto from "expo-crypto";
 import {
   Check,
@@ -16,43 +51,9 @@ import {
   Timer,
   Trash,
 } from "lucide-react-native";
-import {
-  canAddBeaconNote,
-  beaconChecklistLabel,
-  canDeleteBeaconModuleEntry,
-  canEditBeaconChecklist,
-  canReadBeaconModuleEntry,
-  canReadBeaconNote,
-  canUseBeaconModules,
-} from "@/src/features/beacons/beaconModules";
-import {
-  canManageBeacon,
-  isApprovedGoing,
-  isBeaconModuleEnabled,
-} from "@/src/features/beacons/permissions";
-import {
-  createFocusTimer,
-  pauseFocusTimer,
-  startFocusTimer,
-  tickFocusTimer,
-} from "@/src/features/beacons/focusTimer";
-import { canViewProfile } from "@/src/features/profile/privacy";
-import { useBeacon } from "@/src/shared/store";
-import {
-  Action,
-  Button,
-  Chips,
-  Field,
-  Sheet,
-  Txt,
-  useTheme,
-} from "@/src/shared/ui";
-import type {
-  Activity,
-  BeaconChecklistItem,
-  BeaconChecklistSection,
-  Payload,
-} from "@/src/shared/types";
+import React, { useEffect, useRef, useState } from "react";
+import { Pressable, Text, View } from "react-native";
+import Svg, { Circle as SvgCircle } from "react-native-svg";
 
 type ToolSection = "checklist" | "journal" | "focus";
 type TimerMode = "Standard" | "Pomodoro";
@@ -130,6 +131,7 @@ export function BeaconTools({
   const [noteVisibility, setNoteVisibility] = useState<
     "private" | "shared" | null
   >(null);
+  const { requestConfirmation, confirmationDialog } = useConfirmation();
   const [noteSaving, setNoteSaving] = useState(false);
   const [noteError, setNoteError] = useState("");
 
@@ -384,7 +386,12 @@ export function BeaconTools({
   return (
     <View style={{ gap: 10 }}>
       {allowed && checklistEnabled ? (
-        <View style={[section ? { gap: 10 } : styles.card, inlineEditors && { padding: 0, gap: 8 }]}>
+        <View
+          style={[
+            section ? { gap: 10 } : styles.card,
+            inlineEditors && { padding: 0, gap: 8 },
+          ]}
+        >
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={
@@ -709,7 +716,12 @@ export function BeaconTools({
       ) : null}
 
       {allowed && journalEnabled ? (
-        <View style={[section ? { gap: 10 } : styles.card, inlineEditors && { padding: 0, gap: 8 }]}>
+        <View
+          style={[
+            section ? { gap: 10 } : styles.card,
+            inlineEditors && { padding: 0, gap: 8 },
+          ]}
+        >
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={
@@ -777,7 +789,33 @@ export function BeaconTools({
                           secondary
                           title="Delete note"
                           onPress={() =>
-                            void run("delete_beacon_note", { id: note.id })
+                            requestConfirmation({
+                              title: "Delete this note?",
+                              message:
+                                "This permanently deletes this note. This can’t be undone.",
+                              confirmLabel: "Delete note",
+                              destructive: true,
+                              onConfirm: async () => {
+                                const currentNote = data.beacon_notes.find(
+                                  (row) => row.id === note.id,
+                                );
+                                if (
+                                  !currentNote ||
+                                  !deleteNoteAllowed(
+                                    currentNote,
+                                    userId,
+                                    data,
+                                    activity,
+                                  )
+                                )
+                                  throw new Error(
+                                    "This note is no longer available to delete.",
+                                  );
+                                await act("delete_beacon_note", {
+                                  id: note.id,
+                                });
+                              },
+                            })
                           }
                         />
                       ) : null}
@@ -881,7 +919,12 @@ export function BeaconTools({
       ) : null}
 
       {focusEnabled ? (
-        <View style={[section ? { gap: 10 } : styles.card, inlineEditors && { padding: 0, gap: 8 }]}>
+        <View
+          style={[
+            section ? { gap: 10 } : styles.card,
+            inlineEditors && { padding: 0, gap: 8 },
+          ]}
+        >
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={
@@ -1116,7 +1159,12 @@ export function BeaconTools({
       ) : null}
 
       {!allowed && (checklistEnabled || journalEnabled) ? (
-        <View style={[section ? { gap: 10 } : styles.card, inlineEditors && { padding: 0, gap: 8 }]}>
+        <View
+          style={[
+            section ? { gap: 10 } : styles.card,
+            inlineEditors && { padding: 0, gap: 8 },
+          ]}
+        >
           <Txt muted>
             Join this Beacon to use its shared Checklist and Beacon Sketchboard.
           </Txt>
@@ -1225,6 +1273,7 @@ export function BeaconTools({
           settings.
         </Txt>
       )}
+      {confirmationDialog}
     </View>
   );
 }

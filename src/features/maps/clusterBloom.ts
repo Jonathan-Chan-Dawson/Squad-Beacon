@@ -1,4 +1,10 @@
-import { bloomPetalOffset, clusterLayout } from "./clusterLayout";
+import {
+  bloomPetalOffset,
+  clusterLayout,
+  friendSatelliteLimit,
+  clusterCountLabel,
+  clusterCountWidth,
+} from "./clusterLayout";
 import { mapPointOffset } from "./mapPointOffset";
 import type { NativeMapPresentation } from "./nativeMapPresentation";
 
@@ -12,7 +18,7 @@ const intersects = (
   Math.abs(a.x - b.x) < (a.width + b.width) / 2 + 2 &&
   Math.abs(a.y - b.y) < (a.height + b.height) / 2 + 2;
 /** Preserve Beacon geometry. Only friend decorations adapt to the available perimeter. */
-export function bloomGeometry(item: NativeMapPresentation) {
+function calculateBloomGeometry(item: NativeMapPresentation) {
   const friendsOnly = item.beacons.length === 0;
   const primary = item.visible.filter(
     (point) => point.kind === (friendsOnly ? "person" : "beacon"),
@@ -28,7 +34,6 @@ export function bloomGeometry(item: NativeMapPresentation) {
   const overflowInset =
     !friendsOnly &&
     item.people.length > 0 &&
-    item.people.length <= 7 &&
     (item.scale === "close" || item.scale === "medium")
       ? 8
       : 0;
@@ -55,27 +60,33 @@ export function bloomGeometry(item: NativeMapPresentation) {
         radius: (6 * markerSize) / 32,
       });
   });
+  if (!friendsOnly) {
+    layout.shadowSize = Math.min(
+      layout.shadowSize,
+      Math.ceil(
+        markerSize +
+          2 * Math.max(0, ...offsets.map((p) => Math.hypot(p.x, p.y))) +
+          8,
+      ),
+    );
+    layout.shadowLeft = layout.center - layout.shadowSize / 2;
+    layout.shadowTop = layout.center - layout.shadowSize / 2 + 2;
+  }
   const satelliteSize =
     item.scale === "micro"
-      ? 4
+      ? 5
       : item.scale === "far"
-        ? 7
+        ? 8
         : item.friendsProminent
-          ? 13
-          : 11;
+          ? 14
+          : 13;
   const radius = layout.size / 2 - satelliteSize / 2 - 1;
-  const overflowBox =
-    item.overflow && !friendsOnly
-      ? {
-          x: bloomHalf - (16 + 6 * String(item.overflow).length) / 2,
-          y: bloomHalf - (item.scale === "micro" ? 7 : 10),
-          width: 16 + 6 * String(item.overflow).length,
-          height: item.scale === "micro" ? 14 : 20,
-        }
-      : undefined;
   const clear = (p: Offset, width: number, height: number) => {
     const box = { ...p, width, height };
-    if (overflowBox && intersects(box, overflowBox)) return false;
+    if (fullBeacon && intersects(box, { x: 0, y: 25, width: 16, height: 18 }))
+      return false;
+    if (item.decorationObstacles?.some((obstacle) => intersects(box, obstacle)))
+      return false;
     return occupiedCircles.every(
       (center) =>
         Math.hypot(
@@ -93,80 +104,84 @@ export function bloomGeometry(item: NativeMapPresentation) {
     const p = mapPointOffset(point, item.group, 14);
     return Math.hypot(p.x, p.y) < 0.01 ? fallback : Math.atan2(p.y, p.x);
   };
-  const satelliteOffsets: Offset[] = [];
-  let satellites = friendsOnly
-    ? []
-    : item.people.slice(
-        0,
-        item.scale === "micro" ? 2 : item.scale === "far" ? 3 : 7,
-      );
-  const limit = item.scale === "micro" ? 2 : item.scale === "far" ? 3 : 7;
-  if (item.scale !== "micro" && item.people.length > limit) satellites = [];
-  for (const person of satellites) {
-    const angle = bearing(person);
-    const candidates = Array.from({ length: 24 }, (_, i) => {
-      const a = (i * Math.PI) / 12;
-      return { x: Math.cos(a) * radius, y: Math.sin(a) * radius, angle: a };
-    })
-      .filter(
-        (p) =>
-          (item.scale === "micro" || clear(p, satelliteSize, satelliteSize)) &&
-          satelliteOffsets.every(
-            (other) =>
-              Math.hypot(p.x - other.x, p.y - other.y) >= satelliteSize + 3,
-          ),
-      )
-      .sort(
-        (a, b) =>
-          angularDistance(a.angle, angle) - angularDistance(b.angle, angle),
-      );
-    if (!candidates.length) {
-      satellites = [];
-      satelliteOffsets.length = 0;
-      break;
-    }
-    satelliteOffsets.push({ x: candidates[0].x, y: candidates[0].y });
-  }
-  let friendBadge:
-    { offset: Offset; width: number; height: number } | undefined;
-  if (
-    !friendsOnly &&
-    item.people.length &&
-    !satellites.length &&
-    item.scale !== "micro"
-  ) {
-    const width = 22 + 6 * String(item.people.length).length,
-      height = item.scale === "far" ? 16 : 18;
-    const average = item.people.reduce(
-      (sum, point) => {
-        const p = mapPointOffset(point, item.group, 14);
-        return { x: sum.x + p.x, y: sum.y + p.y };
-      },
-      { x: 0, y: 0 },
+  const limit = friendSatelliteLimit(primary.length, item.scale);
+  const micro = item.scale === "micro";
+  const makeCountBadge = (peopleCount: number) => {
+    if (friendsOnly || (!peopleCount && !item.overflow)) return undefined;
+    const width = Math.max(
+      micro ? 18 : 24,
+      clusterCountWidth(peopleCount, item.overflow, micro),
     );
-    const angle =
-      Math.hypot(average.x, average.y) < 0.01
-        ? fallback
-        : Math.atan2(average.y, average.x);
+    const height = micro ? 16 : 20;
+    const artworkBottom = Math.max(
+      fullBeacon ? 36 : 0,
+      ...occupiedCircles.map((point) => point.y + point.radius),
+    );
+    const top = Math.max(bloomHalf - height, artworkBottom + 4);
+    const preferred = { x: bloomHalf - width / 2, y: top + height / 2 };
+    // Stay on the bottom-right edge. Only move outward/down to clear nearby artwork.
     const candidates: (Offset & { score: number })[] = [];
-    for (let r = bloomHalf - 10; r <= bloomHalf + 24; r += 2)
-      for (let i = 0; i < 24; i++) {
-        const a = (i * Math.PI) / 12,
-          p = { x: Math.cos(a) * r, y: Math.sin(a) * r };
-        if (
-          clear(p, width, height) &&
-          (!overflowBox ||
-            !intersects(
-              { ...p, width: 44, height: 44 },
-              { ...overflowBox, width: 44, height: 44 },
-            ))
-        )
-          candidates.push({ ...p, score: angularDistance(a, angle) * 16 + r });
+    for (let down = 0; down <= 80; down += 4)
+      for (let right = 0; right <= 64; right += 4) {
+        const offset = { x: preferred.x + right, y: preferred.y + down };
+        if (clear(offset, width, height))
+          candidates.push({ ...offset, score: down + right * 2 });
       }
     candidates.sort((a, b) => a.score - b.score);
-    const best = candidates[0] ?? { x: -layout.size / 2 - 12, y: 0 };
-    friendBadge = { offset: { x: best.x, y: best.y }, width, height };
+    const best = candidates[0] ?? preferred;
+    return {
+      offset: { x: best.x, y: best.y },
+      width,
+      height,
+      text: clusterCountLabel(peopleCount, item.overflow),
+      peopleCount,
+      beaconOverflow: item.overflow,
+      fontSize: micro ? 8 : 10,
+    };
+  };
+  let countBadge = makeCountBadge(0);
+  let satellites: NativeMapPresentation["people"] = [];
+  let satelliteOffsets: Offset[] = [];
+  let effectiveLimit = limit;
+  if (!friendsOnly && item.people.length && item.people.length <= limit) {
+    const positions: Offset[] = [];
+    for (const person of item.people) {
+      const angle = bearing(person);
+      const candidates = Array.from({ length: 36 }, (_, i) => {
+        const a = (i * Math.PI) / 18;
+        return { x: Math.cos(a) * radius, y: Math.sin(a) * radius, angle: a };
+      })
+        .filter(
+          (p) =>
+            clear(p, satelliteSize, satelliteSize) &&
+            (!countBadge ||
+              !intersects(
+                { ...p, width: satelliteSize, height: satelliteSize },
+                {
+                  ...countBadge.offset,
+                  width: countBadge.width,
+                  height: countBadge.height,
+                },
+              )) &&
+            positions.every(
+              (other) =>
+                Math.hypot(p.x - other.x, p.y - other.y) >= satelliteSize + 4,
+            ),
+        )
+        .sort(
+          (a, b) =>
+            angularDistance(a.angle, angle) - angularDistance(b.angle, angle),
+        );
+      if (!candidates.length) break;
+      positions.push({ x: candidates[0].x, y: candidates[0].y });
+    }
+    if (positions.length === item.people.length) {
+      satellites = item.people;
+      satelliteOffsets = positions;
+    } else effectiveLimit = positions.length;
   }
+  if (!friendsOnly && item.people.length && !satellites.length)
+    countBadge = makeCountBadge(item.people.length);
   return {
     ...layout,
     markerSize,
@@ -177,10 +192,37 @@ export function bloomGeometry(item: NativeMapPresentation) {
     satellites,
     satelliteOffsets,
     satelliteSize,
-    friendBadge,
+    satelliteLimit: effectiveLimit,
+    countBadge,
     overflowInset,
   };
 }
+const geometryCache = new WeakMap<
+  NativeMapPresentation,
+  {
+    visible: NativeMapPresentation["visible"];
+    obstacles: NativeMapPresentation["decorationObstacles"];
+    value: ReturnType<typeof calculateBloomGeometry>;
+  }
+>();
+/** Immutable presentation geometry is reused by rendering, revision keys, and native overlays. */
+export function bloomGeometry(item: NativeMapPresentation) {
+  const cached = geometryCache.get(item);
+  if (
+    cached &&
+    cached.visible === item.visible &&
+    cached.obstacles === item.decorationObstacles
+  )
+    return cached.value;
+  const value = calculateBloomGeometry(item);
+  geometryCache.set(item, {
+    visible: item.visible,
+    obstacles: item.decorationObstacles,
+    value,
+  });
+  return value;
+}
+
 export function bloomAccessibilityLabel(item: NativeMapPresentation) {
   const beacons = item.beacons.length,
     people = item.people.length;

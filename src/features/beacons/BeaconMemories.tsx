@@ -1,3 +1,4 @@
+import { useConfirmation } from "@/src/shared/Dialogs";
 import React, { useEffect, useMemo, useState } from "react";
 import { Image, Linking, Pressable, Text, View } from "react-native";
 import { Pencil, Play, Trash } from "lucide-react-native";
@@ -25,6 +26,7 @@ import type { Activity } from "@/src/shared/types";
 export function BeaconMemories({ activity }: { activity: Activity }) {
   const { colors, styles } = useTheme();
   const { data, userId, act } = useBeacon();
+  const { requestConfirmation, confirmationDialog } = useConfirmation();
   const [caption, setCaption] = useState("");
   const [editId, setEditId] = useState<string | null>(null);
   const [editCaption, setEditCaption] = useState("");
@@ -190,6 +192,7 @@ export function BeaconMemories({ activity }: { activity: Activity }) {
           ? failure.message
           : "Could not delete this memory.",
       );
+      throw failure;
     } finally {
       setBusy(false);
     }
@@ -311,7 +314,16 @@ export function BeaconMemories({ activity }: { activity: Activity }) {
                     accessibilityRole="button"
                     accessibilityLabel="Delete Beacon memory"
                     disabled={busy}
-                    onPress={() => void deleteMemory(memory.id)}
+                    onPress={() =>
+                      requestConfirmation({
+                        title: "Delete this memory?",
+                        message:
+                          "This permanently removes this photo or video and its caption. This can’t be undone.",
+                        confirmLabel: "Delete memory",
+                        destructive: true,
+                        onConfirm: () => deleteMemory(memory.id),
+                      })
+                    }
                     style={{
                       minWidth: 44,
                       minHeight: 44,
@@ -379,6 +391,7 @@ export function BeaconMemories({ activity }: { activity: Activity }) {
         secondary
         onPress={() => void saveMemory()}
       />
+      {confirmationDialog}
     </View>
   );
 }

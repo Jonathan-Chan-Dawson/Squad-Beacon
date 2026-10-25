@@ -1,8 +1,8 @@
-import { PlanningResponseControls } from "./PlanningResponseControls";
 import { canOpenSquadPing } from "@/src/features/people/communication";
-import { PlanningEditor } from "./PlanningEditor";
-import React, { useState } from "react";
-import { Text, View } from "react-native";
+import { ConfirmDialog } from "@/src/shared/Dialogs";
+import { useBeacon } from "@/src/shared/store";
+import { Action, Button, Empty, Screen, Txt, useTheme } from "@/src/shared/ui";
+import { useNow } from "@/src/shared/useNow";
 import { router, useLocalSearchParams } from "expo-router";
 import {
   CalendarClock,
@@ -11,9 +11,8 @@ import {
   Dices,
   Vote,
 } from "lucide-react-native";
-import { useBeacon } from "@/src/shared/store";
-import { useNow } from "@/src/shared/useNow";
-import { Action, Button, Empty, Screen, Txt, useTheme } from "@/src/shared/ui";
+import React, { useState } from "react";
+import { Text, View } from "react-native";
 import {
   canManagePlanningThread,
   canReadPlanningThread,
@@ -23,8 +22,9 @@ import {
   validateCouncilProposal,
   visiblePlanningProposals,
 } from "./domain";
-import type { BeaconDraft, PlanningProposal } from "./types";
+import { PlanningResponseControls } from "./PlanningResponseControls";
 import { ProposalEditor } from "./ProposalEditor";
+import type { BeaconDraft, PlanningProposal } from "./types";
 const dateLabel = (value: string) =>
   new Date(value).toLocaleString([], {
     weekday: "short",
@@ -469,34 +469,34 @@ export default function PlanningDetailScreen({
           })
         }
       />
-      <PlanningEditor
-        inline={embedded}
+      <ConfirmDialog
         title="Replace the selected beacon?"
         visible={replaceConfirm}
         onClose={() => setReplaceConfirm(false)}
+        onConfirm={async () => {
+          const result = await act("replace_council_winner", {
+            thread_id: thread.id,
+            expected_winner_proposal_id: thread.winner_proposal_id,
+            confirm_cancel_previous: true,
+          });
+          setReplaceConfirm(false);
+          if (typeof result.activity_id === "string")
+            router.push({
+              pathname: "/activity/[id]",
+              params: { id: result.activity_id },
+            });
+        }}
+        confirmLabel={"Confirm replacement"}
+        cancelLabel={"Cancel"}
+        closeOnConfirm={false}
+        destructive
       >
         <Txt>
           This will cancel the current scheduled beacon and create the next
           eligible option. Existing RSVP records stay on the cancelled beacon,
           and its attendees will be notified.
         </Txt>
-        <Action
-          title="Confirm replacement"
-          run={async () => {
-            const result = await act("replace_council_winner", {
-              thread_id: thread.id,
-              expected_winner_proposal_id: thread.winner_proposal_id,
-              confirm_cancel_previous: true,
-            });
-            setReplaceConfirm(false);
-            if (typeof result.activity_id === "string")
-              router.push({
-                pathname: "/activity/[id]",
-                params: { id: result.activity_id },
-              });
-          }}
-        />
-      </PlanningEditor>
+      </ConfirmDialog>
       {thread.kind !== "ping" && thread.status === "resolved" && !winner && (
         <Empty
           title="No beacon was created."

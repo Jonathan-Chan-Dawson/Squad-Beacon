@@ -28,12 +28,7 @@ import {
   Pressable,
   useWindowDimensions,
 } from "react-native";
-import {
-  LocateFixed,
-  MapPin,
-  SlidersHorizontal,
-  UsersRound,
-} from "lucide-react-native";
+import { LocateFixed, MapPin, SlidersHorizontal } from "lucide-react-native";
 import MapView, {
   Circle,
   Marker,
@@ -721,13 +716,17 @@ export default function BeaconMap({
     y: number;
   } | null>(null);
   const [cameraMoving, setCameraMoving] = useState(false);
-  const [friendBadges, setFriendBadges] = useState<
+  const [countBadges, setCountBadges] = useState<
     {
       item: NativeMapPresentation;
       x: number;
       y: number;
       width: number;
       height: number;
+      text: string;
+      peopleCount: number;
+      beaconOverflow: number;
+      fontSize: number;
     }[]
   >([]);
   useEffect(() => {
@@ -735,7 +734,7 @@ export default function BeaconMap({
     if (!ready || onPick || cameraMoving) return;
     void Promise.all(
       presentations.map(async (item) => {
-        const badge = bloomGeometry(item).friendBadge;
+        const badge = bloomGeometry(item).countBadge;
         if (!badge) return null;
         try {
           const anchor = await map.current?.pointForCoordinate({
@@ -749,6 +748,10 @@ export default function BeaconMap({
                 y: anchor.y + badge.offset.y,
                 width: badge.width,
                 height: badge.height,
+                text: badge.text,
+                peopleCount: badge.peopleCount,
+                beaconOverflow: badge.beaconOverflow,
+                fontSize: badge.fontSize,
               }
             : null;
         } catch {
@@ -757,7 +760,7 @@ export default function BeaconMap({
       }),
     ).then((values) => {
       if (active)
-        setFriendBadges(
+        setCountBadges(
           values.filter((value): value is NonNullable<typeof value> => !!value),
         );
     });
@@ -810,7 +813,9 @@ export default function BeaconMap({
       void pressCluster(
         presentation.group,
         false,
-        presentation.forceExplorer ? "Friends" : undefined,
+        presentation.forceExplorer || !presentation.beacons.length
+          ? "Friends"
+          : undefined,
       );
       return;
     }
@@ -920,7 +925,7 @@ export default function BeaconMap({
         onMapReady={() => setReady(true)}
         onRegionChangeComplete={(nextRegion, details) => {
           if (!isValidMapRegion(nextRegion)) return;
-          setFriendBadges([]);
+          setCountBadges([]);
           setCameraMoving(false);
           closeStack();
           setRegion(nextRegion);
@@ -1294,7 +1299,7 @@ export default function BeaconMap({
       />
       {!cameraMoving &&
         !onPick &&
-        friendBadges
+        countBadges
           .filter(
             (badge) =>
               presentations.includes(badge.item) &&
@@ -1302,19 +1307,25 @@ export default function BeaconMap({
           )
           .map((badge) => (
             <Pressable
-              key={`friends:${badge.item.group.id}`}
+              key={`counts:${badge.item.group.id}`}
               accessibilityRole="button"
-              accessibilityLabel={`Explore ${badge.item.people.length} nearby friends; proximity is not attendance`}
-              testID="cluster-friend-count"
+              accessibilityLabel={`${badge.peopleCount ? `${badge.peopleCount} nearby friends. ` : ""}${badge.beaconOverflow ? `${badge.beaconOverflow} hidden Beacons. ` : ""}Explore cluster`}
+              testID="map-cluster-count"
               onPress={() => {
                 closeStack();
-                void pressCluster(badge.item.group, false, "Friends");
+                if (badge.peopleCount)
+                  void pressCluster(
+                    badge.item.group,
+                    false,
+                    badge.beaconOverflow ? undefined : "Friends",
+                  );
+                else void pressPresentation(badge.item);
               }}
               style={{
                 position: "absolute",
-                left: badge.x - 22,
+                left: badge.x - Math.max(44, badge.width) / 2,
                 top: badge.y - 22,
-                width: 44,
+                width: Math.max(44, badge.width),
                 height: 44,
                 alignItems: "center",
                 justifyContent: "center",
@@ -1335,11 +1346,14 @@ export default function BeaconMap({
                   backgroundColor: colors.white,
                 }}
               >
-                <UsersRound size={10} color={colors.ink} />
                 <Text
-                  style={{ fontSize: 10, fontWeight: "700", color: colors.ink }}
+                  style={{
+                    fontSize: badge.fontSize,
+                    fontWeight: "700",
+                    color: colors.ink,
+                  }}
                 >
-                  {badge.item.people.length}
+                  {badge.text}
                 </Text>
               </View>
             </Pressable>

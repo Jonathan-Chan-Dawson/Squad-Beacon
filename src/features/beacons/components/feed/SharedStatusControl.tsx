@@ -359,14 +359,22 @@ function SharedStatusContent({
       <StatusPanel
         headerOverride={
           livingLayout ? (
-            <View style={{ gap: 10 }}>
+            <View
+              testID={compact ? "home-my-status" : undefined}
+              style={{ gap: compact ? 4 : 10 }}
+            >
               <LivingStatusHeader
                 variant={compact ? "compact" : "profile"}
                 renderIdentity={renderIdentity}
                 onEditStatus={control.openCurrent}
               />
               {!identityOnly && (
-                <LivingActivitySection personId={userId!} showLower={false} />
+                <LivingActivitySection
+                  personId={userId!}
+                  showLower={false}
+                  compact={compact}
+                  sonar={!compact}
+                />
               )}
             </View>
           ) : undefined

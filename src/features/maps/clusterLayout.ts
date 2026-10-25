@@ -1,6 +1,8 @@
 /** Logical pixels shared by native marker bitmaps and web blooms. */
 export const CLUSTER_MARKER_SIZE = 32;
-export const CLUSTER_SHADOW_OPACITY = 0.22;
+export const CLUSTER_SHADOW_OPACITY = 0.14;
+export const CLUSTER_MICRO_SHADOW_OPACITY = 0.09;
+export const CLUSTER_FRIEND_SHADOW_OPACITY = 0.07;
 export const CLUSTER_COUNT_ANCHOR = { right: 0, bottom: 0 } as const;
 export const CLUSTER_OWNERSHIP_ANCHOR = { right: 0, top: 0 } as const;
 export type BloomScale = "close" | "medium" | "far" | "micro";
@@ -10,6 +12,37 @@ export function beaconPetalLimit(count: number, scale: BloomScale = "medium") {
   if (scale === "far") return Math.min(count, 3);
   return count <= 5 ? count : count <= 10 ? 6 : 7;
 }
+/** Preview capacity follows Beacon petals; distant tiers deliberately use fewer marks. */
+export function friendSatelliteLimit(petals: number, scale: BloomScale) {
+  const capacity = petals <= 2 ? 3 : petals <= 5 ? 5 : 7;
+  return Math.min(
+    capacity,
+    scale === "micro" ? 1 : scale === "far" ? 3 : capacity,
+  );
+}
+export const friendCountLabel = (count: number) => `👥${count}`;
+export const friendCountWidth = (count: number, micro = false) =>
+  (micro ? 18 : 25) + (micro ? 5 : 6) * String(count).length;
+
+/** One count label: people are totals, Beacon numbers are hidden previews only. */
+export const clusterCountLabel = (people: number, beacons: number) =>
+  [people ? `👥 +${people}` : "", beacons ? `+${beacons}` : ""]
+    .filter(Boolean)
+    .join(" · ");
+export function clusterCountWidth(
+  people: number,
+  beacons: number,
+  micro = false,
+) {
+  const digit = micro ? 5 : 6;
+  return (
+    10 +
+    (people ? 20 + digit * String(people).length : 0) +
+    (beacons ? digit * (String(beacons).length + 1) : 0) +
+    (people && beacons ? 10 : 0)
+  );
+}
+
 export function clusterLayout(
   count: number,
   scale: BloomScale = "medium",

@@ -1,31 +1,22 @@
-import { FlashList } from "@shopify/flash-list";
-import React, { useRef, useState } from "react";
-import { Pressable, Text, View } from "react-native";
-import { router, useLocalSearchParams, useNavigation } from "expo-router";
-import {
-  usePreventRemove,
-  type NavigationAction,
-} from "expo-router/react-navigation";
-import {
-  CalendarDays,
-  Layers3,
-  Settings2,
-  UserPlus,
-} from "lucide-react-native";
-import { useNow } from "@/src/shared/useNow";
-import { useBeacon } from "@/src/shared/store";
-import { friendIds } from "@/src/shared/domain";
 import { canReadBeaconActivity } from "@/src/features/beacons/beaconModules";
-import { matchesSearch } from "@/src/shared/search";
-import { canViewProfile } from "@/src/features/profile/privacy";
-import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
-import { VirtualizedCommunityDirectory } from "@/src/features/people/VirtualizedCommunityDirectory";
-import { activeSquadMembership } from "@/src/features/people/squadProfile";
-import { canReadOrganization } from "@/src/features/organizations/domain";
 import { CommunityPublicBeacons } from "@/src/features/discovery/CommunityPublicBeacons";
 import { CommunityPublicProfile } from "@/src/features/discovery/CommunityPublicProfile";
 import { communityProfileMode } from "@/src/features/discovery/communityPublicProfileAccess";
+import { canReadOrganization } from "@/src/features/organizations/domain";
+import {
+  ProfileActions,
+  ProfileLink,
+  ProfileSection,
+} from "@/src/features/people/components/ProfilePrimitives";
+import { activeSquadMembership } from "@/src/features/people/squadProfile";
+import { VirtualizedCommunityDirectory } from "@/src/features/people/VirtualizedCommunityDirectory";
+import { canViewProfile } from "@/src/features/profile/privacy";
+import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
 import { communityTypeLabel } from "@/src/features/social/communityPresentation";
+import {
+  RelationshipDisclosure,
+  useCommunitySummary,
+} from "@/src/features/social/CommunityProfileAccess";
 import {
   canInviteWithPolicy,
   SOCIAL_ROLE_RANK,
@@ -34,15 +25,10 @@ import {
   SocialPolicyFields,
   type SocialPolicyValue,
 } from "@/src/features/social/SocialPolicyControls";
-import {
-  RelationshipDisclosure,
-  useCommunitySummary,
-} from "@/src/features/social/CommunityProfileAccess";
-import {
-  ProfileActions,
-  ProfileLink,
-  ProfileSection,
-} from "@/src/features/people/components/ProfilePrimitives";
+import { ConfirmDialog, useConfirmation } from "@/src/shared/Dialogs";
+import { friendIds } from "@/src/shared/domain";
+import { matchesSearch } from "@/src/shared/search";
+import { useBeacon } from "@/src/shared/store";
 import {
   Action,
   Button,
@@ -55,6 +41,21 @@ import {
   Txt,
   useTheme,
 } from "@/src/shared/ui";
+import { useNow } from "@/src/shared/useNow";
+import { FlashList } from "@shopify/flash-list";
+import { router, useLocalSearchParams, useNavigation } from "expo-router";
+import {
+  usePreventRemove,
+  type NavigationAction,
+} from "expo-router/react-navigation";
+import {
+  CalendarDays,
+  Layers3,
+  Settings2,
+  UserPlus,
+} from "lucide-react-native";
+import { useRef, useState } from "react";
+import { Pressable, Text, View } from "react-native";
 import {
   activeSpaceRole,
   canInviteSpaceMember,
@@ -63,8 +64,8 @@ import {
   canReadSpace,
   visibleSpaceSquads,
 } from "./domain";
-import type { Space, SpaceMemberRole } from "./types";
 import { SpaceSquadPreview } from "./SpaceSquadPreview";
+import type { Space, SpaceMemberRole } from "./types";
 
 const settingsSections = [
   "details",
@@ -84,12 +85,20 @@ const settingsSectionTitles: Record<SpaceSettingsSection, string> = {
 
 export default function SpaceScreen() {
   const navigation = useNavigation();
-  const params = useLocalSearchParams<{ id?: string; tab?: string; view?: string; section?: string }>();
+  const params = useLocalSearchParams<{
+    id?: string;
+    tab?: string;
+    view?: string;
+    section?: string;
+  }>();
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
   const legacyView = params.tab ?? params.view;
   const { data, userId, act } = useBeacon();
-  const { summary: safeSummary, loading: summaryLoading, refresh: refreshSummary } =
-    useCommunitySummary("space", id);
+  const {
+    summary: safeSummary,
+    loading: summaryLoading,
+    refresh: refreshSummary,
+  } = useCommunitySummary("space", id);
   const now = useNow();
   const { styles, colors } = useTheme();
   const [menu, setMenu] = useState<"invite" | "squads" | "settings" | null>(
@@ -98,12 +107,11 @@ export default function SpaceScreen() {
   const tab: "overview" | "squads" | "activity" | "members" | "settings" =
     legacyView === "settings"
       ? "settings"
-      :
-    legacyView === "squads" ||
-    legacyView === "activity" ||
-    legacyView === "members"
-      ? legacyView
-      : "overview";
+      : legacyView === "squads" ||
+          legacyView === "activity" ||
+          legacyView === "members"
+        ? legacyView
+        : "overview";
   const requestedSection = Array.isArray(params.section)
     ? params.section[0]
     : params.section;
@@ -119,40 +127,53 @@ export default function SpaceScreen() {
   const [squadSearch, setSquadSearch] = useState("");
   const [memberSearch, setMemberSearch] = useState("");
   const [editingMemberId, setEditingMemberId] = useState<string | null>(null);
+  const { requestConfirmation, confirmationDialog } = useConfirmation();
   const [editingMemberRole, setEditingMemberRole] =
     useState<SpaceMemberRole>("member");
   const [detailsDraft, setDetailsDraft] = useState<{
     name: string;
     description: string;
   } | null>(null);
-  const [policyDraft, setPolicyDraft] = useState<SocialPolicyValue | null>(null);
+  const [policyDraft, setPolicyDraft] = useState<SocialPolicyValue | null>(
+    null,
+  );
   const [discardOpen, setDiscardOpen] = useState(false);
   const [pendingDestination, setPendingDestination] = useState<
     SpaceSettingsSection | null | undefined
   >(undefined);
   const pendingRemoveAction = useRef<NavigationAction | null>(null);
   const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
-  const memberSpaceRecord = id ? data.spaces.find((row) => row.id === id) : undefined;
+  const memberSpaceRecord = id
+    ? data.spaces.find((row) => row.id === id)
+    : undefined;
   const hasReadableMemberRecord = !!(
     safeSummary?.membership_status === "active" &&
-    memberSpaceRecord && userId && canReadSpace(data, memberSpaceRecord.id, userId)
+    memberSpaceRecord &&
+    userId &&
+    canReadSpace(data, memberSpaceRecord.id, userId)
   );
-  const profileMode = communityProfileMode(safeSummary, hasReadableMemberRecord, summaryLoading);
-  const space = profileMode === "member"
-    ? memberSpaceRecord
-    : safeSummary
-      ? ({
-          id: safeSummary.entity_id,
-          owner_id: "",
-          name: safeSummary.name,
-          description: safeSummary.description,
-          created_at: "",
-          discoverability: safeSummary.discoverability,
-          join_mode: safeSummary.join_mode,
-        } satisfies Space)
-      : undefined;
+  const profileMode = communityProfileMode(
+    safeSummary,
+    hasReadableMemberRecord,
+    summaryLoading,
+  );
+  const space =
+    profileMode === "member"
+      ? memberSpaceRecord
+      : safeSummary
+        ? ({
+            id: safeSummary.entity_id,
+            owner_id: "",
+            name: safeSummary.name,
+            description: safeSummary.description,
+            created_at: "",
+            discoverability: safeSummary.discoverability,
+            join_mode: safeSummary.join_mode,
+          } satisfies Space)
+        : undefined;
   const policyInitial: SocialPolicyValue = {
-    discoverability: space?.discoverability ?? safeSummary?.discoverability ?? "private",
+    discoverability:
+      space?.discoverability ?? safeSummary?.discoverability ?? "private",
     join_mode: space?.join_mode ?? safeSummary?.join_mode ?? "invite",
     invite_policy: space?.invite_policy ?? "admins",
   };
@@ -160,24 +181,29 @@ export default function SpaceScreen() {
     name: space?.name ?? safeSummary?.name ?? "",
     description: space?.description ?? safeSummary?.description ?? "",
   };
-  const detailsDirty = !!detailsDraft && (
-    detailsDraft.name !== (space?.name ?? safeSummary?.name ?? "") ||
-    detailsDraft.description !== (space?.description ?? safeSummary?.description ?? "")
-  );
+  const detailsDirty =
+    !!detailsDraft &&
+    (detailsDraft.name !== (space?.name ?? safeSummary?.name ?? "") ||
+      detailsDraft.description !==
+        (space?.description ?? safeSummary?.description ?? ""));
   const policyValues = policyDraft ?? policyInitial;
-  const policyDirty = !!policyDraft && (
-    policyDraft.discoverability !== policyInitial.discoverability ||
-    policyDraft.join_mode !== policyInitial.join_mode ||
-    policyDraft.invite_policy !== policyInitial.invite_policy
-  );
+  const policyDirty =
+    !!policyDraft &&
+    (policyDraft.discoverability !== policyInitial.discoverability ||
+      policyDraft.join_mode !== policyInitial.join_mode ||
+      policyDraft.invite_policy !== policyInitial.invite_policy);
   const settingsDirty = tab === "settings" && (detailsDirty || policyDirty);
   const currentMemberAccess = profileMode === "member";
-  const canManageCurrentSpace = currentMemberAccess && !!id && !!userId && canManageSpace(data, id, userId);
-  usePreventRemove(settingsDirty && canManageCurrentSpace, ({ data: { action } }) => {
-    pendingRemoveAction.current = action;
-    setPendingDestination(undefined);
-    setDiscardOpen(true);
-  });
+  const canManageCurrentSpace =
+    currentMemberAccess && !!id && !!userId && canManageSpace(data, id, userId);
+  usePreventRemove(
+    settingsDirty && canManageCurrentSpace,
+    ({ data: { action } }) => {
+      pendingRemoveAction.current = action;
+      setPendingDestination(undefined);
+      setDiscardOpen(true);
+    },
+  );
   if (profileMode === "loading")
     return (
       <Screen title="Loading Organization" eyebrow="">
@@ -202,14 +228,19 @@ export default function SpaceScreen() {
         create={false}
         showDemoNotice={false}
       >
-        <CommunityPublicProfile summary={profileSummary} onSummaryChanged={refreshSummary} />
+        <CommunityPublicProfile
+          summary={profileSummary}
+          onSummaryChanged={refreshSummary}
+        />
       </Screen>
     );
-  const viewerRole = userId && currentMemberAccess && canReadSpace(data, id, userId)
-    ? activeSpaceRole(space, data.space_members, userId)
-    : null;
+  const viewerRole =
+    userId && currentMemberAccess && canReadSpace(data, id, userId)
+      ? activeSpaceRole(space, data.space_members, userId)
+      : null;
   const manageable = !!viewerRole && canManageSpace(data, id, userId);
-  const mayInvite = !!viewerRole && canInviteWithPolicy(viewerRole, space.invite_policy);
+  const mayInvite =
+    !!viewerRole && canInviteWithPolicy(viewerRole, space.invite_policy);
   const members = viewerRole
     ? data.space_members.filter(
         (member) => member.space_id === id && member.status === "active",
@@ -234,7 +265,10 @@ export default function SpaceScreen() {
   const squads = visibleSpaceSquads(data, id, userId).sort((first, second) => {
     const firstJoined = !!activeSquadMembership(data, first.id, userId);
     const secondJoined = !!activeSquadMembership(data, second.id, userId);
-    return Number(secondJoined) - Number(firstJoined) || first.name.localeCompare(second.name);
+    return (
+      Number(secondJoined) - Number(firstJoined) ||
+      first.name.localeCompare(second.name)
+    );
   });
   const searchedMembers = members.flatMap((member) => {
     const profile = data.profiles.find((row) => row.id === member.user_id);
@@ -294,7 +328,9 @@ export default function SpaceScreen() {
     setPolicyDraft(null);
     router.push({ pathname: "/space/[id]", params: { id, tab: "settings" } });
   };
-  const selectTab = (next: "overview" | "squads" | "activity" | "members" | "settings") => {
+  const selectTab = (
+    next: "overview" | "squads" | "activity" | "members" | "settings",
+  ) => {
     router.push({
       pathname: "/space/[id]",
       params: { id, ...(next === "overview" ? {} : { tab: next }) },
@@ -344,14 +380,20 @@ export default function SpaceScreen() {
       showDemoNotice={false}
       scroll={tab !== "members" && tab !== "squads"}
       compactHeader={
-        tab === "members" || tab === "squads" ||
+        tab === "members" ||
+        tab === "squads" ||
         (tab === "settings" && !!settingsSection)
       }
       headerAction={
         <IconButton
-          label={tab === "settings" && settingsSection ? "Back to Organization settings" : "Organization settings"}
+          label={
+            tab === "settings" && settingsSection
+              ? "Back to Organization settings"
+              : "Organization settings"
+          }
           onPress={() => {
-            if (tab === "settings" && settingsSection) requestSettings(undefined);
+            if (tab === "settings" && settingsSection)
+              requestSettings(undefined);
             else if (tab === "settings") selectTab("overview");
             else openSettings();
           }}
@@ -360,32 +402,39 @@ export default function SpaceScreen() {
         </IconButton>
       }
     >
-      {tab !== "squads" && tab !== "settings" ? <View style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
-        <View
-          style={{
-            width: 48,
-            height: 48,
-            borderRadius: 16,
-            backgroundColor: colors.lime,
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <Layers3 size={23} color={colors.green} />
+      {tab !== "squads" && tab !== "settings" ? (
+        <View style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
+          <View
+            style={{
+              width: 48,
+              height: 48,
+              borderRadius: 16,
+              backgroundColor: colors.lime,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Layers3 size={23} color={colors.green} />
+          </View>
+          <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+            <Text style={styles.h2} numberOfLines={2}>
+              {profileSummary.name}
+            </Text>
+            {profileSummary.description.trim() ? (
+              <Text style={styles.muted} numberOfLines={2}>
+                {profileSummary.description}
+              </Text>
+            ) : null}
+            <Txt muted>
+              {space.space_type
+                ? `${space.space_type.replaceAll("_", " ")} · `
+                : "Organization · "}
+              {profileSummary.member_count}{" "}
+              {profileSummary.member_count === 1 ? "member" : "members"}
+            </Txt>
+          </View>
         </View>
-        <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
-          <Text style={styles.h2} numberOfLines={2}>{profileSummary.name}</Text>
-          {profileSummary.description.trim() ? (
-            <Text style={styles.muted} numberOfLines={2}>{profileSummary.description}</Text>
-          ) : null}
-          <Txt muted>
-            {space.space_type
-              ? `${space.space_type.replaceAll("_", " ")} · `
-              : "Organization · "}
-            {profileSummary.member_count} {profileSummary.member_count === 1 ? "member" : "members"}
-          </Txt>
-        </View>
-      </View> : null}
+      ) : null}
       {tab === "overview" ? (
         <ProfileActions>
           <Button
@@ -412,14 +461,26 @@ export default function SpaceScreen() {
       {tab === "overview" && (
         <>
           <SpaceSquadPreview spaceId={id} />
-          <Button compact secondary title="All Squads" onPress={() => selectTab("squads")} />
+          <Button
+            compact
+            secondary
+            title="All Squads"
+            onPress={() => selectTab("squads")}
+          />
         </>
       )}
       {tab === "squads" && (
         <View style={{ flex: 1, minHeight: 0, gap: 8 }}>
           <View style={styles.between}>
             <Txt muted>Only Squads you can independently open appear here.</Txt>
-            {manageable ? <Button compact secondary title="Connect Squad" onPress={() => setMenu("squads")} /> : null}
+            {manageable ? (
+              <Button
+                compact
+                secondary
+                title="Connect Squad"
+                onPress={() => setMenu("squads")}
+              />
+            ) : null}
           </View>
           <Field
             label={`Search Squads in ${space.name}`}
@@ -447,7 +508,8 @@ export default function SpaceScreen() {
           title="Networks"
           onOpen={(summary) => {
             if (summary.entity_type === "squad") setSquadId(summary.entity_id);
-            else if (summary.entity_type === "space") setOtherSpaceId(summary.entity_id);
+            else if (summary.entity_type === "space")
+              setOtherSpaceId(summary.entity_id);
             else setOrganizationId(summary.entity_id);
           }}
         />
@@ -528,11 +590,13 @@ export default function SpaceScreen() {
             title="All Beacons"
             onPress={() => selectTab("activity")}
           />
-          {viewerRole ? <ProfileLink
-            title="Members"
-            detail={`${members.length} members`}
-            onPress={() => selectTab("members")}
-          /> : null}
+          {viewerRole ? (
+            <ProfileLink
+              title="Members"
+              detail={`${members.length} members`}
+              onPress={() => selectTab("members")}
+            />
+          ) : null}
           {profileSummary.description.trim() ? (
             <ProfileSection title="About">
               <Txt>{profileSummary.description}</Txt>
@@ -544,20 +608,29 @@ export default function SpaceScreen() {
         <View style={{ gap: 8 }}>
           <View style={styles.card}>
             <Text style={styles.h2}>Organization settings</Text>
-            <Txt muted>{viewerRole ? `Your role: ${viewerRole}` : "Public profile settings"}</Txt>
+            <Txt muted>
+              {viewerRole
+                ? `Your role: ${viewerRole}`
+                : "Public profile settings"}
+            </Txt>
           </View>
-          {settingsSections.filter((section) =>
-            section === "details" || section === "access" ? manageable :
-              section === "members" ? !!viewerRole || mayInvite :
-                section === "connections" ? manageable :
-                  !!viewerRole && space.owner_id !== userId,
-          ).map((section) => (
-            <ProfileLink
-              key={section}
-              title={settingsSectionTitles[section]}
-              onPress={() => requestSettings(section)}
-            />
-          ))}
+          {settingsSections
+            .filter((section) =>
+              section === "details" || section === "access"
+                ? manageable
+                : section === "members"
+                  ? !!viewerRole || mayInvite
+                  : section === "connections"
+                    ? manageable
+                    : !!viewerRole && space.owner_id !== userId,
+            )
+            .map((section) => (
+              <ProfileLink
+                key={section}
+                title={settingsSectionTitles[section]}
+                onPress={() => requestSettings(section)}
+              />
+            ))}
           {!manageable && !viewerRole && !mayInvite ? (
             <Txt muted>There are no settings available to this account.</Txt>
           ) : null}
@@ -568,21 +641,50 @@ export default function SpaceScreen() {
           <Text style={styles.h2}>Organization details</Text>
           {manageable ? (
             <>
-              <Field label="Organization name" value={detailValues.name} maxLength={60} onChangeText={(value) => setDetailsDraft({ ...detailValues, name: value })} />
-              <Field label="Description" value={detailValues.description} maxLength={500} multiline onChangeText={(value) => setDetailsDraft({ ...detailValues, description: value })} />
+              <Field
+                label="Organization name"
+                value={detailValues.name}
+                maxLength={60}
+                onChangeText={(value) =>
+                  setDetailsDraft({ ...detailValues, name: value })
+                }
+              />
+              <Field
+                label="Description"
+                value={detailValues.description}
+                maxLength={500}
+                multiline
+                onChangeText={(value) =>
+                  setDetailsDraft({ ...detailValues, description: value })
+                }
+              />
               <Action
                 title="Save Organization"
                 disabled={!detailsDirty || !detailValues.name.trim()}
                 run={async () => {
-                  if (!detailValues.name.trim()) throw new Error("Give your Organization a name.");
-                  await act("update_space", { space_id: id, name: detailValues.name.trim(), description: detailValues.description.trim() });
+                  if (!detailValues.name.trim())
+                    throw new Error("Give your Organization a name.");
+                  await act("update_space", {
+                    space_id: id,
+                    name: detailValues.name.trim(),
+                    description: detailValues.description.trim(),
+                  });
                   setDetailsDraft(null);
                   navigateSettings();
                 }}
               />
             </>
-          ) : <Txt muted>Only Organization admins can edit these details.</Txt>}
-          <Button secondary title="Cancel" onPress={() => { setDetailsDraft(null); navigateSettings(); }} />
+          ) : (
+            <Txt muted>Only Organization admins can edit these details.</Txt>
+          )}
+          <Button
+            secondary
+            title="Cancel"
+            onPress={() => {
+              setDetailsDraft(null);
+              navigateSettings();
+            }}
+          />
         </View>
       ) : null}
       {tab === "settings" && settingsSection === "access" ? (
@@ -590,50 +692,115 @@ export default function SpaceScreen() {
           <Text style={styles.h2}>Privacy & access</Text>
           {manageable ? (
             <>
-              <SocialPolicyFields value={policyValues} onChange={setPolicyDraft} />
+              <SocialPolicyFields
+                value={policyValues}
+                onChange={setPolicyDraft}
+              />
               <Action
                 title="Save access settings"
                 disabled={!policyDirty}
                 run={async () => {
-                  await act("set_social_policy", { entity_type: "space", entity_id: id, ...policyValues });
+                  await act("set_social_policy", {
+                    entity_type: "space",
+                    entity_id: id,
+                    ...policyValues,
+                  });
                   setPolicyDraft(null);
                   navigateSettings();
                 }}
               />
             </>
-          ) : <Txt muted>Only Organization admins can edit privacy and access.</Txt>}
-          <Button secondary title="Cancel" onPress={() => { setPolicyDraft(null); navigateSettings(); }} />
+          ) : (
+            <Txt muted>
+              Only Organization admins can edit privacy and access.
+            </Txt>
+          )}
+          <Button
+            secondary
+            title="Cancel"
+            onPress={() => {
+              setPolicyDraft(null);
+              navigateSettings();
+            }}
+          />
         </View>
       ) : null}
       {tab === "settings" && settingsSection === "members" ? (
         <View style={{ gap: 10 }}>
           <Text style={styles.h2}>Members & roles</Text>
-          {viewerRole ? <Button title="View members" onPress={() => selectTab("members")} /> : null}
-          {mayInvite ? <Button secondary title="Invite people" onPress={() => setMenu("invite")} /> : null}
-          {manageable ? <Button secondary title="Manage member roles and removals" onPress={() => setMenu("settings")} /> : null}
-          {manageable && joinRequests.length ? <Txt muted>{joinRequests.length} join requests await review in the member directory.</Txt> : null}
+          {viewerRole ? (
+            <Button title="View members" onPress={() => selectTab("members")} />
+          ) : null}
+          {mayInvite ? (
+            <Button
+              secondary
+              title="Invite people"
+              onPress={() => setMenu("invite")}
+            />
+          ) : null}
+          {manageable ? (
+            <Button
+              secondary
+              title="Manage member roles and removals"
+              onPress={() => setMenu("settings")}
+            />
+          ) : null}
+          {manageable && joinRequests.length ? (
+            <Txt muted>
+              {joinRequests.length} join requests await review in the member
+              directory.
+            </Txt>
+          ) : null}
         </View>
       ) : null}
       {tab === "settings" && settingsSection === "connections" ? (
         <View style={{ gap: 10 }}>
           <Text style={styles.h2}>Connections</Text>
           <Txt muted>Linked Squads keep their own membership and privacy.</Txt>
-          {manageable ? <Button title="Connect Squad" onPress={() => setMenu("squads")} /> : null}
+          {manageable ? (
+            <Button title="Connect Squad" onPress={() => setMenu("squads")} />
+          ) : null}
           {squads.map((squad) => (
             <View key={squad.id} style={[styles.row, styles.card]}>
               <Text style={[styles.body, { flex: 1 }]}>{squad.name}</Text>
-              {manageable ? <Action compact secondary title={`Disconnect ${squad.name}`} run={() => act("detach_space_squad", { space_id: id, squad_id: squad.id })} /> : null}
+              {manageable ? (
+                <Action
+                  compact
+                  secondary
+                  title={`Disconnect ${squad.name}`}
+                  run={() =>
+                    act("detach_space_squad", {
+                      space_id: id,
+                      squad_id: squad.id,
+                    })
+                  }
+                />
+              ) : null}
             </View>
           ))}
-          <Button secondary title="Browse all Squads" onPress={() => selectTab("squads")} />
+          <Button
+            secondary
+            title="Browse all Squads"
+            onPress={() => selectTab("squads")}
+          />
         </View>
       ) : null}
       {tab === "settings" && settingsSection === "actions" ? (
         <View style={{ gap: 10 }}>
           <Text style={styles.h2}>Actions</Text>
           {viewerRole && space.owner_id !== userId ? (
-            <Button secondary title="Leave Organization" onPress={() => setLeaveConfirmOpen(true)} />
-          ) : <Txt muted>{space.owner_id === userId ? "The owner role stays with the Organization owner." : "There are no membership actions available."}</Txt>}
+            <Button
+              secondary
+              title="Leave Organization"
+              onPress={() => setLeaveConfirmOpen(true)}
+            />
+          ) : (
+            <Txt muted>
+              {space.owner_id === userId
+                ? "The owner role stays with the Organization owner."
+                : "There are no membership actions available."}
+            </Txt>
+          )}
         </View>
       ) : null}
       {tab === "activity" && (
@@ -697,78 +864,82 @@ export default function SpaceScreen() {
           keyExtractor={({ member }) => member.user_id}
           ListHeaderComponent={
             <View style={{ gap: 10, paddingBottom: 10 }}>
-          <View style={styles.between}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.h2}>Members</Text>
-              <Text style={styles.muted}>{profileSummary.member_count} members</Text>
-            </View>
-            {mayInvite && (
-              <Button
-                compact
-                secondary
-                title="Invite people"
-                onPress={() => setMenu("invite")}
-                icon={<UserPlus size={15} color={colors.green} />}
-              />
-            )}
-          </View>
-          {manageable && joinRequests.length ? (
-            <View style={[styles.card, { gap: 8 }]}>
-              <Text style={styles.h2}>Join requests</Text>
-              {joinRequests.map((request) => {
-                const profile = data.profiles.find(
-                  (row) => row.id === request.user_id,
-                );
-                const visible = !!(
-                  profile &&
-                  userId &&
-                  canViewProfile(data, profile, userId)
-                );
-                return (
-                  <View
-                    key={request.user_id}
-                    style={[
-                      styles.row,
-                      { flexWrap: "wrap", justifyContent: "space-between" },
-                    ]}
-                  >
-                    <Text style={[styles.body, { flex: 1 }]}>
-                      {visible && profile ? profile.name : "Community member"}
-                    </Text>
-                    <Action
-                      compact
-                      title="Approve"
-                      run={() =>
-                        act("approve_space_join_request", {
-                          space_id: id,
-                          user_id: request.user_id,
-                        })
-                      }
-                    />
-                    <Action
-                      compact
-                      secondary
-                      title="Decline"
-                      run={() =>
-                        act("deny_space_join_request", {
-                          space_id: id,
-                          user_id: request.user_id,
-                        })
-                      }
-                    />
-                  </View>
-                );
-              })}
-            </View>
-          ) : null}
-          {members.length > 5 ? (
-            <Field
-              label="Search Organization members"
-              value={memberSearch}
-              onChangeText={setMemberSearch}
-              placeholder="Name or username"
-            />
-          ) : null}
+              <View style={styles.between}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.h2}>Members</Text>
+                  <Text style={styles.muted}>
+                    {profileSummary.member_count} members
+                  </Text>
+                </View>
+                {mayInvite && (
+                  <Button
+                    compact
+                    secondary
+                    title="Invite people"
+                    onPress={() => setMenu("invite")}
+                    icon={<UserPlus size={15} color={colors.green} />}
+                  />
+                )}
+              </View>
+              {manageable && joinRequests.length ? (
+                <View style={[styles.card, { gap: 8 }]}>
+                  <Text style={styles.h2}>Join requests</Text>
+                  {joinRequests.map((request) => {
+                    const profile = data.profiles.find(
+                      (row) => row.id === request.user_id,
+                    );
+                    const visible = !!(
+                      profile &&
+                      userId &&
+                      canViewProfile(data, profile, userId)
+                    );
+                    return (
+                      <View
+                        key={request.user_id}
+                        style={[
+                          styles.row,
+                          { flexWrap: "wrap", justifyContent: "space-between" },
+                        ]}
+                      >
+                        <Text style={[styles.body, { flex: 1 }]}>
+                          {visible && profile
+                            ? profile.name
+                            : "Community member"}
+                        </Text>
+                        <Action
+                          compact
+                          title="Approve"
+                          run={() =>
+                            act("approve_space_join_request", {
+                              space_id: id,
+                              user_id: request.user_id,
+                            })
+                          }
+                        />
+                        <Action
+                          compact
+                          secondary
+                          title="Decline"
+                          run={() =>
+                            act("deny_space_join_request", {
+                              space_id: id,
+                              user_id: request.user_id,
+                            })
+                          }
+                        />
+                      </View>
+                    );
+                  })}
+                </View>
+              ) : null}
+              {members.length > 5 ? (
+                <Field
+                  label="Search Organization members"
+                  value={memberSearch}
+                  onChangeText={setMemberSearch}
+                  placeholder="Name or username"
+                />
+              ) : null}
             </View>
           }
           renderItem={({ item: { member, profile } }) => (
@@ -776,20 +947,31 @@ export default function SpaceScreen() {
               accessibilityRole="button"
               accessibilityLabel={`Preview ${profile.name}`}
               onPress={() =>
-                router.push({ pathname: "/person/[id]", params: { id: profile.id } })
+                router.push({
+                  pathname: "/person/[id]",
+                  params: { id: profile.id },
+                })
               }
               style={[styles.row, { minHeight: 54 }]}
             >
               <ProfileAvatar profile={profile} size={38} />
               <Text style={[styles.body, { flex: 1 }]}>{profile.name}</Text>
               <Text style={styles.muted}>
-                {member.role === "owner" ? "Owner" : member.role === "admin" ? "Admin" : ""}
+                {member.role === "owner"
+                  ? "Owner"
+                  : member.role === "admin"
+                    ? "Admin"
+                    : ""}
               </Text>
             </Pressable>
           )}
           ListEmptyComponent={
             <Empty
-              title={memberSearch.trim() ? "No matching members" : "No visible members"}
+              title={
+                memberSearch.trim()
+                  ? "No matching members"
+                  : "No visible members"
+              }
               body="Members appear here when their profile is visible to you."
             />
           }
@@ -900,14 +1082,22 @@ export default function SpaceScreen() {
                           }}
                         />
                       ) : null}
-                      <Action
+                      <Button
                         compact
                         secondary
                         title={`Remove ${profile && canViewProfile(data, profile, userId!) ? profile.name : "member"} from Organization`}
-                        run={() =>
-                          act("remove_space_member", {
-                            space_id: id,
-                            user_id: member.user_id,
+                        onPress={() =>
+                          requestConfirmation({
+                            title: "Remove this member from the Organization?",
+                            message:
+                              "This removes the membership or invitation and its access to this Organization.",
+                            confirmLabel: `Remove ${profile && canViewProfile(data, profile, userId!) ? profile.name : "member"} from Organization`,
+                            destructive: true,
+                            onConfirm: () =>
+                              act("remove_space_member", {
+                                space_id: id,
+                                user_id: member.user_id,
+                              }),
                           })
                         }
                       />
@@ -926,17 +1116,26 @@ export default function SpaceScreen() {
                           onChange={setEditingMemberRole}
                           accessibilityPrefix="Organization member role"
                         />
-                        <Action
+                        <Button
                           compact
                           title="Save role"
-                          run={async () => {
-                            await act("set_space_member_role", {
-                              space_id: id,
-                              user_id: member.user_id,
-                              role: editingMemberRole,
-                            });
-                            setEditingMemberId(null);
-                          }}
+                          onPress={() =>
+                            requestConfirmation({
+                              title: "Change this member’s role?",
+                              message:
+                                "Change this member’s role to " + editingMemberRole + "? This changes their permissions.",
+                              confirmLabel: "Save role",
+                              destructive: false,
+                              onConfirm: async () => {
+                                await act("set_space_member_role", {
+                                  space_id: id,
+                                  user_id: member.user_id,
+                                  role: editingMemberRole,
+                                });
+                                setEditingMemberId(null);
+                              },
+                            })
+                          }
                         />
                       </View>
                     ) : null}
@@ -947,7 +1146,7 @@ export default function SpaceScreen() {
         )}
         <Button secondary title="Done" onPress={() => setMenu(null)} />
       </Sheet>
-      <Sheet
+      <ConfirmDialog
         title="Discard settings changes?"
         visible={discardOpen}
         onClose={() => {
@@ -955,31 +1154,37 @@ export default function SpaceScreen() {
           setPendingDestination(undefined);
           pendingRemoveAction.current = null;
         }}
+        onConfirm={confirmDiscardSettings}
+        confirmLabel={"Discard changes"}
+        cancelLabel={"Keep editing"}
+        closeOnConfirm={false}
+        destructive
       >
         <View style={{ gap: 10 }}>
           <Txt>Your Organization settings have unsaved changes.</Txt>
-          <Button secondary title="Keep editing" onPress={() => setDiscardOpen(false)} />
-          <Button title="Discard changes" onPress={confirmDiscardSettings} />
         </View>
-      </Sheet>
-      <Sheet
+      </ConfirmDialog>
+      <ConfirmDialog
         title="Leave this Organization?"
         visible={leaveConfirmOpen}
         onClose={() => setLeaveConfirmOpen(false)}
+        onConfirm={async () => {
+          await act("leave_space", { space_id: id });
+          setLeaveConfirmOpen(false);
+          router.back();
+        }}
+        confirmLabel={"Leave Organization"}
+        cancelLabel={"Cancel"}
+        closeOnConfirm={false}
+        destructive
       >
         <View style={{ gap: 10 }}>
-          <Txt>You will lose access to member-only settings and private activity.</Txt>
-          <Button secondary title="Cancel" onPress={() => setLeaveConfirmOpen(false)} />
-          <Action
-            title="Leave Organization"
-            run={async () => {
-              await act("leave_space", { space_id: id });
-              setLeaveConfirmOpen(false);
-              router.back();
-            }}
-          />
+          <Txt>
+            You will lose access to member-only settings and private activity.
+          </Txt>
         </View>
-      </Sheet>
+      </ConfirmDialog>
+      {confirmationDialog}
     </Screen>
   );
 }

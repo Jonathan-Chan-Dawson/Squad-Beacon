@@ -17,11 +17,11 @@ test("bloom counts, direct exploration, reduced motion and phone layouts", async
       return webConstellation(presentation,{
         ink:dark?'#eef5f3':'#163830',surface:dark?'#192e29':'#ffffff',line:dark?'#456157':'#c5d8d0',ownership:'#168c80',categoryColor:()=> '#26b39d',reducedMotion:matchMedia('(prefers-reduced-motion: reduce)').matches,
         open:(section)=>{window.opened=(window.opened||0)+1;window.section=section;},
-        member:(point)=>{
+        member:(point,full=false)=>{
           const button=document.createElement('button');button.setAttribute('aria-label',point.id);button.onclick=()=>window.selected=point.id;
-          const face=document.createElement('span');face.textContent=['\\u2615','\\u26bd','\\ud83c\\udfae'][Number(point.id.split(':')[1])%3];face.style.cssText='box-sizing:border-box;display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;background:white;border:2px solid #26b39d;font-size:20px;';
-          button.style.cssText='border:0;background:transparent;padding:0;display:flex;align-items:center;';button.append(face);
-          if(point.id==='beacon:0'){const star=document.createElement('span');star.textContent='\\u2605';star.style.cssText='position:absolute;right:-3px;bottom:-2px;border-radius:50%;background:#168c80;color:white;font-size:10px;width:12px;height:12px;';button.append(star);}return button;
+          const face=document.createElement('span');face.textContent=['\\u2615','\\u26bd','\\ud83c\\udfae'][Number(point.id.split(':')[1])%3];face.style.cssText='position:relative;box-sizing:border-box;display:flex;align-items:center;justify-content:center;width:'+(full?40:32)+'px;height:'+(full?40:32)+'px;flex-shrink:0;border-radius:50%;background:white;border:2px solid #26b39d;font-size:20px;';
+          button.style.cssText='border:0;background:transparent;padding:0;display:flex;flex-direction:column;align-items:center;';button.append(face);
+          if(point.id==='beacon:0'){const star=document.createElement('span');star.textContent='\\u2605';star.style.cssText='position:absolute;right:-3px;bottom:-2px;border-radius:50%;background:#168c80;color:white;font-size:10px;width:12px;height:12px;';face.append(star);}return button;
         }
       }).node;
     };`,
@@ -52,6 +52,9 @@ test("bloom counts, direct exploration, reduced motion and phone layouts", async
           ({ dark }) => {
             for (const mode of ["stack", "swarm", "atmosphere", "micro"])
               for (const [count, friends] of [
+                [1, 0],
+                [1, 2],
+                [0, 12],
                 [2, 2],
                 [2, 25],
                 [2, 7],
@@ -83,25 +86,29 @@ test("bloom counts, direct exploration, reduced motion and phone layouts", async
           'section[data-mode="swarm"][data-count="20"][data-friends="11"]',
         );
         assert.equal(
-          await dense.getByTestId("map-constellation-overflow").textContent(),
-          "+13",
+          await dense.getByTestId("map-cluster-count").textContent(),
+          "👥 +11 · +13",
+        );
+        assert.equal(await dense.getByTestId("map-cluster-count").count(), 1);
+        assert.equal(
+          await dense.getByTestId("cluster-friend-count").count(),
+          0,
         );
         assert.equal(
-          await dense.getByTestId("cluster-friend-count").textContent(),
-          "11",
+          await dense.getByTestId("map-constellation-overflow").count(),
+          0,
         );
         assert.equal(
           await dense.getByTestId("cluster-friend-satellite").count(),
           0,
         );
         assert.equal(await dense.locator(".map-petal-item").count(), 7);
+        const microDense = page.locator(
+          'section[data-mode="micro"][data-count="20"][data-friends="11"]',
+        );
         assert.equal(
-          await page
-            .locator(
-              'section[data-mode="micro"] [data-testid="cluster-friend-count"]:visible',
-            )
-            .count(),
-          0,
+          await microDense.getByTestId("map-cluster-count").textContent(),
+          "👥 +11 · +18",
         );
         assert.equal(
           await page
@@ -144,7 +151,7 @@ test("bloom counts, direct exploration, reduced motion and phone layouts", async
         );
         await small.dispatchEvent("keydown", { key: "Escape" });
         assert.equal(await small.getAttribute("data-expanded"), null);
-        await small.getByTestId("cluster-friend-count").click();
+        await small.getByTestId("map-cluster-count").click();
         assert.equal(await page.evaluate(() => (window as any).opened), 1);
         assert.equal(
           await page.evaluate(() => (window as any).section),
@@ -170,13 +177,11 @@ test("bloom counts, direct exploration, reduced motion and phone layouts", async
           5,
         );
         assert.equal(
-          await microSmall
-            .getByTestId("map-constellation-overflow")
-            .isVisible(),
-          false,
+          await microSmall.getByTestId("map-cluster-count").textContent(),
+          "👥 +11",
         );
         assert.equal(
-          await microSmall.getByTestId("cluster-friend-count").isVisible(),
+          await microSmall.getByTestId("map-cluster-count").isVisible(),
           true,
         );
         await microSmall
@@ -186,14 +191,82 @@ test("bloom counts, direct exploration, reduced motion and phone layouts", async
           await page.evaluate(() => (window as any).selected),
           "beacon:4",
         );
-        const iconSmall=page.locator('section[data-mode="swarm"][data-count="2"][data-friends="2"] [data-testid="map-constellation"]');
-        assert.equal(await iconSmall.getByTestId("cluster-friend-satellite").count(),2);
-        assert.equal(await iconSmall.getByTestId("cluster-friend-count").isVisible(),false);
-        await iconSmall.locator('[data-member-id="beacon:0"]').dispatchEvent("click");
-        assert.equal(await iconSmall.getByTestId("cluster-friend-count").isVisible(),true);
-        assert.equal(await iconSmall.getByTestId("cluster-friend-satellite").first().isVisible(),false);
-        await iconSmall.getByTestId("cluster-friend-count").click();
-        assert.equal(await page.evaluate(() => (window as any).section),"Friends");
+        const iconSmall = page.locator(
+          'section[data-mode="swarm"][data-count="2"][data-friends="2"] [data-testid="map-constellation"]',
+        );
+        assert.equal(
+          await iconSmall.getByTestId("cluster-friend-satellite").count(),
+          2,
+        );
+        assert.equal(
+          await iconSmall.getByTestId("map-cluster-count").isVisible(),
+          false,
+        );
+        await iconSmall
+          .locator('[data-member-id="beacon:0"]')
+          .dispatchEvent("click");
+        assert.equal(
+          await iconSmall.getByTestId("map-cluster-count").isVisible(),
+          true,
+        );
+        assert.equal(
+          await iconSmall
+            .getByTestId("cluster-friend-satellite")
+            .first()
+            .isVisible(),
+          false,
+        );
+        await iconSmall.getByTestId("map-cluster-count").click();
+        assert.equal(
+          await page.evaluate(() => (window as any).section),
+          "Friends",
+        );
+        // Final compact capture at a real phone viewport, including friend-only groups.
+        await page.locator("section").evaluateAll((nodes) => {
+          for (const node of nodes) {
+            const section = node as HTMLElement;
+            const count = Number(section.dataset.count),
+              friends = Number(section.dataset.friends);
+            section.style.display =
+              section.dataset.mode === "stack" &&
+              ((count === 1 && friends === 0) ||
+                (count === 1 && friends === 2) ||
+                (count === 2 && friends === 7) ||
+                (count === 7 && friends === 18) ||
+                (count === 20 && friends === 11) ||
+                (count === 0 && friends === 12))
+                ? "flex"
+                : "none";
+          }
+        });
+        await page.evaluate(() => window.scrollTo(0, 0));
+        const friendOnly = page.locator(
+          'section[data-mode="stack"][data-count="0"]',
+        );
+        assert.equal(
+          await friendOnly.getByTestId("cluster-friend-count").textContent(),
+          "👥12",
+        );
+        await friendOnly.getByTestId("cluster-friend-count").click();
+        assert.equal(
+          await page.evaluate(() => (window as any).section),
+          "Friends",
+        );
+        const viewportErrors = await page
+          .locator(
+            '[data-testid="cluster-friend-satellite"]:visible,[data-testid="cluster-friend-count"]:visible,[data-testid="map-cluster-count"]:visible',
+          )
+          .evaluateAll(
+            (nodes) =>
+              nodes.filter((node) => {
+                const r = node.getBoundingClientRect();
+                return r.left < 0 || r.right > innerWidth;
+              }).length,
+          );
+        assert.equal(viewportErrors, 0);
+        await page.screenshot({
+          path: `.expo/cluster-bloom-qa/count-cleanup-${width}-${dark ? "dark" : "light"}.png`,
+        });
         await page.close();
       }
   } finally {

@@ -1,35 +1,19 @@
-import { CommunityAvatar } from "../components/CommunityAvatar";
-import { SquadIconPicker } from "../components/SquadIconPicker";
-import React, { useEffect, useId, useRef, useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
-import { FlashList } from "@shopify/flash-list";
-import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
-import { usePreventRemove } from "expo-router/react-navigation";
-import {
-  CalendarClock,
-  Check,
-  CircleHelp,
-  ChevronRight,
-  Radio,
-  MessageCircle,
-  Settings2,
-  Vote,
-  Layers3,
-} from "lucide-react-native";
+import { ActivityCard } from "@/src/features/beacons/ActivityCard";
+import { CommunityPublicBeacons } from "@/src/features/discovery/CommunityPublicBeacons";
+import { CommunityPublicProfile } from "@/src/features/discovery/CommunityPublicProfile";
+import { communityProfileMode } from "@/src/features/discovery/communityPublicProfileAccess";
 import {
   ProfileActions,
   ProfileLink,
   ProfileSection,
 } from "@/src/features/people/components/ProfilePrimitives";
-import { ActivityCard } from "@/src/features/beacons/ActivityCard";
-import { CommunityPublicBeacons } from "@/src/features/discovery/CommunityPublicBeacons";
-import { CommunityPublicProfile } from "@/src/features/discovery/CommunityPublicProfile";
-import { communityProfileMode } from "@/src/features/discovery/communityPublicProfileAccess";
-import { communityTypeLabel } from "@/src/features/social/communityPresentation";
 import { canViewProfile } from "@/src/features/profile/privacy";
 import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
-import { activityWhen, friendIds } from "@/src/shared/domain";
-import { matchesSearch } from "@/src/shared/search";
+import { communityTypeLabel } from "@/src/features/social/communityPresentation";
+import {
+  RelationshipDisclosure,
+  useCommunitySummary,
+} from "@/src/features/social/CommunityProfileAccess";
 import {
   canInviteWithPolicy,
   SOCIAL_ROLE_RANK,
@@ -38,11 +22,10 @@ import {
   SocialPolicyFields,
   type SocialPolicyValue,
 } from "@/src/features/social/SocialPolicyControls";
-import {
-  RelationshipDisclosure,
-  useCommunitySummary,
-} from "@/src/features/social/CommunityProfileAccess";
 import type { SocialMemberRole } from "@/src/features/social/types";
+import { ConfirmDialog } from "@/src/shared/Dialogs";
+import { activityWhen, friendIds } from "@/src/shared/domain";
+import { matchesSearch } from "@/src/shared/search";
 import { useBeacon } from "@/src/shared/store";
 import {
   Action,
@@ -56,14 +39,32 @@ import {
   Txt,
   useTheme,
 } from "@/src/shared/ui";
+import { FlashList } from "@shopify/flash-list";
+import { useLocalSearchParams, useNavigation, useRouter } from "expo-router";
+import { usePreventRemove } from "expo-router/react-navigation";
 import {
-  squadProfilePreviews,
+  CalendarClock,
+  Check,
+  ChevronRight,
+  CircleHelp,
+  Layers3,
+  MessageCircle,
+  Radio,
+  Settings2,
+  Vote,
+} from "lucide-react-native";
+import { useEffect, useId, useRef, useState } from "react";
+import { Pressable, ScrollView, Text, View } from "react-native";
+import { CommunityAvatar } from "../components/CommunityAvatar";
+import { SquadIconPicker } from "../components/SquadIconPicker";
+import {
   canOpenSquadProfile,
   squadHistory,
+  squadProfilePreviews,
   squadSizeLabel,
   visibleSquadMembers,
-  visibleSquadOrganizations,
   visibleSquadNetworks,
+  visibleSquadOrganizations,
 } from "../squadProfile";
 
 const tabs = ["Overview", "Members", "Activity", "Settings", "Invite"] as const;
@@ -144,7 +145,8 @@ export default function SquadProfileScreen() {
   } | null>(null);
   const [discardOpen, setDiscardOpen] = useState(false);
   const [leaveConfirmOpen, setLeaveConfirmOpen] = useState(false);
-  const [pendingMemberAction, setPendingMemberAction] = useState<PendingMemberAction | null>(null);
+  const [pendingMemberAction, setPendingMemberAction] =
+    useState<PendingMemberAction | null>(null);
   const [pendingDestination, setPendingDestination] = useState<{
     tab: SquadTab;
     settings?: SettingsCategory;
@@ -154,7 +156,11 @@ export default function SquadProfileScreen() {
     squadId && canOpenSquadProfile(data, squadId, userId)
       ? data.squads.find((item) => item.id === squadId)
       : undefined;
-  const profileMode = communityProfileMode(summary, !!memberSquad, summaryLoading);
+  const profileMode = communityProfileMode(
+    summary,
+    !!memberSquad,
+    summaryLoading,
+  );
   const isCurrentMember = profileMode === "member";
   const squad = isCurrentMember ? memberSquad : undefined;
   const viewerRole = data.squad_members.find(
@@ -238,8 +244,7 @@ export default function SquadProfileScreen() {
       policyDraft.invite_policy !== policyInitial.invite_policy);
 
   function changePolicyDraft(value: SocialPolicyValue) {
-    if (policyEditorKey)
-      setPolicyDraftState({ key: policyEditorKey, value });
+    if (policyEditorKey) setPolicyDraftState({ key: policyEditorKey, value });
   }
 
   usePreventRemove(policyDirty, ({ data: { action } }) => {
@@ -333,7 +338,12 @@ export default function SquadProfileScreen() {
 
   if (!userId || !squadId) {
     return (
-      <Screen title="Squad unavailable" eyebrow="SQUAD PROFILE" compactHeader create={false}>
+      <Screen
+        title="Squad unavailable"
+        eyebrow="SQUAD PROFILE"
+        compactHeader
+        create={false}
+      >
         <Empty
           title="This Squad profile is unavailable."
           body="This Squad profile is unavailable or your access has changed."
@@ -347,14 +357,24 @@ export default function SquadProfileScreen() {
   }
   if (profileMode === "loading") {
     return (
-      <Screen title="Squad profile" eyebrow="SQUAD PROFILE" compactHeader create={false}>
+      <Screen
+        title="Squad profile"
+        eyebrow="SQUAD PROFILE"
+        compactHeader
+        create={false}
+      >
         <Txt muted>Loading Squad profile…</Txt>
       </Screen>
     );
   }
   if (profileMode === "unavailable" || !summary) {
     return (
-      <Screen title="Squad unavailable" eyebrow="SQUAD PROFILE" compactHeader create={false}>
+      <Screen
+        title="Squad unavailable"
+        eyebrow="SQUAD PROFILE"
+        compactHeader
+        create={false}
+      >
         <Empty
           title="This Squad profile is unavailable."
           body="This Squad profile is unavailable or your access has changed."
@@ -375,7 +395,10 @@ export default function SquadProfileScreen() {
         showDemoNotice={false}
         create={false}
       >
-        <CommunityPublicProfile summary={summary} onSummaryChanged={refreshSummary} />
+        <CommunityPublicProfile
+          summary={summary}
+          onSummaryChanged={refreshSummary}
+        />
       </Screen>
     );
   }
@@ -387,11 +410,7 @@ export default function SquadProfileScreen() {
     activeSquadId,
     userId,
   );
-  const associatedNetworks = visibleSquadNetworks(
-    data,
-    activeSquadId,
-    userId,
-  );
+  const associatedNetworks = visibleSquadNetworks(data, activeSquadId, userId);
   const relationshipRows = [
     ...associatedOrganizations,
     ...associatedNetworks,
@@ -437,7 +456,10 @@ export default function SquadProfileScreen() {
     return relationshipRows.length ? (
       <RelationshipDisclosure
         contexts={relationshipRows.map((relation) => ({
-          parentType: relation.type === "organization" ? "space" as const : "organization" as const,
+          parentType:
+            relation.type === "organization"
+              ? ("space" as const)
+              : ("organization" as const),
           parentId: relation.id,
         }))}
         current={{ type: "squad", id: activeSquadId }}
@@ -446,11 +468,20 @@ export default function SquadProfileScreen() {
         title={title}
         onOpen={(related) => {
           if (related.entity_type === "squad")
-            router.push({ pathname: "/squad/[id]", params: { id: related.entity_id } });
+            router.push({
+              pathname: "/squad/[id]",
+              params: { id: related.entity_id },
+            });
           else if (related.entity_type === "space")
-            router.push({ pathname: "/space/[id]", params: { id: related.entity_id } });
+            router.push({
+              pathname: "/space/[id]",
+              params: { id: related.entity_id },
+            });
           else
-            router.push({ pathname: "/organization/[id]", params: { id: related.entity_id } });
+            router.push({
+              pathname: "/organization/[id]",
+              params: { id: related.entity_id },
+            });
         }}
       />
     ) : null;
@@ -472,14 +503,28 @@ export default function SquadProfileScreen() {
           ? `Plan routine · next ${preview.routine.next_occurrence_on ?? "date to be set"}`
           : `Plan · starts ${preview.plan.start_date}`;
     const Icon = isDecision
-      ? preview.decision.kind === "ping" ? CircleHelp : Vote
-      : isBeacon ? CalendarClock : Layers3;
+      ? preview.decision.kind === "ping"
+        ? CircleHelp
+        : Vote
+      : isBeacon
+        ? CalendarClock
+        : Layers3;
     const onPress = () => {
       if (isDecision)
-        router.push({ pathname: "/council/[id]", params: { id: preview.decision.id } });
+        router.push({
+          pathname: "/council/[id]",
+          params: { id: preview.decision.id },
+        });
       else if (isBeacon)
-        router.push({ pathname: "/activity/[id]", params: { id: preview.activity.id } });
-      else router.push({ pathname: "/plan/[id]", params: { id: preview.plan.id } });
+        router.push({
+          pathname: "/activity/[id]",
+          params: { id: preview.activity.id },
+        });
+      else
+        router.push({
+          pathname: "/plan/[id]",
+          params: { id: preview.plan.id },
+        });
     };
     return (
       <Pressable
@@ -492,8 +537,12 @@ export default function SquadProfileScreen() {
       >
         <Icon size={19} color={colors.green} />
         <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-          <Text style={styles.body} numberOfLines={1}>{title}</Text>
-          <Text style={styles.muted} numberOfLines={1}>{detail}</Text>
+          <Text style={styles.body} numberOfLines={1}>
+            {title}
+          </Text>
+          <Text style={styles.muted} numberOfLines={1}>
+            {detail}
+          </Text>
         </View>
         <Text style={[styles.body, { color: colors.green }]}>Open</Text>
       </Pressable>
@@ -552,7 +601,11 @@ export default function SquadProfileScreen() {
       create={false}
       headerAction={
         <IconButton
-          label={tab === "Settings" && settingsCategory ? "Back to Squad settings" : "Squad settings"}
+          label={
+            tab === "Settings" && settingsCategory
+              ? "Back to Squad settings"
+              : "Squad settings"
+          }
           onPress={() =>
             tab === "Settings" && settingsCategory
               ? backToSettings()
@@ -573,9 +626,18 @@ export default function SquadProfileScreen() {
             <View style={[styles.row, { gap: 11 }]}>
               <CommunityAvatar iconKey={squad.icon_key} size={44} />
               <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                <Text style={styles.h2} numberOfLines={1}>{squad.name}</Text>
+                <Text style={styles.h2} numberOfLines={1}>
+                  {squad.name}
+                </Text>
                 <Txt muted>
-                  {members.length} {members.length === 1 ? "member" : "members"} · {squad.discoverability === "public" ? "Public" : squad.discoverability === "community" ? "Community" : "Private"} Squad
+                  {members.length} {members.length === 1 ? "member" : "members"}{" "}
+                  ·{" "}
+                  {squad.discoverability === "public"
+                    ? "Public"
+                    : squad.discoverability === "community"
+                      ? "Community"
+                      : "Private"}{" "}
+                  Squad
                 </Txt>
               </View>
             </View>
@@ -593,14 +655,26 @@ export default function SquadProfileScreen() {
                 onPress={openPing}
                 icon={<Radio size={17} color={colors.green} />}
               />
-              <Button compact secondary title="Beacon" onPress={openBeaconCreate} />
+              <Button
+                compact
+                secondary
+                title="Beacon"
+                onPress={openBeaconCreate}
+              />
             </ProfileActions>
           </View>
 
           {overviewPreviews.length ? (
             <ProfileSection
               title="What's happening"
-              action={<Button compact secondary title="See all" onPress={() => selectTab("Activity")} />}
+              action={
+                <Button
+                  compact
+                  secondary
+                  title="See all"
+                  onPress={() => selectTab("Activity")}
+                />
+              }
             >
               {overviewPreviews.map((preview) => previewRow(preview))}
             </ProfileSection>
@@ -622,24 +696,47 @@ export default function SquadProfileScreen() {
 
           <ProfileSection
             title={`Members · ${members.length}`}
-            action={<Button compact secondary title="View members" onPress={() => selectTab("Members")} />}
+            action={
+              <Button
+                compact
+                secondary
+                title="View members"
+                onPress={() => selectTab("Members")}
+              />
+            }
           >
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
-              contentContainerStyle={{ flexDirection: "row", gap: 14, paddingVertical: 4 }}
+              contentContainerStyle={{
+                flexDirection: "row",
+                gap: 14,
+                paddingVertical: 4,
+              }}
             >
               {members.slice(0, 6).map(({ member, profile }) => (
                 <Pressable
                   key={member.user_id}
                   accessibilityRole={profile ? "button" : undefined}
-                  accessibilityLabel={profile ? `View ${profile.name}'s profile` : "Squad member"}
-                  onPress={profile ? () => router.push({ pathname: "/person/[id]", params: { id: member.user_id } }) : undefined}
+                  accessibilityLabel={
+                    profile ? `View ${profile.name}'s profile` : "Squad member"
+                  }
+                  onPress={
+                    profile
+                      ? () =>
+                          router.push({
+                            pathname: "/person/[id]",
+                            params: { id: member.user_id },
+                          })
+                      : undefined
+                  }
                   style={{ width: 62, alignItems: "center", gap: 5 }}
                 >
                   <ProfileAvatar profile={profile} size={42} />
                   <Text style={styles.muted} numberOfLines={1}>
-                    {member.user_id === userId ? "You" : profile?.name ?? "Member"}
+                    {member.user_id === userId
+                      ? "You"
+                      : (profile?.name ?? "Member")}
                   </Text>
                 </Pressable>
               ))}
@@ -660,7 +757,8 @@ export default function SquadProfileScreen() {
           data={members.filter(
             ({ profile }) =>
               !memberSearch.trim() ||
-              (!!profile && matchesSearch(memberSearch, profile.name, profile.username)),
+              (!!profile &&
+                matchesSearch(memberSearch, profile.name, profile.username)),
           )}
           keyExtractor={({ member }) => member.user_id}
           getItemType={() => "member"}
@@ -671,71 +769,160 @@ export default function SquadProfileScreen() {
               <View style={styles.card}>
                 <Text style={styles.h2}>Squad members</Text>
                 <Txt muted>
-                  {members.length} {members.length === 1 ? "current member" : "current members"}. Names and photos follow each person’s profile privacy.
+                  {members.length}{" "}
+                  {members.length === 1 ? "current member" : "current members"}.
+                  Names and photos follow each person’s profile privacy.
                 </Txt>
               </View>
               {canInviteMembers ? (
                 <View style={{ alignSelf: "flex-start" }}>
-                  <Button compact secondary title="Invite people" onPress={() => selectTab("Invite")} />
+                  <Button
+                    compact
+                    secondary
+                    title="Invite people"
+                    onPress={() => selectTab("Invite")}
+                  />
                 </View>
               ) : null}
               {canReviewRequests && joinRequests.length ? (
                 <View style={[styles.card, { gap: 9 }]}>
                   <Text style={styles.h2}>Join requests</Text>
                   {joinRequests.map((request) => {
-                    const profile = data.profiles.find((item) => item.id === request.user_id);
-                    const visible = !!(profile && canViewProfile(data, profile, userId));
-                    const name = visible && profile ? profile.name : "Community member";
+                    const profile = data.profiles.find(
+                      (item) => item.id === request.user_id,
+                    );
+                    const visible = !!(
+                      profile && canViewProfile(data, profile, userId)
+                    );
+                    const name =
+                      visible && profile ? profile.name : "Community member";
                     return (
-                      <View key={request.user_id} style={[styles.row, { flexWrap: "wrap", justifyContent: "space-between" }]}>
+                      <View
+                        key={request.user_id}
+                        style={[
+                          styles.row,
+                          { flexWrap: "wrap", justifyContent: "space-between" },
+                        ]}
+                      >
                         <Text style={[styles.body, { flex: 1 }]}>{name}</Text>
-                        <Button compact title="Approve" onPress={() => setPendingMemberAction({ kind: "approve", userId: request.user_id, name })} />
-                        <Button compact secondary title="Decline" onPress={() => setPendingMemberAction({ kind: "decline", userId: request.user_id, name })} />
+                        <Button
+                          compact
+                          title="Approve"
+                          onPress={() =>
+                            setPendingMemberAction({
+                              kind: "approve",
+                              userId: request.user_id,
+                              name,
+                            })
+                          }
+                        />
+                        <Button
+                          compact
+                          secondary
+                          title="Decline"
+                          onPress={() =>
+                            setPendingMemberAction({
+                              kind: "decline",
+                              userId: request.user_id,
+                              name,
+                            })
+                          }
+                        />
                       </View>
                     );
                   })}
                 </View>
               ) : null}
               {members.length > 8 ? (
-                <Field label="Search Squad members" value={memberSearch} onChangeText={setMemberSearch} placeholder="Name or username" />
+                <Field
+                  label="Search Squad members"
+                  value={memberSearch}
+                  onChangeText={setMemberSearch}
+                  placeholder="Name or username"
+                />
               ) : null}
             </View>
           }
-          ListEmptyComponent={<Empty title="No members match" body="Try another name or username." />}
+          ListEmptyComponent={
+            <Empty
+              title="No members match"
+              body="Try another name or username."
+            />
+          }
           renderItem={({ item: { member, profile } }) => {
             const isSelf = member.user_id === userId;
-            const memberName = isSelf ? "You" : profile?.name ?? "Squad member";
+            const memberName = isSelf
+              ? "You"
+              : (profile?.name ?? "Squad member");
             const canRemove =
               member.role !== "owner" &&
-              (isSelf || isOwner || (viewerRole === "admin" && member.role === "member"));
+              (isSelf ||
+                isOwner ||
+                (viewerRole === "admin" && member.role === "member"));
             const canManageRole =
-              isAdmin && member.role !== "owner" && !!viewerRole &&
+              isAdmin &&
+              member.role !== "owner" &&
+              !!viewerRole &&
               SOCIAL_ROLE_RANK[viewerRole] > SOCIAL_ROLE_RANK[member.role] &&
               ["coowner", "admin", "elder", "member"].some(
-                (candidate) => SOCIAL_ROLE_RANK[viewerRole] > SOCIAL_ROLE_RANK[candidate as SocialMemberRole],
+                (candidate) =>
+                  SOCIAL_ROLE_RANK[viewerRole] >
+                  SOCIAL_ROLE_RANK[candidate as SocialMemberRole],
               );
             return (
               <View style={[styles.card, { gap: 9 }]}>
                 <View style={styles.row}>
                   <ProfileAvatar profile={profile} size={42} />
                   <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-                    <Text style={styles.body} numberOfLines={1}>{memberName}</Text>
+                    <Text style={styles.body} numberOfLines={1}>
+                      {memberName}
+                    </Text>
                     <Text style={styles.muted}>
-                      {member.role === "owner" ? "Owner" : member.role === "admin" ? "Admin" : "Member"}
+                      {member.role === "owner"
+                        ? "Owner"
+                        : member.role === "admin"
+                          ? "Admin"
+                          : "Member"}
                     </Text>
                   </View>
                   {profile && !isSelf ? (
-                    <Button compact secondary title="Profile" onPress={() => router.push({ pathname: "/person/[id]", params: { id: member.user_id } })} />
+                    <Button
+                      compact
+                      secondary
+                      title="Profile"
+                      onPress={() =>
+                        router.push({
+                          pathname: "/person/[id]",
+                          params: { id: member.user_id },
+                        })
+                      }
+                    />
                   ) : null}
                 </View>
                 {canManageRole ? (
-                  <Button compact secondary title="Manage role" onPress={() => {
-                    setMemberToManage(member.user_id);
-                    setMemberRole(member.role as SocialMemberRole);
-                  }} />
+                  <Button
+                    compact
+                    secondary
+                    title="Manage role"
+                    onPress={() => {
+                      setMemberToManage(member.user_id);
+                      setMemberRole(member.role as SocialMemberRole);
+                    }}
+                  />
                 ) : null}
                 {canRemove ? (
-                  <Button compact secondary title={isSelf ? "Leave" : "Remove"} onPress={() => setPendingMemberAction({ kind: isSelf ? "leave" : "remove", userId: member.user_id, name: memberName })} />
+                  <Button
+                    compact
+                    secondary
+                    title={isSelf ? "Leave" : "Remove"}
+                    onPress={() =>
+                      setPendingMemberAction({
+                        kind: isSelf ? "leave" : "remove",
+                        userId: member.user_id,
+                        name: memberName,
+                      })
+                    }
+                  />
                 ) : null}
               </View>
             );
@@ -838,7 +1025,9 @@ export default function SquadProfileScreen() {
         <>
           <View style={styles.card}>
             <Text style={styles.h2}>Squad settings</Text>
-            <Txt muted>Your role: {isOwner ? "Owner" : (viewerRole ?? "Member")}</Txt>
+            <Txt muted>
+              Your role: {isOwner ? "Owner" : (viewerRole ?? "Member")}
+            </Txt>
           </View>
           {settingsCategories.map((category) => (
             <ProfileLink
@@ -904,11 +1093,16 @@ export default function SquadProfileScreen() {
         <>
           <View style={styles.card}>
             <Text style={styles.h2}>Access & membership</Text>
-            <Txt muted>Your role: {isOwner ? "Owner" : (viewerRole ?? "Member")}</Txt>
+            <Txt muted>
+              Your role: {isOwner ? "Owner" : (viewerRole ?? "Member")}
+            </Txt>
           </View>
           {isAdmin && policyDraft ? (
             <View style={[styles.card, { gap: 12 }]}>
-              <SocialPolicyFields value={policyDraft} onChange={changePolicyDraft} />
+              <SocialPolicyFields
+                value={policyDraft}
+                onChange={changePolicyDraft}
+              />
               <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
                 <Action
                   title="Save"
@@ -928,7 +1122,17 @@ export default function SquadProfileScreen() {
           ) : (
             <View style={styles.card}>
               <Txt muted>
-                {squad.discoverability === "public" ? "Public" : squad.discoverability === "community" ? "Community" : "Private"} discovery · {squad.join_mode === "open" ? "Anyone can join" : squad.join_mode === "request" ? "Request to join" : "Invite only"}
+                {squad.discoverability === "public"
+                  ? "Public"
+                  : squad.discoverability === "community"
+                    ? "Community"
+                    : "Private"}{" "}
+                discovery ·{" "}
+                {squad.join_mode === "open"
+                  ? "Anyone can join"
+                  : squad.join_mode === "request"
+                    ? "Request to join"
+                    : "Invite only"}
               </Txt>
               <Txt muted>Only Squad admins can change access settings.</Txt>
             </View>
@@ -941,7 +1145,8 @@ export default function SquadProfileScreen() {
           <View style={styles.card}>
             <Text style={styles.h2}>Members</Text>
             <Txt muted>
-              Current Squad membership is managed separately from Network and Organization connections.
+              Current Squad membership is managed separately from Network and
+              Organization connections.
             </Txt>
           </View>
           <ProfileLink
@@ -950,18 +1155,31 @@ export default function SquadProfileScreen() {
             onPress={() => selectTab("Members")}
           />
           {canInviteMembers ? (
-            <ProfileLink title="Invite people" onPress={() => selectTab("Invite")} />
+            <ProfileLink
+              title="Invite people"
+              onPress={() => selectTab("Invite")}
+            />
           ) : null}
         </>
       ) : null}
 
       {tab === "Settings" && settingsCategory === "connections" ? (
         <>
-          {relationshipRows.length ? relationshipSection("Direct associations") : <Txt muted>No visible direct connections.</Txt>}
+          {relationshipRows.length ? (
+            relationshipSection("Direct associations")
+          ) : (
+            <Txt muted>No visible direct connections.</Txt>
+          )}
           {isOwner && members.length >= 31 ? (
             <View style={{ gap: 8 }}>
-              <Txt muted>{members.length} members · {squadSizeLabel(members.length)}. Group related Squads in an Organization.</Txt>
-              <Button title="Organize as an Organization" onPress={openOrganizeSpace} />
+              <Txt muted>
+                {members.length} members · {squadSizeLabel(members.length)}.
+                Group related Squads in an Organization.
+              </Txt>
+              <Button
+                title="Organize as an Organization"
+                onPress={openOrganizeSpace}
+              />
             </View>
           ) : null}
         </>
@@ -985,7 +1203,11 @@ export default function SquadProfileScreen() {
             }
           />
           {!isOwner ? (
-            <Button secondary title="Leave Squad" onPress={() => setLeaveConfirmOpen(true)} />
+            <Button
+              secondary
+              title="Leave Squad"
+              onPress={() => setLeaveConfirmOpen(true)}
+            />
           ) : (
             <View style={styles.card}>
               <Txt muted>The owner role stays with the Squad owner.</Txt>
@@ -994,7 +1216,7 @@ export default function SquadProfileScreen() {
         </>
       ) : null}
 
-      <Sheet
+      <ConfirmDialog
         title="Discard access changes?"
         visible={discardOpen}
         onClose={() => {
@@ -1002,74 +1224,97 @@ export default function SquadProfileScreen() {
           setPendingDestination(null);
           pendingRemoveAction.current = null;
         }}
+        onConfirm={confirmDiscard}
+        confirmLabel={"Discard changes"}
+        cancelLabel={"Keep editing"}
+        closeOnConfirm={false}
+        destructive
       >
         <View style={{ gap: 10 }}>
           <Txt>Your access policy changes have not been saved.</Txt>
-          <Button
-            secondary
-            title="Keep editing"
-            onPress={() => {
-              setDiscardOpen(false);
-              setPendingDestination(null);
-              pendingRemoveAction.current = null;
-            }}
-          />
-          <Button title="Discard changes" onPress={confirmDiscard} />
         </View>
-      </Sheet>
-      <Sheet
+      </ConfirmDialog>
+      <ConfirmDialog
         title="Leave this Squad?"
         visible={leaveConfirmOpen}
         onClose={() => setLeaveConfirmOpen(false)}
+        onConfirm={async () => {
+          await act("remove_member", { id: squad.id, user_id: userId });
+          setLeaveConfirmOpen(false);
+          router.replace("/(tabs)/squads");
+        }}
+        confirmLabel={"Leave Squad"}
+        cancelLabel={"Cancel"}
+        closeOnConfirm={false}
+        destructive
       >
         <View style={{ gap: 10 }}>
-          <Txt>You will lose access to this Squad’s chat, roster, and shared activity.</Txt>
-          <Button secondary title="Cancel" onPress={() => setLeaveConfirmOpen(false)} />
-          <Action
-            title="Leave Squad"
-            run={async () => {
-              await act("remove_member", { id: squad.id, user_id: userId });
-              setLeaveConfirmOpen(false);
-              router.replace("/(tabs)/squads");
-            }}
-          />
+          <Txt>
+            You will lose access to this Squad’s chat, roster, and shared
+            activity.
+          </Txt>
         </View>
-      </Sheet>
-      <Sheet
-        title={pendingMemberAction?.kind === "approve" ? "Approve join request?" : pendingMemberAction?.kind === "decline" ? "Decline join request?" : pendingMemberAction?.kind === "leave" ? "Leave this Squad?" : "Remove member?"}
+      </ConfirmDialog>
+      <ConfirmDialog
+        title={
+          pendingMemberAction?.kind === "approve"
+            ? "Approve join request?"
+            : pendingMemberAction?.kind === "decline"
+              ? "Decline join request?"
+              : pendingMemberAction?.kind === "leave"
+                ? "Leave this Squad?"
+                : "Remove member?"
+        }
         visible={!!pendingMemberAction}
         onClose={() => setPendingMemberAction(null)}
+        onConfirm={async () => {
+          const pending = pendingMemberAction;
+          if (!pending) return;
+          if (pending.kind === "approve")
+            await act("approve_squad_join_request", {
+              squad_id: squad.id,
+              user_id: pending.userId,
+            });
+          else if (pending.kind === "decline")
+            await act("deny_squad_join_request", {
+              squad_id: squad.id,
+              user_id: pending.userId,
+            });
+          else
+            await act("remove_member", {
+              id: squad.id,
+              user_id: pending.userId,
+            });
+          setPendingMemberAction(null);
+          if (pending.kind === "leave") router.replace("/(tabs)/squads");
+        }}
+        confirmLabel={
+          pendingMemberAction?.kind === "approve"
+            ? "Approve"
+            : pendingMemberAction?.kind === "decline"
+              ? "Decline"
+              : pendingMemberAction?.kind === "leave"
+                ? "Leave Squad"
+                : "Remove member"
+        }
+        cancelLabel={"Cancel"}
+        closeOnConfirm={false}
+        destructive={pendingMemberAction?.kind !== "approve"}
       >
         {pendingMemberAction ? (
           <View style={{ gap: 10 }}>
             <Txt>
               {pendingMemberAction.kind === "approve"
                 ? `${pendingMemberAction.name} will become a Squad member.`
-                : pendingMemberAction.kind === "decline"
+                : pendingMemberAction?.kind === "decline"
                   ? `The join request from ${pendingMemberAction.name} will be declined.`
-                  : pendingMemberAction.kind === "leave"
+                  : pendingMemberAction?.kind === "leave"
                     ? "You will lose access to this Squad."
                     : `${pendingMemberAction.name} will lose access to this Squad.`}
             </Txt>
-            <Button secondary title="Cancel" onPress={() => setPendingMemberAction(null)} />
-            <Action
-              title={pendingMemberAction.kind === "approve" ? "Approve" : pendingMemberAction.kind === "decline" ? "Decline" : pendingMemberAction.kind === "leave" ? "Leave Squad" : "Remove member"}
-              run={async () => {
-                const pending = pendingMemberAction;
-                if (!pending) return;
-                if (pending.kind === "approve")
-                  await act("approve_squad_join_request", { squad_id: squad.id, user_id: pending.userId });
-                else if (pending.kind === "decline")
-                  await act("deny_squad_join_request", { squad_id: squad.id, user_id: pending.userId });
-                else
-                  await act("remove_member", { id: squad.id, user_id: pending.userId });
-                setPendingMemberAction(null);
-                if (pending.kind === "leave") router.replace("/(tabs)/squads");
-              }}
-            />
           </View>
         ) : null}
-      </Sheet>
+      </ConfirmDialog>
 
       <Sheet
         title="Organize this Squad as an Organization"

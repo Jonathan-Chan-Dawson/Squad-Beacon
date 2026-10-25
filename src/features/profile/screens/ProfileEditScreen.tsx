@@ -1,4 +1,23 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import { ChatKeyboardFrame } from "@/src/features/messages/ChatKeyboard";
+import { MiniAvatar } from "@/src/features/people/MiniAvatar";
+import {
+  Chip,
+  GlassBar,
+  useDesignTheme,
+  useReducedMotion,
+} from "@/src/shared/design-system";
+import { ConfirmDialog } from "@/src/shared/Dialogs";
+import { useBeacon } from "@/src/shared/store";
+import { supabase } from "@/src/shared/supabase";
+import type { Profile } from "@/src/shared/types";
+import { Button, Field } from "@/src/shared/ui";
+import { router, useLocalSearchParams, useNavigation } from "expo-router";
+import {
+  usePreventRemove,
+  type NavigationAction,
+} from "expo-router/react-navigation";
+import { X } from "lucide-react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Animated,
   Modal,
@@ -9,33 +28,14 @@ import {
   View,
   type ViewProps,
 } from "react-native";
-import { router, useLocalSearchParams, useNavigation } from "expo-router";
-import {
-  usePreventRemove,
-  type NavigationAction,
-} from "expo-router/react-navigation";
-import { X } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useBeacon } from "@/src/shared/store";
-import { supabase } from "@/src/shared/supabase";
-import type { Profile } from "@/src/shared/types";
-import { Button, Field, Sheet } from "@/src/shared/ui";
-import {
-  Chip,
-  GlassBar,
-  useDesignTheme,
-  useReducedMotion,
-} from "@/src/shared/design-system";
-import { ChatKeyboardFrame } from "@/src/features/messages/ChatKeyboard";
-import { ProfileAvatar } from "../ProfileAvatar";
-import { MiniAvatar } from "@/src/features/people/MiniAvatar";
 import { uploadAvatar } from "../avatar";
-import { ProfileSurveyContent } from "../ProfileSurvey";
 import {
   EditorAspirations,
   EditorIdentity,
   EditorInterests,
 } from "../components/ProfileEditorChoices";
+import { ProfileAvatar } from "../ProfileAvatar";
 import {
   profileEditorDraft,
   profileEditorPayload,
@@ -43,6 +43,7 @@ import {
   validateProfileEditor,
   type ProfileEditorDraft,
 } from "../profileEditorDraft";
+import { ProfileSurveyContent } from "../ProfileSurvey";
 
 function EditorKeyboardFrame({ children, style, ...props }: ViewProps) {
   return (
@@ -617,48 +618,40 @@ function Editor({ profile }: { profile: Profile }) {
           }}
         />
       </GlassBar>
-      <Sheet
+      <ConfirmDialog
         title="Discard your changes?"
         visible={discardOpen}
         onClose={() => {
           setDiscardOpen(false);
           setExitAction(null);
         }}
+        onConfirm={() => {
+          setDiscardOpen(false);
+          setAllowExit(true);
+        }}
+        confirmLabel="Discard changes"
+        cancelLabel="Keep editing"
+        closeOnConfirm={false}
+        destructive
       >
         <Text style={{ color: colors.textPrimary, fontSize: 16 }}>
           Your unsaved profile changes will be lost.
         </Text>
-        <Button
-          title="Keep editing"
-          onPress={() => {
-            setDiscardOpen(false);
-            setExitAction(null);
-          }}
-        />
-        <Button
-          title="Discard changes"
-          secondary
-          onPress={() => {
-            setDiscardOpen(false);
-            setAllowExit(true);
-          }}
-        />
-      </Sheet>
-      <Sheet
+      </ConfirmDialog>
+      <ConfirmDialog
         title="Retake profile survey?"
         visible={retakeConfirm}
         onClose={() => setRetakeConfirm(false)}
+        onConfirm={discardAndRetake}
+        confirmLabel="Discard changes and retake"
+        cancelLabel="Keep editing"
+        closeOnConfirm={false}
+        destructive
       >
         <Text style={{ color: colors.textPrimary, fontSize: 16 }}>
           Discard the changes in this editor before starting the survey.
         </Text>
-        <Button title="Keep editing" onPress={() => setRetakeConfirm(false)} />
-        <Button
-          title="Discard changes and retake"
-          secondary
-          onPress={discardAndRetake}
-        />
-      </Sheet>
+      </ConfirmDialog>
       <Modal
         visible={surveyOpen}
         animationType={reducedMotion ? "none" : "slide"}

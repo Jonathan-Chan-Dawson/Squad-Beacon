@@ -1,3 +1,4 @@
+import { useConfirmation } from "@/src/shared/Dialogs";
 import React, { useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { router, useLocalSearchParams, type Href } from "expo-router";
@@ -28,6 +29,7 @@ export default function MyCollectionScreen() {
     ? params.section
     : undefined;
   const groups = personalCollections(data, userId);
+  const { requestConfirmation, confirmationDialog } = useConfirmation();
   const mutationLock = useRef(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -416,7 +418,14 @@ export default function MyCollectionScreen() {
                     disabled={!!busy}
                     title={`Delete ${row.name}`}
                     onPress={() =>
-                      void mutate(row.id, "delete_template", { id: row.id })
+                      requestConfirmation({
+                        title: "Delete this template?",
+                        message:
+                          "This permanently deletes the template. Beacons already created from it remain.",
+                        confirmLabel: "Delete template",
+                        destructive: true,
+                        onConfirm: () => act("delete_template", { id: row.id }),
+                      })
                     }
                   />
                 </View>
@@ -425,6 +434,7 @@ export default function MyCollectionScreen() {
           )}
         </>
       )}
+      {confirmationDialog}
     </Screen>
   );
 }

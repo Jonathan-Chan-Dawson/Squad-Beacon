@@ -1,21 +1,33 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import { AvatarToggle } from "@/src/features/profile/AvatarToggle";
+import { profileSavePayload } from "@/src/features/profile/profileEditorDraft";
 import {
-  AppState,
-  Platform,
-  Linking,
-  Pressable,
-  Switch,
-  Text,
-  View,
-} from "react-native";
+  clearPush,
+  enablePush,
+  stopDeviceLocation,
+} from "@/src/platform/device";
+import {
+  Skeleton,
+  uiHaptics,
+  useReducedMotion,
+} from "@/src/shared/design-system";
+import { ConfirmDialog } from "@/src/shared/Dialogs";
+import { usePreferences } from "@/src/shared/preferences";
+import { useBeacon } from "@/src/shared/store";
+import { supabase } from "@/src/shared/supabase";
+import type { Audience, Profile } from "@/src/shared/types";
+import {
+  Action,
+  Button,
+  Chips,
+  Field,
+  Screen,
+  Sheet,
+  Txt,
+  useTheme,
+} from "@/src/shared/ui";
+import { useNow } from "@/src/shared/useNow";
 import Constants, { ExecutionEnvironment } from "expo-constants";
 import { router, type Href } from "expo-router";
-import Animated, {
-  FadeInDown,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from "react-native-reanimated";
 import {
   Bell,
   BellOff,
@@ -35,34 +47,22 @@ import {
   UsersRound,
   type LucideIcon,
 } from "lucide-react-native";
-import { AvatarToggle } from "@/src/features/profile/AvatarToggle";
-import { useBeacon } from "@/src/shared/store";
-import { useNow } from "@/src/shared/useNow";
-import { usePreferences } from "@/src/shared/preferences";
-import { ThemePicker } from "./ThemePicker";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  stopDeviceLocation,
-  enablePush,
-  clearPush,
-} from "@/src/platform/device";
-import { supabase } from "@/src/shared/supabase";
-import {
-  Skeleton,
-  uiHaptics,
-  useReducedMotion,
-} from "@/src/shared/design-system";
-import {
-  Action,
-  Button,
-  Chips,
-  Field,
-  Screen,
-  Sheet,
-  Txt,
-  useTheme,
-} from "@/src/shared/ui";
-import type { Audience, Profile } from "@/src/shared/types";
-import { SettingsGroup, SettingsRow } from "./SettingsRow";
+  AppState,
+  Linking,
+  Platform,
+  Pressable,
+  Switch,
+  Text,
+  View,
+} from "react-native";
+import Animated, {
+  FadeInDown,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
+} from "react-native-reanimated";
 import {
   defaultAudienceOptions,
   eligibleDefaultTargets,
@@ -71,22 +71,23 @@ import {
 import {
   readViewerDeviceDefaults,
   writeViewerDeviceDefaults,
-  type ViewerDeviceDefaults,
   type SonarDurationMinutes,
+  type ViewerDeviceDefaults,
 } from "./deviceDefaults";
+import {
+  readLocationPermissionState,
+  requestForegroundLocation,
+  type LocationPermissionState,
+} from "./locationPermissions";
 import {
   acknowledgePushRegistration,
   clearPushRegistrationReceipt,
   readDeviceNotificationState,
   type DeviceNotificationState,
 } from "./notificationState";
-import {
-  readLocationPermissionState,
-  requestForegroundLocation,
-  type LocationPermissionState,
-} from "./locationPermissions";
 import QuietHoursPicker from "./QuietHoursPicker";
-import { profileSavePayload } from "@/src/features/profile/profileEditorDraft";
+import { SettingsGroup, SettingsRow } from "./SettingsRow";
+import { ThemePicker } from "./ThemePicker";
 
 type Panel =
   | "quiet"
@@ -1075,34 +1076,30 @@ function SettingsForm({ profile }: { profile: Profile }) {
         ) : null}
         {message ? <Txt>{message}</Txt> : null}
       </Sheet>
-      <Sheet
+      <ConfirmDialog
         title="Unblock this account?"
         visible={unblockId !== null}
         onClose={() => setUnblockId(null)}
+        onConfirm={async () => {
+          requireViewer();
+          if (
+            !unblockId ||
+            !blocks.some((block) => block.blocked_id === unblockId)
+          )
+            throw new Error("This block is no longer available.");
+          await act("unblock", { id: unblockId });
+          setUnblockId(null);
+        }}
+        confirmLabel={"Unblock account"}
+        cancelLabel={"Keep blocked"}
+        closeOnConfirm={false}
+        destructive
       >
         <Txt>
           They may be able to see what your current privacy settings allow.
           Friendships and location sharing are not restored.
         </Txt>
-        <Action
-          title="Unblock account"
-          run={async () => {
-            requireViewer();
-            if (
-              !unblockId ||
-              !blocks.some((block) => block.blocked_id === unblockId)
-            )
-              throw new Error("This block is no longer available.");
-            await act("unblock", { id: unblockId });
-            setUnblockId(null);
-          }}
-        />
-        <Button
-          secondary
-          title="Keep blocked"
-          onPress={() => setUnblockId(null)}
-        />
-      </Sheet>
+      </ConfirmDialog>
     </Screen>
   );
 }

@@ -1,8 +1,9 @@
-import React, { useCallback, useRef, useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
-import { router, useFocusEffect } from "expo-router";
+import { ConfirmDialog } from "@/src/shared/Dialogs";
 import { useBeacon } from "@/src/shared/store";
-import { Action, Button, Sheet, Txt, useTheme } from "@/src/shared/ui";
+import { Button, Sheet, Txt, useTheme } from "@/src/shared/ui";
+import { router, useFocusEffect } from "expo-router";
+import { useCallback, useRef, useState } from "react";
+import { Pressable, ScrollView, Text, View } from "react-native";
 import {
   discardCreationDraft,
   listCreationDraftSummaries,
@@ -194,39 +195,33 @@ export function CreationSavedDrafts({ savedToken }: { savedToken?: string }) {
       >
         {rows.map((row) => pill(row, true))}
       </Sheet>
-      <Sheet
+      <ConfirmDialog
         title="Delete saved draft?"
         visible={!!removing}
         onClose={() => setRemoving(null)}
-        footer={
-          <Button
-            secondary
-            title="Keep draft"
-            onPress={() => setRemoving(null)}
-          />
-        }
+        onConfirm={async () => {
+          if (!userId || !removing) return;
+          const { row, epoch } = removing;
+          await discardCreationDraft(
+            userId,
+            row.token,
+            () => getViewerEpoch() === epoch,
+          );
+          if (getViewerEpoch() !== epoch) return;
+          setRemoving(null);
+          await load();
+        }}
+        confirmLabel={"Delete draft"}
+        cancelLabel={"Cancel"}
+        closeOnConfirm={false}
+        destructive
       >
         <Txt>Delete “{removing?.row.title}” from this device?</Txt>
         <Txt muted>
           This removes only this saved draft. It does not affect templates or
           published Beacons.
         </Txt>
-        <Action
-          title="Delete draft"
-          run={async () => {
-            if (!userId || !removing) return;
-            const { row, epoch } = removing;
-            await discardCreationDraft(
-              userId,
-              row.token,
-              () => getViewerEpoch() === epoch,
-            );
-            if (getViewerEpoch() !== epoch) return;
-            setRemoving(null);
-            await load();
-          }}
-        />
-      </Sheet>
+      </ConfirmDialog>
     </View>
   );
 }

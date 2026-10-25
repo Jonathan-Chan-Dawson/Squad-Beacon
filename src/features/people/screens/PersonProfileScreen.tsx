@@ -1,22 +1,11 @@
-import React, { useState } from "react";
-import { Text, View } from "react-native";
+import { selectPersonPreview } from "@/src/features/people/previews/personPreview";
 import {
   ProfileExperience,
   type ProfileTab,
 } from "@/src/features/profile/components/ProfileExperience";
-import { Redirect, router, useLocalSearchParams } from "expo-router";
-import {
-  MapPin,
-  MessageCircle,
-  Settings,
-  ShieldCheck,
-  Star,
-} from "lucide-react-native";
-import { selectPersonPreview } from "@/src/features/people/previews/personPreview";
-import { ProfileLink } from "@/src/features/people/components/ProfilePrimitives";
-import { useNow } from "@/src/shared/useNow";
-import { useBeacon } from "@/src/shared/store";
 import { Skeleton } from "@/src/shared/design-system";
+import { ConfirmDialog, QuickChoiceDialog } from "@/src/shared/Dialogs";
+import { useBeacon } from "@/src/shared/store";
 import {
   Action,
   Button,
@@ -28,6 +17,17 @@ import {
   Txt,
   useTheme,
 } from "@/src/shared/ui";
+import { useNow } from "@/src/shared/useNow";
+import { Redirect, router, useLocalSearchParams } from "expo-router";
+import {
+  MapPin,
+  MessageCircle,
+  Settings,
+  ShieldCheck,
+  Star,
+} from "lucide-react-native";
+import { useRef, useState } from "react";
+import { Text, View } from "react-native";
 
 export default function PersonProfileScreen() {
   const { id: routeId } = useLocalSearchParams<{ id: string }>();
@@ -52,6 +52,16 @@ export default function PersonProfileScreen() {
   const [panel, setPanel] = useState<
     "safety" | "report" | "block" | "friend" | "remove" | null
   >(null);
+  const returnMenu = useRef<"friend" | "safety" | null>(null);
+  const closeToMenu = (menu: "friend" | "safety") => {
+    returnMenu.current = menu;
+    setPanel(null);
+  };
+  const resumeMenu = () => {
+    const menu = returnMenu.current;
+    returnMenu.current = null;
+    if (menu) setPanel(menu);
+  };
   const [reason, setReason] = useState("");
   const [starBusy, setStarBusy] = useState(false);
   const [starError, setStarError] = useState("");
@@ -294,58 +304,60 @@ export default function PersonProfileScreen() {
           {starError}
         </Text>
       ) : null}
-      <Sheet
+      <QuickChoiceDialog
         title="Safety & Privacy"
         visible={panel === "safety"}
         onClose={() => setPanel(null)}
-      >
-        <Txt muted>
-          Choose how you connect and what you share with this person.
-        </Txt>
-        <ProfileLink
-          title="Your privacy settings"
-          onPress={() => {
-            setPanel(null);
-            router.push("/settings/privacy");
-          }}
-        />
-        <ProfileLink
-          title="Report account"
-          onPress={() => setPanel("report")}
-        />
-        <ProfileLink title="Block account" onPress={() => setPanel("block")} />
-      </Sheet>
-      <Sheet
+        description="Choose how you connect and what you share with this person."
+        items={[
+          {
+            label: "Your privacy settings",
+            onPress: () => router.push("/settings/privacy"),
+          },
+          { label: "Report account", onPress: () => setPanel("report") },
+          {
+            label: "Block account",
+            destructive: true,
+            onPress: () => setPanel("block"),
+          },
+        ]}
+      />
+      <QuickChoiceDialog
         title="Friendship"
         visible={panel === "friend" && selection.canMessage}
         onClose={() => setPanel(null)}
-      >
-        <Txt>You and {name} are friends.</Txt>
-        <ProfileLink
-          title="Remove friendship"
-          onPress={() => setPanel("remove")}
-        />
-      </Sheet>
-      <Sheet
+        description={"You and " + name + " are friends."}
+        items={[
+          {
+            label: "Remove friendship",
+            destructive: true,
+            onPress: () => setPanel("remove"),
+          },
+        ]}
+      />
+      <ConfirmDialog
         title="Remove friendship?"
         visible={panel === "remove" && selection.canMessage}
-        onClose={() => setPanel("friend")}
+        onClose={() => closeToMenu("friend")}
+        onDismiss={resumeMenu}
+        onConfirm={async () => {
+          await act("remove_friend", { user_id: id });
+          setPanel(null);
+        }}
+        confirmLabel={"Confirm remove friendship"}
+        cancelLabel={"Cancel"}
+        closeOnConfirm={false}
+        destructive
       >
         <Txt>
           This ends direct messaging and sharing through your friendship.
         </Txt>
-        <Action
-          title="Confirm remove friendship"
-          run={async () => {
-            await act("remove_friend", { user_id: id });
-            setPanel(null);
-          }}
-        />
-      </Sheet>
+      </ConfirmDialog>
       <Sheet
         title="Report account"
         visible={panel === "report"}
-        onClose={() => setPanel("safety")}
+        onClose={() => closeToMenu("safety")}
+        onDismiss={resumeMenu}
       >
         <Field
           label="What happened?"
@@ -363,24 +375,26 @@ export default function PersonProfileScreen() {
           }}
         />
       </Sheet>
-      <Sheet
+      <ConfirmDialog
         title={`Block ${name}?`}
         visible={panel === "block"}
-        onClose={() => setPanel("safety")}
+        onClose={() => closeToMenu("safety")}
+        onDismiss={resumeMenu}
+        onConfirm={async () => {
+          await act("block", { id });
+          setPanel(null);
+          router.replace("/(tabs)/squads");
+        }}
+        confirmLabel={"Confirm block"}
+        cancelLabel={"Cancel"}
+        closeOnConfirm={false}
+        destructive
       >
         <Txt>
           This ends your friendship and direct sharing. Their comments and
           location will be hidden, including in shared Squads.
         </Txt>
-        <Action
-          title="Confirm block"
-          run={async () => {
-            await act("block", { id });
-            setPanel(null);
-            router.replace("/(tabs)/squads");
-          }}
-        />
-      </Sheet>
+      </ConfirmDialog>
     </Screen>
   );
 }

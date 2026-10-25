@@ -61,6 +61,12 @@ export type NativeMapPresentation = {
   friendOverflow: number;
   friendsProminent: boolean;
   forceExplorer?: boolean;
+  decorationObstacles?: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  }[];
 };
 
 export function nativeStackOpensExplorer(count: number) {
@@ -128,6 +134,14 @@ export class MapPresentationCache {
           friendsProminent,
         ),
       );
+      avoidNeighborArtwork(this.value, viewport);
+      if (
+        this.value.reduce((sum, item) => sum + item.featureCost, 0) >
+        (budget ?? MAX_RENDERED_MAP_FEATURES)
+      ) {
+        this.value = nativeMapPresentations(...args);
+        this.stats.spatialBuilds++;
+      }
     } else this.stats.hits++;
     this.rankKey = rankKey;
     return this.value;
@@ -227,8 +241,7 @@ export function nativePresentation(
   );
   item.featureCost =
     Math.max(1, item.visible.length) +
-    Number(overflow > 0) +
-    Number(!!geometry.friendBadge || (!beacons.length && people.length >= 5));
+    Number(!!geometry.countBadge || (!beacons.length && people.length >= 5));
   return item;
 }
 
@@ -245,6 +258,120 @@ export function presentationArtworkPoints(item: NativeMapPresentation) {
   return item.beacons.length
     ? [...item.beacons, ...item.satellites]
     : item.people;
+}
+
+/** Declutter friend decorations after grouping; Beacon artwork and geographic groups never move. */
+function avoidNeighborArtwork(
+  items: NativeMapPresentation[],
+  viewport: ClusterViewport,
+) {
+  const screen = (point: { latitude: number; longitude: number }) =>
+    nativePointOffset(
+      point,
+      {
+        latitude: viewport.centerLatitude,
+        longitude: viewport.centerLongitude,
+      },
+      viewport.zoom,
+    );
+  const entries = items
+    .map((item) => {
+      item.decorationObstacles = undefined;
+      const geometry = bloomGeometry(item);
+      const rectangles = geometry.primary.map((point, index) => ({
+        ...geometry.offsets[index],
+        width: geometry.markerSize,
+        height: geometry.markerSize,
+      }));
+      for (const point of item.owned) {
+        const index = geometry.primary.findIndex(
+          (member) => member.id === point.id,
+        );
+        if (index >= 0)
+          rectangles.push({
+            x: geometry.offsets[index].x + (13 * geometry.markerSize) / 32,
+            y: geometry.offsets[index].y + (12 * geometry.markerSize) / 32,
+            width: (12 * geometry.markerSize) / 32,
+            height: (12 * geometry.markerSize) / 32,
+          });
+      }
+
+      if (geometry.friendsOnly && item.people.length >= 5)
+        rectangles.push({
+          x: 0,
+          y: 0,
+          width: 25 + 6 * String(item.people.length).length,
+          height: 20,
+        });
+      return { item, anchor: screen(item.group), rectangles };
+    })
+    .sort((a, b) => a.item.group.id.localeCompare(b.item.group.id));
+  const placed: { x: number; y: number; width: number; height: number }[] = [];
+  for (const entry of entries) {
+    const { item, anchor } = entry;
+    if (!item.beacons.length || !item.people.length) continue;
+    const neighbors = entries
+      .filter(
+        (other) =>
+          other !== entry &&
+          Math.hypot(other.anchor.x - anchor.x, other.anchor.y - anchor.y) <
+            200,
+      )
+      .flatMap((other) =>
+        other.rectangles.map((rect) => ({
+          ...rect,
+          x: rect.x + other.anchor.x - anchor.x,
+          y: rect.y + other.anchor.y - anchor.y,
+        })),
+      );
+    neighbors.push(
+      ...placed
+        .filter(
+          (rect) => Math.hypot(rect.x - anchor.x, rect.y - anchor.y) < 200,
+        )
+        .map((rect) => ({
+          ...rect,
+          x: rect.x - anchor.x,
+          y: rect.y - anchor.y,
+        })),
+    );
+    const left = -viewport.width / 2 - anchor.x + 4,
+      right = viewport.width / 2 - anchor.x - 4,
+      top = -viewport.height / 2 - anchor.y + 4,
+      bottom = viewport.height / 2 - anchor.y - 4;
+    neighbors.push(
+      { x: left - 5000, y: 0, width: 10000, height: 10000 },
+      { x: right + 5000, y: 0, width: 10000, height: 10000 },
+      { x: 0, y: top - 5000, width: 10000, height: 10000 },
+      { x: 0, y: bottom + 5000, width: 10000, height: 10000 },
+    );
+    item.decorationObstacles = neighbors;
+    const geometry = bloomGeometry(item);
+    item.satellites = geometry.satellites;
+    item.visible = [
+      ...item.visible.filter((point) => point.kind === "beacon"),
+      ...item.satellites,
+    ];
+    item.friendOverflow = item.people.length - item.satellites.length;
+    item.featureCost =
+      Math.max(1, item.visible.length) + Number(!!geometry.countBadge);
+    placed.push(
+      ...geometry.satelliteOffsets.map((offset) => ({
+        x: offset.x + anchor.x,
+        y: offset.y + anchor.y,
+        width: geometry.satelliteSize,
+        height: geometry.satelliteSize,
+      })),
+    );
+    if (geometry.countBadge)
+      placed.push({
+        x: geometry.countBadge.offset.x + anchor.x,
+        y: geometry.countBadge.offset.y + anchor.y,
+        width: geometry.countBadge.width,
+        height: geometry.countBadge.height,
+      });
+  }
+  return items;
 }
 
 /** Authorized coordinates only. Beacon clustering is independent of friend positions. */
@@ -341,7 +468,7 @@ export function nativeMapPresentations(
           friendsProminent,
         ),
       );
-    return result;
+    return avoidNeighborArtwork(result, viewport);
   };
   let radius =
     mode === "stack"

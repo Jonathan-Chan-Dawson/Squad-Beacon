@@ -1,6 +1,12 @@
 import React, { useCallback, useEffect, useRef } from "react";
 import { BackHandler, Pressable, Text, View } from "react-native";
-import { UserRound, UsersRound } from "lucide-react-native";
+import Svg, {
+  Circle,
+  Defs,
+  Path,
+  RadialGradient,
+  Stop,
+} from "react-native-svg";
 import { bloomGeometry, bloomAccessibilityLabel } from "../clusterBloom";
 import { Marker, Polygon } from "react-native-maps";
 import { AvatarStatusBadge } from "@/src/features/profile/AvatarStatusBadge";
@@ -13,7 +19,11 @@ import type { ClusterPoint } from "../cluster";
 import type { ClusterMemberArtwork } from "../clusterArtwork";
 import { mapIdentityColors, friendLocationLabel } from "../markerIdentity";
 import {
+  friendCountLabel,
+  friendCountWidth,
   CLUSTER_OWNERSHIP_ANCHOR,
+  CLUSTER_FRIEND_SHADOW_OPACITY,
+  CLUSTER_MICRO_SHADOW_OPACITY,
   CLUSTER_SHADOW_OPACITY,
 } from "../clusterLayout";
 import {
@@ -238,10 +248,16 @@ function LivingMapPinComponent({
   const { group, overflow } = presentation;
   const geometry = bloomGeometry(presentation);
   const explorer = !!presentationOpensExplorer(presentation);
+  const shadowGradientId = React.useId().replace(/:/g, "");
+  const shadowOpacity = geometry.friendsOnly
+    ? CLUSTER_FRIEND_SHADOW_OPACITY
+    : presentation.scale === "micro"
+      ? CLUSTER_MICRO_SHADOW_OPACITY
+      : CLUSTER_SHADOW_OPACITY;
   const [avatarRevision, setAvatarRevision] = React.useState(0);
   const loaded = useCallback(() => setAvatarRevision((value) => value + 1), []);
   const tracking = useMarkerTracking(
-    `${appearanceKey}:${geometry.markerSize}:${geometry.satelliteSize}:${presentation.scale}:${presentation.people.length}:${overflow}:${members.map((member) => member.visualRevision).join("|")}:${avatarRevision}:${JSON.stringify(geometry.satelliteOffsets)}:${JSON.stringify(geometry.friendBadge)}`,
+    `${appearanceKey}:${geometry.markerSize}:${geometry.satelliteSize}:${presentation.scale}:${presentation.people.length}:${overflow}:${members.map((member) => member.visualRevision).join("|")}:${avatarRevision}:${JSON.stringify(geometry.satelliteOffsets)}:${JSON.stringify(geometry.countBadge)}`,
   );
   const badgeStyle = {
     position: "absolute" as const,
@@ -311,14 +327,32 @@ function LivingMapPinComponent({
             left: geometry.shadowLeft,
             top: geometry.shadowTop,
             borderRadius: geometry.shadowSize / 2,
-            backgroundColor: "black",
-            opacity: geometry.friendsOnly
-              ? 0.1
-              : presentation.scale === "micro"
-                ? 0.14
-                : CLUSTER_SHADOW_OPACITY,
           }}
-        />
+        >
+          <Svg width={geometry.shadowSize} height={geometry.shadowSize}>
+            <Defs>
+              <RadialGradient id={shadowGradientId}>
+                <Stop
+                  offset="0"
+                  stopColor="black"
+                  stopOpacity={shadowOpacity}
+                />
+                <Stop
+                  offset="0.55"
+                  stopColor="black"
+                  stopOpacity={shadowOpacity * 0.5}
+                />
+                <Stop offset="1" stopColor="black" stopOpacity={0} />
+              </RadialGradient>
+            </Defs>
+            <Circle
+              cx={geometry.shadowSize / 2}
+              cy={geometry.shadowSize / 2}
+              r={geometry.shadowSize / 2}
+              fill={`url(#${shadowGradientId})`}
+            />
+          </Svg>
+        </View>
         {geometry.primary.map((point, index) => {
           const model = members.find((member) => member.id === point.id),
             offset = geometry.offsets[index];
@@ -379,50 +413,52 @@ function LivingMapPinComponent({
                 height: s,
                 borderRadius: s / 2,
                 borderWidth: 1,
-                borderColor: colors.line,
-                backgroundColor: s >= 10 ? colors.white : colors.ink,
-                opacity: presentation.scale === "micro" ? 0.4 : 0.85,
+                borderColor:
+                  s >= 10 ? mapIdentityColors.ownership : colors.white,
+                backgroundColor:
+                  s >= 10 ? colors.white : mapIdentityColors.ownership,
+                opacity: presentation.scale === "micro" ? 0.8 : 1,
                 alignItems: "center",
                 justifyContent: "center",
                 zIndex: 30,
               }}
             >
               {s >= 10 && (
-                <UserRound size={s - 3} color={colors.ink} strokeWidth={2} />
+                <Svg
+                  width={s - 4}
+                  height={s - 4}
+                  viewBox="0 0 24 24"
+                  fill={colors.ink}
+                >
+                  <Circle cx={12} cy={7} r={4} />
+                  <Path d="M5 21v-3a7 7 0 0 1 14 0v3Z" />
+                </Svg>
               )}
             </View>
           );
         })}
-        {presentation.beacons.length > 0 && overflow > 0 && (
-          <View style={{ ...badgeStyle, right: geometry.overflowInset,bottom:geometry.overflowInset }}>
-            <Text
-              style={{
-                color: colors.ink,
-                fontSize: presentation.scale === "micro" ? 8 : 10,
-                fontWeight: "700",
-              }}
-            >
-              +{overflow}
-            </Text>
-          </View>
-        )}
         {geometry.friendsOnly && presentation.people.length >= 5 && (
           <View
             style={{
               ...badgeStyle,
-              left: geometry.center - (presentation.scale === "micro" ? 8 : 15),
+              left:
+                geometry.center -
+                friendCountWidth(
+                  presentation.people.length,
+                  presentation.scale === "micro",
+                ) /
+                  2,
               top: geometry.center - 10,
               bottom: undefined,
-              minWidth: presentation.scale === "micro" ? 16 : 30,
-              opacity: presentation.scale === "micro" ? 0.45 : 1,
+              minWidth: friendCountWidth(
+                presentation.people.length,
+                presentation.scale === "micro",
+              ),
+              opacity: presentation.scale === "micro" ? 0.8 : 1,
               flexDirection: "row",
               gap: 2,
             }}
           >
-            <UsersRound
-              size={presentation.scale === "micro" ? 7 : 10}
-              color={colors.ink}
-            />
             <Text
               style={{
                 color: colors.ink,
@@ -430,7 +466,7 @@ function LivingMapPinComponent({
                 fontWeight: "700",
               }}
             >
-              {presentation.people.length}
+              {friendCountLabel(presentation.people.length)}
             </Text>
           </View>
         )}

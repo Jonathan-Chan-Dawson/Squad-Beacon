@@ -15,7 +15,7 @@ async function shareNote(page: Page) {
     exact: true,
   });
   await editor
-    .getByRole("textbox", { name: "What are you doing?", exact: true })
+    .getByRole("textbox", { name: "What are you up to?", exact: true })
     .fill("Shooting hoops");
   await editor.getByRole("button", { name: "Fitness", exact: true }).click();
   await editor
@@ -79,10 +79,10 @@ test("compact empty state, direct editing, independent Status and availability, 
     exact: true,
   });
   await expect(
-    editor.getByRole("textbox", { name: "What are you doing?", exact: true }),
+    editor.getByRole("textbox", { name: "What are you up to?", exact: true }),
   ).toHaveValue("Shooting hoops");
   await editor
-    .getByRole("textbox", { name: "What are you doing?", exact: true })
+    .getByRole("textbox", { name: "What are you up to?", exact: true })
     .fill("Practicing free throws");
   await editor
     .getByRole("button", { name: "Save Changes", exact: true })
@@ -158,15 +158,17 @@ test("Do with others creates an independent Ping and offers featuring without re
     page.getByRole("dialog", { name: "Edit Activity Note", exact: true }),
   ).toHaveCount(0);
   await page.screenshot({ path: ".expo/pass3/do-with-others.png" });
-  await sheet
-    .getByRole("button", { name: "See who’s interested", exact: true })
-    .click();
-  const editor = page.getByRole("dialog", {
-    name: "Start a ping or decision",
-    exact: true,
-  });
+  await sheet.getByRole("button", { name: "Ping", exact: true }).click();
+  const editor = page;
+  await expect(page).toHaveURL(/planning\/create/);
   await expect(
-    editor.getByRole("textbox", { name: "Question or decision", exact: true }),
+    page.getByRole("dialog", { name: "Do with others", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    editor.getByRole("textbox", {
+      name: "What are you thinking?",
+      exact: true,
+    }),
   ).toHaveValue("Shooting hoops");
   await editor
     .getByRole("button", { name: "Create Ping", exact: true })
@@ -175,8 +177,7 @@ test("Do with others creates an independent Ping and offers featuring without re
     page.getByRole("button", { name: "Feature on Status", exact: true }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Continue", exact: true }).click();
-  await page.getByRole("button", { name: "Beacons", exact: true }).click();
-  await page.getByRole("tab", { name: "Profile", exact: true }).click();
+  await page.goBack();
   await expect(
     page.getByTestId("activity-note-card").filter({ visible: true }),
   ).toContainText("Shooting hoops");
@@ -192,28 +193,31 @@ test("Council setup requires two options and retains the Activity Note", async (
     .click();
   await page
     .getByRole("dialog", { name: "Do with others", exact: true })
-    .getByRole("button", { name: "Decide together", exact: true })
+    .getByRole("button", { name: "Vote", exact: true })
     .click();
-  const editor = page.getByRole("dialog", {
-    name: "Start a ping or decision",
-    exact: true,
-  });
+  const editor = page;
+  await expect(page).toHaveURL(/planning\/create/);
+  await expect(
+    page.getByRole("dialog", { name: "Do with others", exact: true }),
+  ).toHaveCount(0);
   await editor
-    .getByRole("button", { name: "Create Council", exact: true })
+    .getByRole("button", { name: "Create Vote Council", exact: true })
     .click();
   await expect(
-    editor.getByText(/Add at least two actual options/),
+    editor.getByText("Give the beacon a title (up to 120 characters).", {
+      exact: true,
+    }),
   ).toBeVisible();
   await editor
-    .getByRole("textbox", { name: "Another activity option", exact: true })
+    .getByRole("textbox", { name: "Activity option", exact: true })
+    .nth(1)
     .fill("Go for a walk");
   await editor
-    .getByRole("button", { name: "Create Council", exact: true })
+    .getByRole("button", { name: "Create Vote Council", exact: true })
     .click();
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await expect(page.getByText("Go for a walk", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Beacons", exact: true }).click();
-  await page.getByRole("tab", { name: "Profile", exact: true }).click();
+  await page.goBack();
   await expect(
     page.getByTestId("activity-note-card").filter({ visible: true }),
   ).toContainText("Shooting hoops");
@@ -289,7 +293,7 @@ for (const appearance of ["light", "dark"]) {
     });
     await expect(editor).toBeVisible();
     await editor
-      .getByRole("textbox", { name: "What are you doing?", exact: true })
+      .getByRole("textbox", { name: "What are you up to?", exact: true })
       .fill("A quiet afternoon working on my creative project");
     await editor
       .getByRole("button", { name: "Choose audience", exact: true })
