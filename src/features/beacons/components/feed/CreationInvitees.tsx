@@ -1,10 +1,9 @@
 import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useId, useMemo, useRef, useState } from "react";
 import {
   View,
   Pressable,
   Text,
-  Modal,
   ScrollView,
   KeyboardAvoidingView,
   Platform,
@@ -19,6 +18,12 @@ import { useReducedMotion } from "@/src/shared/design-system";
 import { socialFriends } from "../../socialFriends";
 import { UserRoundPlus } from "lucide-react-native";
 import { SocialSelector } from "@/src/features/people/components/SocialSelector";
+import { DialogPortal } from "@/src/shared/DialogPortal";
+import { useOverlayPresence, useTopOverlay } from "@/src/shared/overlays";
+import {
+  focusOverlay,
+  useOverlayKeyboardFocus,
+} from "@/src/shared/overlayFocus";
 
 export function CreationInvitees({
   ids,
@@ -34,12 +39,30 @@ export function CreationInvitees({
   const reducedMotion = useReducedMotion();
   const now = useNow();
   const [open, setOpen] = useState(false);
-  const [selectionError, setSelectionError] = useState("");
+  const [draftIds, setDraftIds] = useState<string[]>([]);
+  const overlayId = useId();
+  const dialogRef = useRef<View>(null);
+  const returnFocus = useRef<HTMLElement | null>(null);
+  useOverlayPresence(overlayId, open, "Add People");
+  const top = useTopOverlay(overlayId);
+  const closePicker = useCallback(() => setOpen(false), []);
+  const focus = useCallback(() => focusOverlay(dialogRef, "Back"), []);
+  useOverlayKeyboardFocus(dialogRef, open && top, closePicker, focus);
+  const openPicker = () => {
+    if (Platform.OS === "web" && typeof document !== "undefined")
+      returnFocus.current = document.activeElement as HTMLElement;
+    setDraftIds([...ids]);
+    setOpen(true);
+  };
+
   const friends = useMemo(
-    () => socialFriends(data, userId, now).filter(friend=>!allowedIds||allowedIds.includes(friend.id)),
+    () =>
+      socialFriends(data, userId, now).filter(
+        (friend) => !allowedIds || allowedIds.includes(friend.id),
+      ),
     [data, userId, now, allowedIds],
   );
-  const unavailable = ids.filter(
+  const unavailable = (open ? draftIds : ids).filter(
     (id) => !friends.some((friend) => friend.id === id),
   );
   return (
@@ -90,7 +113,7 @@ export function CreationInvitees({
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={`Review all ${ids.length} invited people`}
-                onPress={() => setOpen(true)}
+                onPress={openPicker}
                 style={{
                   minWidth: 44,
                   minHeight: 44,
@@ -103,14 +126,14 @@ export function CreationInvitees({
           </View>
           {ids.length ? (
             <Text style={[styles.muted, { fontSize: 12 }]}>
-              {ids.length}/20 selected
+              {ids.length} selected
             </Text>
           ) : null}
         </View>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={"+ Add People"}
-          onPress={() => setOpen(true)}
+          onPress={openPicker}
           style={{
             minHeight: 44,
             paddingHorizontal: 10,
@@ -136,11 +159,19 @@ export function CreationInvitees({
           or remove them before publishing.
         </Txt>
       ) : null}
-      <Modal
+      <DialogPortal
         visible={open}
         presentationStyle="fullScreen"
         animationType={reducedMotion ? "none" : "fade"}
         onRequestClose={() => setOpen(false)}
+        onShow={focus}
+        onDismiss={() =>
+          requestAnimationFrame(() => {
+            if (returnFocus.current?.isConnected)
+              returnFocus.current.focus({ preventScroll: true });
+            returnFocus.current = null;
+          })
+        }
       >
         <GestureHandlerRootView style={{ flex: 1 }}>
           <BottomSheetModalProvider>
@@ -150,6 +181,9 @@ export function CreationInvitees({
                 style={{ flex: 1 }}
               >
                 <View
+                  ref={dialogRef}
+                  aria-hidden={!top}
+                  pointerEvents={top ? "auto" : "none"}
                   accessibilityViewIsModal
                   role="dialog"
                   aria-modal
@@ -182,7 +216,10 @@ export function CreationInvitees({
                     <Button
                       compact
                       title="Done"
-                      onPress={() => setOpen(false)}
+                      onPress={() => {
+                        onChange(draftIds);
+                        setOpen(false);
+                      }}
                     />
                   </View>
                   <ScrollView
@@ -196,16 +233,17 @@ export function CreationInvitees({
                     }}
                   >
                     <Txt muted>
-                      {ids.length}/20 selected · Invitations send when you
-                      publish.
+                      {draftIds.length} selected · Invitations send when you
+                      publish. We recommend 50 or fewer; larger selections can
+                      be reviewed before publishing.
                     </Txt>
                     <Button
                       compact
                       secondary
                       title="Clear selection"
-                      onPress={() => onChange([])}
+                      onPress={() => setDraftIds([])}
                     />
-                    {selectionError ? <Txt>{selectionError}</Txt> : null}
+
                     {unavailable.map((id) => (
                       <Button
                         key={id}
@@ -213,46 +251,19 @@ export function CreationInvitees({
                         secondary
                         title="Remove unavailable friend"
                         onPress={() =>
-                          onChange(ids.filter((value) => value !== id))
+                          setDraftIds(draftIds.filter((value) => value !== id))
                         }
                       />
                     ))}
-                    {ids.length > 0 && (
-                      <View
-                        style={{
-                          flexDirection: "row",
-                          flexWrap: "wrap",
-                          gap: 4,
-                        }}
-                      >
-                        {ids.map((id) => (
-                          <Button
-                            key={id}
-                            compact
-                            secondary
-                            title={`Remove ${friends.find((friend) => friend.id === id)?.name ?? "unavailable friend"}`}
-                            onPress={() =>
-                              onChange(ids.filter((value) => value !== id))
-                            }
-                          />
-                        ))}
-                      </View>
-                    )}
                     <SocialSelector
+                      groupBehavior="filterFriends"
                       friends={friends}
-                      selected={ids.map((id) => ({ kind: "friend", id }))}
+                      selected={draftIds.map((id) => ({ kind: "friend", id }))}
                       onChange={(rows) => {
                         const ids = rows
                           .filter((row) => row.kind === "friend")
                           .map((row) => row.id);
-                        if (ids.length > 20) {
-                          setSelectionError(
-                            "Choose up to 20 friends for this invitation batch.",
-                          );
-                          return;
-                        }
-                        setSelectionError("");
-                        onChange(ids);
+                        setDraftIds(ids);
                       }}
                       supportedKinds={["friend"]}
                       bulk
@@ -263,7 +274,7 @@ export function CreationInvitees({
             </SafeAreaView>
           </BottomSheetModalProvider>
         </GestureHandlerRootView>
-      </Modal>
+      </DialogPortal>
     </View>
   );
 }

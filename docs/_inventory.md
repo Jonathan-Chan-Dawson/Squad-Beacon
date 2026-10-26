@@ -22,3 +22,4 @@ Documentation guide
 - beacon-creation-inline-polish.md: Pass 1.1 inline form, multiple draft pills, guarded deletion, rendered states, and verification boundaries.
 
 - beacon-creation-mobile-polish.md: compact saved drafts, inline visibility/community, full-screen friend selection, rendered evidence and verification limits.
+- PLANS_OVERHAUL_VALIDATION.md: Living Plans, collaborative decisions and unified repeats implementation, additive migrations, validation evidence and hosted/native acceptance boundaries.

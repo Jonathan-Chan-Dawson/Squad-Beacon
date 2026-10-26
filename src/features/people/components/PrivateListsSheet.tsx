@@ -25,10 +25,12 @@ export function PrivateListsSheet({
   visible,
   onClose,
   onSelect,
+  inline = false,
 }: {
   visible: boolean;
   onClose: () => void;
   onSelect: (selection: PeopleListSelection) => void;
+  inline?: boolean;
 }) {
   const { data, userId, act } = useBeacon();
   const { styles, colors } = useTheme();
@@ -53,6 +55,7 @@ export function PrivateListsSheet({
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
   const edited = lists.find((row) => row.id === editing);
+  const Panel = inline ? InlineListPanel : Sheet;
   const select = (selection: PeopleListSelection) => {
     onClose();
     onSelect(selection);
@@ -75,7 +78,7 @@ export function PrivateListsSheet({
       >
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`Filter chats by ${title}`}
+          accessibilityLabel={`Filter people by ${title}`}
           onPress={() => select(selection)}
           style={{
             flex: 1,
@@ -119,9 +122,9 @@ export function PrivateListsSheet({
   }
   return (
     <>
-      <Sheet
+      <Panel
         title="Private Lists"
-        visible={visible}
+        visible={visible && (!inline || !editing)}
         onClose={onClose}
         maxHeightPercent={78}
       >
@@ -155,8 +158,8 @@ export function PrivateListsSheet({
           />
         </View>
         {lists.map((list) => row(`custom:${list.id}`, list.name))}
-      </Sheet>
-      <Sheet
+      </Panel>
+      <Panel
         title={
           editing === "new"
             ? "Create private list"
@@ -184,7 +187,7 @@ export function PrivateListsSheet({
         {edited ? (
           <>
             <Txt muted>
-              Selecting this list only filters Chats. Changing its members also
+              Selecting this list only filters people. Changing its members also
               updates sharing wherever you already use this list as an audience.
             </Txt>
             {friends.map((profile) => {
@@ -225,7 +228,7 @@ export function PrivateListsSheet({
             />
           </>
         ) : null}
-      </Sheet>
+      </Panel>
       <ConfirmDialog
         title="Delete this list?"
         visible={deleting && !!edited}
@@ -242,5 +245,31 @@ export function PrivateListsSheet({
         }}
       />
     </>
+  );
+}
+
+function InlineListPanel({
+  title,
+  visible,
+  onClose,
+  children,
+}: React.ComponentProps<typeof Sheet>) {
+  const { styles } = useTheme();
+  if (!visible) return null;
+  return (
+    <View testID="private-lists-inline" style={{ gap: 8 }}>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+        <Button
+          compact
+          secondary
+          title={title === "Private Lists" ? "Back to people" : "Back to lists"}
+          onPress={onClose}
+        />
+        <Text accessibilityRole="header" style={[styles.label, { flex: 1 }]}>
+          {title}
+        </Text>
+      </View>
+      {children}
+    </View>
   );
 }

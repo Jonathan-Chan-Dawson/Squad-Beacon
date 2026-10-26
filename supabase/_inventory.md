@@ -1,5 +1,9 @@
 Supabase database and functions
 
+- `20261025203005_living_plans.sql`: undated Plans, stable independent stops, backfill, scoped server actions/RLS and the living_plans capability.
+- `20261025204150_collaborative_plans.sql`: canonical decision-result association, independent tentative Plan membership, suggestion notices and authorized chat links; adds collaborative_plans capability.
+- `20261026002202_repeatable_plans_calendar.sql`: private reviewed Routine sources, recurring single Beacons, original-occurrence deduplication and generated occurrence metadata; keeps the existing generator, runner and ledger and adds repeatable_plans capability. These migrations are source-only until explicitly deployed in order.
+
 - config.toml: local Supabase configuration.
 - migrations/: ordered schema, RLS, RPC, and data-contract changes. The timestamped SQL files are applied in order; do not edit or deploy applied migrations without an explicit migration plan.
 - migrations/202610110004_ping_availability.sql: nullable Interested availability and availability-aware opt-in Auto-RSVP, integrated into the existing Ping actions without changing Vote/Draw resolution.
@@ -18,3 +22,5 @@ No remote deployment is performed by local source changes.
 - 202610140002_activity_history.sql: permission-scoped activity history RPC with capped keyset pages, host profile visibility, approved-going attendee checks, and unchanged shared snapshot. Source-only pending hosted rollout.
 
 - 202610140004_community_profiles.sql: authenticated exact-ID community summaries using existing visibility predicates; no new tables or membership hierarchy. Hosted application is a separate rollout step.
+
+- 20261026031141_beacon_invitation_recommendation.sql: removes the atomic Beacon recipient-count cap and raises only its invitation throttle to the approved 300/hour. Friendship, permissions, replay and the general action ceiling remain enforced. Source-only; hosted rollout pending.

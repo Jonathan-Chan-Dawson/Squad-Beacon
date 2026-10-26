@@ -1,3 +1,4 @@
+import { PlanChatPreview } from "@/src/features/plans/PlanChatPreview";
 import {LinkedPlanningBeacon} from "@/src/features/planning/ConnectedPlanningActions";
 import React, { useState } from "react";
 import { Pressable, Text, View } from "react-native";
@@ -125,6 +126,9 @@ export function GroupChatThread({
     ...canonical,
     ...(canWrite ? chat.rows : []),
   ].map((message) => ({ kind: "message", message }));
+  for (const message of group.filter(m=>m.plan_id)) {
+    events.push({kind:"card",id:`plan:${message.id}`,createdAt:message.created_at,content:<PlanChatPreview planId={message.plan_id!} />});
+  }
   for (const thread of planning) {
     const canReply =
       !!userId &&

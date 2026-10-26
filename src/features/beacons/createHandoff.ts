@@ -2,6 +2,11 @@ import type { Data, Payload } from "@/src/shared/types";
 import { friendIds } from "@/src/shared/domain";
 import { canReadBeaconActivity } from "./beaconModules";
 
+export const RECOMMENDED_BEACON_INVITEES = 50;
+export function needsLargeInviteConfirmation(ids: readonly string[]) {
+  return new Set(ids).size > RECOMMENDED_BEACON_INVITEES;
+}
+
 export function parseCreationInvitees(raw: unknown): {
   ids: string[];
   error: string;
@@ -312,9 +317,9 @@ async function performAtomicCreation(
   }
   if (!session.atomicAttempt) {
     validateCreationInvitees(getData(), userId, ids);
-    if (ids.length < 1 || ids.length > 20)
+    if (ids.length < 1)
       throw new Error(
-        "Choose from 1 to 20 friends per Beacon invitation batch.",
+        "Choose at least one friend for this Beacon invitation batch.",
       );
     session.atomicAttempt = {
       action,

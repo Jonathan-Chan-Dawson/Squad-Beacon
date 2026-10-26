@@ -124,8 +124,8 @@ export function squadPlans(
     .filter(
       (plan) =>
         canReadSquadPlan(data, plan, squadId, userId) &&
-        plan.status === "scheduled" &&
-        (Date.parse(`${plan.start_date}T23:59:59Z`) >= now ||
+        plan.status !== "cancelled" && !plan.routine_source &&
+        (plan.status === "draft" || Date.parse(`${plan.start_date}T23:59:59Z`) >= now ||
           data.activities.some(
             (activity) =>
               activity.plan_id === plan.id &&
@@ -141,7 +141,7 @@ export function squadPlans(
               routine.next_occurrence_on >= new Date(now).toISOString().slice(0, 10),
           )),
     )
-    .sort((first, second) => first.start_date.localeCompare(second.start_date))
+    .sort((first, second) => (first.start_date ?? "9999").localeCompare(second.start_date ?? "9999"))
     .map((plan) => ({
       plan,
       routine: data.plan_routines.find(

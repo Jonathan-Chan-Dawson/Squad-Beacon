@@ -1,5 +1,11 @@
 Plans feature
 
+- LivingPlansScreen.tsx and PlanPresentation.tsx: capability-gated lightweight creation, compact icon timeline, suggestions, inline review, independent ordering, and canonical editor handoffs. Existing route exports retain the legacy experience for older backends.
+- livingPlans.ts: stable stop contracts, viewer-scoped selectors and shared Plan permissions. PlanChatPreview.tsx adds authorized compact chat links and existing decision responses.
+- RepeatBeaconAction.tsx and RoutineScheduleSheet.tsx: shared Plan/Beacon repetition and explicit occurrence/future-repeat editing. Reviewed source content stays private on the server; no responses or attendance are copied.
+- demoLivingPlans.ts and demoRepeatablePlans.ts: demo action parity; the repeat adapter reuses the existing Routine generator rather than implementing recurrence separately.
+- Additive living_plans, collaborative_plans and repeatable_plans_calendar migrations backfill stops, associate canonical decision results, freeze reviewed sources, and retain the scheduler/occurrence ledger. See supabase/_inventory.md and docs/PLANS_OVERHAUL_VALIDATION.md for rollout and validation boundaries.
+
 - PlansScreen.tsx and PlanDetailScreen.tsx: multi-Beacon itinerary builder/detail, independent Plan membership, physical directions and Routine entry point.
 - RoutinesScreen.tsx and RoutineScheduleSheet.tsx: recurring Plan schedule and lifecycle tools.
 - routines.ts: PlanMember/PlanRoutine contract, ISO weekday/date helpers, and demo fixture/action helpers.

@@ -113,12 +113,15 @@ The project keeps Expo SDK 57. Relevant exact-version references:
 npm run typecheck
 npm run lint
 npm test
+npm run test:plans
 npm run export:web
 npx playwright install chromium
 npm run test:e2e
 ```
 
 The database tests execute the real migration SQL in embedded PostgreSQL (PGlite), using a small Auth/Storage schema harness. They verify RLS and transactional behavior, including direct API-equivalent unauthorized reads and writes. They do not replace hosted Supabase Auth, Storage HTTP, Realtime, Edge Function or phone testing.
+
+Living Plans and reviewed Routine sources require the three ordered Plan migrations listed in [the backend inventory](supabase/_inventory.md). Client capabilities preserve the legacy experience until the corresponding backend changes are deployed. See [the Plan validation report](docs/PLANS_OVERHAUL_VALIDATION.md) for verification and rollout boundaries.
 
 Browser tests exercise the demo’s Now/favorites, RSVP/chat, personal templates, Profile/Settings, Notifications, organizations and narrow-screen flows. On Windows they use installed Chrome; elsewhere they use Playwright Chromium.
 

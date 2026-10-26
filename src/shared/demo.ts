@@ -1,3 +1,5 @@
+import { demoRepeatablePlan } from "@/src/features/plans/demoRepeatablePlans";
+import { applyDemoLivingPlan, connectDemoPlanResults } from "@/src/features/plans/demoLivingPlans";
 import { demoConnected } from "@/src/features/planning/demoConnected";
 import { applyDemoLivingActivity } from "@/src/features/beacons/demoLivingActivity";
 import { applyDemoSupplyAction, eligibleSupplyClaim } from "@/src/features/beacons/supplies";
@@ -1715,7 +1717,7 @@ function demoActionInner(previous: Data, action: string, p: Payload): Data {
   if (action === "create_activity_with_invitees" || action === "create_plan_beacon_with_invitees") {
     if (p.expected_actor_id && p.expected_actor_id!==uid) throw new Error("Your account changed before publication. Return to the account that started this Beacon.");
     const ids=p.invitee_ids;
-    if (!Array.isArray(ids) || ids.length<1 || ids.length>20 || ids.some((item)=>typeof item!=="string") || new Set(ids).size!==ids.length) throw new Error("Choose from 1 to 20 unique friends per Beacon invitation batch.");
+    if (!Array.isArray(ids) || ids.length<1 || ids.some((item)=>typeof item!=="string") || new Set(ids).size!==ids.length) throw new Error("Choose at least one unique friend for this Beacon invitation batch.");
     if (p.mode!=="squad" && p.mode!=="invite") throw new Error("Selected friends can only be invited to a shared Beacon.");
     validateCreationInvitees(d,uid,ids as string[]);
     const payload={...p}; delete payload.invitee_ids; delete payload.expected_actor_id;
@@ -3693,4 +3695,12 @@ function demoActionInner(previous: Data, action: string, p: Payload): Data {
   return d;
 }
 
-export function demoAction(previous: Data, action: string, payload: Payload): Data { const next = demoConnected(previous, DEMO_ID, action, payload, demoActionInner) ?? applyDemoLivingActivity(previous, DEMO_ID, action, payload) ?? demoActionInner(previous, action, payload); next.beacon_supply_claims = next.beacon_supply_claims.filter(row => eligibleSupplyClaim(next,row)); return next; }
+function demoBaseAction(previous: Data, action: string, payload: Payload): Data {
+ return applyDemoLivingPlan(previous, DEMO_ID, action, payload) ?? demoConnected(previous, DEMO_ID, action, payload, demoActionInner) ?? applyDemoLivingActivity(previous, DEMO_ID, action, payload) ?? demoActionInner(previous, action, payload);
+}
+export function demoAction(previous: Data, action: string, payload: Payload): Data {
+ const changed = demoRepeatablePlan(previous,DEMO_ID,action,payload,demoBaseAction) ?? demoBaseAction(previous,action,payload);
+ const next = connectDemoPlanResults(previous,changed,DEMO_ID,action,payload);
+ next.beacon_supply_claims = next.beacon_supply_claims.filter(row => eligibleSupplyClaim(next,row));
+ return next;
+}

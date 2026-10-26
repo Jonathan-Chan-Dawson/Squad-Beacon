@@ -76,8 +76,6 @@ export function MapOptions({
   onClose,
   liveUpdates,
   onLiveUpdates,
-  style,
-  onStyle,
   showFriends,
   showWeather,
   onShowWeather,
@@ -90,8 +88,6 @@ export function MapOptions({
   onClose(): void;
   liveUpdates: boolean;
   onLiveUpdates(value: boolean): void;
-  style: MapStyle;
-  onStyle(value: MapStyle): void;
   showFriends: boolean;
   showWeather: boolean;
   onShowWeather(value: boolean): void;
@@ -121,7 +117,6 @@ export function MapOptions({
           trackColor={{ true: colors.green }}
         />
       </View>
-      <MapStyleControls style={style} onStyle={onStyle} />
       <View
         style={{
           minHeight: 52,

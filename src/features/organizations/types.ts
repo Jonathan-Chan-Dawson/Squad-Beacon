@@ -50,6 +50,7 @@ export interface OrganizationBan {
 
 export type GroupMessageScope = "squad" | "organization";
 export interface GroupMessage {
+  plan_id?: ID | null;
   id: ID;
   scope: GroupMessageScope;
   scope_id: ID;

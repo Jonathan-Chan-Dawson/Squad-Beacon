@@ -2,7 +2,13 @@ import { BeaconParticipation } from "@/src/features/beacons/useBeaconParticipati
 import { canReadBeaconActivity } from "@/src/features/beacons/beaconModules";
 import React, { useCallback, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
-import { Bell, ChevronRight } from "lucide-react-native";
+import {
+  Bell,
+  ChevronDown,
+  ChevronRight,
+  Plus,
+  RefreshCw,
+} from "lucide-react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { Action, Button, Empty, Screen, Txt, useTheme } from "@/src/shared/ui";
 import { useBeacon } from "@/src/shared/store";
@@ -44,6 +50,8 @@ function ResponsesContent() {
   const focusedLink = useRef<string | null>(null);
   const positions = useRef({ list: 0, sections: {} as Record<string, number> });
   const [creating, setCreating] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshError, setRefreshError] = useState("");
   const [completedInvites, setCompletedInvites] = useState<
     { id: string; title: string }[]
   >([]);
@@ -71,9 +79,14 @@ function ResponsesContent() {
     (item) =>
       filter === "All" ||
       filter ===
-        ({ ping: "Pings", vote: "Decisions", draw: "Decisions", time: "Decisions" } as const)[
-          item.thread.kind
-        ],
+        (
+          {
+            ping: "Pings",
+            vote: "Decisions",
+            draw: "Decisions",
+            time: "Decisions",
+          } as const
+        )[item.thread.kind],
   );
   const showInvites = filter === "All" || filter === "Invites";
   function freezePlacement() {
@@ -164,39 +177,103 @@ function ResponsesContent() {
       scrollRequest={scrollRequest}
       scrollStateKey="responses"
     >
-      <View style={{ flexDirection: "row", gap: 8 }}>
-        <Button
-          compact
-          secondary
-          title="+ New"
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 8,
+          marginBottom: -8,
+        }}
+      >
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="+ New"
+          accessibilityState={{ expanded: creating }}
           onPress={() => setCreating(!creating)}
-        />
-        <Action
-          secondary
-          title="Refresh"
-          run={async () => {
-            await refresh();
-            regroup();
+          style={{ minHeight: 44, justifyContent: "center" }}
+        >
+          <View
+            style={{
+              minHeight: 32,
+              paddingHorizontal: 12,
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 5,
+              backgroundColor: colors.surfaceRaised,
+              borderRadius: 9,
+            }}
+          >
+            <Plus size={14} color={colors.ink} />
+            <Text style={[styles.label, { fontSize: 12 }]}>New</Text>
+          </View>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={refreshing ? "Refreshing" : "Refresh"}
+          accessibilityState={{ busy: refreshing, disabled: refreshing }}
+          disabled={refreshing}
+          onPress={() => {
+            setRefreshing(true);
+            setRefreshError("");
+            void refresh()
+              .then(regroup)
+              .catch((e: unknown) =>
+                setRefreshError(
+                  e instanceof Error
+                    ? e.message
+                    : "Couldn't refresh. Try again.",
+                ),
+              )
+              .finally(() => setRefreshing(false));
           }}
-        />
+          style={{
+            minHeight: 44,
+            justifyContent: "center",
+            paddingHorizontal: 8,
+            opacity: refreshing ? 0.6 : 1,
+          }}
+        >
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
+            <RefreshCw size={13} color={colors.muted} />
+            <Text style={[styles.label, { fontSize: 12, color: colors.muted }]}>
+              {refreshing ? "Refreshing…" : "Refresh"}
+            </Text>
+          </View>
+        </Pressable>
       </View>
+      {!!refreshError && (
+        <Text accessibilityRole="alert" style={styles.error}>
+          {refreshError}
+        </Text>
+      )}
       {creating ? (
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-          {(["ping", "vote", "draw", "time"] as const).filter(kind=>kind !== "time" || (data.is_demo === true || data.capabilities?.connected_planning === true)).map((kind) => (
-            <Button
-              key={kind}
-              compact
-              secondary
-              title={kind === "time" ? "Find a Time" : kind[0].toUpperCase() + kind.slice(1)}
-              onPress={() => {
-                setCreating(false);
-                router.push({
-                  pathname: "/planning/create",
-                  params: { kind, sessionId: randomUUID() },
-                });
-              }}
-            />
-          ))}
+          {(["ping", "vote", "draw", "time"] as const)
+            .filter(
+              (kind) =>
+                kind !== "time" ||
+                data.is_demo === true ||
+                data.capabilities?.connected_planning === true,
+            )
+            .map((kind) => (
+              <Button
+                key={kind}
+                compact
+                secondary
+                title={
+                  kind === "time"
+                    ? "Find a Time"
+                    : kind[0].toUpperCase() + kind.slice(1)
+                }
+                onPress={() => {
+                  setCreating(false);
+                  router.push({
+                    pathname: "/planning/create",
+                    params: { kind, sessionId: randomUUID() },
+                  });
+                }}
+              />
+            ))}
         </View>
       ) : null}
       {params.threadId &&
@@ -254,6 +331,7 @@ function ResponsesContent() {
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
+            style={{ flexGrow: 0, marginBottom: -6 }}
             contentContainerStyle={{ gap: 6 }}
           >
             {filters.map((value) => (
@@ -267,25 +345,32 @@ function ResponsesContent() {
                   setFilter(value);
                   regroup();
                 }}
-                style={{
-                  minHeight: 44,
-                  paddingHorizontal: 14,
-                  justifyContent: "center",
-                  borderRadius: 22,
-                  backgroundColor:
-                    filter === value ? colors.lime : colors.white,
-                  borderWidth: 1,
-                  borderColor: filter === value ? colors.green : colors.line,
-                }}
+                style={{ minHeight: 44, justifyContent: "center" }}
               >
-                <Text
-                  style={[
-                    styles.label,
-                    { color: filter === value ? colors.green : colors.ink },
-                  ]}
+                <View
+                  style={{
+                    minHeight: 32,
+                    justifyContent: "center",
+                    paddingHorizontal: 12,
+                    borderRadius: 16,
+                    backgroundColor:
+                      filter === value ? colors.lime : colors.white,
+                    borderWidth: 1,
+                    borderColor: filter === value ? colors.green : colors.line,
+                  }}
                 >
-                  {value}
-                </Text>
+                  <Text
+                    style={[
+                      styles.label,
+                      {
+                        fontSize: 12,
+                        color: filter === value ? colors.green : colors.ink,
+                      },
+                    ]}
+                  >
+                    {value}
+                  </Text>
+                </View>
               </Pressable>
             ))}
           </ScrollView>
@@ -312,17 +397,64 @@ function ResponsesContent() {
                       positions.current.sections[section] =
                         event.nativeEvent.layout.y;
                     }}
-                    style={{ gap: 4, marginTop: 14 }}
+                    style={{
+                      gap: 6,
+                      marginTop:
+                        rows[0] && section === sectionFor(rows[0]) ? 10 : 18,
+                    }}
                   >
                     {section === "History" ? (
-                      <Button
-                        compact
-                        secondary
-                        title={history ? "Hide history" : "History"}
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={
+                          history ? "Hide history" : "History"
+                        }
+                        accessibilityState={{ expanded: history }}
+                        aria-expanded={history}
                         onPress={() => setHistory(!history)}
-                      />
+                        style={{
+                          minHeight: 44,
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: 8,
+                          paddingHorizontal: 12,
+                        }}
+                      >
+                        <Text
+                          style={[
+                            styles.label,
+                            { flex: 1, color: colors.muted },
+                          ]}
+                        >
+                          History
+                        </Text>
+                        <Text style={styles.muted}>{items.length}</Text>
+                        {history ? (
+                          <ChevronDown size={16} color={colors.muted} />
+                        ) : (
+                          <ChevronRight size={16} color={colors.muted} />
+                        )}
+                      </Pressable>
                     ) : (
-                      <Text style={styles.h2}>{section}</Text>
+                      <View
+                        style={{
+                          flexDirection: "row",
+                          alignItems: "center",
+                          gap: 8,
+                          paddingHorizontal: 12,
+                          paddingBottom: 2,
+                        }}
+                      >
+                        <Text
+                          accessibilityRole="header"
+                          style={[styles.label, { color: colors.muted }]}
+                        >
+                          {section === "Needs Response" ? "Open" : section}
+                        </Text>
+                        <Text style={[styles.muted, { fontSize: 12 }]}>
+                          {items.length}
+                        </Text>
+                      </View>
                     )}
                     {section !== "History" || history
                       ? items.map((item) => (

@@ -168,6 +168,11 @@ export function SlotFields({
 export function TimeFinderComposer({ sessionId }: { sessionId: string }) {
   const { data, userId, act, getViewerEpoch } = useBeacon();
   const params = useLocalSearchParams<{
+    returnPlanId?: string;
+    planStopId?: string;
+    planAfterStopId?: string;
+    planAudience?: string;
+    startsAt?: string;
     sourceThreadId?: string;
     recoveryId?: string;
     activityNoteId?: string;
@@ -299,7 +304,11 @@ export function TimeFinderComposer({ sessionId }: { sessionId: string }) {
         audience:
           source?.audience ??
           recovery?.audience ??
-          (params.squadId ? "squad" : "friends"),
+          (params.squadId
+            ? "squad"
+            : params.planAudience === "private"
+              ? "private"
+              : "friends"),
         audienceId:
           source?.audience_id ??
           recovery?.audience_id ??
@@ -321,7 +330,17 @@ export function TimeFinderComposer({ sessionId }: { sessionId: string }) {
         timeSlots: suggestedSlots(
           Date.now(),
           randomUUID,
-          source?.payload ?? recovery,
+          source?.payload ??
+            recovery ??
+            (params.returnPlanId
+              ? {
+                  ...makeBeaconDraft(),
+                  timezone:
+                    data.plans.find((p) => p.id === params.returnPlanId)
+                      ?.timezone ?? "UTC",
+                  ...(params.startsAt ? { starts_at: params.startsAt } : {}),
+                }
+              : undefined),
         ),
       })),
     );
@@ -329,7 +348,17 @@ export function TimeFinderComposer({ sessionId }: { sessionId: string }) {
       restored.timeSlots = suggestedSlots(
         Date.now(),
         randomUUID,
-        source?.payload ?? recovery,
+        source?.payload ??
+          recovery ??
+          (params.returnPlanId
+            ? {
+                ...makeBeaconDraft(),
+                timezone:
+                  data.plans.find((p) => p.id === params.returnPlanId)
+                    ?.timezone ?? "UTC",
+                ...(params.startsAt ? { starts_at: params.startsAt } : {}),
+              }
+            : undefined),
       );
     return restored;
   });
@@ -384,13 +413,26 @@ export function TimeFinderComposer({ sessionId }: { sessionId: string }) {
           slots={draft.timeSlots ?? []}
           onChange={(timeSlots) => update({ timeSlots })}
         />
-        <AudiencePicker
-          value={draft.audience}
-          id={draft.audienceId}
-          onChange={(audience, audienceId) => {
-            if (!source) update({ audience, audienceId });
-          }}
-        />
+        {params.returnPlanId ? (
+          <Txt muted>
+            For{" "}
+            {data.plans.find((p) => p.id === params.returnPlanId)?.title ??
+              "your Plan"}{" "}
+            ·{" "}
+            {params.squadId
+              ? (data.squads.find((s) => s.id === params.squadId)?.name ??
+                "Squad")
+              : "Personal"}
+          </Txt>
+        ) : (
+          <AudiencePicker
+            value={draft.audience}
+            id={draft.audienceId}
+            onChange={(audience, audienceId) => {
+              if (!source) update({ audience, audienceId });
+            }}
+          />
+        )}
         <ZonedTimeField
           timezone={
             draft.timeSlots?.[0]?.timezone ??
@@ -494,6 +536,12 @@ export function TimeFinderComposer({ sessionId }: { sessionId: string }) {
                 ? sessionId
                 : randomUUID(),
               kind: "time",
+              return_plan_id: params.returnPlanId,
+              plan_stop_id: params.planStopId,
+              plan_after_stop_id: params.planAfterStopId,
+              coowner_ids:
+                data.plans.find((p) => p.id === params.returnPlanId)
+                  ?.coowner_ids ?? [],
               title: draft.title,
               body: draft.body.slice(0, 500),
               audience: draft.audience,
@@ -544,6 +592,13 @@ export function TimeFinderComposer({ sessionId }: { sessionId: string }) {
             if (epoch === getViewerEpoch()) {
               completePlanningDraft(userId, recoveryToken);
               completeComposerSession(userId, sessionId);
+              if (params.returnPlanId) {
+                router.dismissTo({
+                  pathname: "/plan/[id]",
+                  params: { id: params.returnPlanId },
+                });
+                return;
+              }
               router.replace({
                 pathname: "/responses",
                 params: { threadId: id },

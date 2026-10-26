@@ -1,3 +1,5 @@
+import { ConfirmDialog } from "@/src/shared/Dialogs";
+import { needsLargeInviteConfirmation } from "../createHandoff";
 import { LinkedPlanningBeacon } from "@/src/features/planning/ConnectedPlanningActions";
 import { saveComposerOption } from "@/src/features/planning/composerSession";
 import { CreationDisclosure } from "../components/CreationDisclosure";
@@ -186,6 +188,10 @@ function CreateEditor() {
     kind?: string;
     editor?: string;
     planId?: string;
+    returnPlanId?: string;
+    planStopId?: string;
+    stopPosition?: string;
+    stopAfterId?: string;
     threadId?: string;
     planningSessionId?: string;
     planningOptionId?: string;
@@ -236,6 +242,7 @@ function CreateEditor() {
     parsedInvitees.ids,
   );
   const [inviteeError, setInviteeError] = useState(parsedInvitees.error);
+  const [largeInviteSelection, setLargeInviteSelection] = useState<string[] | null>(null);
   const [statusSourceDismissed, setStatusSourceDismissed] =
     usePlanningDraftState(userId, draftToken, "statusSourceDismissed", false);
   const statusSourceId = statusSourceDismissed
@@ -1047,7 +1054,11 @@ function CreateEditor() {
       throw error;
     }
   }
-  async function submit() {
+  async function submit(largeBatchConfirmed = false) {
+    if (!largeBatchConfirmed && needsLargeInviteConfirmation(inviteeIds) && !invitationSession.current.atomicAttempt) {
+      setLargeInviteSelection([...inviteeIds]);
+      return;
+    }
     if (publicationBusy.current) return;
     publicationBusy.current = true;
     setFieldError(null);
@@ -1238,7 +1249,8 @@ function CreateEditor() {
       const result = await durableAction("publish_planning_beacon", {thread_id: params.sourcePlanningId, claim_token: params.planningClaimToken || undefined, proposal_id: params.planningProposalId || undefined, slot_id: params.planningSlotId || undefined, invitee_ids: inviteeIds, payload, confirmed: true});
       if (typeof result.id !== "string") throw new Error("Could not verify the resulting Beacon. Keep this draft and retry.");
       if (result.already_published) return;
-      router.replace({pathname:"/activity/[id]",params:{id:result.id}});
+      if(params.returnPlanId) router.dismissTo({pathname:"/plan/[id]",params:{id:params.returnPlanId}});
+      else router.replace({pathname:"/activity/[id]",params:{id:result.id}});
       return;
     }
     if (params.planningSessionId && params.planningOptionId) {
@@ -1314,9 +1326,10 @@ function CreateEditor() {
       router.replace({ pathname: "/plan/[id]", params: { id: plan.id } });
       return;
     }
-    const create = () => durableAction("create_activity", payload);
+    const contextualPayload = {...payload,...(params.returnPlanId?{return_plan_id:params.returnPlanId,plan_stop_id:params.planStopId,stop_position:params.stopPosition,stop_after_id:params.stopAfterId}: {})};
+    const create = () => durableAction("create_activity", contextualPayload);
     const result = inviteeIds.length
-      ? await publishAtomic("create_activity_with_invitees", payload)
+      ? await publishAtomic("create_activity_with_invitees", contextualPayload)
       : {
           id: (
             await createAndInvite(
@@ -1332,6 +1345,10 @@ function CreateEditor() {
         };
     if (invitationSession.current.pendingIds.length) return;
     completePlanningDraft(userId, draftToken);
+    if (typeof result.id === "string" && params.returnPlanId) {
+      router.dismissTo({pathname:"/plan/[id]",params:{id:params.returnPlanId}});
+      return;
+    }
     if (typeof result.id === "string")
       router.replace({
         pathname: "/activity-created",
@@ -2532,6 +2549,20 @@ function CreateEditor() {
         </Txt>
         <Txt muted>{moduleNames.join(" · ")}</Txt>
       </Sheet>
+      <ConfirmDialog
+        title="Invite more than 50 people?"
+        visible={!!largeInviteSelection}
+        onClose={() => setLargeInviteSelection(null)}
+        message={"You selected " + (largeInviteSelection?.length ?? 0) + " people. We recommend 50 or fewer for a focused Beacon. Continue with everyone selected?"}
+        confirmLabel={"Publish with " + (largeInviteSelection?.length ?? 0) + " invitations"}
+        cancelLabel="Review people"
+        onConfirm={async () => {
+          if (!largeInviteSelection || largeInviteSelection.length !== inviteeIds.length || largeInviteSelection.some(id => !inviteeIds.includes(id))) {
+            throw new Error("Your selection changed. Close this dialog and review the people again.");
+          }
+          await submit(true);
+        }}
+      />
     </CreationKeyboardScreen>
   );
 }

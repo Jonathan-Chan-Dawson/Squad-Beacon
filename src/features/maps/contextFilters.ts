@@ -129,13 +129,11 @@ export function resolveMapContext(
       if (path.length > 1) result.paths.push(path);
       path = [];
     };
-    for (const activity of data.activities
-      .filter((row) => row.plan_id === plan.id)
-      .sort(
-        (a, b) =>
-          (a.plan_step_index ?? 0) - (b.plan_step_index ?? 0) ||
-          a.starts_at.localeCompare(b.starts_at),
-      )) {
+    const links=(data.plan_stops??[]).filter(s=>s.plan_id===plan.id&&s.approval==="approved"&&s.state==="active").sort((a,b)=>a.position-b.position);
+    const useStops=data.is_demo ? plan.revision!=null || links.length>0 : data.capabilities?.living_plans===true;
+    const itinerary=useStops?links.map(s=>data.activities.find(a=>a.id===(s.activity_id??data.planning_threads.find(t=>t.id===s.thread_id)?.materialized_activity_id))):data.activities.filter(a=>a.plan_id===plan.id).sort((a,b)=>(a.plan_step_index??0)-(b.plan_step_index??0));
+    for (const activity of itinerary) {
+      if(!activity){finishPath();continue;}
       const coordinate = addActivity(activity.id, false);
       // Do not connect across a hidden, virtual, or missing step.
       if (coordinate) path.push(coordinate);

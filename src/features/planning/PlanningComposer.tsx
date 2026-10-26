@@ -1,3 +1,4 @@
+import ZonedTimeField from "./ZonedTimeField";
 import { interestTarget } from "./connected";
 import { PlanningDisclosure, PlanningToggle } from "./PlanningControls";
 import React, { useCallback, useRef, useState } from "react";
@@ -33,6 +34,7 @@ import { publishPlanningSession } from "./creationSession";
 import {
   applyPingStarter,
   composerSession,
+  composerMapCoordinate,
   storeComposerSession,
   completeComposerSession,
   pingStarters,
@@ -44,14 +46,22 @@ import type { Payload } from "@/src/shared/types";
 export function PlanningComposer({ sessionId }: { sessionId: string }) {
   const { data, userId, act, getViewerEpoch, refresh } = useBeacon();
   const params = useLocalSearchParams<{
+    timezone?: string;
+    startsAt?: string;
     kind?: string;
     creationKind?: string;
     squadId?: string;
     organizationId?: string;
     placeLabel?: string;
+    latitude?: string;
+    longitude?: string;
     activityNoteId?: string;
     inviteeIds?: string;
     featureAfter?: string;
+    returnPlanId?: string;
+    planStopId?: string;
+    planAfterStopId?: string;
+    planAudience?: string;
   }>();
   const kind: PlanningThreadKind =
     params.kind === "draw" || params.creationKind === "draw"
@@ -70,6 +80,12 @@ export function PlanningComposer({ sessionId }: { sessionId: string }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const lock = useRef(false);
+  const planContext = data.plans.find(
+    (p) => p.id === params.returnPlanId && data.viewer_id === userId,
+  );
+  const planIdea = data.plan_stops?.find(
+    (s) => s.id === params.planStopId && s.plan_id === planContext?.id,
+  );
   const source = activityNoteSeed(data, userId, params.activityNoteId, now);
   const sourceNote = source
     ? data.activities.find((row) => row.id === params.activityNoteId)
@@ -80,26 +96,35 @@ export function PlanningComposer({ sessionId }: { sessionId: string }) {
   const [draft, setDraft] = useState(() =>
     structuredClone(
       composerSession(userId ?? "signed-out", sessionId, () => {
-        const startsAt = new Date(Date.now() + 3 * 86400000).toISOString();
+        const startsAt =
+          params.startsAt && Date.parse(params.startsAt) > Date.now() + 120000
+            ? params.startsAt
+            : new Date(Date.now() + 3 * 86400000).toISOString();
         return {
           title:
             source?.title ??
+            planIdea?.title ??
             (params.placeLabel ? `Meet at ${params.placeLabel}` : ""),
           body: source?.description ?? "",
           audience: params.squadId
             ? "squad"
             : params.organizationId
               ? "organization"
-              : (sourceNote?.audience ?? "friends"),
+              : params.planAudience === "private"
+                ? "private"
+                : (sourceNote?.audience ?? "friends"),
           audienceId:
             params.squadId ??
             params.organizationId ??
             sourceNote?.audience_id ??
             null,
           startsAt,
-          deadline: new Date(Date.now() + 86400000).toISOString(),
+          deadline: new Date(
+            Math.min(Date.now() + 86400000, Date.parse(startsAt) - 60000),
+          ).toISOString(),
           minutes: "60",
           place: sourcePlace ?? params.placeLabel ?? "",
+          coordinate: sourcePlace ? undefined : composerMapCoordinate(params.latitude, params.longitude),
           category: source?.category ?? "Social",
           options:
             kind === "ping"
@@ -108,6 +133,7 @@ export function PlanningComposer({ sessionId }: { sessionId: string }) {
                   id: randomUUID(),
                   payload: {
                     ...makeBeaconDraft(new Date(startsAt), 60),
+                    ...(planContext ? { timezone: planContext.timezone } : {}),
                     title: index === 0 ? (source?.title ?? "") : "",
                     description: source?.description ?? "",
                     category: source?.category ?? "Social",
@@ -140,6 +166,7 @@ export function PlanningComposer({ sessionId }: { sessionId: string }) {
     if (frozen || busy) return;
     change((next) => {
       next[key] = value;
+      if (key === "place") next.coordinate = undefined;
       if (!next.touched.includes(key)) next.touched.push(key);
     });
   }
@@ -257,10 +284,12 @@ export function PlanningComposer({ sessionId }: { sessionId: string }) {
           throw new Error("Choose an audience you can share with.");
         const beacon = {
           ...makeBeaconDraft(new Date(draft.startsAt), Number(draft.minutes)),
+          ...(planContext ? { timezone: planContext.timezone } : {}),
           title: draft.title.trim(),
           description: draft.body,
           category: draft.category,
           label: draft.place,
+          ...(draft.coordinate ? draft.coordinate : {}),
           audience: draft.audience,
           audience_id: draft.audienceId,
         };
@@ -302,12 +331,17 @@ export function PlanningComposer({ sessionId }: { sessionId: string }) {
           );
         payload = {
           kind,
+          return_plan_id: params.returnPlanId,
+          plan_stop_id: params.planStopId,
+          plan_after_stop_id: params.planAfterStopId,
           title: draft.title.trim(),
           body: draft.body,
           audience: draft.audience,
           audience_id: draft.audienceId,
           deadline_at: draft.deadline,
-          coowner_ids: kind === "ping" ? [] : (draft.coownerIds ?? []),
+          coowner_ids:
+            data.plans.find((p) => p.id === params.returnPlanId)?.coowner_ids ??
+            (kind === "ping" ? [] : (draft.coownerIds ?? [])),
           source_activity_note_id: params.activityNoteId,
           connected_version: 1,
           vote_method: draft.voteMethod ?? "pick_one",
@@ -335,6 +369,13 @@ export function PlanningComposer({ sessionId }: { sessionId: string }) {
       if (epoch !== getViewerEpoch()) return;
       completed = true;
       completeComposerSession(userId, sessionId);
+      if (params.returnPlanId) {
+        router.dismissTo({
+          pathname: "/plan/[id]",
+          params: { id: params.returnPlanId },
+        });
+        return;
+      }
       router.replace({
         pathname: "/activity-created",
         params: {
@@ -395,6 +436,11 @@ export function PlanningComposer({ sessionId }: { sessionId: string }) {
                       kind: "time",
                       sessionId,
                       activityNoteId: params.activityNoteId,
+                      returnPlanId: params.returnPlanId,
+                      planStopId: params.planStopId,
+                      planAfterStopId: params.planAfterStopId,
+                      squadId: params.squadId,
+                      planAudience: params.planAudience,
                     },
                   })
                 }
@@ -427,11 +473,20 @@ export function PlanningComposer({ sessionId }: { sessionId: string }) {
           onChangeText={(value) => update("title", value)}
         />
         {kind === "ping" ? (
-          <DateField
-            label="When?"
-            value={draft.startsAt}
-            onChange={(value) => update("startsAt", value)}
-          />
+          planContext ? (
+            <ZonedTimeField
+              label="When?"
+              value={draft.startsAt}
+              timezone={planContext.timezone}
+              onChange={(value) => update("startsAt", value)}
+            />
+          ) : (
+            <DateField
+              label="When?"
+              value={draft.startsAt}
+              onChange={(value) => update("startsAt", value)}
+            />
+          )
         ) : (
           <View style={{ gap: 10 }}>
             <Txt>Options</Txt>
@@ -497,7 +552,12 @@ export function PlanningComposer({ sessionId }: { sessionId: string }) {
                   ...draft.options,
                   {
                     id: randomUUID(),
-                    payload: makeBeaconDraft(new Date(draft.startsAt), 60),
+                    payload: {
+                      ...makeBeaconDraft(new Date(draft.startsAt), 60),
+                      ...(planContext
+                        ? { timezone: planContext.timezone }
+                        : {}),
+                    },
                   },
                 ])
               }
@@ -548,20 +608,33 @@ export function PlanningComposer({ sessionId }: { sessionId: string }) {
             />
           </PlanningDisclosure>
         )}
-        <AudiencePicker
-          value={draft.audience}
-          id={draft.audienceId}
-          onChange={(audience, id) => {
-            if (frozen || busy) return;
-            change((next) => {
-              next.audience = audience;
-              next.audienceId = id;
-              next.coownerIds = [];
-              if (!next.touched.includes("audience"))
-                next.touched.push("audience");
-            });
-          }}
-        />
+        {params.returnPlanId ? (
+          <Txt muted>
+            For{" "}
+            {data.plans.find((p) => p.id === params.returnPlanId)?.title ??
+              "your Plan"}{" "}
+            ·{" "}
+            {params.squadId
+              ? (data.squads.find((s) => s.id === params.squadId)?.name ??
+                "Squad")
+              : "Personal"}
+          </Txt>
+        ) : (
+          <AudiencePicker
+            value={draft.audience}
+            id={draft.audienceId}
+            onChange={(audience, id) => {
+              if (frozen || busy) return;
+              change((next) => {
+                next.audience = audience;
+                next.audienceId = id;
+                next.coownerIds = [];
+                if (!next.touched.includes("audience"))
+                  next.touched.push("audience");
+              });
+            }}
+          />
+        )}
         <DateField
           label="Responses close"
           value={draft.deadline}

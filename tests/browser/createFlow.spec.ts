@@ -53,54 +53,29 @@ test("Plan timeline can create a reusable manual Routine", async ({ page }) => {
   await page
     .getByLabel("Plan name", { exact: true })
     .fill("Friday test itinerary");
-  await page
-    .getByLabel("Title / Activity", { exact: true })
-    .fill("Dinner test");
-  await page.getByRole("button", { name: "Manual Start", exact: true }).click();
-  await page.getByRole("button", { name: "Manual End", exact: true }).click();
-  await page.getByRole("button", { name: "+ Add Beacon", exact: true }).click();
-  await page
-    .getByLabel("Title / Activity", { exact: true })
-    .fill("Bowling test");
-  await expect(
-    page.getByRole("button", { name: "After Previous Ends", exact: true }),
-  ).toBeVisible();
   await page.getByRole("button", { name: "Create Plan", exact: true }).click();
-  const conflicts = page.getByRole("button", {
-    name: "Create Plan anyway",
-    exact: true,
-  });
-  if (await conflicts.isVisible()) await conflicts.click();
-  await expect(page).toHaveURL(/\/plan\//);
-  await expect(
-    page.getByText("Dinner test", { exact: true }).first(),
-  ).toBeVisible();
+  await page.getByRole("button", { name: "+ Add Stop", exact: true }).click();
+  await page.getByRole("button", { name: "Add Activity", exact: true }).click();
   await page
-    .getByRole("button", { name: "Start Beacon", exact: true })
-    .first()
+    .getByRole("button", { name: "Dinner together", exact: true })
     .click();
+  await page.getByRole("button", { name: "Repeat", exact: true }).click();
   await page
-    .getByRole("button", { name: "End Beacon", exact: true })
-    .first()
+    .getByRole("button", { name: "Whenever I choose", exact: true })
     .click();
-  await page
-    .getByRole("button", { name: "Make This a Routine", exact: true })
-    .click();
-  await page.getByRole("button", { name: "Run Manually", exact: true }).click();
   await page
     .getByRole("button", { name: "Create Routine", exact: true })
     .click();
-  await expect(
-    page.getByRole("button", { name: "Open Routine tools", exact: true }),
-  ).toBeVisible();
   await page
     .getByRole("button", { name: "Open Routine tools", exact: true })
     .click();
-  await expect(
-    page.getByRole("button", { name: "Run Now", exact: true }),
-  ).toBeVisible();
   await page.getByRole("button", { name: "Run Now", exact: true }).click();
   await expect(page).toHaveURL(/\/plan\//);
+  await expect(
+    page.getByText("This occurrence · Edit its Beacons individually", {
+      exact: true,
+    }),
+  ).toBeVisible();
 });
 
 test("Routine quick start offers source Plans and the shared Plan builder", async ({
@@ -116,7 +91,7 @@ test("Routine quick start offers source Plans and the shared Plan builder", asyn
     .click();
   await expect(page.getByLabel("Plan name", { exact: true })).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Next · Repeat Schedule", exact: true }),
+    page.getByRole("button", { name: "Create Plan", exact: true }),
   ).toBeVisible();
 });
 

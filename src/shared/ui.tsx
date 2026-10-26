@@ -1,3 +1,4 @@
+import { SocialChoiceRow } from "./SocialChoiceRow";
 import {
   getOverlayTitle,
   subscribeToSheetStack,
@@ -60,7 +61,6 @@ import {
 import {
   ArrowLeft,
   Bell,
-  Check,
   Lock,
   Radio,
   Users,
@@ -1423,43 +1423,27 @@ export function AudiencePicker({
       {choices.slice(0, inline ? limit : choices.length).map((g) => {
         const chosen = value === g.audience && (g.id === null || id === g.id);
         return (
-          <Pressable
-            key={g.audience + (g.id ?? "")}
-            accessibilityRole={inline ? "radio" : "button"}
-            accessibilityLabel={g.id ? `${g.name} · ${g.kind}` : g.name}
-            accessibilityState={
-              inline ? { checked: chosen } : { selected: chosen }
+          <SocialChoiceRow
+            key={String(g.audience) + ":" + String(g.id)}
+            label={g.name}
+            accessibilityLabel={g.name + " \u00b7 " + g.kind}
+            detail={g.kind}
+            multiple={false}
+            selected={chosen}
+            icon={
+              g.id ? (
+                <Avatar name={g.name} size={32} />
+              ) : g.audience === "private" ? (
+                <Lock size={20} color={colors.muted} />
+              ) : (
+                <Users size={20} color={colors.muted} />
+              )
             }
-            aria-checked={inline ? chosen : undefined}
             onPress={() => {
               onChange(g.audience, g.id);
               setOpen(false);
             }}
-            style={{
-              minHeight: inline ? 44 : 64,
-              flexDirection: "row",
-              alignItems: "center",
-              gap: inline ? 10 : 12,
-              paddingVertical: inline ? 6 : 10,
-              borderBottomWidth: StyleSheet.hairlineWidth,
-              borderBottomColor: colors.line,
-            }}
-          >
-            {g.id ? (
-              <Avatar name={g.name} size={inline ? 28 : 36} />
-            ) : g.audience === "private" ? (
-              <Lock size={20} color={colors.muted} />
-            ) : (
-              <Users size={20} color={colors.muted} />
-            )}
-            <View style={{ flex: 1, gap: 2 }}>
-              <Text style={styles.body}>{g.name}</Text>
-              {g.id || !inline ? (
-                <Text style={styles.muted}>{g.kind}</Text>
-              ) : null}
-            </View>
-            {chosen && <Check size={20} color={colors.green} />}
-          </Pressable>
+          />
         );
       })}
       {!choices.length && <Txt muted>No matching audiences.</Txt>}

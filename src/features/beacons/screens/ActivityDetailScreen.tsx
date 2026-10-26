@@ -1,3 +1,4 @@
+import { RepeatBeaconAction } from "@/src/features/plans/RepeatBeaconAction";
 import DateField from "@/components/DateField";
 import {
   resolveActivityToolEntry,
@@ -1075,6 +1076,7 @@ export default function ActivityDetail() {
               reducedMotion={reducedMotion}
             />
 
+            <RepeatBeaconAction activity={activity} onEditOccurrence={()=>selectTab("Activity")} />
             {visibleTab === "Overview" ? (
               <>
                 <ActivityDetailInfo

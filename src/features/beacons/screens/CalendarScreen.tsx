@@ -7,7 +7,7 @@ import { useBeacon } from "@/src/shared/store";
 import { useNow } from "@/src/shared/useNow";
 import { localDate } from "@/src/shared/domain";
 import { isLocalDate } from "@/src/features/plans/routines";
-import { Button, IconButton, Screen, Sheet, Txt, useTheme } from "@/src/shared/ui";
+import { Action, Button, IconButton, Screen, Sheet, Txt, useTheme } from "@/src/shared/ui";
 import { PastWeeklyProgressView } from "@/src/features/beacons/components/feed/PastPanels";
 import { calendarMonthDates, calendarScheduleStart, calendarTimezone, calendarWeekDates, calendarWeeklyProgress, selectCalendarItems, selectCalendarWeekItems, type CalendarItem } from "../calendarSelectors";
 
@@ -23,6 +23,9 @@ export default function CalendarScreen() {
   const [monthOpen, setMonthOpen] = useState(true);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [scheduleError, setScheduleError] = useState("");
+  const [expanded,setExpanded]=useState<string|null>(null);
+  const [projected,setProjected]=useState<CalendarItem|null>(null);
+  const {act}=useBeacon();
   const projectionRange=useMemo(()=>{
     if (monthOpen) { const {first,last}=calendarMonthDates(month); return {startOn:first,endOn:last}; }
     const dates=calendarWeekDates(selectedDate); return {startOn:dates[0],endOn:dates[6]};
@@ -39,7 +42,11 @@ export default function CalendarScreen() {
     const nextMonth = value.toISOString().slice(0, 7), range = calendarMonthDates(nextMonth);
     selectDay(`${nextMonth}-${String(Math.min(Number(selectedDate.slice(8)), range.days.length)).padStart(2, "0")}`);
   };
-  const openItem = (item: CalendarItem) => router.push(item.kind === "beacon" ? { pathname: "/activity/[id]", params: { id: item.id } } : { pathname: "/plan/[id]", params: { id: item.id } });
+  const openItem = (item: CalendarItem) => {
+    if(item.kind==="routine"){setProjected(item);return;}
+    if(item.activities?.length){setExpanded(expanded===item.key?null:item.key);return;}
+    router.push(item.kind==="beacon"?{pathname:"/activity/[id]",params:{id:item.id}}:{pathname:"/plan/[id]",params:{id:item.id}});
+  };
   const dotColors = { beacon: colors.accent, plan: tokens.categories.Study.color, routine: tokens.categories.Creative.color };
   const renderDate = (value: string | null, index: number) => {
     if (!value) return <View key={`empty:${index}`} style={{ width: `${100 / 7}%`, minHeight: 52 }} />;
@@ -71,15 +78,16 @@ export default function CalendarScreen() {
         {selectedDate >= today ? <Button compact title="+ Schedule" onPress={() => { setScheduleError(""); setScheduleOpen(true); }} /> : null}
       </View>
       {!agenda.length ? <Txt muted>{loading ? "Loading your calendar…" : selectedDate < today ? "No activity history on this day." : "Nothing scheduled for this day."}</Txt> : null}
-      {agenda.map((item) => <Pressable key={item.key} accessibilityRole="button" onPress={() => openItem(item)} style={[styles.card, { gap: 4, borderLeftWidth: 3, borderLeftColor: dotColors[item.kind] }]}>
+      {agenda.map((item) => <View key={item.key} style={{gap:5}}><Pressable accessibilityRole="button" accessibilityState={item.activities?.length?{expanded:expanded===item.key}:undefined} onPress={() => openItem(item)} style={[styles.card, { gap: 4, borderLeftWidth: 3, borderLeftColor: dotColors[item.kind],borderStyle:item.tentative?"dashed":"solid" }]}>
         <Text style={styles.h2}>{item.title}</Text>
         <Txt muted>{item.label}{item.startsAt ? ` · ${new Date(item.startsAt).toLocaleTimeString([], { timeZone: timezone, hour: "numeric", minute: "2-digit" })}` : ""}</Txt>
-        {item.timezone ? <Txt muted>{item.timezone}</Txt> : null}
-      </Pressable>)}
+        {item.activities?.length ? <Txt muted>{item.activities.length} activities · {expanded===item.key?"Collapse":"View itinerary"}</Txt> : null}
+      </Pressable>{expanded===item.key&&item.activities?<View style={{paddingLeft:16,gap:8}}>{item.activities.map(a=><Button key={a.id} compact secondary title={`${new Date(a.startsAt).toLocaleTimeString([],{timeZone:timezone,hour:"numeric",minute:"2-digit"})} · ${a.title}`} onPress={()=>router.push({pathname:"/activity/[id]",params:{id:a.id}})} />)}<Button compact title="Open Plan" onPress={()=>router.push({pathname:"/plan/[id]",params:{id:item.id}})} /></View>:null}</View>)}
     </View>
     {!!progress.length && <PastWeeklyProgressView items={progress} />}
     <View style={[styles.row, { flexWrap: "wrap" }]}><Button compact secondary title="Plans" onPress={() => router.push("/plans")} /><Button compact secondary title="Routines" onPress={() => router.push("/routines")} /></View>
     <Txt muted>Routine dates use each Routine’s timezone.</Txt>
+    <Sheet title={projected?.title??"Projected repeat"} visible={!!projected} onClose={()=>setProjected(null)}><Txt>{projected?.date} · Projected repeat</Txt><Txt muted>This is a preview. Its Beacons and attendance do not exist yet.</Txt><Button title="Future repeats" onPress={()=>{const item=projected;setProjected(null);if(item)router.push({pathname:"/routines",params:{planId:item.id}});}} />{projected&&data.plan_routines.some(r=>r.id===projected.routineId&&r.next_occurrence_on===projected.date)&&<Action secondary title="Skip this next repeat" run={async()=>{await act("skip_routine_next",{id:projected.routineId,expected_occurrence_on:projected.date});setProjected(null);}} />}</Sheet>
     <Sheet title={`Schedule · ${heading(selectedDate)}`} visible={scheduleOpen && selectedDate >= today} onClose={() => setScheduleOpen(false)}>
       {scheduleError ? <Text accessibilityRole="alert" style={styles.error}>{scheduleError}</Text> : null}
       <Button title="Schedule Once · Beacon" onPress={() => { setScheduleError(""); try { const startsAt = calendarScheduleStart(selectedDate, Date.now(), timezone); setScheduleOpen(false); router.push({ pathname: "/create", params: { startsAt, timezone } }); } catch (failure) { setScheduleError(failure instanceof Error ? failure.message : "Choose another date."); } }} />

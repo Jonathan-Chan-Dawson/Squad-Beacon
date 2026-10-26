@@ -118,7 +118,7 @@ export async function rpc(
         ? "join_public_beacon"
         : "set_beacon_discovery"
       : "beacon_action",
-    discoveryParams ?? { action, payload, request_id: requestId },
+    discoveryParams ?? { action, payload: expectedViewerId ? { ...payload, expected_actor_id: expectedViewerId } : payload, request_id: requestId },
   );
   if (status !== 0) pendingRequests.delete(key);
   if (error) {

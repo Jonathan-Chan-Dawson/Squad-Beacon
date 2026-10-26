@@ -5,7 +5,7 @@ Maps feature
 - markerIdentity.ts: independent ownership badge and relationship identity, rose friend-host hearts, first-name freshness labels and deterministic label collision suppression.
 
 - screens/MapScreen.tsx: full-map tab; coordinates search, safe area/context, inline discovery, area/compass, previews, and map options.
-- Map side controls: direct pin-to-create action and a compact compass toolbar for location, overview, everywhere, and place search. Map type lives in a secondary display menu; additional map settings retain their existing sheet and device preferences.
+- Map controls: Navigation, Layers and Weather share the top-right rail; Layers is the single style selector. Bottom-right Place reuses location picking, fixed-center adjustment, worldwide search, and compact confirmation before template-first Beacon or real Ping creation. Cancel restores the prior camera/query without clearing selected markers or filters; editor picking retains its token return. Scale and attribution stay bottom-left.
 - MapExplorationHeader.tsx: compact accessible search, area/count row, quick-scope chips, reduced-motion inline filter tray, and Search this area action.
 - AdvancedMapFilters.tsx: radio When/Join rows, two-column category checkboxes, segmented format and progressive People & groups/Plans sections in a sticky-footer partial Sheet.
 - filtering.ts: shared privacy-first Beacon filter selectors for Map and Upcoming, including local-date overlap and capacity/RSVP semantics; gates raw meeting-place details through the canonical profile-preview rule.

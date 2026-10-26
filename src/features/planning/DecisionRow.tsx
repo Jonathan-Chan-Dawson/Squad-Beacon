@@ -5,8 +5,9 @@ import {
   OrganizerMessageEditor,
 } from "./ConnectedPlanningActions";
 import { useNow } from "@/src/shared/useNow";
-import React from "react";
-import { Pressable, Text, View } from "react-native";
+import React, { useEffect, useState } from "react";
+import { Animated, Pressable, Text, View } from "react-native";
+import { useReducedMotion } from "@/src/shared/design-system";
 import {
   ChevronDown,
   ChevronRight,
@@ -33,7 +34,17 @@ export function DecisionRow({
   onExpand: () => void;
   onBeforeRespond: () => void;
 }) {
-  const { styles, colors } = useTheme();
+  const { styles, colors, semanticColors } = useTheme();
+  const reduceMotion = useReducedMotion();
+  const [reveal] = useState(() => new Animated.Value(expanded ? 1 : 0));
+  useEffect(() => {
+    Animated.timing(reveal, {
+      toValue: expanded ? 1 : 0,
+      duration: reduceMotion ? 0 : 160,
+      useNativeDriver: false,
+    }).start();
+    return () => reveal.stopAnimation();
+  }, [expanded, reduceMotion, reveal]);
   const { data, userId, act, getViewerEpoch } = useBeacon();
   const now = useNow();
   const { thread, response, vote, manages, eligible } = item;
@@ -89,13 +100,19 @@ export function DecisionRow({
     if (epoch !== getViewerEpoch()) throw new Error("Your account changed.");
   }
   return (
-    <View
+    <Animated.View
       testID={`decision-row-${thread.id}`}
       style={{
-        paddingVertical: 14,
-        gap: 8,
-        borderBottomWidth: 1,
-        borderBottomColor: colors.line,
+        paddingVertical: thread.kind === "ping" ? 6 : 10,
+        paddingHorizontal: 10,
+        gap: thread.kind === "ping" ? 4 : 6,
+        borderRadius: 12,
+        borderLeftWidth: 2,
+        borderLeftColor: expanded ? colors.green : "transparent",
+        backgroundColor: reveal.interpolate({
+          inputRange: [0, 1],
+          outputRange: [colors.bg, semanticColors.surfaceRaised],
+        }),
       }}
     >
       <Pressable
@@ -114,10 +131,15 @@ export function DecisionRow({
       >
         <Icon size={20} color={colors.green} />
         <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
-          <Text style={[styles.body, { fontWeight: "700" }]}>
+          <Text
+            style={[
+              styles.body,
+              { fontWeight: "700", fontSize: 15, lineHeight: 21 },
+            ]}
+          >
             {thread.title}
           </Text>
-          <Text style={styles.muted}>
+          <Text style={[styles.muted, { fontSize: 12, lineHeight: 18 }]}>
             {kindLabel} · {creator} · {audience}
           </Text>
         </View>
@@ -127,7 +149,10 @@ export function DecisionRow({
           <ChevronRight size={18} color={colors.muted} />
         )}
       </Pressable>
-      <Text accessibilityLiveRegion="polite" style={styles.muted}>
+      <Text
+        accessibilityLiveRegion="polite"
+        style={[styles.muted, { fontSize: 12, lineHeight: 18 }]}
+      >
         {thread.materialized_activity_id
           ? data.activities.find(
               (a) => a.id === thread.materialized_activity_id,
@@ -143,7 +168,11 @@ export function DecisionRow({
                   ? "Time selected · Ready for Beacon review"
                   : "Time selected · Waiting for Organizer"
                 : saved
-                  ? `${saved} · ${open ? `Change until ${deadline}` : "Responses closed"}`
+                  ? thread.kind === "ping"
+                    ? open
+                      ? `Change until ${deadline}`
+                      : "Responses closed"
+                    : `${saved} · ${open ? `Change until ${deadline}` : "Responses closed"}`
                   : thread.status !== "open"
                     ? thread.status.replaceAll("_", " ")
                     : open
@@ -158,13 +187,14 @@ export function DecisionRow({
         <PlanningResponseControls
           threadId={thread.id}
           showDeadline={false}
+          compactPing
           expanded={expanded}
           onBeforeRespond={onBeforeRespond}
           onOpen={onExpand}
           onOpenBeaconEditor={() =>
             router.push({
               pathname: "/create",
-              params: { threadId: thread.id },
+              params: { threadId: thread.id, editor: "yes" },
             })
           }
         />
@@ -210,7 +240,7 @@ export function DecisionRow({
         />
       )}
       {expanded ? (
-        <View style={{ gap: 10 }}>
+        <Animated.View style={{ gap: 8, opacity: reveal }}>
           {thread.body ? <Txt>{thread.body}</Txt> : null}
           {thread.payload &&
           thread.kind === "ping" &&
@@ -264,8 +294,8 @@ export function DecisionRow({
           {!manages && thread.kind !== "ping" && !eligible ? (
             <PlanningLink title="View decision details" onPress={manage} />
           ) : null}
-        </View>
+        </Animated.View>
       ) : null}
-    </View>
+    </Animated.View>
   );
 }

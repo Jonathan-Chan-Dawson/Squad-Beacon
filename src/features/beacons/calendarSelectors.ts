@@ -1,3 +1,4 @@
+import { livingPlanCalendar } from "./livingPlanCalendar";
 import { personalCalendarRoutine, type RoutineCalendarRow } from "./calendarRoutineProjection";
 import type { Data } from "@/src/shared/types";
 import { localDate } from "@/src/shared/domain";
@@ -8,7 +9,7 @@ import { addLocalDays, isLocalDate, isoWeekday } from "@/src/features/plans/rout
 import { planLocalDateTimeToISO } from "@/src/features/plans/domain";
 import { getAspirationProgress } from "@/src/features/profile/aspirations";
 
-export type CalendarItem = { key: string; date: string; title: string; kind: "beacon" | "plan" | "routine"; id: string; startsAt?: string; timezone?: string; label: string };
+export type CalendarItem = { activities?: {id:string;title:string;startsAt:string}[]; tentative?: boolean; routineId?: string; key: string; date: string; title: string; kind: "beacon" | "plan" | "routine"; id: string; startsAt?: string; timezone?: string; label: string };
 
 export function calendarTimezone(data: Data, userId: string | null, fallback = "UTC") {
   const zone = data.viewer_id === userId ? data.profiles.find((profile) => profile.id === userId)?.timezone : undefined;
@@ -57,7 +58,14 @@ export function selectCalendarItems(data: Data, userId: string | null, month: st
       label: activity.status === "completed" || end <= now ? "History" : activity.owner_id === userId ? "Hosting" : "Confirmed Going",
     });
   }
-  const plans = data.plans.filter((plan) => plan.status === "scheduled" && canReadMapPlan(data, plan, userId) &&
+  const modern=data.is_demo===true||data.capabilities?.living_plans===true;
+  if(modern) {
+    const groups=livingPlanCalendar(data,userId,days,timezone);
+    const grouped=new Set(groups.flatMap(g=>g.activities?.map(a=>`${a.id}:${g.date}`)??[]));
+    for(let index=items.length-1;index>=0;index--)if(items[index].kind==="beacon"&&grouped.has(`${items[index].id}:${items[index].date}`))items.splice(index,1);
+    items.push(...groups);
+  }
+  const plans = (modern ? [] : data.plans).filter((plan) => plan.status === "scheduled" && canReadMapPlan(data, plan, userId) &&
     (plan.owner_id === userId || data.plan_members.some((member) => member.plan_id === plan.id && member.user_id === userId)));
   for (const plan of plans) {
     const source = data.activities.filter((activity) => activity.plan_id === plan.id && activity.mode !== "solo" && activity.status !== "cancelled" && canReadBeaconActivity(data, activity, userId));
@@ -72,11 +80,12 @@ export function selectCalendarItems(data: Data, userId: string | null, month: st
     if (row.state==="materialized") {
       const child=data.plans.find((item)=>item.id===row.occurrencePlanId && item.status==="scheduled" && canReadMapPlan(data,item,userId));
       if (!child) continue;
+      if (child.routine_source && items.some(item=>item.date===row.date&&item.kind==="beacon"&&(data.plan_stops??[]).some(stop=>stop.plan_id===child.id&&stop.activity_id===item.id))) continue;
       if (items.some((item)=>item.date===row.date && (item.kind==="plan" && item.id===child.id || item.kind==="beacon" && data.activities.some((activity)=>activity.id===item.id && activity.plan_id===child.id)))) continue;
       items.push({key:`routine-plan:${row.routineId}:${row.date}`,date:row.date,kind:"plan",id:child.id,title:child.title,timezone:child.timezone,label:"Scheduled Routine Plan - attendance is separate"});
     } else {
       if (data.activities.some((activity)=>activity.plan_id===plan.id && activity.status==="scheduled" && canReadBeaconActivity(data,activity,userId) && Number.isFinite(Date.parse(activity.starts_at)) && localDate(new Date(activity.starts_at),plan.timezone)===row.date)) continue;
-      items.push({key:`routine:${row.routineId}:${row.date}`,date:row.date,kind:"routine",id:plan.id,title:plan.title,timezone:plan.timezone,label:"Projected Routine - attendance is separate"});
+      items.push({key:`routine:${row.routineId}:${row.date}`,date:row.date,kind:"routine",id:plan.id,routineId:row.routineId,title:plan.title,timezone:plan.timezone,label:"Projected Routine - attendance is separate"});
     }
   }
   return items.sort((left, right) => left.date.localeCompare(right.date) || (left.startsAt ?? "").localeCompare(right.startsAt ?? "") || left.key.localeCompare(right.key));

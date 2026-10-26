@@ -14,3 +14,5 @@ Feature-specific business rules belong under src/features/; keep only true cross
 - mobilePresentation.ts, SystemBars.tsx: shared native page/sheet presentation and focus-scoped immersive status-bar requests; status icon style follows the active appearance.
 
 - AppNavigation.tsx / AppNavigation.native.tsx and SystemBars.tsx / SystemBars.native.tsx: preserve web presentation while native opts into themed push/modal transitions and focused system-bar requests.
+
+- SocialChoiceRow.tsx: shared accessible selection/browse rows and category rail for people, creation audiences and community association.

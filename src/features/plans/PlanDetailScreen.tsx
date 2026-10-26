@@ -1,3 +1,5 @@
+import { LivingPlanDetail } from "./LivingPlansScreen";
+import { livingPlansEnabled } from "./livingPlans";
 import { physicalDirectionsUrl } from "@/src/features/maps/directions";
 import { stepsFromPlan } from "@/src/features/plans/domain";
 import { RoutineScheduleSheet } from "@/src/features/plans/RoutineScheduleSheet";
@@ -20,6 +22,12 @@ import { Linking, Text, View } from "react-native";
 const dayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 export default function PlanDetailScreen() {
+  const { data } = useBeacon();
+  if (livingPlansEnabled(data)) return <LivingPlanDetail />;
+  return <LegacyPlanDetail />;
+}
+
+function LegacyPlanDetail() {
   const { styles } = useTheme();
   const now = useNow(1000);
   const [confirmCancel, setConfirmCancel] = useState(false);

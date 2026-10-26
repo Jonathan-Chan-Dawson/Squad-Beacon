@@ -1,3 +1,7 @@
+import {
+  SocialChoiceRow,
+  SocialCategoryRail,
+} from "@/src/shared/SocialChoiceRow";
 import React, { useState } from "react";
 import { Pressable, Text, View, type TextInput } from "react-native";
 import { AudiencePicker, Button, Field, Txt, useTheme } from "@/src/shared/ui";
@@ -45,38 +49,17 @@ function Choice({
   onPress: () => void;
   detail?: string;
 }) {
-  const { styles, colors } = useTheme();
   return (
-    <Pressable
-      accessibilityRole="radio"
-      accessibilityState={{ checked: selected }}
-      aria-checked={selected}
-      accessibilityLabel={title}
+    <SocialChoiceRow
+      label={title}
+      detail={detail}
+      selected={selected}
       onPress={onPress}
-      style={{
-        minHeight: 48,
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 10,
-        paddingVertical: 6,
-      }}
-    >
-      <Text
-        accessible={false}
-        style={{
-          color: selected ? colors.primary : colors.muted,
-          fontSize: 20,
-        }}
-      >
-        {selected ? "◉" : "○"}
-      </Text>
-      <View style={{ flex: 1 }}>
-        <Text style={styles.body}>{title}</Text>
-        {detail ? <Txt muted>{detail}</Txt> : null}
-      </View>
-    </Pressable>
+      multiple={false}
+    />
   );
 }
+
 export function CreationCapacity({
   value,
   onChange,
@@ -225,6 +208,7 @@ export function CreationPeople({
 }) {
   const { styles, colors } = useTheme();
   const [query, setQuery] = useState("");
+  const [communityKind, setCommunityKind] = useState("all");
   const [limit, setLimit] = useState(6);
   const toggle = (value: CreationPeoplePanel) =>
     onPanel(panel === value ? "none" : value);
@@ -243,6 +227,9 @@ export function CreationPeople({
         Number(selected(b)) - Number(selected(a)) ||
         Number(b.joined) - Number(a.joined) ||
         a.name.localeCompare(b.name),
+    )
+    .filter(
+      (row) => communityKind === "all" || row.entity_type === communityKind,
     )
     .filter((row) =>
       `${row.name} ${kind(row.entity_type)}`
@@ -313,6 +300,21 @@ export function CreationPeople({
           }}
           placeholder="Squads, Organizations, Networks…"
         />
+        <SocialCategoryRail
+          value={communityKind}
+          onChange={(value) => {
+            setCommunityKind(value);
+            setLimit(6);
+          }}
+          items={[
+            { value: "all", label: "All" },
+            ...(["squad", "space", "organization"] as const)
+              .filter((type) =>
+                communityChoices.some((row) => row.entity_type === type),
+              )
+              .map((type) => ({ value: type, label: kind(type) + "s" })),
+          ]}
+        />
         <Choice
           title="No community selected"
           selected={!selectedCommunity}
@@ -374,8 +376,9 @@ export function CreationPeople({
           inputRef={capacityRef}
         />
         <Txt muted>
-          Invitations send to selected eligible friends on publication, up to
-          20. Community association does not change access or invite members.
+          Invitations send only to selected eligible friends on publication. We
+          recommend 50 or fewer. Community association does not change access or
+          invite members.
         </Txt>
         <Txt muted>
           After creating, open People → Organizer roles. People must be approved

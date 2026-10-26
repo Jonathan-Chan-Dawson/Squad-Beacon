@@ -501,7 +501,7 @@ export default function SquadProfileScreen() {
         ? `${preview.timing === "current" ? "Current Beacon" : "Upcoming Beacon"} · ${activityWhen(preview.activity)}`
         : preview.routine
           ? `Plan routine · next ${preview.routine.next_occurrence_on ?? "date to be set"}`
-          : `Plan · starts ${preview.plan.start_date}`;
+          : `Plan · ${preview.plan.start_date ?? "Date undecided"}`;
     const Icon = isDecision
       ? preview.decision.kind === "ping"
         ? CircleHelp

@@ -1349,6 +1349,7 @@ export default function BeaconMap(props: MapProps) {
   const lat = focused?.latitude,
     lng = focused?.longitude;
   useEffect(() => {
+    if (onPick) return;
     if (lat == null || lng == null) {
       appliedFocusedTarget.current = null;
       return;
@@ -1365,7 +1366,7 @@ export default function BeaconMap(props: MapProps) {
         appliedFocusedTarget.current = focusKey;
       }
     }
-  }, [ready, lat, lng, adjustedMapCenter, layoutVersion, reducedMotion]);
+  }, [ready, lat, lng, adjustedMapCenter, layoutVersion, reducedMotion, onPick]);
   useEffect(() => {
     if (!ready || !explorationTarget || onPick) return;
     if (appliedTargetRevision.current === explorationTarget.revision) return;
@@ -1467,7 +1468,7 @@ export default function BeaconMap(props: MapProps) {
     const currentMap = map.current;
     if (
       !ready ||
-      onPick ||
+      (onPick && command?.kind !== "focus") ||
       !command ||
       !currentMap ||
       !hasUsableMapViewport(currentMap)

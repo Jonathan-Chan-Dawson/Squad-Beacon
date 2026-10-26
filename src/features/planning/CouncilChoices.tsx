@@ -127,11 +127,13 @@ export function CouncilChoices({
   expanded,
   onExpand,
   onBeforeRespond,
+  onOpenBeaconEditor,
 }: {
   threadId: string;
   expanded: boolean;
   onExpand: () => void;
   onBeforeRespond?: () => void;
+  onOpenBeaconEditor?: () => void;
 }) {
   const { data, userId, act, getViewerEpoch } = useBeacon();
   const { styles, colors } = useTheme();
@@ -228,6 +230,7 @@ export function CouncilChoices({
           <Pressable
             key={option.id}
             accessibilityRole={approval ? "checkbox" : "radio"}
+            aria-checked={selected}
             accessibilityState={{
               checked: selected,
               disabled: !eligible || busy,
@@ -329,6 +332,7 @@ export function CouncilChoices({
       {adding && eligible && (
         <ProposalEditor
           inline
+          onOpenBeaconEditor={onOpenBeaconEditor}
           thread={thread}
           visible
           onClose={() => setAdding(false)}

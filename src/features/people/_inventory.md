@@ -1,6 +1,6 @@
 People feature
 
-- socialSelection.ts / components/SocialSelector.tsx: controlled recipient selection with explicit supported kinds, scrolling underlined categories, divided private-list filters, and bulk-selection undo. Stored spaces display as Organizations and stored organizations as Networks; membership never expands into invitations.
+- socialSelection.ts / components/SocialSelector.tsx: controlled recipient selection with explicit supported kinds, compact category rails, secondary Friends/private-list filters, and bulk-selection undo. Stored spaces display as Organizations and stored organizations as Networks; membership never expands into invitations.
 - Chat rows retain their existing layout, with a compact Friends/Add Friends separator before the start-chat friend rows.
 
 - screens/MessagingHubScreen.tsx: same-tab Chats/Communities hub, independent search state, compact controls and legacy entry parameters; screens/SquadsScreen.tsx preserves the public entry point.
@@ -30,4 +30,4 @@ People feature
 
 - components/PrivateListAvatar.tsx: shared Close Friends people icon and deterministic theme-aware custom-list initial colors in the selector and management.
 
-- components/FriendFilterSelector.tsx and friendGroupFilters.ts: SocialSelector's optional filterFriends mode; authorized group/list browsing narrows accepted friends without selecting group audiences.
+- components/FriendFilterSelector.tsx and friendGroupFilters.ts: SocialSelector's filterFriends mode for invitations and Sonar; authorized group/list browsing narrows context-eligible accepted friends without selecting group audiences. Private List management stays inline.

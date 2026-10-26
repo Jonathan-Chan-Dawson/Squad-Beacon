@@ -1,3 +1,4 @@
+import { Repeat2 } from "lucide-react-native";
 import type { PlanRoutine } from "@/src/features/plans/routines";
 import { isLocalDate } from "@/src/features/plans/routines";
 import { RoutineScheduleSheet } from "@/src/features/plans/RoutineScheduleSheet";
@@ -19,7 +20,7 @@ import { Text, View } from "react-native";
 const dayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 export default function RoutinesScreen() {
-  const { styles } = useTheme();
+  const { styles, semanticColors: c } = useTheme();
   const { data, userId, act } = useBeacon();
   const { planId, create, startDate, timezone } = useLocalSearchParams<{
     planId?: string;
@@ -97,11 +98,13 @@ export default function RoutinesScreen() {
             });
           }}
         />
+        {(data.is_demo||data.capabilities?.repeatable_plans)&&<><Txt muted>Or repeat a favorite Beacon</Txt>{data.activities.filter(a=>a.owner_id===userId&&a.mode!=="solo"&&a.status!=="cancelled").slice(0,8).map(a=><Button key={a.id} secondary title={`Repeat Beacon · ${a.title}`} icon={<Repeat2 size={16} color={c.accent}/>} onPress={()=>{setCreateOpen(false);router.push({pathname:"/activity/[id]",params:{id:a.id,repeat:"yes"}});}} />)}</>}
         {data.plans
           .filter(
             (plan) =>
               plan.owner_id === userId &&
-              plan.status === "scheduled" &&
+              plan.status !== "cancelled" &&
+              !plan.routine_source &&
               !data.plan_routines.some(
                 (routine) => routine.plan_id === plan.id,
               ),
@@ -156,7 +159,7 @@ export default function RoutinesScreen() {
       {!routines.length ? (
         <Empty
           title="No Routines yet"
-          body="Open a Beacon Plan and choose Make This a Routine to repeat its Beacons on a schedule."
+          body="Repeat a Plan or a favorite Beacon. Keep the good things going."
         />
       ) : (
         routines.map((routine) => {
@@ -171,15 +174,33 @@ export default function RoutinesScreen() {
             : undefined;
           const canManage =
             plan.owner_id === userId ||
+            !!plan.coowner_ids?.includes(userId ?? "") ||
             ["owner", "admin"].includes(squadRole ?? "");
           const weekdayText = routine.weekdays
             .map((day) => dayLabels[day - 1])
             .join(", ");
           const moreOpen = more === routine.id;
           return (
-            <View key={routine.id} style={styles.card}>
-              <Text style={styles.label}>SAVED PLAN</Text>
-              <Text style={styles.h2}>{plan.title}</Text>
+            <View
+              key={routine.id}
+              style={{
+                gap: 10,
+                paddingVertical: 16,
+                borderBottomWidth: 1,
+                borderBottomColor: c.border,
+              }}
+            >
+              <Text style={styles.label}>REPEAT A FAVORITE</Text>
+              <View style={styles.row}>
+                <Repeat2 size={22} color={c.accent} />
+                <Text style={[styles.h2, { flex: 1 }]}>{plan.title}</Text>
+              </View>
+              <Txt muted>
+                {routine.source_stop_count ??
+                  data.activities.filter((a) => a.plan_id === plan.id)
+                    .length}{" "}
+                activities · Each occurrence has its own attendance
+              </Txt>
               <Txt>
                 {routine.run_mode === "manual"
                   ? "Run Manually"
@@ -235,14 +256,14 @@ export default function RoutinesScreen() {
                         compact
                         secondary
                         title="Skip Next"
-                        run={() => act("skip_routine_next", { id: routine.id })}
+                        run={() => act("skip_routine_next", { id: routine.id, expected_occurrence_on:routine.next_occurrence_on })}
                       />
                     )}
                   {routine.status !== "ended" && (
                     <Button
                       compact
                       secondary
-                      title="Edit"
+                      title="Future repeats"
                       onPress={() => setEditing(routine.id)}
                     />
                   )}

@@ -1,5 +1,7 @@
 Planning feature
 
+- Plan-context composers retain the canonical decisions and responses, scope their audience to the originating Plan, and dismiss back to its existing timeline. ConnectedPlanningActions accepts returnPlanId for reviewed publication; no separate Plan decision engine exists.
+
 - PlanningListScreen.tsx: organizer management, contributed proposals, and history; everyday participation lives in Responses & Invitations.
 - PlanningComposer.tsx and composerSession.ts: focused Ping/Vote/Draw creation, unique account-scoped in-memory sessions, stable option editor handoffs, and frozen publication recovery.
 - inbox.ts and DecisionRow.tsx: canonical decision grouping, flat action-first rows, inline context, and authoritative Draw results.

@@ -68,7 +68,7 @@ test("already-published source occurrence does not also show as a projected Rout
   const projected: RoutineCalendarRow[]=[{routineId:routine.id,planId:plan.id,date:"2026-10-16",state:"projected"}];
   activity.starts_at = "2026-10-16T17:00:00Z"; activity.ends_at = "2026-10-16T18:00:00Z";
   const rows = selectCalendarItems(data, DEMO_ID, "2026-10", timezone, now, projected);
-  assert.ok(rows.some((row) => row.kind === "beacon"));
+  assert.ok(rows.some((row) => row.kind === "beacon" || row.activities?.some((a) => a.id === activity.id)));
   assert.ok(!rows.some((row) => row.kind === "routine"));
 });
 

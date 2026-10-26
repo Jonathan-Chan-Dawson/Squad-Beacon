@@ -1,6 +1,6 @@
 import { sonarSelectionRequest, type SonarDuration } from "../sonarSelection";
 import { SocialSelector } from "@/src/features/people/components/SocialSelector";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useEffectEvent, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
 import { ChevronRight, Radio } from "lucide-react-native";
 import Animated, {
@@ -31,10 +31,14 @@ function ProfileSonarControl({
   compact = false,
   row = false,
   pill = false,
+  autoOpen = false,
+  onDismiss,
 }: {
   compact?: boolean;
   row?: boolean;
   pill?: boolean;
+  autoOpen?: boolean;
+  onDismiss?: () => void;
 }) {
   const { data, userId, demo, act } = useBeacon();
   const { styles, semanticColors: colors, tokens } = useTheme();
@@ -144,6 +148,13 @@ function ProfileSonarControl({
       setOpen(false);
     }
   };
+  const openRoute = useEffectEvent(openConfirmation);
+  const currentViewer = !!userId && data.viewer_id === userId;
+  useEffect(() => {
+    if (!autoOpen || !currentViewer) return;
+    const frame = requestAnimationFrame(() => openRoute());
+    return () => cancelAnimationFrame(frame);
+  }, [autoOpen, currentViewer]);
   const accountMatches = async (viewerId: string) => {
     if (!supabase) return false;
     const { data: authentication, error } = await supabase.auth.getSession();
@@ -410,6 +421,7 @@ function ProfileSonarControl({
         title={session ? "Manage Sonar" : "Start Sonar"}
         visible={open}
         onClose={close}
+        onDismiss={onDismiss}
         footer={
           <View style={{ gap: 8 }}>
             {!!sharingError && (
@@ -486,6 +498,8 @@ function ProfileSonarControl({
               )
             }
             disabled={busy}
+            maxSelected={50}
+            selectionLabel="Share location with"
           />
           {picked.length !== selected.length && (
             <View style={{ gap: 4 }}>

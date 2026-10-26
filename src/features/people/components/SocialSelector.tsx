@@ -1,7 +1,7 @@
+import { SocialChoiceRow } from "@/src/shared/SocialChoiceRow";
 import { FriendFilterSelector } from "./FriendFilterSelector";
 import React, { useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View } from "react-native";
-import { Check, Plus } from "lucide-react-native";
 import { CommunityAvatar } from "./CommunityAvatar";
 import { useBeacon } from "@/src/shared/store";
 import { Button, Field, useTheme } from "@/src/shared/ui";
@@ -153,6 +153,8 @@ function StandardSocialSelector({
         minHeight: 44,
         minWidth: 44,
         paddingHorizontal: 12,
+        borderRadius: 8,
+        backgroundColor: active ? colors.lime : "transparent",
         borderBottomWidth: 2,
         borderBottomColor: active ? colors.green : "transparent",
         justifyContent: "center",
@@ -169,40 +171,19 @@ function StandardSocialSelector({
       </Text>
     </Pressable>
   );
-  const control = (row: SocialRecipient) => {
-    const checked = selected.some(
-      (item) => recipientKey(item) === recipientKey(row),
-    );
+  if (manage)
     return (
-      <View
-        style={{
-          width: 44,
-          height: 44,
-          alignItems: "center",
-          justifyContent: "center",
+      <PrivateListsSheet
+        inline
+        visible
+        onClose={() => setManage(false)}
+        onSelect={(value) => {
+          setList(value);
+          setCategory("Friends");
+          setManage(false);
         }}
-      >
-        <View
-          style={{
-            width: 28,
-            height: 28,
-            borderRadius: 14,
-            borderWidth: 1,
-            borderColor: checked ? colors.green : colors.muted,
-            backgroundColor: checked ? colors.green : "transparent",
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          {checked ? (
-            <Check size={16} color={colors.onPrimary} />
-          ) : (
-            <Plus size={16} color={colors.muted} />
-          )}
-        </View>
-      </View>
+      />
     );
-  };
   return (
     <View testID="social-selector" style={{ gap: 8 }}>
       <Field
@@ -334,48 +315,19 @@ function StandardSocialSelector({
         <Text style={styles.muted}>Your Groups</Text>
       )}
       {groups.map((row) => (
-        <Pressable
+        <SocialChoiceRow
           key={recipientKey(row)}
-          accessibilityRole="checkbox"
-          accessibilityLabel={`${row.name}, ${recipientCategory[row.kind]}`}
-          accessibilityState={{
-            checked: selected.some(
-              (item) => recipientKey(item) === recipientKey(row),
-            ),
-            disabled: !supportedKinds.includes(row.kind),
-          }}
+          label={row.name}
+          detail={recipientCategory[row.kind]}
+          accessibilityLabel={row.name + ", " + recipientCategory[row.kind]}
+          multiple={multiple}
+          selected={selected.some(
+            (item) => recipientKey(item) === recipientKey(row),
+          )}
           disabled={!supportedKinds.includes(row.kind)}
+          icon={<CommunityAvatar type={row.kind} size={32} />}
           onPress={() => toggle(row)}
-          style={{
-            minHeight: 56,
-            flexDirection: "row",
-            alignItems: "center",
-            gap: 10,
-            borderBottomWidth: 1,
-            borderBottomColor: colors.line,
-            opacity: supportedKinds.includes(row.kind) ? 1 : 0.6,
-          }}
-        >
-          <CommunityAvatar
-            type={row.kind}
-            size={36}
-            iconKey={
-              row.kind === "squad"
-                ? data.squads.find((squad) => squad.id === row.id)?.icon_key
-                : undefined
-            }
-          />
-          <View style={{ flex: 1 }}>
-            <Text style={styles.body}>{row.name}</Text>
-            <Text style={styles.muted}>
-              {recipientCategory[row.kind]}
-              {!supportedKinds.includes(row.kind)
-                ? " · Unavailable in this flow"
-                : ""}
-            </Text>
-          </View>
-          {control(row)}
-        </Pressable>
+        />
       ))}
       {category === "All" && (
         <View
@@ -432,50 +384,28 @@ function StandardSocialSelector({
               {renderFriend(friend)}
             </React.Fragment>
           ) : (
-            <Pressable
+            <SocialChoiceRow
               key={friend.id}
-              accessibilityRole="checkbox"
-              accessibilityLabel={`Select ${friend.name}`}
-              accessibilityState={{
-                checked: selected.some(
-                  (row) => row.kind === "friend" && row.id === friend.id,
-                ),
-                disabled: !supportedKinds.includes("friend"),
-              }}
+              label={friend.name}
+              accessibilityLabel={"Select " + friend.name}
+              multiple={multiple}
+              selected={selected.some(
+                (row) => row.kind === "friend" && row.id === friend.id,
+              )}
               disabled={!supportedKinds.includes("friend")}
+              icon={
+                <ProfileAvatar
+                  profile={data.profiles.find((row) => row.id === friend.id)}
+                  size={32}
+                />
+              }
               onPress={() => toggle({ kind: "friend", id: friend.id })}
-              style={{
-                minHeight: 56,
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 10,
-                borderBottomWidth: 1,
-                borderBottomColor: colors.line,
-              }}
-            >
-              <ProfileAvatar
-                profile={data.profiles.find((row) => row.id === friend.id)}
-                size={36}
-              />
-              <Text numberOfLines={1} style={[styles.body, { flex: 1 }]}>
-                {friend.name}
-              </Text>
-              {control({ kind: "friend", id: friend.id })}
-            </Pressable>
+            />
           ),
         )}
       {!groups.length && !visibleFriends.length && (
         <Text style={styles.muted}>No matching people or groups.</Text>
       )}
-      <PrivateListsSheet
-        visible={manage}
-        onClose={() => setManage(false)}
-        onSelect={(value) => {
-          setList(value);
-          setCategory("Friends");
-          setManage(false);
-        }}
-      />
     </View>
   );
 }
@@ -483,16 +413,24 @@ function StandardSocialSelector({
 export function SocialSelector({
   groupBehavior = "select",
   disabled,
+  maxSelected,
+  selectionLabel,
   ...props
 }: React.ComponentProps<typeof StandardSocialSelector> & {
   groupBehavior?: "select" | "filterFriends";
   disabled?: boolean;
+  maxSelected?: number;
+  selectionLabel?: string;
 }) {
   return groupBehavior === "filterFriends" ? (
     <FriendFilterSelector
       selected={props.selected}
       onChange={props.onChange}
       disabled={disabled}
+      eligibleIds={props.friends?.map((friend) => friend.id)}
+      maxSelected={maxSelected}
+      selectionLabel={selectionLabel}
+      bulk={props.bulk}
     />
   ) : (
     <StandardSocialSelector {...props} />

@@ -1,5 +1,8 @@
 Test map
 
+- livingPlans.test.ts and livingPlans.database.test.ts: tentative Plans, stable ordering, role/revision/audience boundaries, canonical result linking, reviewed repeat sources, occurrence isolation and Calendar grouping. `npm run test:plans` includes related existing Plan, Routine, Calendar, Map-context and connected-planning suites.
+- browser/livingPlans.spec.ts: durable in-session Plan reopening, linked Ping creation/return, phone-width timeline screenshots, and recurring Beacon creation/occurrence-versus-future editing.
+
 - spaces.test.ts and spaces.database.test.ts: independent Space creation, invitations, membership revocation and private Squad boundaries.
 - social.test.ts and social.database.test.ts: sanitized directory browsing, all-entity request/join flows, policy roles, independent parent membership, affiliations, Beacon associations, and safe conversion/grouping with source-history preservation.
 - browser/squadsChatFirst.spec.ts: temporary search, compact Chats, Space creation/linking and source-linked Squad Ping navigation.
@@ -26,3 +29,5 @@ Test map
 Tests should exercise product flows through public routes/actions and preserve existing suites when adding coverage.
 
 - browser/themeRefinement.spec.ts: all six families in Light/Dark across Map, Beacons, Create, Squads, Friends and Profile at mobile widths; neutral preview persistence and live System appearance. themes/themeTokens tests cover legacy defaults, exact neutral colors and readable semantic roles.
+
+- browser/unifiedPeople.spec.ts, browser/creationMobilePolish.spec.ts and browser/sonarPeople.spec.ts: staged invitation cancellation/Done, secondary list filters, inline list management, advisory large batches, canonical location route, keyboard selection, and responsive creation/Sonar screens. createHandoff and creationAtomic.database cover the 50-person recommendation and atomic 51-recipient publication.

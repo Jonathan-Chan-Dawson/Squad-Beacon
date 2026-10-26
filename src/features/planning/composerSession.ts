@@ -21,6 +21,7 @@ export type ComposerDraft = {
   deadline: string;
   minutes: string;
   place: string;
+  coordinate?: { latitude: number; longitude: number };
   category: BeaconDraft["category"];
   coownerIds?: string[];
   options: ComposerOption[];
@@ -60,8 +61,13 @@ export function saveComposerOption(
     throw new Error(
       "This Council draft is no longer editable. Return to the Council.",
     );
-  if (payload.audience !== draft.audience || payload.audience_id !== draft.audienceId)
-    throw new Error("Use the same audience as this Council. Change its audience in the Council composer.");
+  if (
+    payload.audience !== draft.audience ||
+    payload.audience_id !== draft.audienceId
+  )
+    throw new Error(
+      "Use the same audience as this Council. Change its audience in the Council composer.",
+    );
   const option = draft.options.find((row) => row.id === optionId);
   if (!option) throw new Error("This option is no longer available.");
   option.payload = structuredClone(payload);
@@ -103,4 +109,17 @@ export function applyPingStarter(
     draft.startsAt = new Date(now + starter.hours * 3600000).toISOString();
   if (!draft.touched.includes("deadline"))
     draft.deadline = new Date(now + starter.closeHours * 3600000).toISOString();
+}
+
+/** Accept only a complete, bounded Map handoff; older drafts remain location-free. */
+export function composerMapCoordinate(latitude?: string, longitude?: string) {
+  if (!latitude?.trim() || !longitude?.trim()) return undefined;
+  const lat = Number(latitude),
+    lng = Number(longitude);
+  return Number.isFinite(lat) &&
+    Number.isFinite(lng) &&
+    Math.abs(lat) <= 90 &&
+    Math.abs(lng) <= 180
+    ? { latitude: lat, longitude: lng }
+    : undefined;
 }

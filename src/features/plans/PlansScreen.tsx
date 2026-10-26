@@ -1,3 +1,5 @@
+import { LivingPlansScreen } from "./LivingPlansScreen";
+import { livingPlansEnabled } from "./livingPlans";
 import React, { useMemo, useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
 import { Repeat2 } from "lucide-react-native";
@@ -92,6 +94,8 @@ function ReorderHandle({
 
 export default function PlansScreen() {
   const params = useLocalSearchParams();
+  const { data } = useBeacon();
+  if (livingPlansEnabled(data)) return <LivingPlansScreen key={JSON.stringify(params)} />;
   return <PlanBuilderScreen key={JSON.stringify(params)} />;
 }
 

@@ -174,9 +174,11 @@ function OriginPlanningLink({ thread }: { thread: PlanningThread }) {
 }
 
 export function ConnectedPlanningActions({
+  returnPlanId,
   thread,
   onBeforeAction,
 }: {
+  returnPlanId?: string;
   thread: PlanningThread;
   onBeforeAction?: () => void;
 }) {
@@ -391,13 +393,13 @@ export function ConnectedPlanningActions({
       {owner && thread.kind === "ping" && thread.status === "open" && (
         <Button
           title="Review & Create Beacon"
-          onPress={() => openPlanningReview(data, userId, thread)}
+          onPress={() => openPlanningReview(data, userId, thread, {returnPlanId})}
         />
       )}
       {owner && thread.kind === "time" && thread.selected_slot_id && (
         <Button
           title="Review & Create Beacon"
-          onPress={() => openPlanningReview(data, userId, thread)}
+          onPress={() => openPlanningReview(data, userId, thread, {returnPlanId})}
         />
       )}
       {owner && thread.kind === "ping" && !child && (
@@ -487,7 +489,7 @@ export function ConnectedPlanningActions({
                       : "Review the selected activity and its audience. You will publish under your own identity.",
                 confirmLabel: "Review Beacon",
                 onConfirm: () =>
-                  openPlanningReview(data, userId, thread, {
+                  openPlanningReview(data, userId, thread, {returnPlanId,
                     claimToken: token,
                     proposalId: thread.kind === "vote" ? selected : undefined,
                     slotId:

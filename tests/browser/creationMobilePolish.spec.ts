@@ -9,7 +9,7 @@ async function blank(page: Page) {
     .click();
 }
 
-test("full-screen invitations retain the limit, filters, and keyboard focus", async ({
+test("full-screen invitations allow more than 20, inline list management, and keyboard focus", async ({
   page,
 }) => {
   const inviteeIds = Array.from(
@@ -29,13 +29,9 @@ test("full-screen invitations retain the limit, filters, and keyboard focus", as
     .getByRole("checkbox", { name: "Select Jordan Ellis", exact: true })
     .click();
   await expect(
-    modal.getByText("Choose up to 20 friends for this invitation batch.", {
-      exact: true,
-    }),
-  ).toBeVisible();
-  await expect(
     modal.getByRole("checkbox", { name: "Select Jordan Ellis", exact: true }),
-  ).not.toBeChecked();
+  ).toBeChecked();
+  await expect(modal.getByText(/21 selected.*Invitations/)).toBeVisible();
   await modal
     .getByRole("button", { name: "Clear selection", exact: true })
     .click();
@@ -46,14 +42,13 @@ test("full-screen invitations retain the limit, filters, and keyboard focus", as
   await modal
     .getByRole("button", { name: "Manage Private Lists", exact: true })
     .click();
-  const lists = page.getByRole("dialog", {
-    name: "Private Lists",
-    exact: true,
-  });
+  const lists = modal.getByTestId("private-lists-inline");
   await expect(lists).toBeVisible();
-  const listDialog = await lists.elementHandle();
-  await lists.getByRole("button", { name: "Close", exact: true }).click();
-  await listDialog!.waitForElementState("hidden");
+  await expect(page.getByRole("dialog")).toHaveCount(1);
+  await lists
+    .getByRole("button", { name: "Back to people", exact: true })
+    .click();
+  await expect(lists).toHaveCount(0);
   await modal.getByLabel("Search people and groups", { exact: true }).focus();
   for (let index = 0; index < 12; index++) {
     await page.keyboard.press("Tab");
@@ -213,7 +208,7 @@ for (const width of [320, 375, 430, 1024]) {
       ).toBeFocused();
       await expect(visibility).toHaveAttribute("aria-expanded", "true");
       await expect(
-        page.getByText("1/20 selected", { exact: true }),
+        page.getByText("No invitations yet", { exact: true }),
       ).toBeVisible();
       await visibility.click();
       await page

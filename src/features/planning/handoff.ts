@@ -13,7 +13,7 @@ export function openPlanningReview(
   data: Data,
   viewer: string,
   thread: PlanningThread,
-  context: { claimToken?: string; proposalId?: string; slotId?: string } = {},
+  context: { claimToken?: string; proposalId?: string; slotId?: string; returnPlanId?: string } = {},
 ) {
   if (!canReadPlanningThread(data, thread, viewer))
     throw new Error("This decision is no longer available.");
@@ -101,6 +101,7 @@ export function openPlanningReview(
       planningProposalId: context.proposalId ?? proposal?.id ?? "",
       planningSlotId: context.slotId ?? slot?.id ?? "",
       timezone: payload.timezone,
+      ...(context.returnPlanId ? { returnPlanId: context.returnPlanId } : {}),
     },
   });
 }

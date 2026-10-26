@@ -17,6 +17,8 @@ export type PlanRoutineStatus = "active" | "paused" | "ended";
 
 /** A recurring Beacon Plan. Beacon steps remain the source of truth for each occurrence. */
 export interface PlanRoutine {
+  source_reviewed_at?: string | null;
+  source_stop_count?: number | null;
   id: string;
   run_mode?: "scheduled" | "manual";
   plan_id: string;
@@ -212,7 +214,8 @@ function demoCanManagePlan(
   plan: Plan,
   userId: string,
 ): boolean {
-  if (plan.owner_id === userId) return true;
+  if (plan.owner_id === userId || plan.coowner_ids?.includes(userId))
+    return true;
   if (!plan.squad_id) return false;
   const membership = data.squad_members?.find(
     (member) => member.squad_id === plan.squad_id && member.user_id === userId,
@@ -234,7 +237,7 @@ function demoCanJoinPlan(
   plan: Plan,
   userId: string,
 ): boolean {
-  if (!plan.squad_id || plan.status !== "scheduled" || plan.owner_id === userId)
+  if (!plan.squad_id || plan.status === "cancelled" || plan.owner_id === userId)
     return false;
   const member = data.squad_members?.some(
     (row) => row.squad_id === plan.squad_id && row.user_id === userId,
@@ -318,7 +321,7 @@ export function applyPlanRoutineDemo(
       ? null
       : Number(payload.reminder_minutes);
   validateRoutineSchedule({
-    anchor_date: source.start_date,
+    anchor_date: source.start_date ?? dateInZone(now, source.timezone),
     weekdays,
     interval_weeks,
     ends_on,
@@ -326,7 +329,7 @@ export function applyPlanRoutineDemo(
   });
   const localToday = dateInZone(now, source.timezone);
   const next = nextRoutineOccurrence({
-    anchor_date: source.start_date,
+    anchor_date: source.start_date ?? dateInZone(now, source.timezone),
     weekdays,
     interval_weeks,
     after_date: localToday,
@@ -343,7 +346,7 @@ export function applyPlanRoutineDemo(
     owner_id: source.owner_id,
     weekdays: [...weekdays].sort((a, b) => a - b),
     interval_weeks,
-    anchor_date: source.start_date,
+    anchor_date: source.start_date ?? dateInZone(now, source.timezone),
     ends_on,
     reminder_minutes,
     run_mode: payload.run_mode === "manual" ? "manual" : "scheduled",
@@ -510,6 +513,12 @@ export function applyRoutineDemo(
     weekdays: [...current.weekdays],
     updated_at: now.toISOString(),
   };
+  if (
+    action === "skip_routine_next" &&
+    payload.expected_occurrence_on != null &&
+    current.next_occurrence_on !== payload.expected_occurrence_on
+  )
+    throw new Error("The next repeat changed. Refresh before skipping it.");
   const patchSchedule = () => {
     const weekdayValues = Array.isArray(payload.weekdays)
       ? payload.weekdays.map(Number)
@@ -579,7 +588,7 @@ export function applyRoutineDemo(
       .sort((a, b) => (a.plan_step_index ?? 0) - (b.plan_step_index ?? 0));
     const steps = stepsFromPlan(source, data.activities, data.places);
     const original = buildPlanSchedule(
-      source.start_date,
+      source.start_date ?? dateInZone(now, source.timezone),
       source.timezone,
       steps,
     );
@@ -690,7 +699,7 @@ export function applyRoutineDemo(
     let previousWaiting = false;
     let previousManualEnd = false;
     additions.activities.push(
-      ...buildPlanSchedule(newPlan.start_date, source.timezone, steps).map(
+      ...buildPlanSchedule(newPlan.start_date!, source.timezone, steps).map(
         (occurrence) => {
           const waiting =
             occurrence.step.start_mode === "manual" ||

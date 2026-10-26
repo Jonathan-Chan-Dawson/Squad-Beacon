@@ -74,18 +74,18 @@ test("atomic creation/invitations commit once and roll back all writes on eligib
   await actor('owner'); await assert.rejects(action('create_activity_with_invitees',{...payload,mode:'solo'}),/shared Beacon/);
   await assert.rejects(action('create_activity_with_invitees',{...payload,invitee_ids:[ids.member,ids.member]}),/only once/);
   await assert.rejects(action('create_activity_with_invitees',{...payload,invitee_ids:[ids.admin,ids.admin.toUpperCase()]}),/only once/);
-  await assert.rejects(action('create_activity_with_invitees',{...payload,invitee_ids:Array(21).fill(ids.admin)}),/1 to 20/);
-  await assert.rejects(action('create_activity_with_invitees',{...payload,invitee_ids:[]}),/1 to 20/);
+  await assert.rejects(action('create_activity_with_invitees',{...payload,invitee_ids:Array(21).fill(ids.admin)}),/only once/);
+  await assert.rejects(action('create_activity_with_invitees',{...payload,invitee_ids:[]}),/at least one/);
   await assert.rejects(action('create_activity_with_invitees',{...payload,invitee_ids:[null]}),/valid selected/);
   await root(); await db.query("insert into public.blocks(blocker_id,blocked_id) values($1,$2)",[ids.member,ids.owner]);
   await actor('owner'); await assert.rejects(action('create_activity_with_invitees',payload),/eligible/);
   assert.deepEqual(await count(),before);
   await db.exec('delete from public.blocks');
-  await db.query("insert into private.action_limits(user_id,bucket,kind,count) values($1,date_trunc('hour',now()),'invitations',19)",[ids.owner]);
+  await db.query("insert into private.action_limits(user_id,bucket,kind,count) values($1,date_trunc('hour',now()),'invitations',299)",[ids.owner]);
   const rejected=crypto.randomUUID();
   await actor('owner'); await assert.rejects(action('create_activity_with_invitees',payload,rejected),/Too many requests/);
   assert.deepEqual(await count(),before,"failure after first invitation rolls back Beacon, recipients, grants and notices");
-  assert.equal((await db.query("select count from private.action_limits where user_id=$1 and kind='invitations'",[ids.owner])).rows[0].count,19);
+  assert.equal((await db.query("select count from private.action_limits where user_id=$1 and kind='invitations'",[ids.owner])).rows[0].count,299);
   assert.equal((await db.query("select count(*)::int n from private.requests where request_id=$1",[rejected])).rows[0].n,0);
   await db.exec("delete from private.action_limits where kind='invitations'");
   const request=crypto.randomUUID(); await actor('owner');
@@ -108,6 +108,20 @@ test("atomic creation/invitations commit once and roll back all writes on eligib
   const linked=await action('create_plan_beacon_with_invitees',planPayload);
   assert.equal(linked.plan_id,plan.id); assert.equal(linked.committed,true);
   assert.equal((await db.query("select status from public.rsvps where activity_id=$1 and user_id=$2",[linked.id,ids.invitee])).rows[0].status,'invited');
+  await root();
+  const largeIds = Array.from({length: 51}, () => crypto.randomUUID());
+  for (const [index, id] of largeIds.entries()) {
+    await db.query("insert into auth.users values($1,now())", [id]);
+    await db.query("insert into public.profiles(id,username,name) values($1,$2,$2)", [id, "large_invitee_"+index]);
+    await db.query("insert into private.accounts(id,birth_date) values($1,'1990-01-01')", [id]);
+    await db.query("insert into public.friendships(sender_id,recipient_id,status) values($1,$2,'accepted')", [ids.owner,id]);
+  }
+  await actor('owner');
+  const largeRequest = crypto.randomUUID();
+  const large = await action('create_activity_with_invitees', {...payload, invitee_ids: largeIds}, largeRequest);
+  assert.equal(large.invited_ids.length,51);
+  assert.equal((await db.query("select count(*)::int n from public.rsvps where activity_id=$1 and status='invited'", [large.id])).rows[0].n,51);
+  assert.deepEqual(await action('create_activity_with_invitees', {...payload, invitee_ids: largeIds}, largeRequest), large);
   await root(); await db.exec("set role anon"); await assert.rejects(action('create_activity_with_invitees',payload),/permission denied/);
   await actor('owner'); await db.query("select set_config('request.jwt.claim.sub','',false)"); await assert.rejects(action('create_activity_with_invitees',payload),/Sign in/);
   await db.close();

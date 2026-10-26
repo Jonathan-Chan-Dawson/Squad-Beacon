@@ -34,10 +34,13 @@ export function CreationDisclosure({
   return (
     <View
       style={{
-        borderTopWidth: 1,
+        borderWidth: 1,
         borderColor: colors.line,
-        paddingTop: compact ? 6 : 8,
-        paddingBottom: compact ? 2 : 0,
+        borderRadius: 12,
+        backgroundColor: open ? colors.lime : colors.white,
+        paddingHorizontal: 10,
+        paddingTop: compact ? 2 : 4,
+        paddingBottom: open ? 10 : 2,
         gap: compact ? 2 : 8,
       }}
     >
@@ -58,7 +61,7 @@ export function CreationDisclosure({
         {icon}
         <View style={{ flex: 1, gap: 4 }}>
           <Text style={compact ? styles.label : styles.h2}>{title}</Text>
-          {summary && (compact || !open) ? <Txt muted>{summary}</Txt> : null}
+          {summary ? <Txt muted>{summary}</Txt> : null}
         </View>
         <Animated.View
           accessible={false}
@@ -81,7 +84,18 @@ export function CreationDisclosure({
           <ChevronDown size={18} strokeWidth={2} color={colors.muted} />
         </Animated.View>
       </Pressable>
-      {open ? <View style={{ gap: 12 }}>{children}</View> : null}
+      {open ? (
+        <View
+          style={{
+            gap: 8,
+            borderTopWidth: 1,
+            borderTopColor: colors.line,
+            paddingTop: 8,
+          }}
+        >
+          {children}
+        </View>
+      ) : null}
     </View>
   );
 }

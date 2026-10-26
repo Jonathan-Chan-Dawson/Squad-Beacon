@@ -18,6 +18,7 @@ export function PlanningResponseControls({
   onOpen = () => {},
   showDeadline = true,
   expanded = true,
+  compactPing = false,
   onResponded,
   onOpenBeaconEditor,
   onBeforeRespond,
@@ -26,6 +27,7 @@ export function PlanningResponseControls({
   onOpen?: () => void;
   showDeadline?: boolean;
   expanded?: boolean;
+  compactPing?: boolean;
   onResponded?: () => void;
   onOpenBeaconEditor?: () => void;
   onBeforeRespond?: () => void;
@@ -54,19 +56,26 @@ export function PlanningResponseControls({
           key={userId}
           {...common}
           kind="ping"
+          compact={compactPing}
           selected={selected?.response}
           disabled={closed || thread.owner_id === userId}
-          counts={expanded ? [
-            {
-              label: "Interested",
-              value: responses.filter((row) => row.response === "interested")
-                .length,
-            },
-            {
-              label: "Maybe",
-              value: responses.filter((row) => row.response === "maybe").length,
-            },
-          ] : []}
+          counts={
+            expanded
+              ? [
+                  {
+                    label: "Interested",
+                    value: responses.filter(
+                      (row) => row.response === "interested",
+                    ).length,
+                  },
+                  {
+                    label: "Maybe",
+                    value: responses.filter((row) => row.response === "maybe")
+                      .length,
+                  },
+                ]
+              : []
+          }
           onRespond={async (response) => {
             onBeforeRespond?.();
             requirePlanningSubmission(data, userId, threadId);
@@ -97,7 +106,37 @@ export function PlanningResponseControls({
       </View>
     );
   }
-  if (thread.kind === "time") return <AvailabilityControls key={`${userId}:${thread.id}:${thread.slots_revision}:${data.planning_availability?.find(a=>a.thread_id===thread.id&&a.user_id===userId)?.updated_at??""}`} thread={thread} expanded={expanded} onExpand={onOpen} onBeforeRespond={onBeforeRespond}/>;
-  if (thread.kind === "vote") return <CouncilChoices key={`${userId}:${thread.id}:${data.planning_approval_ballots?.find(b=>b.thread_id===thread.id&&b.user_id===userId)?.updated_at??""}`} threadId={thread.id} expanded={expanded} onExpand={onOpen} onBeforeRespond={onBeforeRespond}/>;
-  return <View style={{gap:8}}>{(expanded?options:options.slice(0,3)).map(option=><Txt key={option.id}>{option.payload.title}</Txt>)}<Txt muted>{thread.status === "resolved" ? "Draw selected" : "The organizer runs the server Draw after the deadline. No response is needed."}</Txt></View>;
+  if (thread.kind === "time")
+    return (
+      <AvailabilityControls
+        key={`${userId}:${thread.id}:${thread.slots_revision}:${data.planning_availability?.find((a) => a.thread_id === thread.id && a.user_id === userId)?.updated_at ?? ""}`}
+        thread={thread}
+        expanded={expanded}
+        onExpand={onOpen}
+        onBeforeRespond={onBeforeRespond}
+      />
+    );
+  if (thread.kind === "vote")
+    return (
+      <CouncilChoices
+        key={`${userId}:${thread.id}:${data.planning_approval_ballots?.find((b) => b.thread_id === thread.id && b.user_id === userId)?.updated_at ?? ""}`}
+        threadId={thread.id}
+        expanded={expanded}
+        onExpand={onOpen}
+        onBeforeRespond={onBeforeRespond}
+        onOpenBeaconEditor={onOpenBeaconEditor}
+      />
+    );
+  return (
+    <View style={{ gap: 8 }}>
+      {(expanded ? options : options.slice(0, 3)).map((option) => (
+        <Txt key={option.id}>{option.payload.title}</Txt>
+      ))}
+      <Txt muted>
+        {thread.status === "resolved"
+          ? "Draw selected"
+          : "The organizer runs the server Draw after the deadline. No response is needed."}
+      </Txt>
+    </View>
+  );
 }

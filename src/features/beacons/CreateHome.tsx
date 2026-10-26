@@ -518,7 +518,7 @@ export function CreateHome({
       {card("plan", "Create Plan", "Organize multiple Beacons", () =>
         router.push({ pathname: "/plans", params: { create: "yes" } }),
       )}
-      {card("routine", "Create Routine", "Repeat a Plan", () =>
+      {card("routine", "Create Routine", "Repeat a Plan or Beacon", () =>
         router.push({ pathname: "/routines", params: { create: "yes" } }),
       )}
       <Sheet

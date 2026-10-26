@@ -307,6 +307,8 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
           void refresh();
         },
       )
+      .on("postgres_changes", {event:"*",schema:"public",table:"plan_stops"},()=>{void refresh();})
+      .on("postgres_changes", {event:"*",schema:"public",table:"plans"},()=>{void refresh();})
       .on("postgres_changes", {event:"*",schema:"public",table:"planning_threads"},()=>{void refresh();})
       .on("postgres_changes", {event:"*",schema:"public",table:"planning_availability"},()=>{void refresh();})
       .on("postgres_changes", {event:"*",schema:"public",table:"planning_approval_ballots"},()=>{void refresh();})
@@ -422,6 +424,12 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
             ? { id: organization.id, organization_id: organization.id }
             : {};
         }
+        if (["add_plan_stop","save_living_plan_template"].includes(action)) {
+          const row = action === "add_plan_stop" ? next.plan_stops?.find(s=>!baseData.plan_stops?.some(old=>old.id===s.id)) : next.plan_templates.find(s=>!baseData.plan_templates.some(old=>old.id===s.id));
+          const result = row ? {id:row.id,plan_id:payload.plan_id} : {};
+          if(requestKey) demoRequests.current.set(requestKey,result);
+          return result;
+        }
         if (action === "create_activity" || action === "create_plan_beacon") {
           const activity = next.activities.find(
             (item) => !baseData.activities.some((old) => old.id === item.id),
@@ -430,26 +438,21 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
           if(requestKey)demoRequests.current.set(requestKey,result);
           return result;
         }
-        if (action === "create_plan" || action === "run_routine_once" || action === "run_routine_now") {
+        if (action === "create_living_plan" || action === "create_plan" || action === "run_routine_once" || action === "run_routine_now") {
           const plan = next.plans.find(
             (item) => !baseData.plans.some((old) => old.id === item.id),
           );
-          return plan
-            ? { id: plan.id, plan_id: plan.id, occurrence_plan_id: plan.id }
-            : {};
+          const result = plan ? { id: plan.id, plan_id: plan.id, occurrence_plan_id: plan.id } : {};
+          if(requestKey) demoRequests.current.set(requestKey,result);
+          return result;
         }
-        if (action === "create_routine") {
-          const routine = next.plan_routines.find(
-            (item) => !baseData.plan_routines.some((old) => old.id === item.id),
-          );
-          return routine
-            ? {
-                id: routine.id,
-                plan_id: routine.plan_id,
-                next_occurrence_on: routine.next_occurrence_on,
-              }
-            : {};
+        if (action === "create_routine" || action === "repeat_beacon") {
+          const routine = next.plan_routines.find(item=>!baseData.plan_routines.some(old=>old.id===item.id)) ?? next.plan_routines.find(item=>item.status!=="ended"&&(action==="create_routine"?item.plan_id===payload.plan_id:next.plans.some(p=>p.id===item.plan_id&&p.routine_source&&p.owner_id===DEMO_ID&&next.plan_stops?.some(s=>s.plan_id===p.id&&s.activity_id===payload.activity_id))));
+          const result=routine?{id:routine.id,plan_id:routine.plan_id,next_occurrence_on:routine.next_occurrence_on}:{};
+          if(requestKey)demoRequests.current.set(requestKey,result);
+          return result;
         }
+
         if (action === "send_group_message") {
           const message = next.group_messages.find(
             (item) =>
@@ -547,7 +550,7 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
       const generation = epoch.current;
       const viewer = session.user.id;
       const atomicCreation = action === "create_activity_with_invitees" || action === "create_plan_beacon_with_invitees";
-      const actorScoped = action.includes("planning") || action.includes("council") || atomicCreation || action === "create_activity" || action === "create_plan_beacon" || ["rsvp","start_location","stop_location","save_activity_note","end_activity_note","update_presence","save_status_note","create_planning_thread","add_council_proposal"].includes(action);
+      const actorScoped = action.includes("plan") || action.includes("routine") || action.includes("planning") || action.includes("council") || atomicCreation || action === "create_activity" || action === "create_plan_beacon" || ["rsvp","start_location","stop_location","save_activity_note","end_activity_note","update_presence","save_status_note","create_planning_thread","add_council_proposal"].includes(action);
       const assertAtomicViewer = () => {
         if (actorScoped && (generation !== epoch.current || dataRef.current.viewer_id !== viewer)) throw new Error(action === "rsvp" ? "Your account changed. Refresh before responding." : "Your account changed before publication. Return to the account that started this Beacon.");
       };

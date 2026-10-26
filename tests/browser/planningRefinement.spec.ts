@@ -40,7 +40,9 @@ test("Chats has one compact response row and a full-screen filtered inbox", asyn
   await expect(
     page.getByRole("button", { name: "Resolve vote", exact: true }),
   ).toHaveCount(0);
-  await page.getByRole("button", { name: "Add option", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Suggest an option", exact: true })
+    .click();
   await page
     .getByRole("button", { name: "Use Beacon editor", exact: true })
     .click();
@@ -80,8 +82,8 @@ test("Interested After saves availability independently and allows removal", asy
     .getByRole("button", { name: "Save Interested", exact: true })
     .click();
   await expect(
-    page.getByText(/Your response: interested.*Change until/),
-  ).toBeVisible();
+    page.getByRole("button", { name: "Interested", exact: true }).first(),
+  ).toHaveAttribute("aria-pressed", "true");
 });
 
 test("small-phone inbox and New Message keep conversations accessible", async ({

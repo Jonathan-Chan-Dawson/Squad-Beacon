@@ -383,7 +383,7 @@ export default function BeaconMap({
     }
   }, [coordinates, ready, mapSize, onPick, explorationTarget, controlCommand]);
   useEffect(() => {
-    if (!ready || !hasUsableMapViewport(mapSize) || onPick || !controlCommand)
+    if (!ready || !hasUsableMapViewport(mapSize) || (onPick && controlCommand?.kind !== "focus") || !controlCommand)
       return;
     if (appliedControlRevision.current === controlCommand.revision) return;
     const currentMap = map.current;
@@ -496,6 +496,7 @@ export default function BeaconMap({
     appliedTargetRevision.current = explorationTarget.revision;
   }, [ready, onPick, explorationTarget, mapSize]);
   useEffect(() => {
+    if (onPick) return;
     if (focusedLat == null || focusedLng == null) {
       appliedFocusedTarget.current = null;
       return;
@@ -541,6 +542,7 @@ export default function BeaconMap({
     ready,
     focusedLat,
     focusedLng,
+    onPick,
     mapSize,
     mapPadding.top,
     mapPadding.bottom,

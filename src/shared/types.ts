@@ -226,8 +226,14 @@ export interface Plan {
   title: string;
   description: string;
   timezone: string;
-  start_date: string;
-  status: "scheduled" | "cancelled";
+  start_date: string | null;
+  status: "draft" | "scheduled" | "cancelled";
+  coowner_ids?: ID[];
+  open_collaboration?: boolean;
+  revision?: number;
+  routine_source?: boolean;
+  routine_id?: ID | null;
+  routine_occurrence_on?: string | null;
   created_at: string;
 }
 export interface PlanTemplate {
@@ -238,6 +244,7 @@ export interface PlanTemplate {
   description: string;
   timezone: string;
   steps: PlanStep[];
+  stops?: { title: string; details?: string; proposed_at?: string | null }[];
   created_at: string;
   updated_at: string;
 }
@@ -429,6 +436,9 @@ export interface ProfileVisibilityGrant {
   target_id: ID;
 }
 export interface Data {
+  /** Demo-only reviewed sources; production keeps these in its private schema. */
+  demo_repeat_sources?: Record<string, { steps: PlanStep[]; activity_ids: ID[]; defaults: Partial<Activity>[]; online_urls: (string | null)[]; location_access?: boolean[] }>;
+  plan_stops?: import("@/src/features/plans/livingPlans").PlanStop[];
   /** Internal demo lifecycle ledger; never supplied by a hosted snapshot. */
   demo_routine_occurrences?: import("@/src/features/beacons/calendarRoutineProjection").DemoRoutineOccurrence[];
   public_beacons: import("@/src/features/discovery/types").PublicBeaconSummary[];
@@ -512,7 +522,7 @@ export interface Data {
   rsvps: RSVP[];
   resolved_beacon_responses?: RSVP[];
   presence?: Presence[];
-  capabilities?: { connected_planning?: boolean; living_activity?: boolean; rsvp_decline?: boolean; beacon_supplies?: boolean; status_privacy?: boolean; status_attachments?: boolean; status_current_beacon?: boolean };
+  capabilities?: { living_plans?: boolean; collaborative_plans?: boolean; repeatable_plans?: boolean; connected_planning?: boolean; living_activity?: boolean; rsvp_decline?: boolean; beacon_supplies?: boolean; status_privacy?: boolean; status_attachments?: boolean; status_current_beacon?: boolean };
   comments: Comment[];
   reactions: Reaction[];
   locations: LocationSession[];
@@ -622,6 +632,10 @@ export function normalizeData(value: Partial<Data> | null | undefined): Data {
   data.presence = Array.isArray(data.presence) ? data.presence : [];
   data.capabilities = { connected_planning: data.is_demo === true || data.capabilities?.connected_planning === true, living_activity: data.is_demo === true || data.capabilities?.living_activity === true, status_attachments: data.is_demo === true || data.capabilities?.status_attachments === true, beacon_supplies: data.is_demo === true || data.capabilities?.beacon_supplies === true, status_privacy: data.is_demo === true || data.capabilities?.status_privacy === true, status_current_beacon: data.is_demo === true || data.capabilities?.status_current_beacon === true, rsvp_decline: data.is_demo === true || data.capabilities?.rsvp_decline === true };
   data.dm_message_reads = Array.isArray(data.dm_message_reads) ? data.dm_message_reads : [];
+  data.plan_stops = Array.isArray(data.plan_stops) ? data.plan_stops : [];
+  data.capabilities.living_plans = data.is_demo === true || value?.capabilities?.living_plans === true;
+  data.capabilities.collaborative_plans = data.is_demo === true || value?.capabilities?.collaborative_plans === true;
+  data.capabilities.repeatable_plans = data.is_demo === true || value?.capabilities?.repeatable_plans === true;
   data.plan_members = Array.isArray(data.plan_members) ? data.plan_members : [];
   data.plan_routines = Array.isArray(data.plan_routines)
     ? data.plan_routines

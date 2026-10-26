@@ -100,6 +100,7 @@ export function PlanningResponseCard(props: PlanningResponseCardProps) {
     !!props.deadline &&
     Date.parse(props.deadline) <= now;
   const disabled = !!(props.disabled || props.pending || busy || expiredPing);
+  const compactPing = props.kind === "ping" && props.embedded && props.compact;
   const remaining = countdown(props.deadline, now);
   const Icon =
     props.kind === "ping" ? CircleHelp : props.kind === "vote" ? Vote : Shuffle;
@@ -150,13 +151,22 @@ export function PlanningResponseCard(props: PlanningResponseCardProps) {
     }
   }
 
+  const countSummary = props.counts.length ? (
+    <Text
+      style={[styles.muted, props.embedded && { fontSize: 12, lineHeight: 18 }]}
+    >
+      {props.counts.map((count) => `${count.value} ${count.label}`).join(" · ")}
+    </Text>
+  ) : null;
+
   return (
     <Animated.View
       testID={`planning-response-${props.id}`}
       style={[
         props.embedded ? undefined : styles.card,
         {
-          gap: 10,
+          gap: compactPing ? 5 : 10,
+          marginTop: compactPing ? 3 : 0,
           padding: props.embedded ? 0 : props.compact ? 12 : 14,
           borderColor: success ? colors.green : colors.line,
           transform: [{ scale: pulse }],
@@ -188,20 +198,15 @@ export function PlanningResponseCard(props: PlanningResponseCardProps) {
       {remaining && props.showDeadline !== false ? (
         <Text style={[styles.label, { color: colors.green }]}>{remaining}</Text>
       ) : null}
-      {props.counts.length ? (
-        <Text
-          style={[
-            styles.muted,
-            props.embedded && { fontSize: 12, lineHeight: 18 },
-          ]}
-        >
-          {props.counts
-            .map((count) => `${count.value} ${count.label}`)
-            .join(" · ")}
-        </Text>
-      ) : null}
+      {!compactPing && countSummary}
       {actions.length ? (
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+        <View
+          style={{
+            flexDirection: "row",
+            flexWrap: "wrap",
+            gap: 6,
+          }}
+        >
           {actions.map((action) => {
             const selected =
               action.selected ||
@@ -216,7 +221,9 @@ export function PlanningResponseCard(props: PlanningResponseCardProps) {
                     : CircleHelp
                 : null;
             const ButtonIcon =
-              props.kind === "ping" && selected ? Check : ResponseIcon;
+              props.kind === "ping" && selected && !compactPing
+                ? Check
+                : ResponseIcon;
             return (
               <Pressable
                 key={action.id}
@@ -229,18 +236,33 @@ export function PlanningResponseCard(props: PlanningResponseCardProps) {
                   busy,
                 }}
                 disabled={disabled || action.disabled}
-                onPress={() => void run(action)}
+                onPress={(event) => {
+                  event.stopPropagation();
+                  void run(action);
+                }}
                 style={{
                   minHeight: 44,
                   flexDirection: props.kind === "ping" ? "row" : undefined,
                   flexGrow: 1,
-                  flexBasis: props.kind === "ping" ? 0 : undefined,
+                  flexBasis: compactPing
+                    ? "auto"
+                    : props.kind === "ping"
+                      ? 0
+                      : undefined,
                   minWidth: props.kind === "ping" ? 76 : undefined,
                   alignItems: "center",
                   justifyContent: "center",
-                  paddingHorizontal: props.kind === "ping" ? 6 : 9,
-                  borderRadius: props.kind === "ping" ? 11 : 22,
-                  borderWidth: 1,
+                  paddingHorizontal: compactPing
+                    ? 4
+                    : props.kind === "ping"
+                      ? 6
+                      : 9,
+                  borderRadius: compactPing
+                    ? 8
+                    : props.kind === "ping"
+                      ? 11
+                      : 22,
+                  borderWidth: compactPing ? 0 : 1,
                   borderColor: selected
                     ? props.kind === "ping"
                       ? semanticColors.accent
@@ -248,11 +270,14 @@ export function PlanningResponseCard(props: PlanningResponseCardProps) {
                     : props.kind === "ping"
                       ? semanticColors.border
                       : colors.line,
-                  backgroundColor:
-                    props.kind === "ping"
+                  backgroundColor: compactPing
+                    ? "transparent"
+                    : props.kind === "ping"
                       ? selected
                         ? semanticColors.accent
-                        : semanticColors.surfaceRaised
+                        : compactPing
+                          ? "transparent"
+                          : semanticColors.surfaceRaised
                       : selected
                         ? colors.lime
                         : colors.bg,
@@ -262,15 +287,33 @@ export function PlanningResponseCard(props: PlanningResponseCardProps) {
                     : undefined),
                 }}
               >
-                {ButtonIcon ? (
-                  <ButtonIcon
-                    size={14}
-                    color={
-                      selected
-                        ? semanticColors.onAccent
-                        : semanticColors.textSecondary
-                    }
+                {compactPing && (
+                  <View
+                    pointerEvents="none"
+                    style={{
+                      position: "absolute",
+                      top: 0,
+                      bottom: 0,
+                      left: 0,
+                      right: 0,
+                      borderRadius: 10,
+                      backgroundColor: selected
+                        ? semanticColors.accent
+                        : semanticColors.surfaceRaised,
+                    }}
                   />
+                )}
+                {ButtonIcon ? (
+                  <View style={{ zIndex: 1 }}>
+                    <ButtonIcon
+                      size={compactPing ? 16 : 14}
+                      color={
+                        selected
+                          ? semanticColors.onAccent
+                          : semanticColors.textSecondary
+                      }
+                    />
+                  </View>
                 ) : null}
                 <Text
                   style={[
@@ -284,7 +327,11 @@ export function PlanningResponseCard(props: PlanningResponseCardProps) {
                           : selected
                             ? colors.green
                             : colors.ink,
-                      fontSize: props.kind === "ping" ? 12 : undefined,
+                      fontSize: compactPing
+                        ? 14
+                        : props.kind === "ping"
+                          ? 12
+                          : undefined,
                     },
                   ]}
                 >
@@ -295,6 +342,7 @@ export function PlanningResponseCard(props: PlanningResponseCardProps) {
           })}
         </View>
       ) : null}
+      {compactPing && countSummary}
       {busy || props.pending ? (
         <ActivityIndicator
           size="small"

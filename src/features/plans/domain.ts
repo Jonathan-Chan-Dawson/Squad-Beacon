@@ -346,7 +346,7 @@ export function stepsFromPlan(
         lat: place?.latitude ?? null,
         lng: place?.longitude ?? null,
         day_offset: Math.round(
-          (Date.parse(local.date) - Date.parse(plan.start_date)) / 86400000,
+          (Date.parse(local.date) - Date.parse(plan.start_date ?? local.date)) / 86400000,
         ),
         start_time: local.time,
         duration_minutes: Math.max(
