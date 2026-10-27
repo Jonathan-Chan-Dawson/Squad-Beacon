@@ -1,5 +1,7 @@
 Supabase database and functions
 
+- 20261026185923_onboarding_progress.sql: owner-only optional UI progress, first-profile eligibility trigger and one idempotent claim RPC. Existing accounts are not marked new. Requires preceding ordered migrations; source-only until separately deployed. Does not change the survey gate.
+
 - `20261025203005_living_plans.sql`: undated Plans, stable independent stops, backfill, scoped server actions/RLS and the living_plans capability.
 - `20261025204150_collaborative_plans.sql`: canonical decision-result association, independent tentative Plan membership, suggestion notices and authorized chat links; adds collaborative_plans capability.
 - `20261026002202_repeatable_plans_calendar.sql`: private reviewed Routine sources, recurring single Beacons, original-occurrence deduplication and generated occurrence metadata; keeps the existing generator, runner and ledger and adds repeatable_plans capability. These migrations are source-only until explicitly deployed in order.

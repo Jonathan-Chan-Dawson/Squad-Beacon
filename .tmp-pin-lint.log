@@ -1,0 +1,25 @@
+
+> squad-beacon@1.0.0 lint
+> eslint app src components --max-warnings=0
+
+
+C:\dev\Squad-Beacon\app\_layout.tsx
+  29:1  warning  Import in body of module; reorder to top  import/first
+
+C:\dev\Squad-Beacon\src\features\maps\screens\MapScreen.tsx
+  3022:16  error  Error: Cannot access refs during render
+
+React refs are values that are not needed for rendering. Refs should only be accessed outside of render, such as in event handlers or effects. Accessing a ref value (the `current` property) during render can cause your component not to update as expected (https://react.dev/reference/react/useRef).
+
+C:\dev\Squad-Beacon\src\features\maps\screens\MapScreen.tsx:3022:16
+  3020 |             {!!locationPickError && <Text accessibilityRole="alert" style={styles.error}>{locationPickError}</Text>}
+  3021 |             <View style={{ flexDirection: "row", gap: 8 }}>
+> 3022 |               {creationLocationContext.current.locationPicker === "editor" ? (
+       |                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ Cannot access ref value during render
+  3023 |                 <View style={{ flex: 1 }}><Button compact title="Use This Location" onPress={confirmPickedLocation} /></View>
+  3024 |               ) : <>
+  3025 |                 <View style={{ flex: 1 }}><Button compact title="Create Beacon" onPress={() => createAtPickedLocation("beacon")} /></View>  react-hooks/refs
+
+✖ 2 problems (1 error, 1 warning)
+  0 errors and 1 warning potentially fixable with the `--fix` option.
+

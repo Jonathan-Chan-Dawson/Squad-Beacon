@@ -10,7 +10,15 @@ export function usePublicBeacons(
   query: string,
   coordinate?: Coordinate | null,
 ) {
-  const { data, userId, demo, getViewerEpoch, viewerEpoch } = useBeacon();
+  const {
+    data,
+    userId,
+    demo,
+    getViewerEpoch,
+    viewerEpoch,
+    demoScenario,
+    switchDemoScenario,
+  } = useBeacon();
   const [revision, setRevision] = useState(0);
   const refresh = useCallback(() => setRevision((value) => value + 1), []);
   useFocusEffect(
@@ -76,6 +84,13 @@ export function usePublicBeacons(
       clearTimeout(timer);
     };
   }, [data, demo, userId, query, latitude, longitude, getViewerEpoch, key]);
+  if (__DEV__ && demo && userId && demoScenario === "offline")
+    return {
+      rows: [],
+      error: "Simulated connection error. Reconnect to try again.",
+      ready: true,
+      refresh: () => switchDemoScenario("disconnected"),
+    };
   if (demo && userId)
     return {
       rows: demoPublicBeacons(data, userId, query),

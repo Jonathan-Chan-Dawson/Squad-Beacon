@@ -253,8 +253,11 @@ export function CouncilChoices({
               gap: 10,
               alignItems: "center",
               paddingVertical: 8,
-              borderBottomWidth: 1,
-              borderBottomColor: colors.line,
+              paddingHorizontal: 10,
+              borderRadius: 9,
+              borderWidth: 1,
+              borderColor: selected ? colors.green : colors.line,
+              backgroundColor: colors.bg,
             }}
           >
             <BeaconIcon category={option.payload.category} size={32} />

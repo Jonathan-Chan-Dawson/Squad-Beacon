@@ -95,7 +95,7 @@ test("approval choices require Save and retain multiple saved choices", async ({
     .getByRole("button", { name: "Create Vote Council", exact: true })
     .click();
   await expect(page).toHaveURL(/activity-created/);
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await page.getByRole("button", { name: "Not Now", exact: true }).click();
   await page
     .getByRole("button", { name: "Approve Bowling", exact: true })
     .click();

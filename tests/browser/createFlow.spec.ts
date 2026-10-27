@@ -226,7 +226,15 @@ for (const preset of ["Grocery Run", "General Hangout"]) {
       .getByRole("button", { name: "Create Beacon", exact: true })
       .click();
     await expect(page).toHaveURL(/activity-created/);
-    await page.getByRole("button", { name: "Continue", exact: true }).click();
+    const success = page.getByRole("dialog", {
+      name: "Created successfully",
+      exact: true,
+    });
+    await expect(success).toBeVisible();
+    await expect.poll(() => success.evaluate((node) => getComputedStyle(node.parentElement!).opacity)).toBe("1");
+    await expect(page.getByTestId("activity-detail-hero")).toHaveCount(1);
+    await page.screenshot({ path: `.expo/prompt3-success-${preset.replaceAll(" ", "-")}.png` });
+    await success.getByRole("button", { name: "Not Now", exact: true }).click();
     await expect(page.getByTestId("activity-detail-hero")).toBeVisible();
     const panel = page;
     await panel.getByRole("tab", { name: "Activity", exact: true }).click();

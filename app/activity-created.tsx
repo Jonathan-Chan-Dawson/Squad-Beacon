@@ -1,10 +1,13 @@
 import type { Audience } from "@/src/shared/types";
 import { useNow } from "@/src/shared/useNow";
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
 import { useBeacon } from "@/src/shared/store";
-import { ConfirmDialog } from "@/src/shared/Dialogs";
-import { AudiencePicker, Button, Screen, Txt } from "@/src/shared/ui";
+import { Dialog } from "@/src/shared/Dialogs";
+import ActivityDetail from "@/src/features/beacons/screens/ActivityDetailScreen";
+import PlanningDetailScreen from "@/src/features/planning/PlanningDetailScreen";
+import { View } from "react-native";
+import { AudiencePicker, Button, Txt } from "@/src/shared/ui";
 import { eligibleCurrentBeacons } from "@/src/features/beacons/currentStatusBeacon";
 import {
   eligibleStatusAttachments,
@@ -23,9 +26,11 @@ export default function ActivityCreated() {
     intent?: string;
   }>();
   const { data, userId, act, getViewerEpoch } = useBeacon();
+  const submitting = useRef(false);
   const [confirm, setConfirm] = useState(false),
     [busy, setBusy] = useState(false),
-    [error, setError] = useState("");
+    [error, setError] = useState(""),
+    [audienceOpen, setAudienceOpen] = useState(false);
   const presence = data.presence?.find((p) => p.owner_id === userId);
   const [audience, setAudience] = useState<Audience>(
     presence?.current_audience ?? "friends",
@@ -48,12 +53,13 @@ export default function ActivityCreated() {
       params: { id },
     });
   const link = async (replaceConfirmed = false) => {
-    if (busy || !userId) return;
+    if (submitting.current || !userId) return;
     if (!live && status?.status_attachment && !replaceConfirmed) {
       setConfirm(true);
       return;
     }
     const epoch = getViewerEpoch();
+    submitting.current = true;
     setBusy(true);
     setError("");
     try {
@@ -96,59 +102,79 @@ export default function ActivityCreated() {
             ? e.message
             : "Created successfully, but linking failed. Try again.",
         );
-      if (replaceConfirmed) throw e;
     } finally {
+      submitting.current = false;
       if (epoch === getViewerEpoch()) setBusy(false);
     }
   };
   return (
-    <Screen eyebrow="" title="Ready to share" create={false}>
-      <Txt>
-        Your{" "}
-        {type === "beacon" ? "Beacon" : type === "ping" ? "Ping" : "Council"}{" "}
-        was created.
-      </Txt>
-      {live && (
-        <Txt muted>
-          You can use this live Beacon as your Current Activity. Your Activity
-          Note will end and remain in history.
+    <>
+      {type === "beacon" ? <ActivityDetail /> : <PlanningDetailScreen />}
+      <Dialog
+        title={confirm ? "Replace Featured activity?" : "Created successfully"}
+        visible
+        busy={busy}
+        onClose={() => (confirm ? setConfirm(false) : open())}
+        initialFocusLabel={confirm ? "Keep Featured activity" : "Not Now"}
+        footer={
+          <View style={{ gap: 8 }}>
+            {(live || eligible) && (
+              <Button
+                title={
+                  busy
+                    ? "Updating…"
+                    : confirm
+                      ? "Replace Featured Activity"
+                      : live
+                        ? "Use as My Current Activity"
+                        : "Feature on Status"
+                }
+                disabled={busy}
+                onPress={() => void link(confirm)}
+              />
+            )}
+            <Button
+              secondary
+              title={confirm ? "Keep Featured activity" : "Not Now"}
+              disabled={busy}
+              onPress={() => (confirm ? setConfirm(false) : open())}
+            />
+          </View>
+        }
+      >
+        <Txt>
+          {confirm
+            ? "Replace your existing Featured activity with this one?"
+            : `Your ${type === "beacon" ? "Beacon" : type === "ping" ? "Ping" : "Council"} was created.`}
         </Txt>
-      )}
-      {live && (
-        <AudiencePicker
-          value={audience}
-          id={audienceId}
-          onChange={(nextAudience, nextId) => {
-            setAudience(nextAudience);
-            setAudienceId(nextId);
-          }}
-        />
-      )}
-      {(live || eligible) && (
-        <Button
-          title={
-            busy
-              ? "Updating…"
-              : live
-                ? "Use as My Current Activity"
-                : "Feature on Status"
-          }
-          disabled={busy}
-          onPress={() => void link()}
-        />
-      )}
-      {!!error && <Txt>{error}</Txt>}
-      <Button secondary title="Continue" disabled={busy} onPress={open} />
-      <ConfirmDialog
-        title="Replace Featured activity?"
-        visible={confirm}
-        onClose={() => setConfirm(false)}
-        message="Replace your existing Featured activity with this one?"
-        confirmLabel="Replace Featured Activity"
-        cancelLabel="Keep Featured activity"
-        closeOnConfirm={false}
-        onConfirm={() => link(true)}
-      />
-    </Screen>
+        {!confirm && live && (
+          <>
+            <Txt muted>
+              You can use this live Beacon as your Current Activity. Your
+              Activity Note will end and remain in history.
+            </Txt>
+            <Button
+              compact
+              secondary
+              title={audienceOpen ? "Hide audience options" : "Choose audience"}
+              onPress={() => setAudienceOpen(!audienceOpen)}
+            />
+            {audienceOpen && (
+              <AudiencePicker
+                inline
+                value={audience}
+                id={audienceId}
+                onChange={(nextAudience, nextId) => {
+                  setAudience(nextAudience);
+                  setAudienceId(nextId);
+                  setAudienceOpen(false);
+                }}
+              />
+            )}
+          </>
+        )}
+        {!!error && <Txt>{error}</Txt>}
+      </Dialog>
+    </>
   );
 }

@@ -299,7 +299,11 @@ export function PlanningResponseCard(props: PlanningResponseCardProps) {
                       borderRadius: 10,
                       backgroundColor: selected
                         ? semanticColors.accent
-                        : semanticColors.surfaceRaised,
+                        : semanticColors.bg,
+                      borderWidth: 1,
+                      borderColor: selected
+                        ? semanticColors.accent
+                        : semanticColors.border,
                     }}
                   />
                 )}

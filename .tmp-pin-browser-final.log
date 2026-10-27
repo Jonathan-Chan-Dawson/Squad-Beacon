@@ -1,0 +1,109 @@
+
+Running 8 tests using 1 worker
+
+(node:31368) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok 1 tests\browser\mapLocationTouch.spec.ts:139:5 › touch taps and pans stay ordinary; long holds select, update and dismiss a temporary location (11.9s)
+  x  2 tests\browser\mapQuickPlace.spec.ts:10:9 › Natural Place stays still, pans, searches, cancels and opens creation at 320px light (11.9s)
+(node:31212) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  x  3 tests\browser\mapQuickPlace.spec.ts:10:9 › Natural Place stays still, pans, searches, cancels and opens creation at 320px dark (13.9s)
+(node:23204) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok 4 tests\browser\mapQuickPlace.spec.ts:10:9 › Natural Place stays still, pans, searches, cancels and opens creation at 375px light (16.8s)
+  ok 5 tests\browser\mapQuickPlace.spec.ts:10:9 › Natural Place stays still, pans, searches, cancels and opens creation at 375px dark (11.7s)
+  ok 6 tests\browser\mapQuickPlace.spec.ts:10:9 › Natural Place stays still, pans, searches, cancels and opens creation at 430px light (11.3s)
+  ok 7 tests\browser\mapQuickPlace.spec.ts:10:9 › Natural Place stays still, pans, searches, cancels and opens creation at 430px dark (11.4s)
+  x  8 tests\browser\mapQuickPlace.spec.ts:193:5 › returning from the Map updates only the existing draft location, including Cancel (8.4s)
+
+
+  1) tests\browser\mapQuickPlace.spec.ts:10:9 › Natural Place stays still, pans, searches, cancels and opens creation at 320px light 
+
+    Error: expect(received).not.toBe(expected) // Object.is equality
+
+    Expected: not "transform: translate3d(0px, 0px, 0px);"
+
+    Call Log:
+    - Timeout 5000ms exceeded while waiting on the predicate
+
+      101 |       await page.mouse.move(100, 445, { steps: 12 });
+      102 |       await page.mouse.up();
+    > 103 |       await expect.poll(camera).not.toBe(initialCamera);
+          |                                     ^
+      104 |       await expect.poll(coordinate).toEqual(repeatedPoint);
+      105 |       const beforeZoom = (await pin.boundingBox())!;
+      106 |       await page.mouse.move(35, 400);
+        at C:\dev\Squad-Beacon\tests\browser\mapQuickPlace.spec.ts:103:37
+
+    Error Context: .expo\pin-placement-results\mapQuickPlace-Natural-Plac-a7cdd-ens-creation-at-320px-light\error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    .expo\pin-placement-results\mapQuickPlace-Natural-Plac-a7cdd-ens-creation-at-320px-light\trace.zip
+    Usage:
+
+        npx playwright show-trace .expo\pin-placement-results\mapQuickPlace-Natural-Plac-a7cdd-ens-creation-at-320px-light\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  2) tests\browser\mapQuickPlace.spec.ts:10:9 › Natural Place stays still, pans, searches, cancels and opens creation at 320px dark 
+
+    Error: expect(received).not.toBe(expected) // Object.is equality
+
+    Expected: not "transform: translate3d(0px, 0px, 0px);"
+
+    Call Log:
+    - Timeout 5000ms exceeded while waiting on the predicate
+
+      101 |       await page.mouse.move(100, 445, { steps: 12 });
+      102 |       await page.mouse.up();
+    > 103 |       await expect.poll(camera).not.toBe(initialCamera);
+          |                                     ^
+      104 |       await expect.poll(coordinate).toEqual(repeatedPoint);
+      105 |       const beforeZoom = (await pin.boundingBox())!;
+      106 |       await page.mouse.move(35, 400);
+        at C:\dev\Squad-Beacon\tests\browser\mapQuickPlace.spec.ts:103:37
+
+    Error Context: .expo\pin-placement-results\mapQuickPlace-Natural-Plac-81bef-pens-creation-at-320px-dark\error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    .expo\pin-placement-results\mapQuickPlace-Natural-Plac-81bef-pens-creation-at-320px-dark\trace.zip
+    Usage:
+
+        npx playwright show-trace .expo\pin-placement-results\mapQuickPlace-Natural-Plac-81bef-pens-creation-at-320px-dark\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3) tests\browser\mapQuickPlace.spec.ts:193:5 › returning from the Map updates only the existing draft location, including Cancel 
+
+    Error: locator.click: Error: strict mode violation: locator('.leaflet-container') resolved to 2 elements:
+        1) <div tabindex="0" aria-label="Beacon map" class="map-midnight leaflet-container leaflet-touch leaflet-fade-anim leaflet-grab leaflet-touch-drag leaflet-touch-zoom">…</div> aka getByLabel('Beacon map').first()
+        2) <div tabindex="0" aria-label="Beacon map" class="map-midnight leaflet-container leaflet-touch leaflet-fade-anim leaflet-grab leaflet-touch-drag leaflet-touch-zoom">…</div> aka getByText('🎨★☕✦★🏀★52 · 33🎨♥☕♥8 · 2🎮♥3 · 1🏀♥551 km3000 ft Leaflet | © OpenStreetMap')
+
+    Call log:
+      - waiting for locator('.leaflet-container')
+
+
+      214 |   await page
+      215 |     .locator(".leaflet-container")
+    > 216 |     .click({ position: { x: 190, y: 380 }, force: true });
+          |      ^
+      217 |   const tooltip = page.getByTestId("map-place-confirmation");
+      218 |   await expect(
+      219 |     tooltip.getByRole("button", { name: "Use This Location", exact: true }),
+        at C:\dev\Squad-Beacon\tests\browser\mapQuickPlace.spec.ts:216:6
+
+    Error Context: .expo\pin-placement-results\mapQuickPlace-returning-fr-cc24c-t-location-including-Cancel\error-context.md
+
+    attachment #2: trace (application/zip) ─────────────────────────────────────────────────────────
+    .expo\pin-placement-results\mapQuickPlace-returning-fr-cc24c-t-location-including-Cancel\trace.zip
+    Usage:
+
+        npx playwright show-trace .expo\pin-placement-results\mapQuickPlace-returning-fr-cc24c-t-location-including-Cancel\trace.zip
+
+    ────────────────────────────────────────────────────────────────────────────────────────────────
+
+  3 failed
+    tests\browser\mapQuickPlace.spec.ts:10:9 › Natural Place stays still, pans, searches, cancels and opens creation at 320px light 
+    tests\browser\mapQuickPlace.spec.ts:10:9 › Natural Place stays still, pans, searches, cancels and opens creation at 320px dark 
+    tests\browser\mapQuickPlace.spec.ts:193:5 › returning from the Map updates only the existing draft location, including Cancel 
+  5 passed (1.9m)

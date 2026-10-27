@@ -417,7 +417,11 @@ function SharedStatusContent({
         onConvert={control.convert}
         availabilityAnchorRef={availabilityAnchor}
         onAvailability={() => setAvailabilityOpen(true)}
-        statusAccessory={compact ? <ProfileSonarCard compact /> : undefined}
+        statusAccessory={
+          compact || profilePill ? (
+            <ProfileSonarCard compact pill={profilePill} />
+          ) : undefined
+        }
         onQuick={() => {
           setNextAvailable(true);
           void publish(false, true);

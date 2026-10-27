@@ -176,7 +176,7 @@ test("Do with others creates an independent Ping and offers featuring without re
   await expect(
     page.getByRole("button", { name: "Feature on Status", exact: true }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await page.getByRole("button", { name: "Not Now", exact: true }).click();
   await page.goBack();
   await expect(
     page.getByTestId("activity-note-card").filter({ visible: true }),
@@ -215,7 +215,7 @@ test("Council setup requires two options and retains the Activity Note", async (
   await editor
     .getByRole("button", { name: "Create Vote Council", exact: true })
     .click();
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await page.getByRole("button", { name: "Not Now", exact: true }).click();
   await expect(page.getByText("Go for a walk", { exact: true })).toBeVisible();
   await page.goBack();
   await expect(

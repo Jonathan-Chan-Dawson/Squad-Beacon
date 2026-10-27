@@ -828,32 +828,47 @@ export function EmptyState({
   icon,
   action,
   style,
+  density,
+  secondaryActions,
+  alignment = "center",
 }: {
   title: string;
   body?: string;
   icon?: ReactNode;
   action?: { label: string; onPress: () => void };
   style?: StyleProp<ViewStyle>;
+  density?: "hero" | "section" | "inline";
+  secondaryActions?: { label: string; onPress: () => void }[];
+  alignment?: "center" | "start";
 }) {
   const { colors } = useDesignTheme();
   return (
     <View
       style={[
         {
-          alignItems: "center",
+          alignItems: alignment === "start" ? "flex-start" : "center",
           justifyContent: "center",
-          padding: space.xl,
+          padding:
+            density === "inline"
+              ? space.sm
+              : density === "section"
+                ? space.md
+                : space.xl,
           gap: space.sm,
         },
         style,
       ]}
     >
-      {icon}
+      {density !== "inline" ? icon : null}
       <Text
         style={{
           color: colors.textPrimary,
-          ...type.title,
-          textAlign: "center",
+          ...(density === "inline"
+            ? type.secondary
+            : density === "section"
+              ? type.titleSmall
+              : type.title),
+          textAlign: alignment === "start" ? "left" : "center",
         }}
       >
         {title}
@@ -863,14 +878,45 @@ export function EmptyState({
           style={{
             color: colors.textSecondary,
             ...type.secondary,
-            textAlign: "center",
+            textAlign: alignment === "start" ? "left" : "center",
           }}
         >
           {body}
         </Text>
       ) : null}
       {action ? (
-        <PrimaryButton title={action.label} onPress={action.onPress} compact />
+        <PrimaryButton
+          title={action.label}
+          onPress={action.onPress}
+          compact={density !== "hero"}
+        />
+      ) : null}
+      {secondaryActions?.length ? (
+        <View
+          style={{
+            flexDirection: "row",
+            flexWrap: "wrap",
+            justifyContent: alignment === "start" ? "flex-start" : "center",
+            gap: space.sm,
+          }}
+        >
+          {secondaryActions.map((item) => (
+            <MotionPressable
+              key={item.label}
+              accessibilityRole="button"
+              onPress={item.onPress}
+              style={{
+                minHeight: 44,
+                paddingHorizontal: space.sm,
+                justifyContent: "center",
+              }}
+            >
+              <Text style={{ ...type.secondary, color: colors.accent }}>
+                {item.label}
+              </Text>
+            </MotionPressable>
+          ))}
+        </View>
       ) : null}
     </View>
   );

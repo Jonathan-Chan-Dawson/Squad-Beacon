@@ -1,7 +1,7 @@
 const http = require("node:http"),
   fs = require("node:fs"),
   path = require("node:path");
-const root = path.resolve(__dirname, "../dist");
+const root = path.resolve(__dirname, process.env.PREVIEW_DIR || "../dist");
 http
   .createServer((request, response) => {
     const requested = decodeURIComponent(

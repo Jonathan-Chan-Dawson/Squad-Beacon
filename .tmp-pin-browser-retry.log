@@ -1,0 +1,10 @@
+
+Running 3 tests using 1 worker
+
+(node:28408) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok 1 tests\browser\mapQuickPlace.spec.ts:10:9 › Natural Place stays still, pans, searches, cancels and opens creation at 320px light (16.7s)
+  ok 2 tests\browser\mapQuickPlace.spec.ts:10:9 › Natural Place stays still, pans, searches, cancels and opens creation at 320px dark (19.6s)
+  ok 3 tests\browser\mapQuickPlace.spec.ts:193:5 › returning from the Map updates only the existing draft location, including Cancel (23.3s)
+
+  3 passed (1.2m)

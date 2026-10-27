@@ -1,18 +1,11 @@
+import { SemanticEmpty } from "@/src/features/onboarding/OnboardingUI";
 import { Repeat2 } from "lucide-react-native";
 import type { PlanRoutine } from "@/src/features/plans/routines";
 import { isLocalDate } from "@/src/features/plans/routines";
 import { RoutineScheduleSheet } from "@/src/features/plans/RoutineScheduleSheet";
 import { ConfirmDialog, QuickChoiceDialog } from "@/src/shared/Dialogs";
 import { useBeacon } from "@/src/shared/store";
-import {
-  Action,
-  Button,
-  Empty,
-  Screen,
-  Sheet,
-  Txt,
-  useTheme,
-} from "@/src/shared/ui";
+import { Action, Button, Screen, Sheet, Txt, useTheme } from "@/src/shared/ui";
 import { router, useLocalSearchParams } from "expo-router";
 import { useState } from "react";
 import { Text, View } from "react-native";
@@ -98,7 +91,34 @@ export default function RoutinesScreen() {
             });
           }}
         />
-        {(data.is_demo||data.capabilities?.repeatable_plans)&&<><Txt muted>Or repeat a favorite Beacon</Txt>{data.activities.filter(a=>a.owner_id===userId&&a.mode!=="solo"&&a.status!=="cancelled").slice(0,8).map(a=><Button key={a.id} secondary title={`Repeat Beacon · ${a.title}`} icon={<Repeat2 size={16} color={c.accent}/>} onPress={()=>{setCreateOpen(false);router.push({pathname:"/activity/[id]",params:{id:a.id,repeat:"yes"}});}} />)}</>}
+        {(data.is_demo || data.capabilities?.repeatable_plans) && (
+          <>
+            <Txt muted>Or repeat a favorite Beacon</Txt>
+            {data.activities
+              .filter(
+                (a) =>
+                  a.owner_id === userId &&
+                  a.mode !== "solo" &&
+                  a.status !== "cancelled",
+              )
+              .slice(0, 8)
+              .map((a) => (
+                <Button
+                  key={a.id}
+                  secondary
+                  title={`Repeat Beacon · ${a.title}`}
+                  icon={<Repeat2 size={16} color={c.accent} />}
+                  onPress={() => {
+                    setCreateOpen(false);
+                    router.push({
+                      pathname: "/activity/[id]",
+                      params: { id: a.id, repeat: "yes" },
+                    });
+                  }}
+                />
+              ))}
+          </>
+        )}
         {data.plans
           .filter(
             (plan) =>
@@ -157,9 +177,10 @@ export default function RoutinesScreen() {
         />
       )}
       {!routines.length ? (
-        <Empty
-          title="No Routines yet"
-          body="Repeat a Plan or a favorite Beacon. Keep the good things going."
+        <SemanticEmpty
+          name="empty.routines"
+          illustration="plans"
+          density="section"
         />
       ) : (
         routines.map((routine) => {
@@ -256,7 +277,12 @@ export default function RoutinesScreen() {
                         compact
                         secondary
                         title="Skip Next"
-                        run={() => act("skip_routine_next", { id: routine.id, expected_occurrence_on:routine.next_occurrence_on })}
+                        run={() =>
+                          act("skip_routine_next", {
+                            id: routine.id,
+                            expected_occurrence_on: routine.next_occurrence_on,
+                          })
+                        }
                       />
                     )}
                   {routine.status !== "ended" && (

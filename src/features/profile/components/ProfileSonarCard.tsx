@@ -1,3 +1,4 @@
+import { ContextTip } from "@/src/features/onboarding/OnboardingUI";
 import { sonarSelectionRequest, type SonarDuration } from "../sonarSelection";
 import { SocialSelector } from "@/src/features/people/components/SocialSelector";
 import React, { useEffect, useEffectEvent, useRef, useState } from "react";
@@ -462,6 +463,7 @@ function ProfileSonarControl({
         }
       >
         <View testID="profile-sonar-confirmation" style={{ gap: 12 }}>
+          <ContextTip name="sonar" />
           {session ? (
             <Action
               title="Stop Sonar"

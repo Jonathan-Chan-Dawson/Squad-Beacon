@@ -1,5 +1,8 @@
 Test map
 
+- onboarding.test.ts and onboarding.database.test.ts: explicit first-session evidence, state precedence, coherent demo fixtures, deterministic copy, confirmed success transitions and owner-scoped atomic progress claims through the ordered migration history.
+- browser/onboarding.spec.ts: real-component demo scenarios, intercepted account progress/reload/failure journeys and phone screenshots. Uses playwright.onboarding.config.ts and the development export; see README.md.
+
 - livingPlans.test.ts and livingPlans.database.test.ts: tentative Plans, stable ordering, role/revision/audience boundaries, canonical result linking, reviewed repeat sources, occurrence isolation and Calendar grouping. `npm run test:plans` includes related existing Plan, Routine, Calendar, Map-context and connected-planning suites.
 - browser/livingPlans.spec.ts: durable in-session Plan reopening, linked Ping creation/return, phone-width timeline screenshots, and recurring Beacon creation/occurrence-versus-future editing.
 

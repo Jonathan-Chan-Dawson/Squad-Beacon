@@ -1,3 +1,4 @@
+import { ContextTip } from "@/src/features/onboarding/OnboardingUI";
 import ZonedTimeField from "./ZonedTimeField";
 import { interestTarget } from "./connected";
 import { PlanningDisclosure, PlanningToggle } from "./PlanningControls";
@@ -410,6 +411,7 @@ export function PlanningComposer({ sessionId }: { sessionId: string }) {
 
   return (
     <Screen title={`Create ${name}`} eyebrow="" showDemoNotice={false}>
+      {kind === "ping" || kind === "vote" ? <ContextTip name={kind} /> : null}
       <Txt muted>
         {kind === "ping"
           ? "Share an idea. Interested is not Going."

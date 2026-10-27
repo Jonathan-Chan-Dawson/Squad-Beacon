@@ -67,6 +67,9 @@ test("collapsed Ping responses remain changeable and regroup only after filterin
   await expect(
     page.getByText("Answered & Active", { exact: true }),
   ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Answered & Active", exact: true })
+    .click();
   await expect(
     row.getByRole("button", { name: "Maybe", exact: true }),
   ).toHaveAttribute("aria-pressed", "true");
@@ -112,7 +115,7 @@ test("Ping creation uses the focused composer and preserves conversion managemen
   ).toHaveValue("Trail after work?");
   await page.getByRole("button", { name: "Create Ping", exact: true }).click();
   await expect(page).toHaveURL(/activity-created/);
-  await page.getByRole("button", { name: "Continue", exact: true }).click();
+  await page.getByRole("button", { name: "Not Now", exact: true }).click();
   await page
     .getByRole("button", {
       name: "Review & Create Beacon",

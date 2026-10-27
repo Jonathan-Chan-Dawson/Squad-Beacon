@@ -1,5 +1,7 @@
 Documentation guide
 
+- ONBOARDING_ENTRY_VALIDATION.md: Phase 4A implementation, screenshot review, developer scenarios, private progress migration and Phase 4B/4C acceptance boundaries.
+
 - DEVICE_ACCEPTANCE.md: device smoke and acceptance checklist.
 - NOTIFICATIONS.md: notification and delivery behavior.
 - UI_GUIDE.md: interface and accessibility conventions.

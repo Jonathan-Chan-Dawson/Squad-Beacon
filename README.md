@@ -125,6 +125,8 @@ Living Plans and reviewed Routine sources require the three ordered Plan migrati
 
 Browser tests exercise the demo’s Now/favorites, RSVP/chat, personal templates, Profile/Settings, Notifications, organizations and narrow-screen flows. On Windows they use installed Chrome; elsewhere they use Playwright Chromium.
 
+For onboarding scenarios, run `npm run test:onboarding`, then `npm run build:onboarding-preview` followed by `npm run test:onboarding:browser`. The development export exposes a demo-only lab; ordinary production exports exclude its controls. The default populated demo is preserved. Optional onboarding progress requires the additive migration listed in [the backend inventory](supabase/_inventory.md); see [Phase 4A validation](docs/ONBOARDING_ENTRY_VALIDATION.md) for rollout and first-entry limitations.
+
 The installed dependency audit reports 15 moderate advisories (the same count reported before feature dependencies were added). Review the dependency audit before public release; no forced SDK upgrade was applied.
 
 Type-check Edge Functions separately with Deno:

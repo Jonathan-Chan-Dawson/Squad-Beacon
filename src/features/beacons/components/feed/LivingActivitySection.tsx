@@ -544,7 +544,22 @@ export function LivingStatusHeader({
         </View>
       ) : (
         <View style={{ gap: 2 }}>
-          {renderIdentity?.(availabilityControl)}
+          {renderIdentity ? (
+            <>
+              <View
+                style={{
+                  flexDirection: "row",
+                  justifyContent: "flex-end",
+                  alignItems: "center",
+                  gap: 6,
+                }}
+              >
+                {availabilityControl}
+                <ProfileSonarCard compact pill />
+              </View>
+              {renderIdentity(undefined)}
+            </>
+          ) : null}
           {noteControl}
           {!renderIdentity && availabilityControl}
         </View>
@@ -722,7 +737,7 @@ export function LivingStatusHeader({
 export function LivingActivitySection({
   personId,
   showLower = true,
-  sonar = true,
+  sonar = false,
   compact = false,
 }: {
   personId: string;

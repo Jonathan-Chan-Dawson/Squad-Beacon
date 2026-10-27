@@ -33,8 +33,8 @@ for (const [width, appearance] of [
     const sonar = home.getByRole("button", { name: "Open Sonar", exact: true });
     const sonarBox = (await sonar.boundingBox())!;
     expect(
-      availabilityBoxAtHome.x + availabilityBoxAtHome.width,
-    ).toBeLessThanOrEqual(sonarBox.x);
+      sonarBox.x - (availabilityBoxAtHome.x + availabilityBoxAtHome.width),
+    ).toBeGreaterThanOrEqual(4);
     expect(Math.abs(sonarBox.y - availabilityBoxAtHome.y)).toBeLessThanOrEqual(
       1,
     );
@@ -104,6 +104,14 @@ for (const [width, appearance] of [
           () => document.documentElement.scrollWidth <= innerWidth + 1,
         ),
       ).toBe(true);
+      const largeAvailability = (await home
+        .getByRole("button", { name: "Change availability", exact: true })
+        .boundingBox())!;
+      const largeSonar = (await sonar.boundingBox())!;
+      expect(
+        largeSonar.x - (largeAvailability.x + largeAvailability.width),
+      ).toBeGreaterThanOrEqual(4);
+      expect(largeSonar.x + largeSonar.width).toBeLessThanOrEqual(width);
       await page.screenshot({
         path: ".expo/identity-status/beacons-large-text.png",
       });
@@ -120,6 +128,35 @@ for (const [width, appearance] of [
     await expect(pill).toContainText("Busy");
     const noteBox = (await note.boundingBox())!;
     const pillBox = (await pill.boundingBox())!;
+    const profileSonar = identity.getByRole("button", {
+      name: "Open Sonar",
+      exact: true,
+    });
+    await expect(profileSonar).toBeVisible();
+    const profileSonarBox = (await profileSonar.boundingBox())!;
+    expect(
+      profileSonarBox.x - (pillBox.x + pillBox.width),
+    ).toBeGreaterThanOrEqual(4);
+    expect(Math.abs(profileSonarBox.y - pillBox.y)).toBeLessThanOrEqual(1);
+    expect(profileSonarBox.x + profileSonarBox.width).toBeLessThanOrEqual(
+      width,
+    );
+    await expect(
+      page.getByRole("button", { name: "Open Sonar", exact: true }),
+    ).toHaveCount(1);
+    if (width === 320 && appearance === "dark") {
+      const largerText = await page.addStyleTag({
+        content:
+          '[data-testid="profile-identity"] [dir="auto"] { font-size: 20px !important; line-height: 28px !important; }',
+      });
+      const largeAvailability = (await pill.boundingBox())!;
+      const largeSonar = (await profileSonar.boundingBox())!;
+      expect(
+        largeSonar.x - (largeAvailability.x + largeAvailability.width),
+      ).toBeGreaterThanOrEqual(4);
+      expect(largeSonar.x + largeSonar.width).toBeLessThanOrEqual(width);
+      await largerText.evaluate((node) => node.remove());
+    }
     const bioBox = (await identity
       .getByRole("button", { name: "Expand bio", exact: true })
       .boundingBox())!;

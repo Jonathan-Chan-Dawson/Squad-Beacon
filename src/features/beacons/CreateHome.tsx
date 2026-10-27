@@ -1,3 +1,4 @@
+import { SemanticEmpty } from "@/src/features/onboarding/OnboardingUI";
 import { randomUUID } from "expo-crypto";
 import { useNow } from "@/src/shared/useNow";
 import { CreationSavedDrafts } from "./components/CreationSavedDrafts";
@@ -507,7 +508,14 @@ export function CreateHome({
           },
         }),
       )}
-      {(data.is_demo === true || data.capabilities?.connected_planning === true) && card("time", "Find a Time", "When works?", () => router.push({pathname:"/planning/create",params:{...context,kind:"time",sessionId:randomUUID()}}))}
+      {(data.is_demo === true ||
+        data.capabilities?.connected_planning === true) &&
+        card("time", "Find a Time", "When works?", () =>
+          router.push({
+            pathname: "/planning/create",
+            params: { ...context, kind: "time", sessionId: randomUUID() },
+          }),
+        )}
       {card(
         "note",
         "Activity Note",
@@ -562,13 +570,18 @@ export function CreateHome({
               </View>
             ))}
             {!savedResults.length && (
-              <Empty
-                title={
-                  query.trim()
-                    ? "No matching saved templates"
-                    : "No saved templates yet"
-                }
-                body="Save a configuration from Advanced Options in the Beacon editor."
+              <SemanticEmpty
+                name={query.trim() ? "empty.search" : "empty.templates"}
+                illustration="templates"
+                density="section"
+                action={{
+                  label: query.trim() ? "Clear search" : "Browse templates",
+                  onPress: () => {
+                    setQuery("");
+                    setSource("Browse");
+                    setFamily(null);
+                  },
+                }}
               />
             )}
             <Button

@@ -49,6 +49,7 @@ export function FriendFilterSelector({
   const [listFilter, setListFilter] = useState<PeopleListSelection>("friends");
   const [manage, setManage] = useState(false);
   const [shown, setShown] = useState(30);
+  const [groupShown, setGroupShown] = useState(8);
   const groups = selectableSocialGroups(data, userId);
   const lists =
     data.viewer_id === userId
@@ -57,41 +58,35 @@ export function FriendFilterSelector({
   const selectedIds = selected
     .filter((row) => row.kind === "friend")
     .map((row) => row.id);
-  const group = groups.find((row) => recipientKey(row) === groupKey);
-  const list = lists.find((row) => `list:${row.id}` === groupKey);
   const effectiveList =
     listFilter.startsWith("custom:") &&
     !lists.some((row) => `custom:${row.id}` === listFilter)
       ? "friends"
       : listFilter;
   const ids = filteredFriendIds(data, userId, {
-    list:
-      category === "Private Lists" && groupKey
-        ? `custom:${groupKey.slice(5)}`
-        : category === "Friends"
-          ? effectiveList
-          : "friends",
-    group:
-      groupKey && category !== "Private Lists"
-        ? (group ?? { kind: "squad", id: "unavailable" })
-        : null,
+    list: category === "Friends" ? effectiveList : "friends",
     selected: category === "Selected" ? selectedIds : undefined,
   });
   const search = query.trim().toLocaleLowerCase();
-  const people = data.profiles
-    .filter(
-      (person) =>
-        ids.has(person.id) &&
-        (!eligibleIds || eligibleIds.includes(person.id)) &&
-        `${person.name} ${person.username}`
-          .toLocaleLowerCase()
-          .includes(search),
-    )
-    .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
-  const directoryMode =
-    ["Private Lists", "Squads", "Organizations", "Networks"].includes(
-      category,
-    ) && !groupKey;
+  const eligiblePeople = (allowed: Set<string>, matchSearch = true) =>
+    data.profiles
+      .filter(
+        (person) =>
+          allowed.has(person.id) &&
+          (!eligibleIds || eligibleIds.includes(person.id)) &&
+          (!matchSearch ||
+            `${person.name} ${person.username}`
+              .toLocaleLowerCase()
+              .includes(search)),
+      )
+      .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
+  const people = eligiblePeople(ids);
+  const directoryMode = [
+    "Private Lists",
+    "Squads",
+    "Organizations",
+    "Networks",
+  ].includes(category);
   const categories: Category[] = [
     "Friends",
     ...(["Squads", "Organizations", "Networks"] as const).filter((value) =>
@@ -131,26 +126,57 @@ export function FriendFilterSelector({
       </Text>
     </Pressable>
   );
-  const directory =
+  const directory = (
     category === "Private Lists"
-      ? lists
-          .filter((row) => row.name.toLocaleLowerCase().includes(search))
-          .map((row) => ({
-            key: `list:${row.id}`,
-            name: row.name,
-            icon: <PrivateListAvatar id={row.id} name={row.name} />,
-          }))
+      ? lists.map((row) => ({
+          key: `list:${row.id}`,
+          name: row.name,
+          icon: <PrivateListAvatar id={row.id} name={row.name} />,
+          members: filteredFriendIds(data, userId, {
+            list: `custom:${row.id}`,
+          }),
+        }))
       : groups
-          .filter(
-            (row) =>
-              recipientCategory[row.kind] === category &&
-              row.name.toLocaleLowerCase().includes(search),
-          )
+          .filter((row) => recipientCategory[row.kind] === category)
           .map((row) => ({
             key: recipientKey(row),
             name: row.name,
             icon: <CommunityAvatar type={row.kind} size={32} />,
-          }));
+            members: filteredFriendIds(data, userId, { group: row }),
+          }))
+  ).filter(
+    (row) =>
+      row.name.toLocaleLowerCase().includes(search) ||
+      eligiblePeople(row.members).length > 0,
+  );
+  const renderPerson = (person: (typeof data.profiles)[number]) => {
+    const checked = selectedIds.includes(person.id);
+    return (
+      <SocialChoiceRow
+        key={person.id}
+        label={person.name}
+        accessibilityLabel={`${selectionLabel} ${person.name}`}
+        icon={<ProfileAvatar profile={person} size={32} />}
+        selected={checked}
+        disabled={
+          disabled ||
+          (!checked && maxSelected != null && selectedIds.length >= maxSelected)
+        }
+        onPress={() =>
+          onChange(
+            checked
+              ? selected.filter(
+                  (row) => row.kind === "friend" && row.id !== person.id,
+                )
+              : [
+                  ...selected.filter((row) => row.kind === "friend"),
+                  { kind: "friend", id: person.id },
+                ],
+          )
+        }
+      />
+    );
+  };
   if (manage)
     return (
       <PrivateListsSheet
@@ -246,19 +272,6 @@ export function FriendFilterSelector({
           </ScrollView>
         </View>
       )}
-      {groupKey && (
-        <Button
-          compact
-          secondary
-          title={`Back to groups · ${group?.name ?? list?.name ?? "Unavailable"}`}
-          accessibilityLabel="Back to groups"
-          disabled={disabled}
-          onPress={() => {
-            setGroupKey(null);
-            setQuery("");
-          }}
-        />
-      )}
       <Text style={styles.muted}>
         {selectedIds.length} selected ·{" "}
         {directoryMode
@@ -287,53 +300,64 @@ export function FriendFilterSelector({
         />
       )}
       {directoryMode
-        ? directory.slice(0, shown).map((row) => (
-            <SocialChoiceRow
-              key={row.key}
-              label={row.name}
-              accessibilityLabel={`Filter friends in ${row.name}`}
-              icon={row.icon}
-              browse
-              disabled={disabled}
-              detail="Browse eligible friends"
-              onPress={() => {
-                setGroupKey(row.key);
-                setQuery("");
-                setShown(30);
-              }}
-            />
-          ))
-        : people.slice(0, shown).map((person) => {
-            const checked = selectedIds.includes(person.id);
+        ? directory.slice(0, shown).map((row) => {
+            const expanded = groupKey === row.key;
+            const members = expanded
+              ? eligiblePeople(
+                  row.members,
+                  !row.name.toLocaleLowerCase().includes(search),
+                )
+              : [];
             return (
-              <SocialChoiceRow
-                key={person.id}
-                label={person.name}
-                accessibilityLabel={`${selectionLabel} ${person.name}`}
-                icon={<ProfileAvatar profile={person} size={32} />}
-                selected={checked}
-                disabled={
-                  disabled ||
-                  (!checked &&
-                    maxSelected != null &&
-                    selectedIds.length >= maxSelected)
+              <View
+                key={row.key}
+                style={
+                  expanded
+                    ? {
+                        backgroundColor: colors.lime,
+                        borderWidth: 1,
+                        borderColor: colors.line,
+                        borderRadius: 12,
+                        paddingHorizontal: 6,
+                      }
+                    : undefined
                 }
-                onPress={() =>
-                  onChange(
-                    checked
-                      ? selected.filter(
-                          (row) =>
-                            row.kind === "friend" && row.id !== person.id,
-                        )
-                      : [
-                          ...selected.filter((row) => row.kind === "friend"),
-                          { kind: "friend", id: person.id },
-                        ],
-                  )
-                }
-              />
+              >
+                <SocialChoiceRow
+                  label={row.name}
+                  accessibilityLabel={`Filter friends in ${row.name}`}
+                  icon={row.icon}
+                  browse
+                  expanded={expanded}
+                  disabled={disabled}
+                  detail="Browse eligible friends"
+                  onPress={() => {
+                    setGroupKey(expanded ? null : row.key);
+                    setGroupShown(8);
+                  }}
+                />
+                {expanded && (
+                  <View style={{ paddingLeft: 16, paddingBottom: 8 }}>
+                    {members.slice(0, groupShown).map(renderPerson)}
+                    {members.length > groupShown && (
+                      <Button
+                        compact
+                        secondary
+                        title="Show more friends"
+                        onPress={() => setGroupShown(groupShown + 8)}
+                      />
+                    )}
+                    {!members.length && (
+                      <Text style={[styles.muted, { paddingVertical: 12 }]}>
+                        No eligible friends in this group.
+                      </Text>
+                    )}
+                  </View>
+                )}
+              </View>
             );
-          })}
+          })
+        : people.slice(0, shown).map(renderPerson)}
       {(directoryMode ? directory.length : people.length) > shown && (
         <Button
           compact

@@ -19,7 +19,14 @@ import { Loading, Screen, Action, SheetIsolation, Txt } from "@/src/shared/ui";
 import { WidgetPreferencesProvider } from "@/src/features/widgets/preferences";
 import { WidgetSync } from "@/src/features/widgets/WidgetRuntime";
 import { ExplorationProvider } from "@/src/shared/exploration";
+import { OnboardingProvider } from "@/src/features/onboarding/runtime";
+import { FirstSuccessNotice } from "@/src/features/onboarding/OnboardingUI";
 import { ChatKeyboardProvider } from "@/src/features/messages/ChatKeyboard";
+// Keep lab controls out of production dependency graphs.
+const DeveloperLab = __DEV__
+  ? // eslint-disable-next-line @typescript-eslint/no-require-imports
+    require("@/src/features/onboarding/DeveloperLab").DeveloperLab
+  : () => null;
 export { ErrorBoundary } from "expo-router";
 function Navigation() {
   const { userId, loading, data, error, refresh } = useBeacon(),
@@ -53,7 +60,7 @@ function Navigation() {
   return <AppNavigation />;
 }
 function AppRuntime() {
-  const { userId, demo } = useBeacon();
+  const { userId, demo, viewerEpoch } = useBeacon();
   useEffect(() => {
     if (Platform.OS !== "web") setCreationDraftAccount(userId);
   }, [userId]);
@@ -61,17 +68,21 @@ function AppRuntime() {
     <DemoNoticeProvider
       sessionKey={`${userId ?? "signed-out"}:${demo ? "demo" : "live"}`}
     >
-      <ExplorationProvider key={userId ?? "signed-out"}>
-        <WidgetPreferencesProvider accountId={userId}>
-          <BottomSheetModalProvider>
-            <WidgetSync />
-            <AppSystemBars />
-            <SheetIsolation>
-              <Navigation />
-            </SheetIsolation>
-          </BottomSheetModalProvider>
-        </WidgetPreferencesProvider>
-      </ExplorationProvider>
+      <OnboardingProvider>
+        <ExplorationProvider key={`${userId}:${demo}:${viewerEpoch}`}>
+          <WidgetPreferencesProvider accountId={userId}>
+            <BottomSheetModalProvider>
+              <WidgetSync />
+              <AppSystemBars />
+              <SheetIsolation>
+                <Navigation />
+                <FirstSuccessNotice />
+                {__DEV__ && demo ? <DeveloperLab /> : null}
+              </SheetIsolation>
+            </BottomSheetModalProvider>
+          </WidgetPreferencesProvider>
+        </ExplorationProvider>
+      </OnboardingProvider>
     </DemoNoticeProvider>
   );
 }

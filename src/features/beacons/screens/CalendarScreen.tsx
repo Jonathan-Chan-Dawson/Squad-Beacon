@@ -1,3 +1,4 @@
+import { SemanticEmpty } from "@/src/features/onboarding/OnboardingUI";
 import { useRoutineCalendar } from "../useRoutineCalendar";
 import React, { useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
@@ -77,7 +78,7 @@ export default function CalendarScreen() {
       <View style={[styles.row, { justifyContent: "space-between" }]}><Text accessibilityRole="header" style={[styles.h2, { flex: 1 }]}>{heading(selectedDate)}</Text>
         {selectedDate >= today ? <Button compact title="+ Schedule" onPress={() => { setScheduleError(""); setScheduleOpen(true); }} /> : null}
       </View>
-      {!agenda.length ? <Txt muted>{loading ? "Loading your calendar…" : selectedDate < today ? "No activity history on this day." : "Nothing scheduled for this day."}</Txt> : null}
+      {!agenda.length && !routineCalendar.error ? loading || routineCalendar.loading ? <Txt muted>Loading your calendar…</Txt> : selectedDate < today ? <Txt muted>No activity history on this day.</Txt> : <SemanticEmpty name="empty.calendar" density="inline" /> : null}
       {agenda.map((item) => <View key={item.key} style={{gap:5}}><Pressable accessibilityRole="button" accessibilityState={item.activities?.length?{expanded:expanded===item.key}:undefined} onPress={() => openItem(item)} style={[styles.card, { gap: 4, borderLeftWidth: 3, borderLeftColor: dotColors[item.kind],borderStyle:item.tentative?"dashed":"solid" }]}>
         <Text style={styles.h2}>{item.title}</Text>
         <Txt muted>{item.label}{item.startsAt ? ` · ${new Date(item.startsAt).toLocaleTimeString([], { timeZone: timezone, hour: "numeric", minute: "2-digit" })}` : ""}</Txt>

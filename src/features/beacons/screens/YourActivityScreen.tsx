@@ -1,3 +1,4 @@
+import { SemanticEmpty } from "@/src/features/onboarding/OnboardingUI";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -13,11 +14,11 @@ import {
 } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import * as ExpoLinking from "expo-linking";
-import { ArrowLeft, CalendarDays, ChevronDown, ChevronRight, ChevronUp, Compass, History, Radio } from "lucide-react-native";
+import { ArrowLeft, CalendarDays, ChevronDown, ChevronRight, ChevronUp, Compass, History } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBeacon } from "@/src/shared/store";
 import { useNow } from "@/src/shared/useNow";
-import { useDesignTheme, Card, PrimaryButton, SecondaryButton } from "@/src/shared/design-system";
+import { useDesignTheme, Card, SecondaryButton } from "@/src/shared/design-system";
 import { confirmedHubActivities } from "@/src/features/beacons/hubSelectors";
 import { canReadBeaconActivity } from "@/src/features/beacons/beaconModules";
 import { BeaconFeedCard } from "@/src/features/beacons/components/BeaconFeedCard";
@@ -371,15 +372,7 @@ export default function YourActivityScreen() {
             {historyQuery ? <Pressable accessibilityRole="button" accessibilityLabel="Clear activity search" onPress={() => onHistorySearch("")} style={{ minWidth: 44, minHeight: 44, alignItems: "center", justifyContent: "center" }}><Text style={{ color: colors.accent, ...tokens.type.caption, fontWeight: "700" }}>Clear</Text></Pressable> : null}
           </View>
           {allEmpty ? (
-            <Card testID="your-activity-empty" style={{ alignItems: "center", gap: tokens.space.sm, padding: tokens.space.lg }}>
-              <Radio size={28} color={colors.accent} />
-              <Text accessibilityRole="header" style={{ textAlign: "center", color: colors.textPrimary, ...tokens.type.titleSmall }}>Your activity starts here</Text>
-              <Text style={{ textAlign: "center", color: colors.textSecondary, ...tokens.type.secondary }}>Create a Beacon or explore what others are planning.</Text>
-              <View style={{ width: "100%", gap: tokens.space.xs }}>
-                <PrimaryButton title="Create a Beacon" onPress={createBeacon} />
-                <SecondaryButton title="Explore Beacons" onPress={exploreBeacons} />
-              </View>
-            </Card>
+            <View testID="your-activity-empty"><SemanticEmpty name="empty.upcoming" illustration="emptyUpcoming" density="hero" action={{label:"Explore Beacons",onPress:exploreBeacons}} secondaryActions={[{label:"Create Beacon",onPress:createBeacon}]} /></View>
           ) : null}
           {!allEmpty && searchedPeriods.active.length ? (
           <View style={{ gap: tokens.space.sm }} testID="your-activity-now-section">

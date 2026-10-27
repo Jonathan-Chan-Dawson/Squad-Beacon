@@ -85,7 +85,10 @@
     "test:map-social": "tsx --test tests/mapSocialPolish.test.ts tests/markerIdentity.test.ts tests/mapClusters.test.ts tests/nativeMapPresentation.test.ts tests/clusterRendering.test.ts tests/mapContextFilters.test.ts tests/themeTokens.test.ts tests/hubState.test.ts tests/social.test.ts tests/beaconDefaults.test.ts tests/mapFiltering.test.ts tests/mapBasemaps.test.ts tests/friendsBrowseSession.test.ts",
     "test:e2e": "playwright test",
     "export:web": "expo export --platform web",
-    "test:plans": "tsx --test tests/livingPlans.test.ts tests/livingPlans.database.test.ts tests/plans.test.ts tests/plansRoutine.test.ts tests/plansRoutine.database.test.ts tests/createFlow.test.ts tests/calendar.test.ts tests/calendarProjection.test.ts tests/calendarProjection.database.test.ts tests/mapContextFilters.test.ts tests/connectedPlanning.test.ts tests/connectedPlanning.database.test.ts"
+    "test:plans": "tsx --test tests/livingPlans.test.ts tests/livingPlans.database.test.ts tests/plans.test.ts tests/plansRoutine.test.ts tests/plansRoutine.database.test.ts tests/createFlow.test.ts tests/calendar.test.ts tests/calendarProjection.test.ts tests/calendarProjection.database.test.ts tests/mapContextFilters.test.ts tests/connectedPlanning.test.ts tests/connectedPlanning.database.test.ts",
+    "test:onboarding": "tsx --test tests/onboarding.test.ts tests/onboarding.database.test.ts",
+    "build:onboarding-preview": "expo export --dev --platform web --max-workers 1 --output-dir .expo/onboarding-dev",
+    "test:onboarding:browser": "playwright test --config playwright.onboarding.config.ts"
   },
   "reanimated": {
     "staticFeatureFlags": {

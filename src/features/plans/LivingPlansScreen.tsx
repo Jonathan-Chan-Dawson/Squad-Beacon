@@ -1,3 +1,7 @@
+import {
+  ContextTip,
+  SemanticEmpty,
+} from "@/src/features/onboarding/OnboardingUI";
 import PlanDateField from "./PlanDateField";
 import { ConnectedPlanningActions } from "@/src/features/planning/ConnectedPlanningActions";
 import React, { useState } from "react";
@@ -101,7 +105,7 @@ export function LivingPlansScreen() {
   }
   return (
     <Screen title="Plans" eyebrow="MAKE SOMETHING HAPPEN" create={false}>
-      <Txt muted>A little idea can become a whole adventure.</Txt>
+      <ContextTip name="plan" />
       <Chips
         value={squads.find((s) => s.id === squad)?.name ?? "Personal"}
         options={["Personal", ...squads.map((s) => s.name)]}
@@ -153,9 +157,11 @@ export function LivingPlansScreen() {
             />
           ))}
       {!plans.length && (
-        <Empty
-          title="Your next adventure starts here"
-          body="Start with a name. Figure out the stops together."
+        <SemanticEmpty
+          name="empty.plans"
+          illustration="plans"
+          density="section"
+          personality
         />
       )}
       {plans.map((plan) => {

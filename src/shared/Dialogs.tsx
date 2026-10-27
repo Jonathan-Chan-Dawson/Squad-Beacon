@@ -34,7 +34,7 @@ type DialogProps = {
 };
 
 /** A centered presentation registered in the same stack as Sheet and ContextMenu. */
-function Dialog({
+export function Dialog({
   title,
   visible,
   onClose,

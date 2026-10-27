@@ -1,3 +1,4 @@
+import { SemanticEmpty } from "@/src/features/onboarding/OnboardingUI";
 import { BeaconParticipation } from "@/src/features/beacons/useBeaconParticipation";
 import { canReadBeaconActivity } from "@/src/features/beacons/beaconModules";
 import React, { useCallback, useRef, useState } from "react";
@@ -10,7 +11,7 @@ import {
   RefreshCw,
 } from "lucide-react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
-import { Action, Button, Empty, Screen, Txt, useTheme } from "@/src/shared/ui";
+import { Action, Button, Screen, Txt, useTheme } from "@/src/shared/ui";
 import { useBeacon } from "@/src/shared/store";
 import { useNow } from "@/src/shared/useNow";
 import { usePlanningResponses } from "../usePlanningResponses";
@@ -42,7 +43,14 @@ function ResponsesContent() {
   const [expandedId, setExpandedId] = useState<string | null>(
     params.threadId ?? null,
   );
-  const [history, setHistory] = useState(!!params.threadId);
+  const [sectionOpen, setSectionOpen] = useState<Record<InboxSection, boolean>>(
+    {
+      "Organizer Actions": true,
+      "Needs Response": true,
+      "Answered & Active": false,
+      History: false,
+    },
+  );
   const [scrollRequest, setScrollRequest] = useState<{
     y: number;
     sequence: number;
@@ -56,6 +64,18 @@ function ResponsesContent() {
     { id: string; title: string }[]
   >([]);
   const decisions = planningInbox(data, userId, now);
+  const linkedSection = params.threadId
+    ? String(
+        decisions.find((item) => item.thread.id === params.threadId)?.section ??
+          "",
+      )
+    : "";
+  useFocusEffect(
+    useCallback(() => {
+      if (params.threadId && linkedSection)
+        setSectionOpen((current) => ({ ...current, [linkedSection]: true }));
+    }, [params.threadId, linkedSection]),
+  );
   const [placement, setPlacement] = useState<{
     viewer: string | null;
     sections: Record<string, InboxSection>;
@@ -71,7 +91,6 @@ function ResponsesContent() {
       if (params.threadId) {
         setExpandedId(params.threadId);
         setFilter("All");
-        setHistory(true);
       }
     }, [regroup, params.threadId]),
   );
@@ -403,101 +422,100 @@ function ResponsesContent() {
                         rows[0] && section === sectionFor(rows[0]) ? 10 : 18,
                     }}
                   >
-                    {section === "History" ? (
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel={
-                          history ? "Hide history" : "History"
-                        }
-                        accessibilityState={{ expanded: history }}
-                        aria-expanded={history}
-                        onPress={() => setHistory(!history)}
-                        style={{
-                          minHeight: 44,
-                          flexDirection: "row",
-                          alignItems: "center",
-                          gap: 8,
-                          paddingHorizontal: 12,
-                        }}
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={
+                        section === "History" && sectionOpen[section]
+                          ? "Hide history"
+                          : section === "Needs Response"
+                            ? "Open"
+                            : section
+                      }
+                      accessibilityState={{ expanded: sectionOpen[section] }}
+                      aria-expanded={sectionOpen[section]}
+                      onPress={() =>
+                        setSectionOpen((current) => ({
+                          ...current,
+                          [section]: !current[section],
+                        }))
+                      }
+                      style={{
+                        minHeight: 44,
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 8,
+                        paddingHorizontal: 12,
+                      }}
+                    >
+                      <Text
+                        style={[
+                          styles.label,
+                          {
+                            color: sectionOpen[section]
+                              ? colors.ink
+                              : colors.muted,
+                          },
+                        ]}
                       >
-                        <Text
-                          style={[
-                            styles.label,
-                            { flex: 1, color: colors.muted },
-                          ]}
-                        >
-                          History
-                        </Text>
-                        <Text style={styles.muted}>{items.length}</Text>
-                        {history ? (
-                          <ChevronDown size={16} color={colors.muted} />
-                        ) : (
-                          <ChevronRight size={16} color={colors.muted} />
-                        )}
-                      </Pressable>
-                    ) : (
+                        {section === "Needs Response" ? "Open" : section}
+                      </Text>
+                      <Text style={[styles.muted, { fontSize: 12 }]}>
+                        {items.length}
+                      </Text>
+                      <View style={{ flex: 1 }} />
+                      {sectionOpen[section] ? (
+                        <ChevronDown size={16} color={colors.muted} />
+                      ) : (
+                        <ChevronRight size={16} color={colors.muted} />
+                      )}
+                    </Pressable>
+                    {items.map((item) => (
                       <View
+                        key={item.thread.id}
                         style={{
-                          flexDirection: "row",
-                          alignItems: "center",
-                          gap: 8,
-                          paddingHorizontal: 12,
-                          paddingBottom: 2,
+                          display: sectionOpen[section] ? "flex" : "none",
+                        }}
+                        accessibilityElementsHidden={!sectionOpen[section]}
+                        importantForAccessibility={
+                          sectionOpen[section] ? "auto" : "no-hide-descendants"
+                        }
+                        onLayout={(event) => {
+                          if (!sectionOpen[section]) return;
+                          const rowY = event.nativeEvent.layout.y;
+                          if (
+                            params.threadId === item.thread.id &&
+                            focusedLink.current !== item.thread.id
+                          ) {
+                            setTimeout(() => {
+                              if (focusedLink.current === item.thread.id)
+                                return;
+                              focusedLink.current = item.thread.id;
+                              setScrollRequest({
+                                y:
+                                  positions.current.list +
+                                  (positions.current.sections[section] ?? 0) +
+                                  rowY,
+                                sequence: Date.now(),
+                              });
+                            }, 0);
+                          }
                         }}
                       >
-                        <Text
-                          accessibilityRole="header"
-                          style={[styles.label, { color: colors.muted }]}
-                        >
-                          {section === "Needs Response" ? "Open" : section}
-                        </Text>
-                        <Text style={[styles.muted, { fontSize: 12 }]}>
-                          {items.length}
-                        </Text>
+                        <DecisionRow
+                          onBeforeRespond={freezePlacement}
+                          item={item}
+                          expanded={expandedId === item.thread.id}
+                          onExpand={() => {
+                            freezePlacement();
+                            setExpandedId((current) =>
+                              current === item.thread.id
+                                ? null
+                                : item.thread.id,
+                            );
+                          }}
+                        />
                       </View>
-                    )}
-                    {section !== "History" || history
-                      ? items.map((item) => (
-                          <View
-                            key={item.thread.id}
-                            onLayout={(event) => {
-                              const rowY = event.nativeEvent.layout.y;
-                              if (
-                                params.threadId === item.thread.id &&
-                                focusedLink.current !== item.thread.id
-                              ) {
-                                setTimeout(() => {
-                                  if (focusedLink.current === item.thread.id)
-                                    return;
-                                  focusedLink.current = item.thread.id;
-                                  setScrollRequest({
-                                    y:
-                                      positions.current.list +
-                                      (positions.current.sections[section] ??
-                                        0) +
-                                      rowY,
-                                    sequence: Date.now(),
-                                  });
-                                }, 0);
-                              }
-                            }}
-                          >
-                            <DecisionRow
-                              onBeforeRespond={freezePlacement}
-                              item={item}
-                              expanded={expandedId === item.thread.id}
-                              onExpand={() => {
-                                freezePlacement();
-                                setExpandedId((current) =>
-                                  current === item.thread.id
-                                    ? null
-                                    : item.thread.id,
-                                );
-                              }}
-                            />
-                          </View>
-                        ))
-                      : null}
+                    ))}
                   </View>
                 );
               })}
@@ -546,11 +564,14 @@ function ResponsesContent() {
             </View>
           ) : null}
           {!loading &&
+          !error &&
+          !refreshError &&
           !rows.length &&
           (!showInvites || (!invitations.length && !answered.length)) ? (
-            <Empty
-              title="You're all caught up"
-              body="New responses and invitations will appear here."
+            <SemanticEmpty
+              name="empty.responses"
+              illustration="complete"
+              density="section"
             />
           ) : null}
           <Button

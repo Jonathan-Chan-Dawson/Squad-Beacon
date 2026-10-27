@@ -1,3 +1,4 @@
+import { SemanticEmpty } from "@/src/features/onboarding/OnboardingUI";
 import {
   LivingActivitySection,
   LivingActivityHighlights,
@@ -115,7 +116,7 @@ function BeaconHistory({ personId }: { personId: string }) {
         {!upcoming.loading &&
           !upcoming.error &&
           !upcoming.page?.rows.length && (
-            <Txt muted>No upcoming Beacons to show.</Txt>
+            <SemanticEmpty name="empty.upcoming" density="inline" />
           )}
         {upcoming.error && (
           <>

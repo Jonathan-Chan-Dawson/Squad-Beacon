@@ -1,3 +1,3 @@
 Help feature
 
-- HelpScreen.tsx: concise guide to Now, Pings, Beacon Plans and Routines, Starred Friends, Sonar, Beacon tools, Organizations, and optional widgets; links to the current destinations.
+- HelpScreen.tsx: searchable, expandable field guide in nine categories; reuses canonical contextual tip copy and links to current destinations. Organization/Network labels follow the presentation model.

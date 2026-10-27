@@ -75,9 +75,9 @@ for (const width of [320, 430]) {
           .first();
         if (await group.count()) {
           await group.click();
-          await expect(
-            sheet.getByRole("button", { name: "Back to groups", exact: true }),
-          ).toBeVisible();
+          await expect(group).toHaveAttribute("aria-expanded", "true");
+          await group.click();
+          await expect(group).toHaveAttribute("aria-expanded", "false");
         }
         await expect(
           sheet.getByRole("button", { name: "Selected · 2", exact: true }),

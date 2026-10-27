@@ -1,3 +1,4 @@
+import { SemanticEmpty } from "@/src/features/onboarding/OnboardingUI";
 import { BeaconCommunitiesProvider } from "@/src/features/discovery/BeaconCommunityRow";
 import { useBeaconCommunities } from "@/src/features/discovery/useBeaconCommunities";
 import { finishCreationLocationPick } from "@/src/features/beacons/socialPlanningSession";
@@ -54,9 +55,7 @@ import {
   MapPinPlus,
   Search,
   Maximize,
-  Plus,
   Settings2,
-  UserRoundPlus,
 } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import BeaconMap, {
@@ -283,7 +282,7 @@ export default function MapScreen() {
     if (exploration.area?.kind === "near-me" && exploration.area.coordinate)
       nearMeArea.current = exploration.area;
   }, [exploration.area]);
-  const { data, userId, demo, loading, act, searchDirectory, refresh } = useBeacon();
+  const { data, userId, demo, loading, act, searchDirectory, refresh, demoScenario } = useBeacon();
   useFocusEffect(useCallback(() => { void refresh(); }, [refresh]));
 
   const params = useLocalSearchParams<{
@@ -536,8 +535,8 @@ export default function MapScreen() {
   }));
   const [offline, setOffline] = useState(false);
   const [pickMode, setPickMode] = useState(false);
-  const [placeConfirmed, setPlaceConfirmed] = useState(false);
-  const pickRestore = useRef<{ viewer: string | null; camera: MapViewport | null; query: string } | null>(null);
+  const [pickingDraft, setPickingDraft] = useState(false);
+  const pickRestore = useRef<{ viewer: string | null; query: string } | null>(null);
   const [locationPickError, setLocationPickError] = useState("");
   const creationLocationContext = useRef<Record<string, string>>({});
   const [pickedMapPoint, setPickedMapPoint] = useState<{
@@ -1549,15 +1548,15 @@ export default function MapScreen() {
   }
 
   const startPickingLocation = useCallback(() => {
-    if (!pickRestore.current) pickRestore.current = { viewer: userId, camera: viewport, query: exploration.query };
+    if (!pickRestore.current) pickRestore.current = { viewer: userId, query: exploration.query };
     creationLocationContext.current = {};
-    setPlaceConfirmed(false);
     setLocationPickError("");
+    setPickingDraft(false);
     closePopovers();
     setPickedMapPoint(null);
     setPickMode(true);
     setPlaceSearchOpen(false);
-  }, [userId, viewport, exploration.query, closePopovers]);
+  }, [userId, exploration.query, closePopovers]);
 
   function finishPicking() {
     Keyboard.dismiss();
@@ -1566,11 +1565,9 @@ export default function MapScreen() {
     creationLocationContext.current = {};
     setPickedMapPoint(null);
     setPickMode(false);
-    setPlaceConfirmed(false);
+    setPickingDraft(false);
     setPlaceSearchOpen(false);
     if (previous?.viewer === userId) exploration.setQuery(previous.query);
-    if (previous?.viewer === userId && previous.camera)
-      setControlCommand(old => ({ kind: "restore", camera: previous.camera!, revision: (old?.revision ?? 0) + 1 }));
   }
 
   function cancelPicking() {
@@ -1597,7 +1594,7 @@ export default function MapScreen() {
       pickRestore.current = null;
       creationLocationContext.current = {};
       setPickMode(false);
-      setPlaceConfirmed(false);
+      setPickingDraft(false);
       setPickedMapPoint(null);
       setPlaceSearchOpen(false);
     }
@@ -1610,8 +1607,8 @@ export default function MapScreen() {
       setLocationPickError("");
       const context = creationHandoffParams(params);
       creationLocationContext.current = context;
+      setPickingDraft(context.locationPicker === "editor");
       if (context.latitude && context.longitude) {
-        setControlCommand(old => ({ kind: "focus", coordinates: [{ latitude: Number(context.latitude), longitude: Number(context.longitude) }], revision: (old?.revision ?? 0) + 1 }));
         setPickedMapPoint({
           latitude: Number(context.latitude),
           longitude: Number(context.longitude),
@@ -1722,13 +1719,8 @@ export default function MapScreen() {
 
   function handleViewportChange(next: MapViewport, userMoved = true) {
     setViewport(next);
-    if (pickMode) {
-      if (userMoved && isValidCoordinate(next.center)) {
-        setPlaceConfirmed(false);
-        setPickedMapPoint({ ...next.center, label: "Pinned location" });
-      }
-      return;
-    }
+    // Placement follows a geographic point, never the camera center.
+    if (pickMode) return;
     if (discoveryActive && userMoved && discoveryRestore.current)
       discoveryRestore.current.cameraChanged = true;
     if (preferencesReady && (!discoveryActive || userMoved))
@@ -2125,7 +2117,7 @@ export default function MapScreen() {
       if (!returnParams) { setLocationPickError("This editor is no longer available. Cancel and reopen your Beacon draft."); return; }
       finishPicking();
       router.dismissTo({ pathname: "/create", params: returnParams });
-    } else setPlaceConfirmed(true);
+    }
   }
 
   function createAtPickedLocation(kind: "beacon" | "ping") {
@@ -2373,10 +2365,10 @@ export default function MapScreen() {
           }}
           hideControls
           viewportInsets={{
-            top: pickMode ? 0 : insets.top + headerHeight + 16,
-            right: pickMode ? 0 : 68,
-            bottom: pickMode ? 0 : mapBottomClearance,
-            left: pickMode ? 0 : 12,
+            top: insets.top + headerHeight + 16,
+            right: 68,
+            bottom: mapBottomClearance,
+            left: 12,
           }}
           previewHeight={
             !pickMode && (person || (selected && !detailTab))
@@ -2385,7 +2377,7 @@ export default function MapScreen() {
           }
           focused={focusedCoordinate}
           anchorCoordinate={
-            clusterActivityIds ? clusterCenter : focusedCoordinate
+            pickMode ? pickedMapPoint : clusterActivityIds ? clusterCenter : focusedCoordinate
           }
           onAnchor={setMapAnchor}
           activities={
@@ -2405,17 +2397,13 @@ export default function MapScreen() {
               : undefined
           }
           selectedActivityId={selected}
-          onPick={
-            pickMode
-              ? (latitude, longitude) =>
-                  { if (!placeConfirmed) {
-                    setPickedMapPoint({ latitude, longitude, label: "Pinned location" });
-                    setControlCommand(old => ({ kind: "focus", coordinates: [{ latitude, longitude }], revision: (old?.revision ?? 0) + 1 }));
-                  } }
-              : undefined
-          }
-          selected={pickMode ? null : contextPoint}
-          selectionIsTemporary={!!contextPoint && !pickedMapPoint}
+          onPick={pickMode ? (latitude, longitude) => {
+            if (!isValidCoordinate({ latitude, longitude })) return;
+            setLocationPickError("");
+            setPickedMapPoint({ latitude, longitude, label: "Pinned location" });
+          } : undefined}
+          selected={pickMode ? pickedMapPoint : contextPoint}
+          selectionIsTemporary={pickMode || !!contextPoint}
           onActivity={(id) => chooseBeacon(id)}
           onPerson={choosePerson}
           clusterPersonCount={countClusterPeople}
@@ -2729,60 +2717,10 @@ export default function MapScreen() {
             {!hasVisibleBeacons &&
             !publicMapRows.length &&
             !hasVisiblePeople ? (
-              <>
-                <Text style={styles.h2}>
-                  {exploration.filters.audience === "Friends" && !friends.length
-                    ? "No friends yet"
-                    : "No Beacons here yet"}
-                </Text>
-                {(publicDiscovery.error || directoryResult?.error) && (
-                  <Text style={styles.muted}>
-                    {publicDiscovery.error ?? directoryResult?.error}
-                  </Text>
-                )}
-                <View
-                  style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}
-                >
-                  {exploration.filters.audience === "Friends" &&
-                  !friends.length ? (
-                    <IconButton
-                      label="Add Friends"
-                      onPress={() => router.push("/find-friends")}
-                    >
-                      <UserRoundPlus size={18} color={colors.green} />
-                    </IconButton>
-                  ) : (
-                    <IconButton
-                      label="Change Area"
-                      onPress={() => setPlaceSearchOpen(true)}
-                    >
-                      <MapPin size={18} color={colors.green} />
-                    </IconButton>
-                  )}
-                  <Button
-                    title={
-                      exploration.filters.audience === "Friends"
-                        ? "Explore Beacons"
-                        : "Explore Nearby"
-                    }
-                    compact
-                    onPress={() => {
-                      resetFilters();
-                      exploration.setQuery("");
-                      setPlaceSearchOpen(true);
-                    }}
-                  />
-                  <Button title="Browse Communities" compact secondary onPress={() => router.push("/communities")} />
-                  <Button title="Find Friends" compact secondary onPress={() => router.push("/find-friends")} />
-                  {publicDiscovery.error ? <Button title="Retry public Beacons" compact secondary onPress={publicDiscovery.refresh} /> : null}
-                  <IconButton
-                    label="Create Beacon"
-                    onPress={() => { creationLocationContext.current = {}; setPickedMapPoint(null); startPickingLocation(); }}
-                  >
-                    <Plus size={18} color={colors.green} />
-                  </IconButton>
-                </View>
-              </>
+              <SemanticEmpty density="section" illustration={publicDiscovery.error || directoryResult?.error || (__DEV__ && demo && demoScenario === "offline") ? "disconnected" : "discovery"}
+                name={publicDiscovery.error || directoryResult?.error || (__DEV__ && demo && demoScenario === "offline") ? "state.error" : exploration.area?.kind === "near-me" && !exploration.area.coordinate ? "empty.location" : exploration.query.trim() || activeFilterCount ? "empty.filtered" : exploration.filters.audience === "Friends" && !friends.length ? "empty.friends" : "empty.discovery"}
+                action={publicDiscovery.error || directoryResult?.error || (__DEV__ && demo && demoScenario === "offline") ? { label: "Try again", onPress: publicDiscovery.refresh } : exploration.query.trim() || activeFilterCount ? { label: "Clear filters", onPress: () => { resetFilters(); exploration.setQuery(""); } } : exploration.filters.audience === "Friends" && !friends.length ? { label: "Find Friends", onPress: () => router.push("/find-friends") } : { label: "Choose an area", onPress: () => setPlaceSearchOpen(true) }}
+              />
             ) : preferencesReady && hintIndex < 3 && !discoveryHintDismissed ? (
               <>
                 <Text style={styles.body}>
@@ -3068,34 +3006,34 @@ export default function MapScreen() {
           </MapControl>
         </View>
       ) : null}
-      {pickMode && !activeSearchVisible ? (
-        <>
-          <View pointerEvents="none" style={{ position: "absolute", top: "50%", left: "50%", marginLeft: -14, marginTop: -28 }}>
-            <MapPin size={28} color={colors.green} fill={colors.white} />
-          </View>
-          <View testID="map-place-confirmation" style={{ position: "absolute", bottom: insets.bottom + tokens.layout.tabBarHeight + 12, left: 12, right: 12, padding: 12, gap: 8, borderRadius: 16, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.white, zIndex: 22 }}>
+      {pickMode && !activeSearchVisible && !pickedMapPoint ? (
+        <View testID="map-place-instructions" style={{ position: "absolute", top: headerTop + 8, alignSelf: "center", maxWidth: mapSize.width - 24, padding: 8, gap: 8, flexDirection: "row", alignItems: "center", borderRadius: 16, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line, zIndex: 22 }}>
+          <Text style={[styles.muted, { flexShrink: 1 }]}>Tap the map to place a pin</Text>
+          <IconButton label="Search for a location" onPress={() => { exploration.setQuery(""); setPlaceSearchOpen(true); }}><Search size={18} color={colors.green} /></IconButton>
+          <Button compact secondary title="Cancel" onPress={cancelPicking} />
+        </View>
+      ) : null}
+      {pickMode && !activeSearchVisible && pickedMapPoint && mapAnchor ? (
+        <MapCallout testID="map-place-confirmation" compact maxWidth={300} anchor={mapAnchor}
+          bounds={{ ...mapSize, top: headerTop + 8, bottom: insets.bottom + tokens.layout.tabBarHeight + 12 }}>
+          <View style={{ padding: 10, gap: 8, borderRadius: 16, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.white }}>
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
               <MapPin size={18} color={colors.green} />
-              <Text numberOfLines={1} style={[styles.h2, { flex: 1 }]}>{pickedMapPoint?.label || "Choose a location"}</Text>
-              {!placeConfirmed && <IconButton label="Search for a location" onPress={() => { exploration.setQuery(""); setPlaceSearchOpen(true); }}><Search size={18} color={colors.green} /></IconButton>}
+              <Text numberOfLines={1} style={[styles.label, { flex: 1 }]}>{pickedMapPoint.label}</Text>
+              <IconButton label="Search for a location" onPress={() => { exploration.setQuery(""); setPlaceSearchOpen(true); }}><Search size={18} color={colors.green} /></IconButton>
             </View>
-            <Text style={styles.muted}>{placeConfirmed ? "What would you like to create here?" : "Tap or search, then move the map to adjust."}</Text>
             {!!locationPickError && <Text accessibilityRole="alert" style={styles.error}>{locationPickError}</Text>}
-            {placeConfirmed ? <>
-              <View style={{ flexDirection: "row", gap: 8 }}>
+            <View style={{ flexDirection: "row", gap: 8 }}>
+              {pickingDraft ? (
+                <View style={{ flex: 1 }}><Button compact title="Use This Location" onPress={confirmPickedLocation} /></View>
+              ) : <>
                 <View style={{ flex: 1 }}><Button compact title="Create Beacon" onPress={() => createAtPickedLocation("beacon")} /></View>
                 <View style={{ flex: 1 }}><Button compact secondary title="Create Ping" onPress={() => createAtPickedLocation("ping")} /></View>
-              </View>
-              <View style={{ flexDirection: "row", gap: 8 }}>
-                <View style={{ flex: 1 }}><Button compact secondary title="Change location" onPress={() => setPlaceConfirmed(false)} /></View>
-                <View style={{ flex: 1 }}><Button compact secondary title="Cancel" onPress={cancelPicking} /></View>
-              </View>
-            </> : <View style={{ flexDirection: "row", gap: 8 }}>
-              <View style={{ flex: 1 }}><Button compact secondary title="Cancel" onPress={cancelPicking} /></View>
-              <View style={{ flex: 2 }}><Button compact title="Use This Location" disabled={!pickedMapPoint || !isValidCoordinate(pickedMapPoint)} onPress={confirmPickedLocation} /></View>
-            </View>}
+              </>}
+            </View>
+            <Button compact secondary title="Cancel" onPress={cancelPicking} />
           </View>
-        </>
+        </MapCallout>
       ) : null}
 
       {!pickMode && selectedPublic && !person && !selected && (

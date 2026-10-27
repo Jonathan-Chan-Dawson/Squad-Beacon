@@ -670,11 +670,7 @@ export function StatusPanel({
         headerOverride
       ) : profilePill ? (
         <View
-          style={
-            Platform.OS !== "web"
-              ? { flexDirection: "row", alignItems: "center", gap: 4 }
-              : undefined
-          }
+          style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
         >
           <Pressable
             accessibilityRole="button"
@@ -695,6 +691,8 @@ export function StatusPanel({
             }
             style={({ pressed }) => ({
               minHeight: 44,
+              minWidth: 0,
+              flexShrink: 1,
               ...(Platform.OS !== "web" ? { flex: 1 } : {}),
               paddingVertical: 7,
               paddingHorizontal: 10,
@@ -731,6 +729,7 @@ export function StatusPanel({
             </Text>
             <ChevronDown size={13} color={colors.textSecondary} />
           </Pressable>
+          {statusAccessory}
           {Platform.OS !== "web" && (
             <Pressable
               accessibilityRole="button"

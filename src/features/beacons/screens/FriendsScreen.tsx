@@ -1,3 +1,4 @@
+import { SemanticEmpty } from "@/src/features/onboarding/OnboardingUI";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { FlatList, Pressable, Text, View } from "react-native";
 import { router, useFocusEffect } from "expo-router";
@@ -249,26 +250,25 @@ export default function FriendsScreen() {
             </View>
           }
           ListEmptyComponent={
-            <View
-              style={{ paddingVertical: 32, alignItems: "center", gap: 12 }}
-            >
-              <UsersRound size={30} color={colors.textSecondary} />
-              <Text
-                style={{ color: colors.textSecondary, textAlign: "center" }}
-              >
-                {loading
-                  ? "Loading your people…"
-                  : friends.length
-                    ? "No friends match. Try another search or filter."
-                    : "Good plans start with your people."}
+            loading ? (
+              <Text style={{ color: colors.textSecondary, padding: 24 }}>
+                Loading your people…
               </Text>
-              {!friends.length && !loading ? (
-                <HomeAction
-                  title="Find friends"
-                  onPress={() => router.push("/find-friends")}
-                />
-              ) : null}
-            </View>
+            ) : (
+              <SemanticEmpty
+                name={friends.length ? "empty.filtered" : "empty.friends"}
+                illustration="noFriends"
+                density="section"
+                action={
+                  friends.length
+                    ? undefined
+                    : {
+                        label: "Find Friends",
+                        onPress: () => router.push("/find-friends"),
+                      }
+                }
+              />
+            )
           }
         />
         {controller.error || selectedIds.length ? (

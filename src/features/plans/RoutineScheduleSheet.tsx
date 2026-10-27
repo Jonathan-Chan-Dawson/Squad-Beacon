@@ -1,3 +1,4 @@
+import { ContextTip } from "@/src/features/onboarding/OnboardingUI";
 import { useBeacon } from "@/src/shared/store";
 import { planStops, stopActivity } from "./livingPlans";
 import { Repeat2, CalendarDays, Check } from "lucide-react-native";
@@ -183,6 +184,7 @@ export function RoutineScheduleSheet({
       visible={visible}
       onClose={onClose}
     >
+      <ContextTip name="routine" />
       <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
         <Repeat2 size={23} color={c.accent} />
         <Txt>Make room for a favorite.</Txt>

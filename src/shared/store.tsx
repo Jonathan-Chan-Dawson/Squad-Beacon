@@ -14,6 +14,9 @@ import * as Network from "expo-network";
 import type { Session } from "@supabase/supabase-js";
 import { supabase, rpc, clearPendingRequests } from "@/src/shared/supabase";
 import { DEMO_ID, demoAction, makeDemo } from "@/src/shared/demo";
+import type { DemoScenario } from "@/src/features/onboarding/scenarios";
+import { firstSuccessCandidate } from "@/src/features/onboarding/presentation";
+import { reportOnboardingSuccess } from "@/src/features/onboarding/progress";
 import {
   normalizeActivityHistoryQuery,
   parseActivityHistoryPage,
@@ -45,6 +48,8 @@ type Store = {
   data: Data;
   userId: string | null;
   demo: boolean;
+  demoScenario: DemoScenario;
+  switchDemoScenario: (scenario: DemoScenario) => void;
   loading: boolean;
   error: string | null;
   session: Session | null;
@@ -74,6 +79,7 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
     [loading, setLoading] = useState(!!supabase),
     [error, setError] = useState<string | null>(null);
   const dataRef = useRef(data);
+  const [demoScenario, setDemoScenario] = useState<DemoScenario>("populated");
   const demoRequests = useRef(new Map<string, Record<string, unknown>>());
   const setData = useCallback((next: Data) => {
     // Sequential actions can reuse a callback before React commits the next render.
@@ -347,6 +353,8 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
           throw failure;
         }
         setData(next);
+        const successKey = firstSuccessCandidate(baseData, next, DEMO_ID, action);
+        if (successKey) reportOnboardingSuccess({ viewer: DEMO_ID, epoch: viewerEpochRef.current, key: successKey });
         if (atomic) {
           const created=next.activities.find((item)=>!baseData.activities.some((previous)=>previous.id===item.id));
           const result={id:created?.id,event:action,committed:true,invited_ids:payload.invitee_ids};
@@ -549,6 +557,7 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
       if (!session) throw new Error("Sign in to continue.");
       const generation = epoch.current;
       const viewer = session.user.id;
+      const beforeAction = dataRef.current;
       const atomicCreation = action === "create_activity_with_invitees" || action === "create_plan_beacon_with_invitees";
       const actorScoped = action.includes("plan") || action.includes("routine") || action.includes("planning") || action.includes("council") || atomicCreation || action === "create_activity" || action === "create_plan_beacon" || ["rsvp","start_location","stop_location","save_activity_note","end_activity_note","update_presence","save_status_note","create_planning_thread","add_council_proposal"].includes(action);
       const assertAtomicViewer = () => {
@@ -566,6 +575,10 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
       assertAtomicViewer();
       if (generation === epoch.current) await refresh();
       assertAtomicViewer();
+      if (generation === epoch.current && dataRef.current.viewer_id === viewer) {
+        const successKey = firstSuccessCandidate(beforeAction, dataRef.current, viewer, action);
+        if (successKey) reportOnboardingSuccess({ viewer, epoch: viewerEpochRef.current, key: successKey });
+      }
       return result;
     },
     [demo, session, refresh, setData],
@@ -594,6 +607,21 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
         data,
         userId: demo ? DEMO_ID : (session?.user.id ?? null),
         demo,
+        demoScenario,
+        switchDemoScenario: (scenario) => {
+          if (!__DEV__ || !demo) return;
+          epoch.current++;
+          viewerEpochRef.current++;
+          setViewerEpoch(viewerEpochRef.current);
+          clearPendingRequests();
+          demoRequests.current.clear();
+          setDemoScenario(scenario);
+          // Erased with the __DEV__ branch; fixtures must not enter production bundles.
+          // eslint-disable-next-line @typescript-eslint/no-require-imports
+          setData(require("@/src/features/onboarding/scenarios").makeScenario(scenario).data);
+          setLoading(false);
+          setError(null);
+        },
         session,
         loading,
         error,
@@ -608,6 +636,7 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
         loadProfileContent,
         loadRoutineCalendar,
         startDemo: () => {
+          setDemoScenario("populated");
           demoRequests.current.clear();
           epoch.current++;
           viewerEpochRef.current++;

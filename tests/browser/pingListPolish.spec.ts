@@ -1,5 +1,40 @@
 import { expect, test } from "@playwright/test";
 
+test("decision sections collapse independently and preserve saved responses", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: /Explore the demo/ }).click();
+  await page.getByRole("tab", { name: "Squads", exact: true }).click();
+  await page
+    .getByRole("button", { name: /Responses & Invitations, \d+ pending/ })
+    .click();
+  const open = page.getByRole("button", { name: "Open", exact: true });
+  const answered = page.getByRole("button", {
+    name: "Answered & Active",
+    exact: true,
+  });
+  await expect(open).toHaveAttribute("aria-expanded", "true");
+  const row = page.getByTestId("decision-row-demo-squad-ping-boxing");
+  await open.click();
+  await expect(row).not.toBeVisible();
+  await open.focus();
+  await page.keyboard.press("Enter");
+  await expect(open).toHaveAttribute("aria-expanded", "true");
+  await expect(row).toBeVisible();
+  await row.getByRole("button", { name: "Interested", exact: true }).click();
+  await page.getByRole("button", { name: "Pings", exact: true }).click();
+  await expect(answered).toHaveAttribute("aria-expanded", "false");
+  await expect(row).not.toBeVisible();
+  await answered.click();
+  await expect(
+    row.getByRole("button", { name: "Interested", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(open).toHaveAttribute("aria-expanded", "true");
+  await answered.click();
+  await expect(row).not.toBeVisible();
+});
+
 for (const width of [320, 390, 430]) {
   test(`Ping quick responses stay in place across expansion at ${width}px`, async ({
     page,
@@ -35,7 +70,9 @@ for (const width of [320, 390, 430]) {
       });
     const before = await interested.boundingBox();
     for (const name of ["Maybe", "Pass"]) {
-      const box = await row.getByRole("button", { name, exact: true }).boundingBox();
+      const box = await row
+        .getByRole("button", { name, exact: true })
+        .boundingBox();
       expect(box!.y).toBeCloseTo(before!.y, 0);
     }
     await header.click();

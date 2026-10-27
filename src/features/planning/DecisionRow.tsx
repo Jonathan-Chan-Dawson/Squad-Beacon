@@ -107,11 +107,14 @@ export function DecisionRow({
         paddingHorizontal: 10,
         gap: thread.kind === "ping" ? 4 : 6,
         borderRadius: 12,
+        marginVertical: 2,
+        borderWidth: 1,
+        borderColor: semanticColors.border,
         borderLeftWidth: 2,
-        borderLeftColor: expanded ? colors.green : "transparent",
+        borderLeftColor: expanded ? colors.green : semanticColors.border,
         backgroundColor: reveal.interpolate({
           inputRange: [0, 1],
-          outputRange: [colors.bg, semanticColors.surfaceRaised],
+          outputRange: [semanticColors.surface, semanticColors.surfaceRaised],
         }),
       }}
     >

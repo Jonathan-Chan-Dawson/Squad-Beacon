@@ -10,9 +10,24 @@ const menuName = "Actions for this map location";
 const firstPoint = { x: 28, y: 430 };
 const secondPoint = { x: 365, y: 650 };
 
+test.beforeEach(async ({ page }) => {
+  await page.routeWebSocket("**/hot", () => {});
+  await page.routeWebSocket("**/message", () => {});
+});
+
 async function demo(page: Page, path = "/") {
   await page.goto(path);
-  await page.getByRole("button", { name: /Explore the demo/ }).tap();
+  const enterDemo = page.getByRole("button", { name: /Explore the demo/ });
+  await expect
+    .poll(
+      () =>
+        enterDemo.evaluate((element) =>
+          Object.keys(element).some((key) => key.startsWith("__reactProps$")),
+        ),
+      { timeout: 90000 },
+    )
+    .toBe(true);
+  await enterDemo.tap();
   await expect(page.locator(".leaflet-container")).toBeVisible();
   await expect(page.locator(".leaflet-marker-icon").first()).toBeVisible();
   await expect(
@@ -260,15 +275,13 @@ test("place taps keep their preview and Pulse context; directions use the exact 
   await expect(preview).toHaveCount(0);
 
   const coordinate = await hold(page, session);
-  await page
-    .context()
-    .route("https://www.google.com/maps/dir/**", (route) =>
-      route.fulfill({
-        status: 200,
-        contentType: "text/html",
-        body: "Directions",
-      }),
-    );
+  await page.context().route("https://www.google.com/maps/dir/**", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "text/html",
+      body: "Directions",
+    }),
+  );
   const request = page
     .context()
     .waitForEvent("request", (value) =>

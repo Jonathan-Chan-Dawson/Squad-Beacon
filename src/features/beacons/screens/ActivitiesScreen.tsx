@@ -1,4 +1,11 @@
 import { LivingActivityHighlights } from "../components/feed/LivingActivitySection";
+import { homePresentation } from "@/src/features/onboarding/presentation";
+import { useOnboarding } from "@/src/features/onboarding/runtime";
+import {
+  HomeInvitation,
+  SemanticEmpty,
+} from "@/src/features/onboarding/OnboardingUI";
+import { currentActivity } from "../livingActivity";
 import { discoveryActivities } from "../discoverySelectors";
 import React, { useCallback, useMemo, useState } from "react";
 import {
@@ -68,10 +75,28 @@ export default function ActivitiesScreen() {
     loading,
     error: storeError,
     refresh,
+    demoScenario,
+    demo,
+    switchDemoScenario,
   } = useBeacon();
   const exploration = useExploration();
   const insets = useSafeAreaInsets();
   const now = useNow();
+  const progress = useOnboarding();
+  const simulatedError = __DEV__ && demo && demoScenario === "offline";
+  const home = homePresentation(
+    data,
+    userId,
+    now,
+    progress.keys,
+    progress.status,
+    loading,
+    storeError || simulatedError,
+    progress.firstEntrySession,
+  );
+  const hasPersonal =
+    personalHubPreview(confirmedHubActivities(data, userId), now).length > 0 ||
+    !!(userId && currentActivity(data, userId, userId, now));
   const params = useLocalSearchParams<{
     filter?: string;
     participation?: string;
@@ -120,6 +145,10 @@ export default function ActivitiesScreen() {
     router.push({ pathname: "/(tabs)", params: { beacon: id } });
   }, []);
   const handleRefresh = useCallback(async () => {
+    if (simulatedError) {
+      switchDemoScenario("disconnected");
+      return;
+    }
     setRefreshing(true);
     setRequestError("");
     try {
@@ -133,7 +162,7 @@ export default function ActivitiesScreen() {
     } finally {
       setRefreshing(false);
     }
-  }, [refresh]);
+  }, [refresh, simulatedError, switchDemoScenario]);
 
   const shareActivity = useCallback(
     async (activity: Activity) => {
@@ -414,7 +443,12 @@ export default function ActivitiesScreen() {
       <HomeAction title={link} onPress={onPress} plain />
     </View>
   );
-  const visibleError = requestError || storeError;
+  const visibleError =
+    requestError ||
+    storeError ||
+    (simulatedError
+      ? "Simulated connection error. Reconnect to load Beacons."
+      : "");
   async function report() {
     if (!reportActivityId || !reportReason.trim()) return;
     setReportBusy(true);
@@ -533,145 +567,196 @@ export default function ActivitiesScreen() {
         ) : null}
 
         <SharedStatusControl compact />
-        <View
-          testID="home-personal-timeline"
-          style={{
-            gap: 0,
-            borderTopWidth: 1,
-            borderTopColor: designColors.border,
-            paddingTop: 12,
-          }}
-        >
-          {hubHeading("Your Activity", "My Activity →", () =>
-            router.push("/your-activity" as Href),
-          )}
-          {(data.is_demo || data.capabilities?.living_activity) && userId ? (
-            <LivingActivityHighlights personId={userId} />
-          ) : (
-            <View style={{ borderRadius: 12, overflow: "hidden" }}>
-              {personalPreview.length ? (
-                personalPreview.map((activity) => (
-                  <BeaconFeedCard
-                    key={activity.id}
-                    presentation="personal-preview"
-                    compact
-                    {...buildCardProps(activity)}
-                  />
-                ))
-              ) : (
-                <Txt muted>
-                  {loading
-                    ? "Loading your activity…"
-                    : "No confirmed plans yet."}
-                </Txt>
-              )}
-            </View>
-          )}
-        </View>
-        <View
-          testID="home-friends-section"
-          style={{
-            borderTopWidth: 1,
-            borderTopColor: designColors.border,
-            paddingTop: 16,
-          }}
-        >
-          <SocialFriendsSection key={userId ?? "signed-out"} />
-        </View>
-        <View
-          testID="home-explore-beacons"
-          style={{
-            gap: 4,
-            borderTopWidth: 1,
-            borderTopColor: designColors.border,
-            paddingTop: 12,
-          }}
-        >
+        {home.pending > 0 ? (
+          <Button
+            secondary
+            title="View invitations & responses"
+            onPress={() => router.push("/responses")}
+          />
+        ) : null}
+        {!hasPersonal &&
+        (home.kind === "welcome" || home.kind === "compact") ? (
+          <HomeInvitation
+            welcome={home.kind === "welcome"}
+            friends={home.friends}
+          />
+        ) : null}
+        {home.kind === "loading" ? (
+          <Skeleton height={160} borderRadius={12} />
+        ) : null}
+        {hasPersonal ? (
           <View
+            testID="home-personal-timeline"
             style={{
-              flexDirection: "row",
-              alignItems: "center",
-              flexWrap: "wrap",
-              justifyContent: "space-between",
+              gap: 0,
+              borderTopWidth: 1,
+              borderTopColor: designColors.border,
+              paddingTop: 12,
             }}
           >
-            <Text
-              accessibilityRole="header"
-              style={{
-                color: designColors.textPrimary,
-                ...tokens.type.titleSmall,
-                fontWeight: "500",
-              }}
-            >
-              Explore Beacons
-            </Text>
-            <View style={{ flexDirection: "row", alignItems: "center" }}>
-              <HomeAction
-                title="Explore all →"
-                onPress={() => browse()}
-                plain
-              />
-              <HomeAction
-                title="Map"
-                label="Explore Beacons on Map"
-                onPress={() =>
-                  router.navigate({
-                    pathname: "/(tabs)",
-                    params: { mapDiscovery: "yes" },
-                  })
-                }
-                plain
-              />
-            </View>
+            {hubHeading("Your Activity", "My Activity →", () =>
+              router.push("/your-activity" as Href),
+            )}
+            {(data.is_demo || data.capabilities?.living_activity) && userId ? (
+              <LivingActivityHighlights personId={userId} />
+            ) : (
+              <View style={{ borderRadius: 12, overflow: "hidden" }}>
+                {personalPreview.length ? (
+                  personalPreview.map((activity) => (
+                    <BeaconFeedCard
+                      key={activity.id}
+                      presentation="personal-preview"
+                      compact
+                      {...buildCardProps(activity)}
+                    />
+                  ))
+                ) : (
+                  <Txt muted>
+                    {loading
+                      ? "Loading your activity…"
+                      : "No confirmed plans yet."}
+                  </Txt>
+                )}
+              </View>
+            )}
           </View>
-          {loading && !data.activities.length ? (
-            <Skeleton height={110} borderRadius={12} />
-          ) : !nowPreview.length && !upcomingPreview.length ? (
-            <Txt muted>No Beacons to explore right now.</Txt>
-          ) : null}
-          {nowPreview.length ? (
-            <Text
-              accessibilityRole="header"
+        ) : null}
+        {home.friends ? (
+          <View
+            testID="home-friends-section"
+            style={{
+              borderTopWidth: 1,
+              borderTopColor: designColors.border,
+              paddingTop: 16,
+            }}
+          >
+            <SocialFriendsSection key={userId ?? "signed-out"} />
+          </View>
+        ) : null}
+        {nowPreview.length || upcomingPreview.length ? (
+          <View
+            testID="home-explore-beacons"
+            style={{
+              gap: 4,
+              borderTopWidth: 1,
+              borderTopColor: designColors.border,
+              paddingTop: 12,
+            }}
+          >
+            <View
               style={{
-                color: designColors.textSecondary,
-                fontSize: 12,
-                fontWeight: "500",
-                marginTop: 6,
+                flexDirection: "row",
+                alignItems: "center",
+                flexWrap: "wrap",
+                justifyContent: "space-between",
               }}
             >
-              Happening Now
-            </Text>
-          ) : null}
-          {nowPreview.map((activity) => (
-            <BeaconFeedCard
-              key={activity.id}
-              presentation="discovery"
-              compact
-              {...buildCardProps(activity)}
-            />
-          ))}
-          {upcomingPreview.length ? (
-            <Text
-              accessibilityRole="header"
-              style={{
-                color: designColors.textSecondary,
-                fontSize: 12,
-                fontWeight: "500",
-                marginTop: 6,
-              }}
-            >
-              Coming Up
-            </Text>
-          ) : null}
-          {upcomingPreview.map((activity) => (
-            <BeaconFeedCard
-              key={activity.id}
-              presentation="discovery"
-              compact
-              {...buildCardProps(activity)}
-            />
-          ))}
-        </View>
+              <Text
+                accessibilityRole="header"
+                style={{
+                  color: designColors.textPrimary,
+                  ...tokens.type.titleSmall,
+                  fontWeight: "500",
+                }}
+              >
+                Explore Beacons
+              </Text>
+              <View style={{ flexDirection: "row", alignItems: "center" }}>
+                <HomeAction
+                  title="Explore all →"
+                  onPress={() => browse()}
+                  plain
+                />
+                <HomeAction
+                  title="Map"
+                  label="Explore Beacons on Map"
+                  onPress={() =>
+                    router.navigate({
+                      pathname: "/(tabs)",
+                      params: { mapDiscovery: "yes" },
+                    })
+                  }
+                  plain
+                />
+              </View>
+            </View>
+            {loading && !data.activities.length ? (
+              <Skeleton height={110} borderRadius={12} />
+            ) : !nowPreview.length && !upcomingPreview.length ? (
+              <Txt muted>No Beacons to explore right now.</Txt>
+            ) : null}
+            {nowPreview.length ? (
+              <Text
+                accessibilityRole="header"
+                style={{
+                  color: designColors.textSecondary,
+                  fontSize: 12,
+                  fontWeight: "500",
+                  marginTop: 6,
+                }}
+              >
+                Happening Now
+              </Text>
+            ) : null}
+            {nowPreview.map((activity) => (
+              <BeaconFeedCard
+                key={activity.id}
+                presentation="discovery"
+                compact
+                {...buildCardProps(activity)}
+              />
+            ))}
+            {upcomingPreview.length ? (
+              <Text
+                accessibilityRole="header"
+                style={{
+                  color: designColors.textSecondary,
+                  fontSize: 12,
+                  fontWeight: "500",
+                  marginTop: 6,
+                }}
+              >
+                Coming Up
+              </Text>
+            ) : null}
+            {upcomingPreview.map((activity) => (
+              <BeaconFeedCard
+                key={activity.id}
+                presentation="discovery"
+                compact
+                {...buildCardProps(activity)}
+              />
+            ))}
+          </View>
+        ) : null}
+
+        {home.kind === "compact" &&
+        !nowPreview.length &&
+        !upcomingPreview.length &&
+        (exploration.query.trim() ||
+          exploration.area ||
+          exploration.filters.audience !== "Everyone" ||
+          exploration.filters.category !== "All categories" ||
+          exploration.filters.time !== "All" ||
+          exploration.filters.planId) ? (
+          <SemanticEmpty
+            name="empty.filtered"
+            density="inline"
+            action={{
+              label: "Clear filters",
+              onPress: () => {
+                exploration.setQuery("");
+                exploration.setArea(null);
+                exploration.setFilters({
+                  audience: "Everyone",
+                  category: "All categories",
+                  time: "All",
+                  planId: null,
+                });
+              },
+            }}
+          />
+        ) : null}
 
         <View
           collapsable={false}

@@ -1242,14 +1242,16 @@ export default function BeaconMap(props: MapProps) {
         JSON.stringify([
           selected,
           selectionIsTemporary,
+          !!onPick,
           colors.green,
           colors.white,
           colors.lime,
         ]),
         () =>
           L.marker([selected.latitude, selected.longitude], {
-            interactive: !selectionIsTemporary,
-            keyboard: !selectionIsTemporary,
+            interactive: !!onPick || !selectionIsTemporary,
+            keyboard: !!onPick || !selectionIsTemporary,
+            draggable: !!onPick,
             icon: L.divIcon({
               html: selectionIsTemporary
                 ? `<span data-testid="map-temporary-pin" data-latitude="${selected.latitude}" data-longitude="${selected.longitude}" role="img" aria-label="Selected map location" style="display:block;width:26px;height:32px;filter:drop-shadow(0 2px 4px #0005)"><svg width="26" height="32" viewBox="0 0 24 28" fill="${colors.white}" stroke="${colors.green}" stroke-width="2"><path d="M21 10c0 7-9 15-9 15S3 17 3 10a9 9 0 0 1 18 0Z"/><circle cx="12" cy="10" r="3" fill="${colors.green}" stroke="none"/></svg></span>`
@@ -1258,12 +1260,18 @@ export default function BeaconMap(props: MapProps) {
               iconSize: selectionIsTemporary ? [26, 32] : [44, 50],
               iconAnchor: selectionIsTemporary ? [13, 32] : [22, 50],
             }),
-          }).addTo(group),
+          })
+            .on("dragend", (event) => {
+              const point = event.target.getLatLng();
+              latest.current.onPick?.(point.lat, point.lng);
+            })
+            .addTo(group),
       );
     markerCache.end();
     decorationCache.end();
     if (
       !fitted.current &&
+      !onPick &&
       !controlCommand?.coordinates?.length &&
       clusterPoints.length &&
       hasUsableMapViewport(m) &&
@@ -1366,7 +1374,15 @@ export default function BeaconMap(props: MapProps) {
         appliedFocusedTarget.current = focusKey;
       }
     }
-  }, [ready, lat, lng, adjustedMapCenter, layoutVersion, reducedMotion, onPick]);
+  }, [
+    ready,
+    lat,
+    lng,
+    adjustedMapCenter,
+    layoutVersion,
+    reducedMotion,
+    onPick,
+  ]);
   useEffect(() => {
     if (!ready || !explorationTarget || onPick) return;
     if (appliedTargetRevision.current === explorationTarget.revision) return;

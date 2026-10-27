@@ -1,3 +1,4 @@
+import { ContextTip } from "@/src/features/onboarding/OnboardingUI";
 import {
   SocialChoiceRow,
   SocialCategoryRail,
@@ -265,7 +266,7 @@ export function CreationPeople({
           }}
         />
       </CreationDisclosure>
-      <Txt muted>{"Visibility doesn't send invitations."}</Txt>
+      <ContextTip name="visibility" />
       {notice ? <Txt muted>{notice}</Txt> : null}
       <View
         style={{

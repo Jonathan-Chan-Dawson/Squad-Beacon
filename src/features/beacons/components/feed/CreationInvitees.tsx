@@ -147,7 +147,7 @@ export function CreationInvitees({
             backgroundColor: colors.bg,
           }}
         >
-          <UserRoundPlus accessible={false} size={16} color={colors.ink} />
+          <UserRoundPlus size={16} color={colors.ink} />
           <Text style={[styles.body, { fontSize: 13, fontWeight: "500" }]}>
             Add People
           </Text>

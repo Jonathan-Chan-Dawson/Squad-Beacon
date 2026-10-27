@@ -1,3 +1,4 @@
+import { SemanticEmpty } from "@/src/features/onboarding/OnboardingUI";
 import { OrganizationDirectory } from "@/src/features/organizations/OrganizationDirectory";
 import {
   activeOrganizationRole,
@@ -497,24 +498,24 @@ export function CommunicationHub({
     const isNew =
       !allChats.length && !startFriends.length && !communities.length;
     return (
-      <View style={{ gap: 12, paddingVertical: 16 }}>
-        <MessageCircle size={28} color={colors.green} />
-        <Text style={styles.h2}>
-          {isNew
-            ? "Find your people"
-            : conversationFilter === "Unread"
-              ? "All caught up"
-              : activeQuery
-                ? "No matching conversations"
-                : "Start a conversation"}
-        </Text>
-        <Txt muted>
-          {isNew
-            ? "Meet people through a public Beacon, or say hello to someone you know."
-            : conversationFilter === "Unread"
-              ? "No unread messages."
-              : "Send a hello to a friend or bring your Squad together."}
-        </Txt>
+      <View style={{ gap: 8, paddingVertical: 8 }}>
+        <SemanticEmpty
+          name={
+            activeQuery
+              ? "empty.search"
+              : conversationFilter === "Unread"
+                ? "empty.responses"
+                : isNew
+                  ? "empty.chats"
+                  : conversationFilter === "Squads"
+                    ? "empty.squads"
+                    : "empty.chats"
+          }
+          illustration={
+            conversationFilter === "Unread" ? "complete" : "noFriends"
+          }
+          density="section"
+        />
         <ProfileActions>
           <Button
             compact

@@ -1,172 +1,153 @@
-import React from "react";
-import { router } from "expo-router";
-import type { Href } from "expo-router";
-import { Text, View } from "react-native";
-import { Button, Screen, Txt, useTheme } from "@/src/shared/ui";
+import React, { useState } from "react";
+import { Pressable, Text, View } from "react-native";
+import { router, type Href } from "expo-router";
+import { ChevronDown, ChevronRight } from "lucide-react-native";
+import { Button, Field, Screen, Txt, useTheme } from "@/src/shared/ui";
+import { matchesSearch } from "@/src/shared/search";
+import { tipCopy, SemanticEmpty } from "@/src/features/onboarding/OnboardingUI";
 
+const topics: { title: string; answer: string; link: string; path: Href }[] = [
+  {
+    title: "Getting Started",
+    answer:
+      "Explore on Map or browse Beacons, connect with someone you know, or use Create to start something. Beacons is your home for activity, friends and exploration. You can move around freely; tips are optional.",
+    link: "Explore Beacons",
+    path: "/browse-beacons",
+  },
+  {
+    title: "Finding and Creating Beacons",
+    answer:
+      "Search by activity or area. Clear filters if results seem too narrow. Create starts with a blank Beacon or a reusable template. " +
+      tipCopy.visibility +
+      " Joining may require host approval; Interested is separate from Going.",
+    link: "Create a Beacon",
+    path: { pathname: "/create", params: { kind: "beacon" } },
+  },
+  {
+    title: "Pings, Votes, Draws, and Find a Time",
+    answer:
+      tipCopy.ping +
+      " " +
+      tipCopy.vote +
+      " A Draw chooses among eligible alternatives when the organizer draws. Find a Time compares availability before the organizer confirms a time. Responding does not automatically commit you to attending.",
+    link: "Pings & Decisions",
+    path: "/councils",
+  },
+  {
+    title: "Plans, Calendar, and Routines",
+    answer:
+      tipCopy.plan +
+      " A Plan can begin without dates; scheduled Beacons appear in Calendar. Following a Plan is separate from each Beacon's attendance. " +
+      tipCopy.routine +
+      " Each generated repeat has separate attendance. Automatic repeats require the server schedule to be deployed.",
+    link: "Open Plans",
+    path: "/plans",
+  },
+  {
+    title: "Friends, Squads, Organizations, and Networks",
+    answer:
+      "Friends are individual connections. Squads bring a crew and its conversations together. Organizations and Networks connect communities; membership and access remain independent. Private Lists organize your accepted friends and are visible only to you. Group membership never automatically sends Beacon invitations.",
+    link: "Find Friends",
+    path: "/find-friends",
+  },
+  {
+    title: "Invitations, responses, and permissions",
+    answer:
+      "Responses & Invitations collects requests that need your attention. Invitations do not override privacy, approval or capacity rules. You can decline. Some details and tools are available only to eligible participants; unavailable content is not an empty feed.",
+    link: "Open Responses",
+    path: "/responses",
+  },
+  {
+    title: "Status, Availability, and Sonar",
+    answer:
+      "Availability tells your chosen audience whether you're free. Status and attendance are separate. " +
+      tipCopy.sonar +
+      " Choose accepted friends and a duration; sharing stays off until you explicitly start it and ends automatically. Sonar does not keep location history and is not an emergency service.",
+    link: "Manage Sonar",
+    path: "/location",
+  },
+  {
+    title: "Templates, Beacon tools and memories",
+    answer:
+      "Templates reuse an activity setup. Hosts enable tools such as Notes, checklists and Memories; tool access follows the Beacon's permissions. Memories remain connected to their source Beacon. Your collection keeps saved Beacons, Plans and templates together.",
+    link: "My Collection",
+    path: "/my-collection",
+  },
+  {
+    title: "Privacy and troubleshooting",
+    answer:
+      "Check your search, filters and chosen area before assuming nothing is available. Location access is optional: you can search for a place instead. Retry failed loads when connected. Manage profile visibility, quiet hours and push preferences in Settings. Optional widgets are configured separately in Widget Studio; platform availability varies. Privacy policies and support details are available from Settings.",
+    link: "Open Settings",
+    path: "/settings",
+  },
+];
 export default function HelpScreen() {
-  const { styles } = useTheme();
-
+  const { styles, colors } = useTheme();
+  const [query, setQuery] = useState("");
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const visible = topics.filter((topic) =>
+    matchesSearch(query, topic.title, topic.answer),
+  );
   return (
-    <Screen title="A friendly field guide" eyebrow="HELP & TUTORIAL" create={false}>
-      <Txt muted>
-        Quick pointers for finding your people, making plans, and choosing what
-        to share.
-      </Txt>
-
-      <View style={[styles.card, { gap: 8 }]}>
-        <Text style={styles.h2}>Now, Beacons & Starred Friends</Text>
-        <Txt>
-          The Map shows nearby shared Beacons. Activities separates what’s
-          happening Now, what’s Upcoming, and what’s Past. Friends Now helps you
-          see who is free; Starred Friends keeps selected people easy to find.
-          Open a Beacon to see details and RSVP.
-        </Txt>
-        <Button
-          title="Open Activities"
-          secondary
-          onPress={() => router.push("/(tabs)/activities" as Href)}
+    <Screen title="A friendly field guide" eyebrow="HELP & TIPS" create={false}>
+      <Txt muted>A few useful answers. Follow your curiosity.</Txt>
+      <Field
+        label="Search Help"
+        value={query}
+        onChangeText={setQuery}
+        placeholder="Try visibility, Ping, or Sonar"
+      />
+      {!visible.length ? (
+        <SemanticEmpty
+          name="empty.search"
+          density="inline"
+          action={{ label: "Clear search", onPress: () => setQuery("") }}
         />
-        <Button title="Open the Map" onPress={() => router.push("/(tabs)" as Href)} />
-      </View>
-
-      <View style={[styles.card, { gap: 8 }]}>
-        <Text style={styles.h2}>Make a Beacon</Text>
-        <Txt>
-          Add the when and what, choose who can see it, then invite people so
-          they can RSVP.
-        </Txt>
-        <Button
-          title="Create a Beacon"
-          onPress={() =>
-            router.push({ pathname: "/create", params: { kind: "beacon" } })
-          }
-        />
-      </View>
-
-      <View style={[styles.card, { gap: 8 }]}>
-        <Text style={styles.h2}>Pings, Votes & Draws</Text>
-        <Txt>
-          A Ping checks interest in one suggested Beacon. A Vote compares
-          options, and a Draw picks among them. Open a response to see the plan
-          and take the next step.
-        </Txt>
-        <Button
-          title="Open Pings & Decisions"
-          onPress={() => router.push("/councils" as Href)}
-        />
-      </View>
-
-      <View style={[styles.card, { gap: 8 }]}>
-        <Text style={styles.h2}>Beacon Plans & Routines</Text>
-        <Txt>
-          A Beacon Plan keeps related scheduled Beacons together as a multi-day
-          itinerary. Join a Squad Beacon Plan separately from RSVP: each Beacon
-          still has its own response. A Routine repeats a Beacon Plan on chosen
-          weekdays, reusing its Beacon times and places for each new occurrence.
-          Its server schedule must be deployed for automatic creation and reminder
-          notices; device push delivery also depends on notification permission.
-        </Txt>
-        <Button
-          title="Open Beacon Plans"
-          secondary
-          onPress={() => router.push("/plans" as Href)}
-        />
-        <Button
-          title="Open Routines"
-          secondary
-          onPress={() => router.push("/routines" as Href)}
-        />
-        <Button
-          title="Browse Beacon Plan templates"
-          secondary
-          onPress={() =>
-            router.push({ pathname: "/plans", params: { templates: "yes" } })
-          }
-        />
-      </View>
-
-      <View style={[styles.card, { gap: 8 }]}>
-        <Text style={styles.h2}>Friends, Squads & Organizations</Text>
-        <Txt>
-          Friends are one-to-one connections. Squads bring a crew and its
-          conversations together. Organizations provide a home for multiple
-          Squads. Private Lists let you choose a smaller audience for a Beacon.
-        </Txt>
-        <Button
-          title="Open Squads"
-          secondary
-          onPress={() => router.push("/(tabs)/squads" as Href)}
-        />
-        <Button
-          title="Find friends"
-          secondary
-          onPress={() => router.push("/find-friends" as Href)}
-        />
-      </View>
-
-      <View style={[styles.card, { gap: 8 }]}>
-        <Text style={styles.h2}>Sonar, privacy & Beacon tools</Text>
-        <Txt>
-          Sonar is optional temporary location sharing: choose accepted friends
-          and a duration. It stays off otherwise, ends automatically, and does
-          not keep location history. Stop a session from its location screen.
-          Sonar is not an emergency or safety-monitoring service.
-        </Txt>
-        <Txt>
-          Beacon tools such as Notes, checklists, and Memories appear when the
-          Beacon host enables them. Beacon Memories remain linked to their
-          source Beacon.
-        </Txt>
-        <Button
-          title="Manage temporary location"
-          secondary
-          onPress={() => router.push("/location" as Href)}
-        />
-        <Button
-          title="Profile visibility & settings"
-          secondary
-          onPress={() => router.push("/settings" as Href)}
-        />
-        <Button
-          title="Privacy, safety & support"
-          secondary
-          onPress={() => router.push("/legal" as Href)}
-        />
-      </View>
-
-      <View style={[styles.card, { gap: 8 }]}>
-        <Text style={styles.h2}>Widget Studio</Text>
-        <Txt>
-          Set up optional Friends Now or circle widgets. They start Off and
-          Discreet and are available in an iOS development build or installed
-          app, not Expo Go, Android, or web. Lock Screen widgets keep generic
-          labels and counts.
-        </Txt>
-        <Button
-          title="Open Widget Studio"
-          onPress={() => router.push("/widgets" as Href)}
-        />
-      </View>
-
-      <View style={[styles.card, { gap: 8 }]}>
-        <Text style={styles.h2}>Need help?</Text>
-        <Txt>
-          Push access and quiet hours are in Settings. For an account, privacy,
-          or safety question, use the support details under Privacy, safety &
-          support.
-        </Txt>
-        <Button
-          title="Open Settings"
-          secondary
-          onPress={() => router.push("/settings" as Href)}
-        />
-        <Button
-          title="Contact support & read policies"
-          secondary
-          onPress={() => router.push("/legal" as Href)}
-        />
-      </View>
+      ) : null}
+      {visible.map((topic) => {
+        const open = expanded === topic.title || !!query.trim();
+        return (
+          <View
+            key={topic.title}
+            style={{
+              borderBottomWidth: 1,
+              borderBottomColor: colors.line,
+              paddingVertical: 8,
+              gap: 8,
+            }}
+          >
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ expanded: open }}
+              onPress={() => setExpanded(open ? null : topic.title)}
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 12,
+                minHeight: 48,
+              }}
+            >
+              <Text style={[styles.h2, { flex: 1 }]}>{topic.title}</Text>
+              {open ? (
+                <ChevronDown size={18} color={colors.muted} />
+              ) : (
+                <ChevronRight size={18} color={colors.muted} />
+              )}
+            </Pressable>
+            {open ? (
+              <>
+                <Txt muted>{topic.answer}</Txt>
+                <Button
+                  compact
+                  secondary
+                  title={topic.link}
+                  onPress={() => router.push(topic.path)}
+                />
+              </>
+            ) : null}
+          </View>
+        );
+      })}
     </Screen>
   );
 }

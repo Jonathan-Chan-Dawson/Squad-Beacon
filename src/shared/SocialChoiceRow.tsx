@@ -11,6 +11,7 @@ export function SocialChoiceRow({
   selected = false,
   disabled = false,
   browse = false,
+  expanded,
   multiple = true,
   accessibilityLabel = label,
   onPress,
@@ -21,6 +22,7 @@ export function SocialChoiceRow({
   selected?: boolean;
   disabled?: boolean;
   browse?: boolean;
+  expanded?: boolean;
   multiple?: boolean;
   accessibilityLabel?: string;
   onPress: () => void;
@@ -36,8 +38,10 @@ export function SocialChoiceRow({
       accessibilityLabel={accessibilityLabel}
       aria-checked={browse ? undefined : selected}
       aria-disabled={disabled}
+      aria-expanded={browse ? expanded : undefined}
       accessibilityState={{
         disabled,
+        ...(browse && expanded !== undefined ? { expanded } : {}),
         ...(!browse ? { checked: selected } : {}),
       }}
       disabled={disabled}
@@ -73,7 +77,9 @@ export function SocialChoiceRow({
         {detail ? <Text style={styles.muted}>{detail}</Text> : null}
       </View>
       {browse ? (
-        <ChevronRight size={18} color={colors.textSecondary} />
+        <View style={{ transform: [{ rotate: expanded ? "90deg" : "0deg" }] }}>
+          <ChevronRight size={18} color={colors.textSecondary} />
+        </View>
       ) : (
         <View
           accessible={false}

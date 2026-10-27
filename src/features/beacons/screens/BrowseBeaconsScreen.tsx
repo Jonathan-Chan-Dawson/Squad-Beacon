@@ -1,4 +1,5 @@
 import { BeaconCollections } from "../components/BeaconCollections";
+import { SemanticEmpty } from "@/src/features/onboarding/OnboardingUI";
 import { discoveryActivities } from "../discoverySelectors";
 import React, {
   useCallback,
@@ -78,12 +79,22 @@ function backToBeacons() {
   else router.replace("/(tabs)/activities");
 }
 
+// SectionList also passes section headers/footers through its viewability keys.
+function browseListKey(
+  item: BrowseDiscoveryEntry | { key: string },
+  index: number,
+) {
+  return "kind" in item ? browseEntryId(item) : `section:${item.key}:${index}`;
+}
+
 export default function BrowseBeaconsScreen() {
   const { colors, tokens } = useDesignTheme();
   const insets = useSafeAreaInsets();
   const now = useNow();
   const params = useLocalSearchParams<{ section?: string }>();
-  const { data, userId, act, loading, error, refresh } = useBeacon();
+  const { data, userId, act, loading, error, refresh, demo, demoScenario } =
+    useBeacon();
+  const simulatedError = __DEV__ && demo && demoScenario === "offline";
   const exploration = useExploration();
   const scrollRef = useRef<SectionList<BrowseDiscoveryEntry>>(null);
   const retryScroll = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -106,7 +117,12 @@ export default function BrowseBeaconsScreen() {
       setVisibleCards(
         new Set(
           viewableItems
-            .filter((row) => row.isViewable && row.item)
+            .filter(
+              (row) =>
+                row.isViewable &&
+                row.item &&
+                (row.item.kind === "activity" || row.item.kind === "public"),
+            )
             .map((row) => browseEntryId(row.item)),
         ),
       ),
@@ -315,10 +331,11 @@ export default function BrowseBeaconsScreen() {
       data.viewer_id !== userId
     )
       return null;
-    return [...publicNow, ...publicUpcoming].find(
-      (summary) =>
-        summary.activity_id === publicPreviewSelection.activityId,
-    ) ?? null;
+    return (
+      [...publicNow, ...publicUpcoming].find(
+        (summary) => summary.activity_id === publicPreviewSelection.activityId,
+      ) ?? null
+    );
   }, [
     data.viewer_id,
     publicDetailScopeKey,
@@ -593,14 +610,31 @@ export default function BrowseBeaconsScreen() {
           adaptiveDiscovery
           compactFooter={
             <View style={{ gap: tokens.space.xs }}>
-              {visibleContextLabel ? <Text style={{ color: colors.textSecondary, ...tokens.type.caption }}>{visibleContextLabel}</Text> : null}
+              {visibleContextLabel ? (
+                <Text
+                  style={{
+                    color: colors.textSecondary,
+                    ...tokens.type.caption,
+                  }}
+                >
+                  {visibleContextLabel}
+                </Text>
+              ) : null}
               <BeaconCommunityRow activityId={activity.id} compact />
             </View>
           }
-          planContext={plan ? {
-            title: plan.title,
-            onPress: () => router.push({ pathname: "/plan/[id]", params: { id: plan.id } }),
-          } : undefined}
+          planContext={
+            plan
+              ? {
+                  title: plan.title,
+                  onPress: () =>
+                    router.push({
+                      pathname: "/plan/[id]",
+                      params: { id: plan.id },
+                    }),
+                }
+              : undefined
+          }
           animationVisible={visibleCards.has(activity.id)}
           {...feedProps}
           onOpenPeople={() => openActivityPeople(activity.id)}
@@ -719,7 +753,7 @@ export default function BrowseBeaconsScreen() {
             { key: "now", title: "Happening Now", data: nowEntries },
             { key: "upcoming", title: "Coming Up", data: upcomingEntries },
           ]}
-          keyExtractor={browseEntryId}
+          keyExtractor={browseListKey}
           renderItem={({ item }) => renderCard(item)}
           initialNumToRender={6}
           maxToRenderPerBatch={8}
@@ -904,7 +938,10 @@ export default function BrowseBeaconsScreen() {
                 ) : null}
               </View>
 
-              {requestError || error || publicDirectory.error ? (
+              {requestError ||
+              error ||
+              publicDirectory.error ||
+              simulatedError ? (
                 <Card
                   style={{ gap: tokens.space.sm, borderColor: colors.danger }}
                 >
@@ -912,7 +949,10 @@ export default function BrowseBeaconsScreen() {
                     accessibilityRole="alert"
                     style={{ color: colors.danger, ...tokens.type.secondary }}
                   >
-                    {requestError || error || publicDirectory.error}
+                    {requestError ||
+                      error ||
+                      publicDirectory.error ||
+                      "Simulated connection error. Reconnect to load Beacons."}
                   </Text>
                   <SecondaryButton
                     title="Try again"
@@ -942,56 +982,49 @@ export default function BrowseBeaconsScreen() {
                   </Text>
                 </View>
               ) : null}
-              {!(loading && !data.activities.length) &&
+              {!loading &&
               !directoryLoading &&
+              !requestError &&
+              !error &&
+              !publicDirectory.error &&
+              !simulatedError &&
               !hasResults ? (
-                <Card
-                  style={{
-                    alignItems: "center",
-                    gap: tokens.space.sm,
-                    padding: tokens.space.lg,
-                  }}
-                  testID="browse-beacons-empty"
-                >
-                  <Compass size={28} color={colors.accent} />
-                  <Text
-                    accessibilityRole="header"
-                    style={{
-                      textAlign: "center",
-                      color: colors.textPrimary,
-                      ...tokens.type.titleSmall,
-                    }}
-                  >
-                    No Beacons match right now
-                  </Text>
-                  <Text
-                    style={{
-                      textAlign: "center",
-                      color: colors.textSecondary,
-                      ...tokens.type.secondary,
-                    }}
-                  >
-                    Try another search or explore a different area.
-                  </Text>
-                  <View style={{ width: "100%", gap: tokens.space.xs }}>
-                    <SecondaryButton
-                      title="Explore on Map"
-                      onPress={() => openMap()}
-                    />
-                    <SecondaryButton
-                      title="Explore Public Communities"
-                      onPress={() => router.push("/communities")}
-                    />
-                    <SecondaryButton
-                      title="Find Friends"
-                      onPress={() => router.push("/find-friends")}
-                    />
-                    <PrimaryButton
-                      title="Create a Beacon"
-                      onPress={() => router.push("/create")}
-                    />
-                  </View>
-                </Card>
+                <View testID="browse-beacons-empty">
+                  <SemanticEmpty
+                    name={
+                      exploration.area?.kind === "near-me" &&
+                      !exploration.area.coordinate
+                        ? "empty.location"
+                        : exploration.query.trim() ||
+                            filterCount ||
+                            exploration.area
+                          ? "empty.filtered"
+                          : "empty.discovery"
+                    }
+                    illustration="discovery"
+                    density="section"
+                    action={
+                      exploration.query.trim() ||
+                      filterCount ||
+                      exploration.area
+                        ? {
+                            label: "Clear filters",
+                            onPress: () => {
+                              exploration.setQuery("");
+                              exploration.setArea(null);
+                              setSelectedCategories([]);
+                              exploration.setFilters({
+                                audience: "Everyone",
+                                category: "All categories",
+                                time: "All",
+                                planId: null,
+                              });
+                            },
+                          }
+                        : { label: "Explore on Map", onPress: () => openMap() }
+                    }
+                  />
+                </View>
               ) : null}
             </>
           }

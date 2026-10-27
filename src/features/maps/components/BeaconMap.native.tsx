@@ -383,7 +383,12 @@ export default function BeaconMap({
     }
   }, [coordinates, ready, mapSize, onPick, explorationTarget, controlCommand]);
   useEffect(() => {
-    if (!ready || !hasUsableMapViewport(mapSize) || (onPick && controlCommand?.kind !== "focus") || !controlCommand)
+    if (
+      !ready ||
+      !hasUsableMapViewport(mapSize) ||
+      (onPick && controlCommand?.kind !== "focus") ||
+      !controlCommand
+    )
       return;
     if (appliedControlRevision.current === controlCommand.revision) return;
     const currentMap = map.current;
@@ -1005,6 +1010,7 @@ export default function BeaconMap({
         rotateEnabled
         pitchEnabled
         toolbarEnabled={false}
+        moveOnMarkerPress={!onPick}
         showsCompass={!hideControls}
         accessibilityLabel={
           onPick
@@ -1274,6 +1280,16 @@ export default function BeaconMap({
         {selected && isValidCoordinate(selected) && (
           <Marker
             coordinate={selected}
+            draggable={!!onPick}
+            onDragEnd={
+              onPick
+                ? (event) =>
+                    onPick(
+                      event.nativeEvent.coordinate.latitude,
+                      event.nativeEvent.coordinate.longitude,
+                    )
+                : undefined
+            }
             accessibilityLabel={
               selectionIsTemporary
                 ? "Selected map location"
