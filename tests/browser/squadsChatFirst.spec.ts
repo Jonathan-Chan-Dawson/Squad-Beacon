@@ -250,23 +250,58 @@ test("a response prompt jumps to its exact Squad Ping and shares its response st
     .click();
   await page
     .getByRole("button", { name: "Open Squad chat", exact: true })
+    .scrollIntoViewIfNeeded();
+  await page.screenshot({
+    path: "docs/screenshots/phase4ca/squad-ping-handoff.png",
+  });
+  await page
+    .getByRole("button", { name: "Open Squad chat", exact: true })
     .click();
   await expect(page).toHaveURL(
     /\/squad-chat\/boxing\?ping=demo-squad-ping-boxing/,
   );
-  const card = page.getByTestId("planning-response-demo-squad-ping-boxing");
-  await expect(card).toBeInViewport();
-  await card.getByRole("button", { name: "Maybe", exact: true }).click();
-  await expect(card).toContainText("1 Maybe");
-  await page.goBack();
+  const ping = page.getByRole("button", {
+    name: "Open ping A quick boxing session?",
+    exact: true,
+  });
+  await expect(ping).toBeInViewport();
+  await ping.click();
+  await expect(page).toHaveURL(/\/responses\?threadId=demo-squad-ping-boxing$/);
+  const response = page.getByTestId("decision-row-demo-squad-ping-boxing");
+  await response.getByRole("button", { name: "Maybe", exact: true }).click();
   await expect(
-    page.getByText("Your response: maybe", { exact: true }),
-  ).toBeVisible();
-  await page.goBack();
+    response.getByRole("button", { name: "Maybe", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "Back", exact: true }).click();
+  await expect(ping).toBeInViewport();
+  await page.getByRole("button", { name: "Back", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Answered & Active", exact: true })
+    .click();
+  await expect(
+    page
+      .getByTestId("decision-row-demo-squad-ping-boxing")
+      .getByRole("button", { name: "Maybe", exact: true }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "Back", exact: true }).click();
   await expect(
     page.getByRole("button", {
       name: "Open A quick boxing session?",
       exact: true,
     }),
+  ).toHaveCount(0);
+});
+
+test("a friend-audience Ping does not offer a Squad chat destination", async ({
+  page,
+}) => {
+  await squads(page);
+  await page
+    .getByRole("button", { name: /Responses & Invitations, \d+ pending/ })
+    .click();
+  const row = page.getByTestId("decision-row-demo-ping-jordan");
+  await row.getByRole("button", { name: /^Open / }).click();
+  await expect(
+    row.getByRole("button", { name: "Open Squad chat", exact: true }),
   ).toHaveCount(0);
 });

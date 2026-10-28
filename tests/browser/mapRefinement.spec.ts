@@ -112,10 +112,10 @@ test("Compass opens without requesting location, and selecting a result opens it
   const compass = page.getByTestId("map-navigation-popover");
   await expect(compass).toBeVisible();
   for (const action of [
+    "My Beacons",
     "Center on Me",
     "Return to Overview",
     "Explore Everywhere",
-    "Pin a Location",
   ])
     await expect(
       compass.getByRole("button", { name: action, exact: true }),
@@ -129,6 +129,12 @@ test("Compass opens without requesting location, and selecting a result opens it
     .getByRole("button", { name: "Close navigation", exact: true })
     .click();
   await expect(compass).toHaveCount(0);
+  await expect(
+    page.getByRole("button", {
+      name: "Place: choose a location to create",
+      exact: true,
+    }),
+  ).toBeVisible();
 
   const search = page.getByRole("textbox", {
     name: "Search places, Beacons, people and communities",
@@ -145,14 +151,18 @@ test("Compass opens without requesting location, and selecting a result opens it
     .getByTestId("map-tooltip-card")
     .first();
   await expect(preview).toBeVisible();
+  const retainedQuery = await search.inputValue();
   await preview
     .getByRole("button", { name: "See overview", exact: true })
     .click();
-  await expect(page.getByTestId("map-panel")).toBeVisible();
-  await expect(page.getByTestId("map-panel")).toContainText(
+  await expect(page).toHaveURL(/\/activity\/a2\?from=map$/);
+  await expect(page.getByTestId("activity-detail-hero")).toContainText(
     "Coffee & a little focus",
   );
+  await page.getByRole("button", { name: "Back", exact: true }).click();
   await expect(page).not.toHaveURL(/\/activity\//);
+  await expect(preview).toBeVisible();
+  await expect(search).toHaveValue(retainedQuery);
 });
 
 test("map controls and persistent results stay inside four phone viewports", async ({

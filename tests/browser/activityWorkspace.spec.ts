@@ -363,8 +363,77 @@ test("Calendar itineraries open individual Beacons and restore their expanded st
     .first()
     .click();
   await expect(page).toHaveURL(/\/activity\/[^/]+$/);
-  await page.goBack();
+  await page.getByRole("button", { name: "Back", exact: true }).click();
   await expect(page.getByTestId("calendar-itinerary")).toBeVisible();
   await page.getByRole("button", { name: "Open Plan", exact: true }).click();
   await expect(page).toHaveURL(/\/plan\//);
+  const planUrl = page.url();
+  await page
+    .getByRole("button", { name: "Open Beacon", exact: true })
+    .first()
+    .click();
+  await expect(page.getByTestId("activity-detail-hero")).toBeVisible();
+  await page.getByRole("button", { name: "Back", exact: true }).click();
+  await expect(page).toHaveURL(planUrl);
+  await page.getByRole("button", { name: "Back", exact: true }).click();
+  await expect(page.getByTestId("calendar-itinerary")).toBeVisible();
+});
+
+for (const width of [320, 390]) {
+  for (const appearance of ["light", "dark"] as const) {
+    test(`direct Beacon Back exits Chat then falls back safely · ${width}px ${appearance}`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 844 });
+      await page.emulateMedia({
+        reducedMotion: width === 320 ? "reduce" : "no-preference",
+      });
+      await page.addInitScript(
+        (value) => localStorage.setItem("beacon.appearance", value),
+        appearance,
+      );
+      // A presentation hint must not manufacture a Map origin or navigation history.
+      await page.goto(
+        `/activity/demo-tools?tab=chat${width === 320 ? "&from=map" : ""}`,
+      );
+      await page.getByRole("button", { name: /Explore the demo/ }).click();
+      const detailUrl = page.url();
+      await expect(
+        page.getByRole("textbox", { name: "Message", exact: true }),
+      ).toBeVisible();
+      await page.getByRole("button", { name: "Back", exact: true }).click();
+      await expect(page).toHaveURL(detailUrl);
+      await expect(
+        page.getByRole("tab", { name: "Overview", exact: true }),
+      ).toHaveAttribute("aria-selected", "true");
+      await expect(
+        page.getByRole("tab", { name: "People", exact: true }),
+      ).toHaveAttribute("aria-selected", "false");
+      await expect(
+        page.getByRole("textbox", { name: "Message", exact: true }),
+      ).toHaveCount(0);
+      await expect(page.getByTestId("activity-detail-hero")).toBeVisible();
+      await page.screenshot({
+        path: `docs/screenshots/phase4ca/${appearance}-${width}-beacon-overview.png`,
+        fullPage: true,
+      });
+      await page.getByRole("button", { name: "Back", exact: true }).click();
+      await expect(page).toHaveURL(/\/activities$/);
+      await expect(
+        page.getByRole("tab", { name: "Beacons", exact: true }),
+      ).toHaveAttribute("aria-selected", "true");
+    });
+  }
+}
+
+test("an unavailable Beacon ignores tool hints and retains its explicit exit", async ({
+  page,
+}) => {
+  await page.goto("/activity/missing-beacon?tab=people&tool=chat&from=map");
+  await page.getByRole("button", { name: /Explore the demo/ }).click();
+  await expect(page.getByTestId("activity-detail-hero")).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Back to activities", exact: true })
+    .click();
+  await expect(page).toHaveURL(/\/activities$/);
 });

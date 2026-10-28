@@ -1,7 +1,13 @@
 import React, { useEffect, useState } from "react";
 import { Animated, Text, View } from "react-native";
 import { Tabs, router, usePathname } from "expo-router";
-import { Map, Radio, Users, UserRound, Plus } from "lucide-react-native";
+import {
+  Map,
+  Radio,
+  MessagesSquare,
+  CircleUserRound,
+  Plus,
+} from "lucide-react-native";
 import { useTheme } from "@/src/shared/ui";
 import { GlassBar } from "@/src/shared/design-system";
 import { MotionPressable } from "@/src/shared/MotionPressable";
@@ -15,8 +21,8 @@ let createPulseConsumedThisSession = false;
 const items = [
   { name: "index", label: "Map", Icon: Map },
   { name: "activities", label: "Beacons", Icon: Radio },
-  { name: "squads", label: "Squads", Icon: Users },
-  { name: "profile", label: "Profile", Icon: UserRound },
+  { name: "squads", label: "Squads", Icon: MessagesSquare },
+  { name: "profile", label: "Profile", Icon: CircleUserRound },
 ];
 
 export default function TabLayout() {
@@ -125,48 +131,55 @@ export default function TabLayout() {
                           gap: tokens.space.xxs,
                         }}
                       >
-                        <Icon
-                          size={tokens.iconSize.md}
-                          color={
-                            focused
-                              ? semanticColors.accent
-                              : semanticColors.textSecondary
-                          }
-                        />
-                        {name === "squads" && pending > 0 ? (
-                          <View
-                            style={{
-                              position: "absolute",
-                              top: tokens.space.xxs,
-                              right: tokens.space.sm,
-                              minWidth:
-                                tokens.type.caption.lineHeight +
-                                tokens.space.sm,
-                              minHeight:
-                                tokens.type.caption.lineHeight +
-                                tokens.space.sm,
-                              paddingHorizontal: tokens.space.xs,
-                              borderRadius: tokens.radius.circle,
-                              backgroundColor: semanticColors.accent,
-                              alignItems: "center",
-                              justifyContent: "center",
-                            }}
-                          >
-                            <Text
-                              accessibilityLabel={`${pending} pending responses`}
-                              maxFontSizeMultiplier={
-                                tokens.type.denseMaxMultiplier
-                              }
+                        <View
+                          testID={`${name}-tab-icon`}
+                          style={{
+                            width: tokens.iconSize.md,
+                            height: tokens.iconSize.md,
+                            overflow: "visible",
+                          }}
+                        >
+                          <Icon
+                            size={tokens.iconSize.md}
+                            color={
+                              focused
+                                ? semanticColors.accent
+                                : semanticColors.textSecondary
+                            }
+                          />
+                          {name === "squads" && pending > 0 ? (
+                            <View
+                              testID="squads-tab-badge"
                               style={{
-                                ...tokens.type.caption,
-                                fontWeight: tokens.type.weight.bold,
-                                color: semanticColors.onAccent,
+                                position: "absolute",
+                                top: -4,
+                                right: -7,
+                                minWidth: 16,
+                                height: 16,
+                                paddingHorizontal: 3,
+                                borderRadius: tokens.radius.circle,
+                                backgroundColor: semanticColors.accent,
+                                alignItems: "center",
+                                justifyContent: "center",
                               }}
                             >
-                              {pending > 99 ? "99+" : pending}
-                            </Text>
-                          </View>
-                        ) : null}
+                              <Text
+                                accessibilityLabel={`${pending} pending responses`}
+                                maxFontSizeMultiplier={
+                                  tokens.type.denseMaxMultiplier
+                                }
+                                style={{
+                                  fontSize: 10,
+                                  lineHeight: 12,
+                                  fontWeight: tokens.type.weight.bold,
+                                  color: semanticColors.onAccent,
+                                }}
+                              >
+                                {pending > 99 ? "99+" : pending}
+                              </Text>
+                            </View>
+                          ) : null}
+                        </View>
                         <Text
                           maxFontSizeMultiplier={tokens.type.denseMaxMultiplier}
                           style={{
@@ -220,7 +233,13 @@ export default function TabLayout() {
             <MotionPressable
               accessibilityRole="button"
               accessibilityLabel="Create"
-              onPress={() => router.push(state.routes[state.index].name === "index" ? { pathname: "/create", params: { fromMap: "yes" } } : "/create")}
+              onPress={() =>
+                router.push(
+                  state.routes[state.index].name === "index"
+                    ? { pathname: "/create", params: { fromMap: "yes" } }
+                    : "/create",
+                )
+              }
               style={{
                 position: "absolute",
                 left: "50%",

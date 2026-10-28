@@ -21,6 +21,7 @@ import { Action, Txt, useTheme } from "@/src/shared/ui";
 import { useBeacon } from "@/src/shared/store";
 import { PlanningResponseControls } from "./PlanningResponseControls";
 import { planningDestination, type planningInbox } from "./inbox";
+import { canOpenSquadPing } from "@/src/features/people/communication";
 
 type Decision = ReturnType<typeof planningInbox>[number];
 export function DecisionRow({
@@ -245,6 +246,17 @@ export function DecisionRow({
       {expanded ? (
         <Animated.View style={{ gap: 8, opacity: reveal }}>
           {thread.body ? <Txt>{thread.body}</Txt> : null}
+          {canOpenSquadPing(data, thread, userId) && (
+            <PlanningLink
+              title="Open Squad chat"
+              onPress={() =>
+                router.push({
+                  pathname: "/squad-chat/[id]",
+                  params: { id: thread.audience_id!, ping: thread.id },
+                })
+              }
+            />
+          )}
           {thread.payload &&
           thread.kind === "ping" &&
           !thread.materialized_activity_id ? (

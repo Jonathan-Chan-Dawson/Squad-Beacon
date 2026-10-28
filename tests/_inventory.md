@@ -10,7 +10,7 @@ Test map
 
 - spaces.test.ts and spaces.database.test.ts: independent Space creation, invitations, membership revocation and private Squad boundaries.
 - social.test.ts and social.database.test.ts: sanitized directory browsing, all-entity request/join flows, policy roles, independent parent membership, affiliations, Beacon associations, and safe conversion/grouping with source-history preservation.
-- browser/squadsChatFirst.spec.ts: temporary search, compact Chats, Space creation/linking and source-linked Squad Ping navigation.
+- browser/squadsChatFirst.spec.ts: temporary search, compact Chats, Space creation/linking, permission-gated inbox-to-Squad Ping navigation, canonical response sharing and return paths.
 - browser/chatHelpers.ts: opens a conversation through its row body while preserving avatar/name profile-preview behavior.
 
 - *.test.ts: domain, aspiration, beacon controls/modules, focus timer, library, planning, plans, snapshot normalization, templates, paired-theme contrast and legacy preference migration, and widget unit coverage.
@@ -37,4 +37,4 @@ Tests should exercise product flows through public routes/actions and preserve e
 
 - browser/unifiedPeople.spec.ts, browser/creationMobilePolish.spec.ts and browser/sonarPeople.spec.ts: staged invitation cancellation/Done, secondary list filters, inline list management, advisory large batches, canonical location route, keyboard selection, and responsive creation/Sonar screens. createHandoff and creationAtomic.database cover the 50-person recommendation and atomic 51-recipient publication.
 
-- activityWorkspace.test.ts and browser/activityWorkspace.spec.ts: unfinished lifecycle selection, date-only presentation, request recovery/isolation, retained subtabs, creation handoffs, lost-reply replay, phone screenshots and dirty-edit protection.
+- activityWorkspace.test.ts and browser/activityWorkspace.spec.ts: unfinished lifecycle selection, date-only presentation, request recovery/isolation, retained subtabs, creation handoffs, lost-reply replay, phone screenshots, dirty-edit protection, Beacon direct-entry/Chat Back fallback and Calendar/Plan return paths.

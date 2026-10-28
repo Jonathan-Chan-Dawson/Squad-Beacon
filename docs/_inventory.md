@@ -1,5 +1,7 @@
 Documentation guide
 
+- PHASE_4CA_NAVIGATION_VALIDATION.md: navigation contract audit, localized Beacon Back/accessibility repairs, regression evidence and Phase 4C-B review targets.
+
 - ONBOARDING_2_VALIDATION.md: Phase 4B shared readiness, direct entry, voluntary personalization, callback configuration and validation boundaries.
 
 - ONBOARDING_ENTRY_VALIDATION.md: Phase 4A implementation, screenshot review, developer scenarios, private progress migration and Phase 4B/4C acceptance boundaries.

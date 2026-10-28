@@ -1692,9 +1692,11 @@ export default function ActivityDetail() {
             onChat={
               canAccess && chatEnabled ? () => selectTab("Chat") : undefined
             }
-            onBack={() =>
-              visibleTab === "Chat" ? selectTab("Overview") : router.back()
-            }
+            onBack={() => {
+              if (visibleTab === "Chat") selectTab("Overview");
+              else if (router.canGoBack()) router.back();
+              else router.replace("/(tabs)/activities");
+            }}
             onOverflow={() => setOverflow(true)}
           />
 
@@ -2236,6 +2238,7 @@ function SlidingTabBar({
             accessibilityRole="tab"
             accessibilityLabel={tab}
             accessibilityState={{ selected }}
+            aria-selected={selected}
             onPress={() => onSelect(tab)}
             style={({ pressed }) => ({
               flex: 1,
