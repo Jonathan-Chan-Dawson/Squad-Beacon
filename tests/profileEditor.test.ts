@@ -7,10 +7,51 @@ import {
   profileSavePayload,
   requireProfileOwner,
   validateProfileEditor,
+  surveyIdentityTags,
 } from "@/src/features/profile/profileEditorDraft";
 
 const ownProfile = () =>
   structuredClone(makeDemo().profiles.find((item) => item.id === DEMO_ID)!);
+
+test("survey preserves legacy personality prose without generating invalid badges", () => {
+  const profile = ownProfile();
+  profile.personality = "A".repeat(80);
+  assert.deepEqual(surveyIdentityTags(profile), profile.identity_tags);
+  const draft = {
+    ...profileEditorDraft(profile),
+    identity_tags: surveyIdentityTags(profile),
+  };
+  assert.doesNotThrow(() => validateProfileEditor(draft));
+  assert.equal(
+    profileEditorPayload(profile, profileEditorDraft(profile), draft)
+      .personality,
+    profile.personality,
+  );
+  assert.deepEqual(
+    surveyIdentityTags({ identity_tags: [], personality: "Creative" }),
+    ["Personality: Creative"],
+  );
+  const legacy = { ...profile, personality: "Creative", identity_tags: [] };
+  const baseline = {
+    ...profileEditorDraft(legacy),
+    identity_tags: surveyIdentityTags(legacy),
+  };
+  const latest = { ...legacy, identity_tags: ["Added elsewhere"] };
+  assert.deepEqual(
+    profileEditorPayload(latest, baseline, {
+      ...baseline,
+      bio: "Only bio changed",
+    }).identity_tags,
+    latest.identity_tags,
+  );
+  assert.deepEqual(
+    surveyIdentityTags({
+      identity_tags: Array(50).fill("Existing"),
+      personality: "Creative",
+    }),
+    Array(50).fill("Existing"),
+  );
+});
 
 test("editor merges only changed fields with the synchronous latest settings and profile", () => {
   const initial = ownProfile(),

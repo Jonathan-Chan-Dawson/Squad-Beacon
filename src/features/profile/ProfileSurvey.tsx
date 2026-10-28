@@ -1,15 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, Text, View } from "react-native";
-import { Check, Trash2 } from "lucide-react-native";
-import {
-  Action,
-  Button,
-  Chips,
-  Field,
-  Screen,
-  Txt,
-  useTheme,
-} from "@/src/shared/ui";
+import { Pressable, ScrollView, Text, View } from "react-native";
+import { Check, Trash2, UserRound, Heart, Target } from "lucide-react-native";
+import { Action, Button, Field, Screen, Txt, useTheme } from "@/src/shared/ui";
 import { useBeacon } from "@/src/shared/store";
 import type { Activity, AspirationGoal, Profile } from "@/src/shared/types";
 import {
@@ -24,8 +16,8 @@ import { ProfileAvatar } from "./ProfileAvatar";
 import {
   profileEditorDraft,
   profileEditorPayload,
-  profileSavePayload,
   requireProfileOwner,
+  surveyIdentityTags,
   validateProfileEditor,
 } from "./profileEditorDraft";
 
@@ -46,20 +38,11 @@ type SurveyProps = {
   onSkip?: () => void;
   onSavingChange?: (saving: boolean) => void;
   onProfileSaved?: (profile: Profile) => void;
+  onStepChange?: (step: number) => void;
 };
 
 function tagKey(group: string, tag: string) {
   return `${group}: ${tag}`;
-}
-
-function savedIdentityTags(profile: SurveyProfile) {
-  const tags = profile.identity_tags ?? [];
-  const legacyPersonality = profile.personality?.trim();
-  if (!legacyPersonality) return tags;
-  const legacyTag = tagKey("Personality", legacyPersonality);
-  return tags.includes(legacyTag) || tags.includes(legacyPersonality)
-    ? tags
-    : [...tags, legacyTag];
 }
 
 function SurveyChip({
@@ -68,49 +51,92 @@ function SurveyChip({
   onPress,
   remove = false,
   disabled = false,
+  single = false,
 }: {
   label: string;
   selected: boolean;
   onPress: () => void;
   remove?: boolean;
   disabled?: boolean;
+  single?: boolean;
 }) {
   const { styles, colors } = useTheme();
   return (
     <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={`${selected ? "Remove" : "Choose"} ${label}`}
-      accessibilityState={{ selected, disabled }}
+      accessibilityRole={single ? "radio" : "button"}
+      accessibilityLabel={
+        single ? label : `${selected ? "Remove" : "Choose"} ${label}`
+      }
+      accessibilityState={
+        single ? { checked: selected, disabled } : { selected, disabled }
+      }
       disabled={disabled}
       onPress={onPress}
-      style={[
-        styles.chip,
-        {
-          minHeight: 44,
-          flexDirection: "row",
-          alignItems: "center",
-          gap: 6,
-          backgroundColor: selected ? colors.ink : colors.white,
-          borderColor: selected ? colors.ink : colors.line,
-          paddingVertical: 8,
-          opacity: disabled ? 0.45 : 1,
-        },
-      ]}
+      style={{
+        minHeight: 44,
+        minWidth: 44,
+        maxWidth: "100%",
+        justifyContent: "center",
+        opacity: disabled ? 0.45 : 1,
+      }}
     >
-      {selected ? (
-        <Check size={14} color={colors.white} />
-      ) : remove ? (
-        <Trash2 size={14} color={colors.muted} />
-      ) : null}
-      <Text
+      <View
         style={[
-          styles.chipText,
-          { color: selected ? colors.white : colors.ink },
+          styles.chip,
+          {
+            minHeight: 34,
+            maxWidth: "100%",
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 6,
+            backgroundColor: selected ? colors.ink : colors.white,
+            borderColor: selected ? colors.ink : colors.line,
+            paddingVertical: 4,
+          },
         ]}
       >
-        {label}
-      </Text>
+        {selected ? (
+          <Check size={14} color={colors.white} />
+        ) : remove ? (
+          <Trash2 size={14} color={colors.muted} />
+        ) : null}
+        <Text
+          style={[
+            styles.chipText,
+            { color: selected ? colors.white : colors.ink, flexShrink: 1 },
+          ]}
+        >
+          {label}
+        </Text>
+      </View>
     </Pressable>
+  );
+}
+
+function SurveyOptions<T extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: readonly T[];
+  value: T;
+  onChange: (value: T) => void;
+}) {
+  return (
+    <View
+      accessibilityRole="radiogroup"
+      style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}
+    >
+      {options.map((option) => (
+        <SurveyChip
+          key={option}
+          single
+          label={option}
+          selected={option === value}
+          onPress={() => onChange(option)}
+        />
+      ))}
+    </View>
   );
 }
 
@@ -122,10 +148,15 @@ function ProfileSurveyBody({
   onSkip,
   onSavingChange,
   onProfileSaved,
+  onStepChange,
 }: SurveyProps) {
   const { styles, colors } = useTheme();
-  const { act, userId, getCurrentProfile } = useBeacon();
-  const [baseline] = useState(() => profileEditorDraft(profile));
+  const { act, userId, getCurrentProfile, getViewerEpoch } = useBeacon();
+  const [epoch] = useState(getViewerEpoch);
+  const [baseline] = useState(() => ({
+    ...profileEditorDraft(profile),
+    identity_tags: surveyIdentityTags(profile),
+  }));
   const savingLock = useRef(false);
   const active = useRef(true);
   useEffect(() => {
@@ -135,11 +166,11 @@ function ProfileSurveyBody({
     };
   }, []);
   const [step, setStep] = useState(0);
-  const [showIdentity, setShowIdentity] = useState(mode === "retake");
+  const [showIdentity, setShowIdentity] = useState(false);
   const [name, setName] = useState(profile.name);
   const [bio, setBio] = useState(profile.bio ?? "");
   const [identityTags, setIdentityTags] = useState<string[]>(
-    savedIdentityTags(profile),
+    surveyIdentityTags(profile),
   );
   const [identityGroup, setIdentityGroup] = useState(
     IDENTITY_CATALOG[0]?.name ?? "Personality",
@@ -213,68 +244,57 @@ function ProfileSurveyBody({
     );
   }
 
-  async function saveSurvey(status: "completed" | "skipped") {
+  async function saveSurvey() {
     if (savingLock.current) return;
-    if (status === "skipped" && mode === "retake") {
-      onSkip?.();
-      return;
-    }
     savingLock.current = true;
     setSavingProfile(true);
     onSavingChange?.(true);
     try {
+      if (getViewerEpoch() !== epoch)
+        throw new Error("Your account changed. Reopen personalization.");
       const current = requireProfileOwner(getCurrentProfile(), profile.id);
-      const payload =
-        status === "skipped"
-          ? profileSavePayload(current)
-          : profileEditorPayload(
-              current,
-              baseline,
-              validateProfileEditor({
-                ...baseline,
-                name,
-                bio,
-                identity_tags: identityTags,
-                interests,
-                aspiration_goals: aspirations,
-              }),
-            );
+      const payload = profileEditorPayload(
+        current,
+        baseline,
+        validateProfileEditor({
+          ...baseline,
+          name,
+          bio,
+          identity_tags: identityTags,
+          interests,
+          aspiration_goals: aspirations,
+        }),
+      );
       await act("save_profile", {
         ...payload,
-        onboarding_survey_status: status,
+        onboarding_survey_status: "completed",
       });
-      if (active.current) {
-        if (status === "completed") {
-          onProfileSaved?.({
-            ...current,
-            ...payload,
-            onboarding_survey_status: status,
-          });
-          onComplete?.();
-        } else onSkip?.();
+      if (active.current && getViewerEpoch() === epoch) {
+        onProfileSaved?.(requireProfileOwner(getCurrentProfile(), profile.id));
+        onComplete?.();
       }
     } finally {
       savingLock.current = false;
       if (active.current) setSavingProfile(false);
-      onSavingChange?.(false);
+      if (active.current && getViewerEpoch() === epoch) onSavingChange?.(false);
     }
   }
 
   const stepCopy = [
     {
       label: "You",
-      title: "A little introduction.",
-      body: "Start with your name. About me and identity badges are optional; you can change everything later.",
+      title: "A little about you.",
+      body: "Your profile, your pace. Add a bio or identity badges if you like; everything here can be changed later.",
     },
     {
       label: "Interests",
-      title: "What do you like doing?",
-      body: "Your interests help people find shared beacons and plans. Pick a few now, or search the full catalog and add your own.",
+      title: "What are you into?",
+      body: "Show people what you enjoy. Explore the catalog or add your own interests. There’s no minimum.",
     },
     {
       label: "Aspirations",
       title: "What would you like to make time for?",
-      body: "Set a small weekly target. You can connect beacons to an aspiration when you create them and track your progress here.",
+      body: "Optional weekly goals for things you enjoy. You can link Beacons to them later, or leave this section empty.",
     },
   ][step];
 
@@ -285,6 +305,13 @@ function ProfileSurveyBody({
       style={{ gap: 14 }}
     >
       <View style={[styles.card, { gap: 12 }]}>
+        {step === 0 ? (
+          <UserRound size={24} color={colors.green} />
+        ) : step === 1 ? (
+          <Heart size={24} color={colors.green} />
+        ) : (
+          <Target size={24} color={colors.green} />
+        )}
         <Text style={styles.label}>
           PART {step + 1} OF 3 · {stepCopy.label.toUpperCase()}
         </Text>
@@ -354,7 +381,7 @@ function ProfileSurveyBody({
             Add badges that help friends understand who you are. Every choice is
             optional.
           </Txt>
-          <Chips
+          <SurveyOptions
             options={IDENTITY_CATALOG.map((group) => group.name)}
             value={identityGroup}
             onChange={setIdentityGroup}
@@ -389,6 +416,7 @@ function ProfileSurveyBody({
             returnKeyType="done"
           />
           <Button
+            compact
             secondary
             title="Add identity tag"
             disabled={!identityCustom.trim() || identityTags.length >= 50}
@@ -450,25 +478,29 @@ function ProfileSurveyBody({
           {!interestSearch.trim() && (
             <>
               <Text style={styles.label}>CATEGORY</Text>
-              <Chips
-                options={categories}
-                value={interestCategory}
-                onChange={(category) => {
-                  setInterestCategory(category);
-                  setInterestSubcategory(
-                    INTEREST_CATALOG.find((entry) => entry.name === category)
-                      ?.subcategories[0]?.name ?? "",
-                  );
-                }}
-              />
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <SurveyOptions
+                  options={categories}
+                  value={interestCategory}
+                  onChange={(category) => {
+                    setInterestCategory(category);
+                    setInterestSubcategory(
+                      INTEREST_CATALOG.find((entry) => entry.name === category)
+                        ?.subcategories[0]?.name ?? "",
+                    );
+                  }}
+                />
+              </ScrollView>
               <Text style={styles.label}>EXPLORE</Text>
-              <Chips
-                options={currentSubcategories.map(
-                  (subcategory) => subcategory.name,
-                )}
-                value={interestSubcategory}
-                onChange={setInterestSubcategory}
-              />
+              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                <SurveyOptions
+                  options={currentSubcategories.map(
+                    (subcategory) => subcategory.name,
+                  )}
+                  value={interestSubcategory}
+                  onChange={setInterestSubcategory}
+                />
+              </ScrollView>
             </>
           )}
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
@@ -499,6 +531,7 @@ function ProfileSurveyBody({
             returnKeyType="done"
           />
           <Button
+            compact
             secondary
             title="Add custom interest"
             disabled={!interestCustom.trim() || interests.length >= 500}
@@ -626,7 +659,7 @@ function ProfileSurveyBody({
                   maxLength={80}
                 />
                 <Text style={styles.label}>PACE · TIMES PER WEEK</Text>
-                <Chips
+                <SurveyOptions
                   options={["1", "2", "3", "4", "5", "6", "7"] as const}
                   value={String(aspiration.target_per_week)}
                   onChange={(value) =>
@@ -655,18 +688,21 @@ function ProfileSurveyBody({
             returnKeyType="done"
           />
           <Text style={styles.label}>CATEGORY</Text>
-          <Chips
-            options={categories}
-            value={aspirationCategory}
-            onChange={setAspirationCategory}
-          />
+          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+            <SurveyOptions
+              options={categories}
+              value={aspirationCategory}
+              onChange={setAspirationCategory}
+            />
+          </ScrollView>
           <Text style={styles.label}>TIMES PER WEEK</Text>
-          <Chips
+          <SurveyOptions
             options={["1", "2", "3", "4", "5", "6", "7"] as const}
             value={aspirationTarget}
             onChange={setAspirationTarget}
           />
           <Button
+            compact
             secondary
             title="Add aspiration"
             disabled={!aspirationTitle.trim() || aspirations.length >= 20}
@@ -693,37 +729,47 @@ function ProfileSurveyBody({
         {step > 0 && (
           <View style={{ flex: 1 }}>
             <Button
+              compact
               secondary
               title="Back"
               disabled={savingProfile}
-              onPress={() => setStep(step - 1)}
+              onPress={() => {
+                setStep(step - 1);
+                onStepChange?.(step - 1);
+              }}
             />
           </View>
         )}
         {step < 2 ? (
           <View style={{ flex: 1 }}>
             <Button
+              compact
               title="Continue"
               disabled={savingProfile}
-              onPress={() => setStep(step + 1)}
+              onPress={() => {
+                setStep(step + 1);
+                onStepChange?.(step + 1);
+              }}
             />
           </View>
         ) : (
           <View style={{ flex: 1 }}>
             <Action
-              title={mode === "onboarding" ? "Finish profile" : "Save profile"}
+              compact
+              title="Save personalization"
               disabled={savingProfile}
-              run={() => saveSurvey("completed")}
+              run={saveSurvey}
             />
           </View>
         )}
       </View>
       {
-        <Action
+        <Button
+          compact
           secondary
-          title="Skip for now"
+          title="Not now"
           disabled={savingProfile}
-          run={() => saveSurvey("skipped")}
+          onPress={() => onSkip?.()}
         />
       }
       {step === 0 && mode === "retake" && (

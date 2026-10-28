@@ -183,6 +183,57 @@ test("Do with others creates an independent Ping and offers featuring without re
   ).toContainText("Shooting hoops");
 });
 
+test("featuring a newly created Ping asks before replacing the existing feature", async ({
+  page,
+}) => {
+  await profile(page);
+  await shareNote(page);
+  const createPing = async () => {
+    await page
+      .getByRole("button", { name: "Do with others", exact: true })
+      .click();
+    await page
+      .getByRole("dialog", { name: "Do with others", exact: true })
+      .getByRole("button", { name: "Ping", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: "Create Ping", exact: true })
+      .click();
+    await expect(
+      page.getByRole("dialog", { name: "Created successfully", exact: true }),
+    ).toBeVisible();
+  };
+  await createPing();
+  await page
+    .getByRole("button", { name: "Feature on Status", exact: true })
+    .click();
+  await expect(page).toHaveURL(/council\//);
+  await page.goBack();
+  await createPing();
+  await page
+    .getByRole("button", { name: "Feature on Status", exact: true })
+    .click();
+  const replace = page.getByRole("dialog", {
+    name: "Replace Featured activity?",
+    exact: true,
+  });
+  await expect(replace).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(1);
+  await replace
+    .getByRole("button", { name: "Keep Featured activity", exact: true })
+    .click();
+  await expect(
+    page.getByRole("dialog", { name: "Created successfully", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Feature on Status", exact: true })
+    .click();
+  await replace
+    .getByRole("button", { name: "Replace Featured Activity", exact: true })
+    .click();
+  await expect(page).toHaveURL(/council\//);
+});
+
 test("Council setup requires two options and retains the Activity Note", async ({
   page,
 }) => {

@@ -24,13 +24,17 @@ async function scenario(page: Page, name: DemoScenario, screen = "Home") {
   await page
     .getByRole("button", { name: `Scenario: ${scenarios[name]}`, exact: true })
     .click();
-  await expect(page.getByText("Onboarding developer lab", { exact: true })).toBeHidden();
+  await expect(
+    page.getByText("Onboarding developer lab", { exact: true }),
+  ).toBeHidden();
   if (screen === "Home") return;
   await page.getByRole("button", { name: /Developer lab:/ }).click();
   await page
     .getByRole("button", { name: `Open ${screen}`, exact: true })
     .click();
-  await expect(page.getByText("Onboarding developer lab", { exact: true })).toBeHidden();
+  await expect(
+    page.getByText("Onboarding developer lab", { exact: true }),
+  ).toBeHidden();
 }
 test("fresh home has one useful introduction; dismissal and account context remain isolated", async ({
   page,
@@ -156,6 +160,18 @@ test("first published Beacon celebrates only after confirmation and does not rep
   await page
     .getByRole("button", { name: "Create Beacon", exact: true })
     .click();
+  // Creation now has an explicit, optional post-publication choice. Dismiss it
+  // before interacting with the Phase 4A receipt beneath the modal.
+  await page
+    .getByRole("dialog")
+    .filter({
+      has: page.getByRole("heading", {
+        name: "Created successfully",
+        exact: true,
+      }),
+    })
+    .getByRole("button", { name: "Not Now", exact: true })
+    .click();
   await expect(visibleId(page, "first-success")).toBeVisible();
   await expect(
     page.getByText("Your first Beacon is ready.", { exact: true }),
@@ -179,7 +195,9 @@ test("phone compositions, themes and restrained personality", async ({
       .getByRole("button", { name: `Preview ${appearance}`, exact: true })
       .click();
     await page.getByRole("button", { name: "Open Home", exact: true }).click();
-    await expect(page.getByText("Onboarding developer lab", { exact: true })).toBeHidden();
+    await expect(
+      page.getByText("Onboarding developer lab", { exact: true }),
+    ).toBeHidden();
     for (const width of [320, 390]) {
       await page.setViewportSize({ width, height: 844 });
       await scenario(page, "fresh");

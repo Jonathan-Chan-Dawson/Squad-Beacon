@@ -16,3 +16,5 @@ Feature map
 - widgets/: widget studio, widget runtime, shared widget types/preferences, data derivation, sync, and native integrations.
 
 Keep Expo route entry files in app/ thin. Feature code should be imported directly from its canonical feature path; avoid duplicate forwarding modules.
+
+- activity/: unified personal Your Activity workspace; see activity/_inventory.md.

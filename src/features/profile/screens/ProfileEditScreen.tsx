@@ -56,11 +56,14 @@ function EditorKeyboardFrame({ children, style, ...props }: ViewProps) {
 }
 
 export default function ProfileEditScreen() {
-  const { data, userId, loading } = useBeacon();
+  const { data, userId, loading, viewerEpoch } = useBeacon();
   const { colors } = useDesignTheme();
-  const profile = data.profiles.find((item) => item.id === userId);
+  const profile =
+    data.viewer_id === userId
+      ? data.profiles.find((item) => item.id === userId)
+      : undefined;
   return profile ? (
-    <Editor key={profile.id} profile={profile} />
+    <Editor key={`${profile.id}:${viewerEpoch}`} profile={profile} />
   ) : (
     <View
       style={{
@@ -101,6 +104,7 @@ function Editor({ profile }: { profile: Profile }) {
   const actionLock = useRef(false);
   const active = useRef(true);
   const scroll = useRef<ScrollView>(null);
+  const surveyScroll = useRef<ScrollView>(null);
   const focusedSection = useRef(false);
   const dirty = JSON.stringify(draft) !== JSON.stringify(baseline);
   const locked = busy || surveyOpen;
@@ -585,7 +589,11 @@ function Editor({ profile }: { profile: Profile }) {
                 ))}
             </View>
             <Button
-              title="Retake profile survey"
+              title={
+                profile.onboarding_survey_status === "completed"
+                  ? "Edit Interests & Goals"
+                  : "Personalize Profile"
+              }
               secondary
               disabled={locked}
               onPress={openSurvey}
@@ -639,17 +647,17 @@ function Editor({ profile }: { profile: Profile }) {
         </Text>
       </ConfirmDialog>
       <ConfirmDialog
-        title="Retake profile survey?"
+        title="Open personalization?"
         visible={retakeConfirm}
         onClose={() => setRetakeConfirm(false)}
         onConfirm={discardAndRetake}
-        confirmLabel="Discard changes and retake"
+        confirmLabel="Discard changes and open"
         cancelLabel="Keep editing"
         closeOnConfirm={false}
         destructive
       >
         <Text style={{ color: colors.textPrimary, fontSize: 16 }}>
-          Discard the changes in this editor before starting the survey.
+          Discard the changes in this editor before opening personalization.
         </Text>
       </ConfirmDialog>
       <Modal
@@ -678,7 +686,7 @@ function Editor({ profile }: { profile: Profile }) {
                 fontWeight: "700",
               }}
             >
-              Profile survey
+              Personalize profile
             </Text>
             <Pressable
               accessibilityRole="button"
@@ -696,6 +704,7 @@ function Editor({ profile }: { profile: Profile }) {
             </Pressable>
           </View>
           <ScrollView
+            ref={surveyScroll}
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={{
               padding: 16,
@@ -710,6 +719,14 @@ function Editor({ profile }: { profile: Profile }) {
                 activities={data.activities}
                 mode="retake"
                 onSavingChange={setSurveyBusy}
+                onStepChange={() =>
+                  requestAnimationFrame(() =>
+                    surveyScroll.current?.scrollTo({
+                      y: 0,
+                      animated: !reducedMotion,
+                    }),
+                  )
+                }
                 onSkip={() => setSurveyOpen(false)}
                 onProfileSaved={(saved) => {
                   const clean = profileEditorDraft(saved);

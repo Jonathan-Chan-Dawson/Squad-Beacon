@@ -18,23 +18,21 @@ for (const appearance of ["dark", "light"] as const) {
     await page
       .getByLabel("Plan name", { exact: true })
       .fill("Saturday tiny adventure");
-    await page
-      .getByRole("button", { name: "Create Plan", exact: true })
-      .click();
+    await page.getByRole("button", { name: "Save Plan", exact: true }).click();
     await expect(
       page.getByText("No stops yet. What should we do first?", { exact: true }),
     ).toBeVisible();
 
-    await page.getByRole("button", { name: "+ Add Stop", exact: true }).click();
-    await page
-      .getByRole("button", { name: "Save an Idea", exact: true })
-      .click();
+    await page.getByRole("button", { name: "+ Idea", exact: true }).click();
     await page
       .getByLabel("What could we do?", { exact: true })
       .fill("Try a cafe");
     await page.getByRole("button", { name: "Add idea", exact: true }).click();
     await page
       .getByRole("button", { name: "1. Try a cafe", exact: true })
+      .click();
+    await page
+      .getByRole("button", { name: "Stop options", exact: true })
       .click();
     await page
       .getByRole("button", { name: "Duplicate idea", exact: true })
@@ -45,6 +43,7 @@ for (const appearance of ["dark", "light"] as const) {
     await page.getByRole("button", { name: "Back", exact: true }).click();
     await page
       .getByRole("button", { name: "Saturday tiny adventure", exact: true })
+      .last()
       .click();
     await expect(
       page.getByRole("button", { name: "1. Try a cafe", exact: true }),
@@ -54,7 +53,7 @@ for (const appearance of ["dark", "light"] as const) {
     for (const width of [320, 390, 430, 1024]) {
       await page.setViewportSize({ width, height: 844 });
       await expect(
-        page.getByRole("button", { name: "+ Add Stop", exact: true }),
+        page.getByRole("button", { name: "+ Idea", exact: true }),
       ).toBeVisible();
       expect(
         await page.evaluate(
@@ -83,11 +82,8 @@ test("a Plan decision uses the existing Ping composer and returns to its stop", 
   await page
     .getByLabel("Plan name", { exact: true })
     .fill("Decide our afternoon");
-  await page.getByRole("button", { name: "Create Plan", exact: true }).click();
-  await page.getByRole("button", { name: "+ Add Stop", exact: true }).click();
-  await page
-    .getByRole("button", { name: "Decide Together", exact: true })
-    .click();
+  await page.getByRole("button", { name: "Save Plan", exact: true }).click();
+  await page.getByRole("button", { name: "+ Decide", exact: true }).click();
   await page.getByRole("button", { name: "Ping", exact: true }).click();
   await page
     .getByLabel("What are you thinking?", { exact: true })

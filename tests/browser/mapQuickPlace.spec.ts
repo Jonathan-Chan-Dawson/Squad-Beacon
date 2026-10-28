@@ -91,10 +91,35 @@ for (const width of [320, 375, 430])
       const panelBox = (await panel.boundingBox())!;
       expect(panelBox.x).toBeGreaterThanOrEqual(0);
       expect(panelBox.x + panelBox.width).toBeLessThanOrEqual(width);
-      expect(panelBox.height).toBeLessThan(200);
+      expect(panelBox.width).toBeLessThanOrEqual(260);
+      expect(panelBox.height).toBeLessThan(120);
+      expect(panelBox.y).toBeGreaterThanOrEqual(0);
+      expect(panelBox.y + panelBox.height).toBeLessThanOrEqual(844);
+      expect(panelBox.y + panelBox.height).toBeLessThanOrEqual(pinBox.y);
+      await expect(
+        panel.getByRole("button", {
+          name: "Cancel location placement",
+          exact: true,
+        }),
+      ).toBeVisible();
+      await expect(
+        panel.getByRole("button", { name: "Cancel", exact: true }),
+      ).toHaveCount(0);
       await map.click({ position: { x: width - 25, y: 560 }, force: true });
       await expect.poll(coordinate).not.toEqual(firstPoint);
       await expect.poll(camera).toBe(initialCamera);
+      await expect
+        .poll(async () => {
+          const box = await panel.boundingBox();
+          return (
+            !!box &&
+            box.x >= 0 &&
+            box.x + box.width <= width &&
+            box.y >= 0 &&
+            box.y + box.height <= 844
+          );
+        })
+        .toBe(true);
       const repeatedPoint = await coordinate();
       await page.mouse.move(35, 80);
       await page.mouse.down();
@@ -153,7 +178,7 @@ for (const width of [320, 375, 430])
       await expect(panel).toContainText("Chicago");
       await expect.poll(coordinate).toEqual(chosenDestination);
       if (width === 375)
-        await page.screenshot({ path: `.expo/place-${appearance}.png` });
+        await page.screenshot({ path: `.expo/compact-pin-${appearance}.png` });
       await panel
         .getByRole("button", { name: "Create Beacon", exact: true })
         .click();
@@ -172,7 +197,15 @@ for (const width of [320, 375, 430])
       await page.goBack();
       await expect(place).toBeVisible();
       await place.click();
+      await map.click({ position: { x: 35, y: 350 }, force: true });
+      await expect(panel).toBeVisible();
       const beforeCancel = await camera();
+      await panel
+        .getByRole("button", { name: "Cancel location placement", exact: true })
+        .click();
+      await expect.poll(camera).toBe(beforeCancel);
+      await expect(panel).toHaveCount(0);
+      await place.click();
       await page.keyboard.press("Escape");
       await expect.poll(camera).toBe(beforeCancel);
       await expect(panel).toHaveCount(0);
@@ -237,10 +270,77 @@ test("returning from the Map updates only the existing draft location, including
     .last()
     .click({ position: { x: 30, y: 540 }, force: true });
   await expect(pin).not.toHaveAttribute("data-latitude", oldPoint!);
-  await tooltip.getByRole("button", { name: "Cancel", exact: true }).click();
+  await tooltip
+    .getByRole("button", { name: "Cancel location placement", exact: true })
+    .click();
   await expect(title).toHaveValue("Keep this draft intact");
   await page
     .getByRole("button", { name: "Adjust on Map", exact: true })
     .click();
   await expect(pin).toHaveAttribute("data-latitude", oldPoint!);
+});
+
+test("pin tooltip stays on screen and clear of the pin on a short phone", async ({
+  page,
+}) => {
+  test.setTimeout(120000);
+  await page.setViewportSize({ width: 320, height: 568 });
+  await page.addInitScript(() =>
+    localStorage.setItem(
+      "beacon.map-device.v2",
+      JSON.stringify({ hintsSeen: 3 }),
+    ),
+  );
+  await page.goto("/");
+  const demo = page.getByRole("button", { name: /Explore the demo/ });
+  await expect
+    .poll(
+      () =>
+        demo.evaluate((element) =>
+          Object.keys(element).some((key) => key.startsWith("__reactProps$")),
+        ),
+      { timeout: 90000 },
+    )
+    .toBe(true);
+  await demo.click();
+  await page
+    .getByRole("button", {
+      name: "Place: choose a location to create",
+      exact: true,
+    })
+    .click();
+  const map = page.locator(".leaflet-container");
+  const tooltip = page.getByTestId("map-place-confirmation");
+  const pin = page.getByTestId("map-temporary-pin");
+  let latitude: string | null = null;
+  for (const point of [
+    { x: 20, y: 130 },
+    { x: 300, y: 390 },
+    { x: 300, y: 130 },
+    { x: 20, y: 390 },
+  ]) {
+    await map.click({ position: point, force: true });
+    await expect(pin).not.toHaveAttribute(
+      "data-latitude",
+      latitude ?? "missing",
+    );
+    latitude = await pin.getAttribute("data-latitude");
+    await expect(tooltip).toBeVisible();
+    await expect
+      .poll(async () => {
+        const box = await tooltip.boundingBox(),
+          marker = await pin.boundingBox();
+        return (
+          !!box &&
+          !!marker &&
+          box.x >= 0 &&
+          box.x + box.width <= 320 &&
+          box.y >= 0 &&
+          box.y + box.height <= 568 &&
+          (box.y + box.height <= marker.y || box.y >= marker.y + marker.height)
+        );
+      })
+      .toBe(true);
+  }
+  await page.screenshot({ path: ".expo/compact-pin-short.png" });
 });

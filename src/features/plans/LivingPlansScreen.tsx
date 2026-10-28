@@ -1,18 +1,39 @@
+import { ActivityActionBar } from "@/src/features/activity/ActivityActionBar";
+import {
+  pendingPlanCreation,
+  retainPlanCreation,
+  clearPlanCreation,
+  type PlanCreationAttempt,
+} from "./planCreationRecovery";
+import { Skeleton } from "@/src/shared/design-system";
+import {
+  continuePlanning,
+  planDateLabel,
+  planListPresentation,
+} from "./planWorkspaceSelectors";
+import { useDraftProtection } from "@/src/features/activity/useDraftProtection";
+import { ActivityFrame } from "@/src/features/activity/ActivityFrame";
 import {
   ContextTip,
   SemanticEmpty,
 } from "@/src/features/onboarding/OnboardingUI";
 import PlanDateField from "./PlanDateField";
 import { ConnectedPlanningActions } from "@/src/features/planning/ConnectedPlanningActions";
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { View } from "react-native";
 import ZonedTimeField from "@/src/features/planning/ZonedTimeField";
 import {
   Eye,
+  ArrowUp,
+  ArrowDown,
+  Copy,
+  Trash2,
+  Plus,
+  ListChecks,
   CalendarDays,
   Map,
+  Route,
   Repeat2,
-  Plus,
   MoreHorizontal,
   Lightbulb,
   MessageCircle,
@@ -26,6 +47,7 @@ import { useBeacon } from "@/src/shared/store";
 import {
   Action,
   Button,
+  IconButton,
   Chips,
   Empty,
   Field,
@@ -34,7 +56,7 @@ import {
   Txt,
   useTheme,
 } from "@/src/shared/ui";
-import { ConfirmDialog } from "@/src/shared/Dialogs";
+import { ConfirmDialog, QuickChoiceDialog } from "@/src/shared/Dialogs";
 import { canReadMapPlan } from "@/src/features/maps/contextFilters";
 import { canReadPlanningThread } from "@/src/features/planning/domain";
 import { PlanningResponseControls } from "@/src/features/planning/PlanningResponseControls";
@@ -57,10 +79,21 @@ import { isLocalDate } from "./routines";
 import { useNow } from "@/src/shared/useNow";
 
 export function LivingPlansScreen() {
-  const { data, userId, act } = useBeacon();
-  const { styles, semanticColors: c } = useTheme();
+  const {
+    data,
+    userId,
+    act,
+    loading,
+    error,
+    refresh,
+    getViewerEpoch,
+    viewerEpoch,
+    demo,
+  } = useBeacon();
+  const { styles } = useTheme();
   const params = useLocalSearchParams<{
     create?: string;
+    planSeed?: string;
     squadId?: string;
     startDate?: string;
     timezone?: string;
@@ -69,33 +102,103 @@ export function LivingPlansScreen() {
     sourcePlan?: string;
     routine?: string;
   }>();
+  const recoveryScope = `${userId}:${demo}:${viewerEpoch}`;
+  const recovering = pendingPlanCreation(recoveryScope);
   const squads = data.squads.filter((s) =>
     data.squad_members.some((m) => m.squad_id === s.id && m.user_id === userId),
   );
-  const [creating, setCreating] = useState(params.create === "yes");
+  const [creating, setCreating] = useState(
+    params.create === "yes" || !!recovering,
+  );
   const [templates, setTemplates] = useState(params.templates === "yes");
   const [title, setTitle] = useState(
-    data.viewer_id === userId
-      ? (data.plan_templates.find((t) => t.id === params.template)?.title ??
+    typeof recovering?.payload.title === "string"
+      ? recovering.payload.title
+      : data.viewer_id === userId
+        ? (data.plan_templates.find((t) => t.id === params.template)?.title ??
           data.plans.find((p) => p.id === params.sourcePlan)?.title ??
           "")
-      : "",
+        : "",
   );
   const [squad, setSquad] = useState(
-    squads.some((s) => s.id === params.squadId) ? params.squadId! : "Personal",
+    typeof recovering?.payload.squad_id === "string"
+      ? recovering.payload.squad_id
+      : squads.some((s) => s.id === params.squadId)
+        ? params.squadId!
+        : "Personal",
   );
-  const [date, setDate] = useState(params.startDate ?? "");
+  const [filter, setFilter] = useState("All");
+  const [revealSequence, setRevealSequence] = useState(0);
+  const [optional, setOptional] = useState(false);
+  const [createBusy, setCreateBusy] = useState(false);
+  const creation = useRef<PlanCreationAttempt | null>(recovering ?? null);
+  const [creationPending, setCreationPending] = useState(!!recovering);
+  const creationLock = useRef(false);
+  const now = useNow();
+  const continuing = continuePlanning(data, userId, now);
+  const [date, setDate] = useState(
+    typeof recovering?.payload.start_date === "string"
+      ? recovering.payload.start_date
+      : (params.startDate ?? ""),
+  );
   const [starter, setStarter] = useState("Custom");
   const [templateId, setTemplateId] = useState(params.template ?? "");
+  const intentKey = JSON.stringify([
+    params.create,
+    params.planSeed,
+    params.template,
+    params.sourcePlan,
+    params.startDate,
+    params.timezone,
+    params.squadId,
+    params.routine,
+    params.templates,
+  ]);
+  const [seenIntent, setSeenIntent] = useState(intentKey);
+  if (seenIntent !== intentKey) {
+    setSeenIntent(intentKey);
+    if (params.templates === "yes") setTemplates(true);
+    if (params.create === "yes" && !creating && !creationPending) {
+      setCreating(true);
+      setTitle(
+        data.plan_templates.find((item) => item.id === params.template)
+          ?.title ??
+          data.plans.find((item) => item.id === params.sourcePlan)?.title ??
+          "",
+      );
+      setDate(params.startDate ?? "");
+      setSquad(
+        squads.some((item) => item.id === params.squadId)
+          ? params.squadId!
+          : "Personal",
+      );
+      setTemplateId(params.template ?? "");
+      setStarter("Custom");
+      setOptional(false);
+    }
+  }
   const plans = data.plans.filter(
     (p) =>
       userId &&
+      data.viewer_id === userId &&
       !p.routine_source &&
       canReadMapPlan(data, p, userId) &&
-      (squad === "Personal" ? !p.squad_id : p.squad_id === squad),
+      (filter === "All" ||
+        (filter === "Personal" ? !p.squad_id : p.squad_id === filter)),
+  );
+  const creationGuard = useDraftProtection(
+    creating && (!!title.trim() || !!date || creationPending),
+    () => {
+      setCreating(false);
+      setTitle("");
+      setDate("");
+    },
+    createBusy || creationPending,
   );
   let timezone =
-    params.timezone ||
+    (typeof recovering?.payload.timezone === "string"
+      ? recovering.payload.timezone
+      : params.timezone) ||
     Intl.DateTimeFormat().resolvedOptions().timeZone ||
     "UTC";
   try {
@@ -103,44 +206,67 @@ export function LivingPlansScreen() {
   } catch {
     timezone = "UTC";
   }
+  const openNewPlan = () => {
+    setTitle("");
+    setDate("");
+    setStarter("Custom");
+    setTemplateId("");
+    setOptional(false);
+    setSquad(squads.some((s) => s.id === filter) ? filter : "Personal");
+    setCreating(true);
+  };
   return (
-    <Screen title="Plans" eyebrow="MAKE SOMETHING HAPPEN" create={false}>
+    <ActivityFrame
+      title="Plans"
+      eyebrow="MAKE SOMETHING HAPPEN"
+      create={false}
+      scrollRequest={
+        revealSequence ? { y: 0, sequence: revealSequence } : undefined
+      }
+    >
       <ContextTip name="plan" />
       <Chips
-        value={squads.find((s) => s.id === squad)?.name ?? "Personal"}
-        options={["Personal", ...squads.map((s) => s.name)]}
+        value={filter === "All" || filter === "Personal" ? filter : "Squad"}
+        options={["All", "Personal", "Squad"]}
         onChange={(value) =>
-          setSquad(squads.find((s) => s.name === value)?.id ?? "Personal")
+          setFilter(value === "Squad" ? (squads[0]?.id ?? "Squad") : value)
         }
       />
-      <Button
-        title="Start a Plan"
-        icon={<Plus size={18} color={c.bg} />}
-        onPress={() => setCreating(true)}
+      {filter !== "All" && filter !== "Personal" && (
+        <View style={[styles.row, { flexWrap: "wrap" }]}>
+          {squads.map((s) => (
+            <Button
+              key={s.id}
+              compact
+              secondary={filter !== s.id}
+              title={s.name}
+              onPress={() => setFilter(s.id)}
+            />
+          ))}
+        </View>
+      )}
+      <ActivityActionBar
+        items={[
+          {
+            label: "New Plan",
+            accessibilityLabel: "+ New Plan",
+            icon: Plus,
+            primary: true,
+            onPress: openNewPlan,
+          },
+          {
+            label: "Routines",
+            icon: Repeat2,
+            onPress: () => router.push("/routines"),
+          },
+          {
+            label: "Templates",
+            icon: Sparkles,
+            selected: templates,
+            onPress: () => setTemplates(!templates),
+          },
+        ]}
       />
-      <View style={styles.row}>
-        <Button
-          compact
-          secondary
-          icon={<Repeat2 size={16} color={c.textSecondary} />}
-          title="Routines"
-          onPress={() => router.push("/routines")}
-        />
-        <Button
-          compact
-          secondary
-          icon={<CalendarDays size={16} color={c.textSecondary} />}
-          title="Calendar"
-          onPress={() => router.push("/calendar")}
-        />
-        <Button
-          compact
-          secondary
-          icon={<Sparkles size={16} color={c.textSecondary} />}
-          title="Templates"
-          onPress={() => setTemplates(!templates)}
-        />
-      </View>
       {templates &&
         data.plan_templates
           .filter((t) => t.owner_id === userId || t.squad_id === squad)
@@ -156,25 +282,54 @@ export function LivingPlansScreen() {
               }}
             />
           ))}
-      {!plans.length && (
+      {loading ? (
+        <View accessibilityLabel="Loading your Plans">
+          <Skeleton height={56} />
+          <Skeleton height={56} />
+        </View>
+      ) : error ? (
+        <>
+          <Txt>{error}</Txt>
+          <Action title="Retry Plans" run={refresh} />
+        </>
+      ) : null}
+      {continuing.length > 0 && plans.length > 3 && filter === "All" && (
+        <View>
+          <Txt>Continue Planning</Txt>
+          {continuing.map((plan) => (
+            <PlanChoice
+              key={plan.id}
+              title={plan.title}
+              detail={`${planListPresentation(data, plan, userId, now).date} · ${planListPresentation(data, plan, userId, now).context}`}
+              icon={Lightbulb}
+              onPress={() =>
+                router.push({ pathname: "/plan/[id]", params: { id: plan.id } })
+              }
+            />
+          ))}
+        </View>
+      )}
+      {!loading && !error && !plans.length && (
         <SemanticEmpty
-          name="empty.plans"
-          illustration="plans"
+          name={filter === "All" ? "empty.plans" : "empty.planFilter"}
+          illustration={filter === "All" ? "plans" : undefined}
           density="section"
           personality
+          action={
+            filter === "All"
+              ? { label: "New Plan", onPress: openNewPlan }
+              : { label: "Show all Plans", onPress: () => setFilter("All") }
+          }
         />
       )}
       {plans.map((plan) => {
-        const stops = planStops(data, plan, userId);
-        const confirmed = stops.filter(
-          (s) => !!stopActivity(data, s, userId),
-        ).length;
+        const summary = planListPresentation(data, plan, userId, now);
         return (
           <PlanChoice
             key={plan.id}
             title={plan.title}
-            icon={Map}
-            detail={`${plan.start_date ?? "Date undecided"} · ${confirmed} confirmed · ${stops.filter((s) => s.approval === "pending").length} suggestions${plan.status === "cancelled" ? " · Cancelled" : ""}`}
+            icon={Route}
+            detail={`${summary.date} · ${summary.context}\n${summary.progress}`}
             onPress={() =>
               router.push({ pathname: "/plan/[id]", params: { id: plan.id } })
             }
@@ -182,13 +337,24 @@ export function LivingPlansScreen() {
         );
       })}
       <Sheet
-        title="Start a Plan"
+        title="New Plan"
         visible={creating}
-        onClose={() => setCreating(false)}
+        onClose={() =>
+          creationGuard.close(() => {
+            setCreating(false);
+            router.setParams({
+              create: undefined,
+              routine: undefined,
+              template: undefined,
+              sourcePlan: undefined,
+            });
+          })
+        }
       >
         <Field
           label="Plan name"
           value={title}
+          editable={!createBusy && !creationPending}
           onChangeText={setTitle}
           placeholder="Saturday Adventure"
         />
@@ -197,6 +363,7 @@ export function LivingPlansScreen() {
           value={squads.find((s) => s.id === squad)?.name ?? "Personal"}
           options={["Personal", ...squads.map((s) => s.name)]}
           onChange={(value) =>
+            !creation.current &&
             setSquad(squads.find((s) => s.name === value)?.id ?? "Personal")
           }
         />
@@ -209,19 +376,49 @@ export function LivingPlansScreen() {
             </Txt>
           </View>
         )}
-        <PlanDateField label="When? Optional" value={date} onChange={setDate} />
-        <Txt>Start with an idea</Txt>
-        <Chips
-          value={starter}
-          options={planStarters.map((s) => s.title)}
-          onChange={(value) => {
-            setStarter(value);
-            setTemplateId("");
-          }}
+        <Button
+          compact
+          secondary
+          title={
+            optional ? "Hide optional details" : "Date & starter · optional"
+          }
+          disabled={createBusy || creationPending}
+          onPress={() => setOptional(!optional)}
         />
+        {optional && (
+          <>
+            <PlanDateField
+              label="When? Optional"
+              value={date}
+              onChange={(value) => {
+                if (!creation.current) setDate(value);
+              }}
+            />
+            <Txt>Start with an idea</Txt>
+            <Chips
+              value={starter}
+              options={planStarters.map((s) => s.title)}
+              onChange={(value) => {
+                if (creation.current) return;
+                setStarter(value);
+                setTemplateId("");
+              }}
+            />
+          </>
+        )}
+        {creationPending && !createBusy && (
+          <Txt muted>
+            Your save needs checking. Use Check saved Plan before starting
+            another.
+          </Txt>
+        )}
         <Action
-          title="Create Plan"
+          title={creationPending ? "Check saved Plan" : "Save Plan"}
+          disabled={createBusy}
           run={async () => {
+            if (creationLock.current) return;
+            if (!title.trim() || title.trim().length > 100)
+              throw new Error("Give your Plan a name up to 100 characters.");
             if (date && !isLocalDate(date))
               throw new Error("Choose a valid date or leave it undecided.");
             const source = data.plans.find((p) => p.id === params.sourcePlan);
@@ -236,43 +433,102 @@ export function LivingPlansScreen() {
               : (planStarters
                   .find((s) => s.title === starter)
                   ?.ideas.map((name) => ({ title: name })) ?? []);
-            const result = await act("create_living_plan", {
-              title,
-              timezone,
-              start_date: date || null,
-              squad_id: squad === "Personal" ? null : squad,
-              ...(templateId ? { template_id: templateId } : { stops: ideas }),
-            });
-            if (typeof result.id !== "string")
-              throw new Error(
-                "Could not verify your Plan. Retry to finish saving.",
-              );
-            setCreating(false);
-            router.push({
-              pathname: "/plan/[id]",
-              params: {
-                id: result.id,
-                ...(params.routine === "yes" ? { repeat: "yes" } : {}),
+            const epoch = getViewerEpoch();
+            if (!userId || data.viewer_id !== userId)
+              throw new Error("Refresh your account before saving.");
+            creation.current ??= {
+              id: randomUUID(),
+              payload: {
+                title,
+                timezone,
+                start_date: date || null,
+                squad_id: squad === "Personal" ? null : squad,
+                ...(templateId
+                  ? { template_id: templateId }
+                  : { stops: ideas }),
               },
-            });
+            };
+            retainPlanCreation(recoveryScope, creation.current);
+            setCreationPending(true);
+            creationLock.current = true;
+            setCreateBusy(true);
+            try {
+              const result = creation.current.resultId
+                ? { id: creation.current.resultId }
+                : await act(
+                    "create_living_plan",
+                    creation.current.payload,
+                    creation.current.id,
+                  );
+              if (epoch !== getViewerEpoch()) return;
+              if (typeof result.id !== "string")
+                throw new Error(
+                  "Could not verify your Plan. Retry to finish saving.",
+                );
+              creation.current.resultId = result.id;
+              await refresh();
+              if (epoch !== getViewerEpoch()) return;
+              setFilter("All");
+              setRevealSequence((value) => value + 1);
+              setCreating(false);
+              router.setParams({
+                create: undefined,
+                routine: undefined,
+                template: undefined,
+                sourcePlan: undefined,
+              });
+              clearPlanCreation(recoveryScope);
+              setCreationPending(false);
+              creation.current = null;
+              router.push({
+                pathname: "/plan/[id]",
+                params: {
+                  id: result.id,
+                  ...(params.routine === "yes" ? { repeat: "yes" } : {}),
+                },
+              });
+            } catch (failure) {
+              if (
+                (failure as { definitive?: boolean }).definitive ||
+                (failure instanceof Error &&
+                  failure.message ===
+                    "Reconnect to save changes. Nothing was queued.")
+              ) {
+                clearPlanCreation(recoveryScope);
+                setCreationPending(false);
+                creation.current = null;
+              }
+              throw failure;
+            } finally {
+              creationLock.current = false;
+              setCreateBusy(false);
+            }
           }}
         />
       </Sheet>
-    </Screen>
+      {creationGuard.dialog}
+    </ActivityFrame>
   );
 }
 
 export function LivingPlanDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { data, userId } = useBeacon();
+  const { data, userId, loading, refresh } = useBeacon();
   const plan = data.plans.find((p) => p.id === id);
   if (!plan || !userId || !canReadMapPlan(data, plan, userId))
     return (
       <Screen title="Plan unavailable" eyebrow="PLANS" create={false}>
-        <Empty
-          title="This Plan is not available"
-          body="Its audience may have changed. Refresh or return to Plans."
-        />
+        {loading ? (
+          <View accessibilityLabel="Loading Plan">
+            <Skeleton height={90} />
+          </View>
+        ) : (
+          <Empty
+            title="This Plan is not available"
+            body="Its audience may have changed. Refresh or return to Plans."
+          />
+        )}
+        <Action title="Refresh Plan" run={refresh} />
         <Button title="Plans" onPress={() => router.replace("/plans")} />
       </Screen>
     );
@@ -282,7 +538,7 @@ export function LivingPlanDetail() {
 function PlanTimeline({ planId }: { planId: string }) {
   const now = useNow(1000);
   const params = useLocalSearchParams<{ repeat?: string }>();
-  const { data, userId, act } = useBeacon();
+  const { data, userId, act, getViewerEpoch, refresh } = useBeacon();
   const { styles, semanticColors: c } = useTheme();
   const plan = data.plans.find((p) => p.id === planId)!;
   const access = planPermissions(data, plan, userId);
@@ -299,6 +555,16 @@ function PlanTimeline({ planId }: { planId: string }) {
   const [position, setPosition] = useState<number | undefined>(),
     [more, setMore] = useState(false),
     [review, setReview] = useState(false);
+  const [stopMenu, setStopMenu] = useState<string | null>(null);
+  const [stopMenuOpen, setStopMenuOpen] = useState(false);
+  const [removeStop, setRemoveStop] = useState<{
+    stop: PlanStop;
+    revision: number;
+  } | null>(null);
+  const [saveState, setSaveState] = useState("Saved");
+  const [conflictReview, setConflictReview] = useState(false);
+  const mutationLock = useRef(false);
+  const [mutationBusy, setMutationBusy] = useState(false);
   const [meta, setMeta] = useState(false),
     [planName, setPlanName] = useState(plan.title),
     [planDate, setPlanDate] = useState(plan.start_date ?? "");
@@ -310,12 +576,60 @@ function PlanTimeline({ planId }: { planId: string }) {
     ),
     [cancel, setCancel] = useState(false);
   const stops = planStops(data, plan, userId, review);
+  const menuStop = stops.find((stop) => stop.id === stopMenu);
+  const menuIndex = stops.findIndex((stop) => stop.id === stopMenu);
   const joined = data.plan_members.some(
     (m) => m.plan_id === plan.id && m.user_id === userId,
   );
   const squad = data.squads.find((s) => s.id === plan.squad_id);
-  const mutate = (action: string, payload: Record<string, unknown> = {}) =>
-    act(action, { plan_id: plan.id, revision: plan.revision ?? 0, ...payload });
+  const mutate = async (
+    action: string,
+    payload: Record<string, unknown> = {},
+  ) => {
+    if (mutationLock.current)
+      throw new Error("Wait for the current change to finish.");
+    const epoch = getViewerEpoch();
+    mutationLock.current = true;
+    setMutationBusy(true);
+    setSaveState("Saving…");
+    try {
+      const result = await act(action, {
+        plan_id: plan.id,
+        revision: plan.revision ?? 0,
+        ...payload,
+      });
+      if (epoch === getViewerEpoch()) setSaveState("Saved");
+      return result;
+    } catch (failure) {
+      if (epoch === getViewerEpoch())
+        setSaveState(
+          "Couldn’t save · Your edits are still here. Refresh and review before retrying a conflict.",
+        );
+      throw failure;
+    } finally {
+      mutationLock.current = false;
+      setMutationBusy(false);
+    }
+  };
+  const ideaDirty =
+    mode === "idea" &&
+    (name !== (editing?.title ?? "") ||
+      details !== (editing?.details ?? "") ||
+      proposed !== (editing?.proposed_at ?? ""));
+  const ideaGuard = useDraftProtection(
+    ideaDirty,
+    () => {
+      setMode(null);
+      setEditing(null);
+    },
+    mutationBusy,
+  );
+
+  const metaGuard = useDraftProtection(
+    meta && (planName !== plan.title || planDate !== (plan.start_date ?? "")),
+    () => setMeta(false),
+    mutationBusy,
+  );
   const openIdea = (stop?: PlanStop) => {
     setEditRevision(plan.revision ?? 0);
     setEditing(stop ?? null);
@@ -378,7 +692,7 @@ function PlanTimeline({ planId }: { planId: string }) {
       create={false}
     >
       <Txt muted>
-        {plan.start_date ?? "Date undecided"} ·{" "}
+        {planDateLabel(plan.start_date, now)} ·{" "}
         {data.plan_members.filter((m) => m.plan_id === plan.id).length + 1}{" "}
         following ·{" "}
         {plan.status === "cancelled"
@@ -386,6 +700,212 @@ function PlanTimeline({ planId }: { planId: string }) {
           : "Attendance is separate for each Beacon"}
       </Txt>
       {!!plan.description && <Txt>{plan.description}</Txt>}
+      <View accessibilityLiveRegion="polite">
+        <Txt muted>{saveState}</Txt>
+      </View>
+      {saveState.startsWith("Couldn’t save") && (
+        <Action
+          compact
+          secondary
+          title="Refresh & review saved version"
+          run={async () => {
+            await refresh();
+            setConflictReview(true);
+          }}
+        />
+      )}
+      <Sheet
+        title="Review saved version"
+        visible={conflictReview}
+        onClose={() => setConflictReview(false)}
+      >
+        <Txt>
+          {plan.title} · {plan.start_date ?? "Date undecided"}
+        </Txt>
+        {editing && (
+          <>
+            <Txt>
+              {stops.find((stop) => stop.id === editing.id)?.title ??
+                "This idea is no longer available"}
+            </Txt>
+            <Txt muted>
+              {stops.find((stop) => stop.id === editing.id)?.details ?? ""}
+            </Txt>
+          </>
+        )}
+        <Txt muted>
+          Your unsaved fields remain in the editor. Compare them before choosing
+          to save again.
+        </Txt>
+        <Button
+          title="Keep my edits against this version"
+          onPress={() => {
+            setEditRevision(plan.revision ?? 0);
+            setMetaRevision(plan.revision ?? 0);
+            setConflictReview(false);
+          }}
+        />
+      </Sheet>
+
+      {access.contribute && (
+        <ActivityActionBar
+          items={[
+            {
+              label:
+                access.editor || plan.open_collaboration
+                  ? "Idea"
+                  : "Suggest idea",
+              accessibilityLabel:
+                access.editor || plan.open_collaboration
+                  ? "+ Idea"
+                  : "+ Suggest idea",
+              icon: Lightbulb,
+              primary: true,
+              onPress: () =>
+                ideaGuard.close(() => {
+                  setSelected(null);
+                  setPosition(undefined);
+                  setAfterStop(undefined);
+                  openIdea();
+                }),
+            },
+            ...(access.editor
+              ? [
+                  {
+                    label: "Beacon",
+                    accessibilityLabel: "+ Beacon",
+                    icon: MapPin,
+                    onPress: () =>
+                      ideaGuard.close(() => {
+                        setSelected(null);
+                        setPosition(undefined);
+                        setAfterStop(undefined);
+                        setMode("activity");
+                      }),
+                  },
+                ]
+              : []),
+            ...(access.editor &&
+            (data.is_demo || data.capabilities?.collaborative_plans)
+              ? [
+                  {
+                    label: "Decide",
+                    accessibilityLabel: "+ Decide",
+                    icon: MessageCircle,
+                    onPress: () =>
+                      ideaGuard.close(() => {
+                        setSelected(null);
+                        setPosition(undefined);
+                        setAfterStop(undefined);
+                        setMode("decision");
+                      }),
+                  },
+                ]
+              : []),
+          ]}
+        />
+      )}
+      {mode === "idea" && (
+        <View
+          testID="plan-inline-idea"
+          style={{
+            gap: 10,
+            padding: 12,
+            backgroundColor: c.surfaceRaised,
+            borderRadius: 12,
+          }}
+        >
+          <Txt>{editing ? "Edit idea" : "New idea · not saved yet"}</Txt>
+          <Field
+            label="What could we do?"
+            value={name}
+            onChangeText={setName}
+          />
+          <Field
+            label="Details · optional"
+            value={details}
+            onChangeText={setDetails}
+            multiline
+          />
+          {proposed ? (
+            <ZonedTimeField
+              label="Proposed time"
+              value={proposed}
+              timezone={plan.timezone}
+              onChange={setProposed}
+            />
+          ) : (
+            <Button
+              compact
+              secondary
+              title="Propose a time"
+              onPress={() =>
+                setProposed(new Date(Date.now() + 86400000).toISOString())
+              }
+            />
+          )}
+          <Button
+            compact
+            secondary
+            title="Decide time later"
+            onPress={() => setProposed("")}
+          />
+          {!!proposed &&
+            data.activities.some(
+              (a) =>
+                a.status === "scheduled" &&
+                (a.owner_id === userId ||
+                  data.rsvps.some(
+                    (r) =>
+                      r.activity_id === a.id &&
+                      r.user_id === userId &&
+                      r.status === "going",
+                  )) &&
+                Date.parse(a.starts_at) <= Date.parse(proposed) &&
+                Date.parse(a.ends_at) > Date.parse(proposed),
+            ) && (
+              <Txt muted>
+                This proposed time overlaps an activity on your calendar.
+              </Txt>
+            )}
+          <Action
+            title={
+              editing
+                ? "Save changes"
+                : access.editor || plan.open_collaboration
+                  ? "Add idea"
+                  : "Suggest idea"
+            }
+            run={async () => {
+              await mutate(editing ? "edit_plan_stop" : "add_plan_stop", {
+                ...(editing
+                  ? { stop_id: editing.id, revision: editRevision }
+                  : { position, after_stop_id: afterStop }),
+                title: name,
+                details,
+                proposed_at: proposed || null,
+              });
+              setMode(null);
+              setEditing(null);
+            }}
+          />
+          <Button
+            compact
+            secondary
+            title="Cancel edit"
+            onPress={() =>
+              ideaGuard.close(() => {
+                setMode(null);
+                setEditing(null);
+              })
+            }
+          />
+        </View>
+      )}
+
+      {ideaGuard.dialog}
+      {metaGuard.dialog}
+
       {plan.routine_id && (
         <View style={[styles.row, { flexWrap: "wrap" }]}>
           <Txt muted>This occurrence · Edit its Beacons individually</Txt>
@@ -439,10 +959,7 @@ function PlanTimeline({ planId }: { planId: string }) {
         </Txt>
       )}
       {!stops.length && (
-        <Empty
-          title="No stops yet. What should we do first?"
-          body="Save an idea, add an activity, or decide together."
-        />
+        <SemanticEmpty name="empty.planStops" density="inline" />
       )}
       {stops.map((stop, index) => {
         const activity = stopActivity(data, stop, userId),
@@ -473,7 +990,9 @@ function PlanTimeline({ planId }: { planId: string }) {
             key={stop.id}
             style={{
               borderLeftWidth: 2,
-              borderLeftColor: c.border,
+              borderLeftColor: expanded ? c.accent : c.border,
+              backgroundColor: expanded ? c.surfaceRaised : "transparent",
+              borderRadius: 10,
               paddingLeft: 14,
               paddingVertical: 8,
               gap: 6,
@@ -502,7 +1021,7 @@ function PlanTimeline({ planId }: { planId: string }) {
                 : unavailable
                   ? "No longer shared with you"
                   : activity
-                    ? `${activity.status === "completed" ? "Completed" : activity.status === "cancelled" ? "Cancelled" : "Confirmed Beacon"} · ${timing} · ${data.rsvps.filter((r) => r.activity_id === activity.id && r.status === "going").length} Going`
+                    ? `${activity.status === "completed" ? "Completed" : activity.status === "cancelled" ? "Cancelled" : "Linked Beacon"} · ${timing} · ${data.rsvps.filter((r) => r.activity_id === activity.id && r.status === "going").length} Going`
                     : thread
                       ? `${thread.kind === "time" ? "Find a Time" : thread.kind === "ping" ? "Ping" : thread.kind === "draw" ? "Draw" : thread.vote_method === "approval" ? "Approval Vote" : "Pick One Vote"} · ${thread.not_organized_at ? "Not organized" : thread.finalized_at && !thread.materialized_activity_id ? "Selected · awaiting confirmation" : thread.status === "open" ? "Open" : thread.status === "no_options" ? "No eligible options" : thread.status === "resolved" ? "Resolved" : thread.status === "cancelled" ? "Cancelled" : "Closed"}${thread.materialized_activity_id ? " · Result ready" : ""}`
                       : `Idea${stop.proposed_at ? ` · Proposed ${new Date(stop.proposed_at).toLocaleString()}` : " · Still deciding"}`}
@@ -532,6 +1051,43 @@ function PlanTimeline({ planId }: { planId: string }) {
                 />
               </View>
             )}
+            {activity && (
+              <Button
+                compact
+                secondary
+                title="Open Beacon"
+                onPress={() =>
+                  router.push({
+                    pathname: "/activity/[id]",
+                    params: { id: activity.id },
+                  })
+                }
+              />
+            )}
+            {!activity &&
+              !thread &&
+              !unavailable &&
+              access.editor &&
+              stop.state === "active" && (
+                <View style={[styles.row, { flexWrap: "wrap" }]}>
+                  <Button
+                    compact
+                    secondary
+                    title="Edit idea"
+                    onPress={() => ideaGuard.close(() => openIdea(stop))}
+                  />
+                  <Button
+                    compact
+                    title="Make it happen"
+                    onPress={() =>
+                      ideaGuard.close(() => {
+                        setSelected(stop.id);
+                        setMode("activity");
+                      })
+                    }
+                  />
+                </View>
+              )}
             {expanded && (
               <>
                 {!unavailable && !activity && !thread && !!stop.details && (
@@ -563,18 +1119,6 @@ function PlanTimeline({ planId }: { planId: string }) {
                       router.push({
                         pathname: "/council/[id]",
                         params: { id: thread.id },
-                      })
-                    }
-                  />
-                )}
-                {activity && (
-                  <Button
-                    compact
-                    title="Open Beacon"
-                    onPress={() =>
-                      router.push({
-                        pathname: "/activity/[id]",
-                        params: { id: activity.id },
                       })
                     }
                   />
@@ -620,109 +1164,93 @@ function PlanTimeline({ planId }: { planId: string }) {
                     </>
                   )}
                 {access.editor && access.contribute && (
-                  <View style={[styles.row, { flexWrap: "wrap" }]}>
-                    {!stop.activity_id && !stop.thread_id && (
-                      <>
-                        <Button
-                          compact
-                          secondary
-                          title="Edit idea"
-                          onPress={() => openIdea(stop)}
-                        />
-                        <Action
-                          compact
-                          secondary
-                          title="Duplicate idea"
-                          run={() =>
-                            mutate("add_plan_stop", {
-                              title: stop.title,
-                              details: stop.details,
-                              proposed_at: stop.proposed_at,
-                              position: stop.position + 1,
-                            })
-                          }
-                        />
-                        <Button
-                          compact
-                          title="Make it happen"
-                          onPress={() => {
-                            setPosition(undefined);
-                            setAfterStop(undefined);
-                            setMenu(true);
-                          }}
-                        />
-                      </>
-                    )}
-                    {index > 0 && (
-                      <Action
-                        compact
-                        secondary
-                        title="Move up"
-                        run={() =>
-                          mutate("move_plan_stop", {
-                            stop_id: stop.id,
-                            position: stops[index - 1].position,
-                          })
-                        }
-                      />
-                    )}
-                    {index < stops.length - 1 && (
-                      <Action
-                        compact
-                        secondary
-                        title="Move down"
-                        run={() =>
-                          mutate("move_plan_stop", {
-                            stop_id: stop.id,
-                            position: stops[index + 1].position,
-                          })
-                        }
-                      />
-                    )}
-                    <Button
-                      compact
-                      secondary
-                      title="Insert after"
-                      onPress={() => {
-                        setSelected(null);
-                        setPosition(stop.position + 1);
-                        setAfterStop(stop.id);
-                        setMenu(true);
-                      }}
-                    />
-                    <Action
-                      compact
-                      secondary
-                      title={
-                        stop.activity_id || stop.thread_id
-                          ? "Remove from Plan"
-                          : "Remove idea"
-                      }
-                      run={() =>
-                        mutate("remove_plan_stop", { stop_id: stop.id })
-                      }
-                    />
-                  </View>
+                  <IconButton
+                    label="Stop options"
+                    onPress={() => {
+                      setStopMenu(stop.id);
+                      setStopMenuOpen(true);
+                    }}
+                  >
+                    <MoreHorizontal size={18} color={c.textSecondary} />
+                  </IconButton>
                 )}
               </>
             )}
           </View>
         );
       })}
-      {access.contribute && (
-        <Button
-          icon={<Plus size={18} color={c.bg} />}
-          title={
-            access.editor || plan.open_collaboration
-              ? "+ Add Stop"
-              : "+ Suggest a Stop"
-          }
-          onPress={() => {
-            setSelected(null);
-            setPosition(undefined);
-            setAfterStop(undefined);
-            setMenu(true);
-          }}
+      {menuStop && access.editor && access.contribute && (
+        <QuickChoiceDialog
+          title="Stop options"
+          visible={stopMenuOpen}
+          onClose={() => setStopMenuOpen(false)}
+          onDismiss={() => setStopMenu(null)}
+          items={[
+            ...(!menuStop.activity_id && !menuStop.thread_id
+              ? [
+                  {
+                    label: "Duplicate idea",
+                    icon: <Copy size={18} color={c.textSecondary} />,
+                    onPress: () => {
+                      void mutate("add_plan_stop", {
+                        title: menuStop.title,
+                        details: menuStop.details,
+                        proposed_at: menuStop.proposed_at,
+                        position: menuStop.position + 1,
+                      }).catch(() => {});
+                    },
+                  },
+                ]
+              : []),
+            ...(menuIndex > 0
+              ? [
+                  {
+                    label: "Move up",
+                    icon: <ArrowUp size={18} color={c.textSecondary} />,
+                    onPress: () => {
+                      void mutate("move_plan_stop", {
+                        stop_id: menuStop.id,
+                        position: stops[menuIndex - 1].position,
+                      }).catch(() => {});
+                    },
+                  },
+                ]
+              : []),
+            ...(menuIndex < stops.length - 1
+              ? [
+                  {
+                    label: "Move down",
+                    icon: <ArrowDown size={18} color={c.textSecondary} />,
+                    onPress: () => {
+                      void mutate("move_plan_stop", {
+                        stop_id: menuStop.id,
+                        position: stops[menuIndex + 1].position,
+                      }).catch(() => {});
+                    },
+                  },
+                ]
+              : []),
+            {
+              label: "Insert after",
+              icon: <Plus size={18} color={c.textSecondary} />,
+              onPress: () => {
+                setSelected(null);
+                setPosition(menuStop.position + 1);
+                setAfterStop(menuStop.id);
+                setMenu(true);
+              },
+            },
+            {
+              label:
+                menuStop.activity_id || menuStop.thread_id
+                  ? "Remove from Plan"
+                  : "Remove idea",
+              destructive: true,
+              icon: <Trash2 size={18} color={c.danger} />,
+              onPress: () =>
+                setRemoveStop({ stop: menuStop, revision: plan.revision ?? 0 }),
+            },
+          ]}
         />
       )}
       <View style={[styles.row, { flexWrap: "wrap" }]}>
@@ -763,7 +1291,7 @@ function PlanTimeline({ planId }: { planId: string }) {
           secondary
           icon={<MoreHorizontal size={16} color={c.textSecondary} />}
           title="More"
-          onPress={() => setMore(true)}
+          onPress={() => ideaGuard.close(() => setMore(true))}
         />
         {routine && !plan.routine_id && (
           <Button
@@ -813,87 +1341,6 @@ function PlanTimeline({ planId }: { planId: string }) {
         />
       </Sheet>
       <Sheet
-        title={
-          editing
-            ? "Edit idea"
-            : access.editor
-              ? "Save an Idea"
-              : "Suggest a Stop"
-        }
-        visible={mode === "idea"}
-        onClose={() => setMode(null)}
-      >
-        <Field label="What could we do?" value={name} onChangeText={setName} />
-        <Field
-          label="Details · optional"
-          value={details}
-          onChangeText={setDetails}
-          multiline
-        />
-        {proposed ? (
-          <ZonedTimeField
-            label="Proposed time"
-            value={proposed}
-            timezone={plan.timezone}
-            onChange={setProposed}
-          />
-        ) : (
-          <Button
-            compact
-            secondary
-            title="Propose a time"
-            onPress={() =>
-              setProposed(new Date(Date.now() + 86400000).toISOString())
-            }
-          />
-        )}
-        <Button
-          compact
-          secondary
-          title="Decide time later"
-          onPress={() => setProposed("")}
-        />
-        {!!proposed &&
-          data.activities.some(
-            (a) =>
-              a.status === "scheduled" &&
-              (a.owner_id === userId ||
-                data.rsvps.some(
-                  (r) =>
-                    r.activity_id === a.id &&
-                    r.user_id === userId &&
-                    r.status === "going",
-                )) &&
-              Date.parse(a.starts_at) <= Date.parse(proposed) &&
-              Date.parse(a.ends_at) > Date.parse(proposed),
-          ) && (
-            <Txt muted>
-              This proposed time overlaps an activity on your calendar.
-            </Txt>
-          )}
-        <Action
-          title={
-            editing
-              ? "Save changes"
-              : access.editor || plan.open_collaboration
-                ? "Add idea"
-                : "Suggest idea"
-          }
-          run={async () => {
-            await mutate(editing ? "edit_plan_stop" : "add_plan_stop", {
-              ...(editing
-                ? { stop_id: editing.id, revision: editRevision }
-                : { position, after_stop_id: afterStop }),
-              title: name,
-              details,
-              proposed_at: proposed || null,
-            });
-            setMode(null);
-            setEditing(null);
-          }}
-        />
-      </Sheet>
-      <Sheet
         title="Add Activity"
         visible={mode === "activity"}
         onClose={() => setMode(null)}
@@ -932,9 +1379,27 @@ function PlanTimeline({ planId }: { planId: string }) {
             ["time", "Find a Time"],
           ] as const
         ).map(([kind, label]) => (
-          <Button
+          <PlanChoice
             key={kind}
             title={label}
+            icon={
+              kind === "ping"
+                ? MessageCircle
+                : kind === "time"
+                  ? CalendarDays
+                  : kind === "draw"
+                    ? Sparkles
+                    : ListChecks
+            }
+            detail={
+              kind === "ping"
+                ? "Check interest without committing attendance"
+                : kind === "time"
+                  ? "Find a time that works together"
+                  : kind === "draw"
+                    ? "Choose from the group's alternatives"
+                    : "Compare choices and pick together"
+            }
             onPress={() => {
               setMode(null);
               router.push({
@@ -1076,7 +1541,7 @@ function PlanTimeline({ planId }: { planId: string }) {
       <Sheet
         title={plan.routine_id ? "Edit this occurrence" : "Edit Plan details"}
         visible={meta}
-        onClose={() => setMeta(false)}
+        onClose={() => metaGuard.close(() => setMeta(false))}
       >
         <Field label="Plan name" value={planName} onChangeText={setPlanName} />
         <PlanDateField
@@ -1111,6 +1576,23 @@ function PlanTimeline({ planId }: { planId: string }) {
           .map((s) => stopActivity(data, s, userId)?.title ?? s.title)}
         act={act}
         onClose={() => setRepeat(false)}
+      />
+      <ConfirmDialog
+        title="Remove this stop?"
+        message="Linked Beacons and decisions remain available separately."
+        visible={!!removeStop}
+        confirmLabel="Remove from Plan"
+        cancelLabel="Keep stop"
+        destructive
+        onClose={() => setRemoveStop(null)}
+        onConfirm={async () => {
+          if (removeStop)
+            await mutate("remove_plan_stop", {
+              stop_id: removeStop.stop.id,
+              revision: removeStop.revision,
+            });
+          setRemoveStop(null);
+        }}
       />
       <ConfirmDialog
         title="Cancel this Plan?"

@@ -29,6 +29,15 @@ for (const width of [320, 430]) {
     expect(await person.count()).toBeGreaterThan(0);
     if (await person.count()) {
       const name = await person.getAttribute("aria-label");
+      const search = picker.getByLabel("Search people and groups", {
+        exact: true,
+      });
+      await search.fill(name!.replace("Select ", ""));
+      await expect(group).toHaveAttribute("aria-expanded", "true");
+      await expect(
+        picker.getByRole("checkbox", { name: name!, exact: true }),
+      ).toBeVisible();
+      await search.clear();
       await person.click();
       await group.click();
       await expect(group).toHaveAttribute("aria-expanded", "false");

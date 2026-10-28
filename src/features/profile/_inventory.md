@@ -4,6 +4,7 @@ Profile feature
 - settings/SettingsScreen.tsx: direct /settings route implementation; owns six theme palettes and System/Light/Dark appearance, avatar visibility, temporary location links, push and quiet hours, Beacon audience defaults, account actions, and support links.
 - ProfileAvatar.tsx, AvatarToggle.tsx, avatar.ts, avatarArt.ts: avatar display, selection, and presentation.
 - ProfileSurvey.tsx and aspirations.ts: profile survey and optional aspiration helpers.
+- Profile personalization opens voluntarily from the compact Profile identity accessory or existing editor. Closing does not save or change survey status; successful saves merge with the latest owner snapshot.
 - privacy.ts and screens/ProfilePrivacySettings.tsx: viewer-specific full-profile privacy gates and profile visibility controls at /settings/privacy.
 
 - settings/ThemePicker.tsx: compact full-color-role previews; Essential Dark/Light convenience choices share one family, while the five original family names remain unchanged.

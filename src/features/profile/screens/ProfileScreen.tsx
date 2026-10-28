@@ -1,7 +1,7 @@
 import React, { useState } from "react";
-import { Share, View } from "react-native";
+import { Modal, Share, Text, View } from "react-native";
 import { router } from "expo-router";
-import { Pencil, QrCode, Settings } from "lucide-react-native";
+import { Pencil, QrCode, Settings, Sparkles, X } from "lucide-react-native";
 import { useBeacon } from "@/src/shared/store";
 import {
   Button,
@@ -11,7 +11,9 @@ import {
   Txt,
   useTheme,
 } from "@/src/shared/ui";
-import { Skeleton } from "@/src/shared/design-system";
+import { Skeleton, useReducedMotion } from "@/src/shared/design-system";
+import { ChatKeyboardFrame } from "@/src/features/messages/ChatKeyboard";
+import { ProfileSurveyContent } from "../ProfileSurvey";
 import { InviteQR } from "@/src/features/people/InviteQR";
 import {
   ProfileExperience,
@@ -19,14 +21,49 @@ import {
 } from "../components/ProfileExperience";
 
 export default function ProfileScreen() {
+  const { userId, viewerEpoch, demo } = useBeacon();
+  return <ProfileScreenBody key={`${userId}:${viewerEpoch}:${demo}`} />;
+}
+
+function ProfileScreenBody() {
   const { data, userId, loading, refresh } = useBeacon();
-  const { semanticColors: colors } = useTheme();
+  const { semanticColors: colors, styles } = useTheme();
+  const reducedMotion = useReducedMotion();
+  const [surveyOpen, setSurveyOpen] = useState(false);
+  const [surveyBusy, setSurveyBusy] = useState(false);
+  const [surveyScrollRequest, setSurveyScrollRequest] = useState<{
+    y: number;
+    sequence: number;
+  }>();
+  const [saved, setSaved] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [tab, setTab] = useState<ProfileTab>("Overview");
   const profile =
     data.viewer_id === userId
       ? data.profiles.find((p) => p.id === userId)
       : undefined;
+  const personalizationEntry =
+    profile && profile.onboarding_survey_status !== "completed" ? (
+      <View
+        testID="profile-personalization-entry"
+        style={[styles.card, { gap: 8 }]}
+      >
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <Sparkles size={20} color={colors.accent} />
+          <Text style={styles.h2}>Make it yours</Text>
+        </View>
+        <Txt muted>Add interests and goals whenever you’re ready.</Txt>
+        <Button
+          compact
+          secondary
+          title="Personalize Profile"
+          onPress={() => {
+            setSaved(false);
+            setSurveyOpen(true);
+          }}
+        />
+      </View>
+    ) : null;
   return (
     <Screen
       title="Profile"
@@ -66,6 +103,11 @@ export default function ProfileScreen() {
               >
                 <QrCode size={21} color={colors.textPrimary} />
               </IconButton>
+              {personalizationEntry && (
+                <View style={{ width: "100%", minWidth: 0 }}>
+                  {personalizationEntry}
+                </View>
+              )}
             </>
           }
         />
@@ -88,6 +130,62 @@ export default function ProfileScreen() {
           <Button title="Retry profile" onPress={() => void refresh()} />
         </>
       )}
+      {saved && (
+        <View accessibilityLiveRegion="polite">
+          <Txt>Your profile is looking good.</Txt>
+        </View>
+      )}
+      <Modal
+        visible={surveyOpen && !!profile}
+        animationType={reducedMotion ? "none" : "slide"}
+        presentationStyle="fullScreen"
+        onRequestClose={() => {
+          if (!surveyBusy) setSurveyOpen(false);
+        }}
+      >
+        <ChatKeyboardFrame>
+          <Screen
+            title="Personalize profile"
+            eyebrow="OPTIONAL"
+            compactHeader
+            create={false}
+            scrollRequest={surveyScrollRequest}
+            headerAction={
+              <IconButton
+                label="Close personalization"
+                disabled={surveyBusy}
+                onPress={() => setSurveyOpen(false)}
+              >
+                <X size={22} color={colors.textPrimary} />
+              </IconButton>
+            }
+          >
+            <Txt muted>
+              Your profile, your pace. These choices never turn on location
+              sharing.
+            </Txt>
+            {surveyOpen && profile && (
+              <ProfileSurveyContent
+                profile={profile}
+                activities={data.activities}
+                mode="retake"
+                onSavingChange={setSurveyBusy}
+                onStepChange={() =>
+                  setSurveyScrollRequest((current) => ({
+                    y: 0,
+                    sequence: (current?.sequence ?? 0) + 1,
+                  }))
+                }
+                onSkip={() => setSurveyOpen(false)}
+                onComplete={() => {
+                  setSurveyOpen(false);
+                  setSaved(true);
+                }}
+              />
+            )}
+          </Screen>
+        </ChatKeyboardFrame>
+      </Modal>
       <Sheet
         title="Share profile"
         visible={shareOpen && !!profile}

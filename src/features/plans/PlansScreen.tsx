@@ -1,3 +1,4 @@
+import { ActivityFrame } from "@/src/features/activity/ActivityFrame";
 import { LivingPlansScreen } from "./LivingPlansScreen";
 import { livingPlansEnabled } from "./livingPlans";
 import React, { useMemo, useState } from "react";
@@ -21,7 +22,6 @@ import {
   Chips,
   Field,
   IconButton,
-  Screen,
   Sheet,
   Txt,
   useTheme,
@@ -95,8 +95,16 @@ function ReorderHandle({
 export default function PlansScreen() {
   const params = useLocalSearchParams();
   const { data } = useBeacon();
-  if (livingPlansEnabled(data)) return <LivingPlansScreen key={JSON.stringify(params)} />;
-  return <PlanBuilderScreen key={JSON.stringify(params)} />;
+  if (livingPlansEnabled(data)) return <LivingPlansScreen />;
+  return (
+    <PlanBuilderScreen
+      key={JSON.stringify(
+        Object.fromEntries(
+          Object.entries(params).filter(([key]) => key !== "tab"),
+        ),
+      )}
+    />
+  );
 }
 
 function PlanBuilderScreen() {
@@ -115,8 +123,12 @@ function PlanBuilderScreen() {
   }>();
   let routeTimezone: string | undefined;
   if (typeof params.timezone === "string" && params.timezone) {
-    try { localDate(new Date(), params.timezone); routeTimezone = params.timezone; }
-    catch { /* Invalid route zones retain the existing creation default. */ }
+    try {
+      localDate(new Date(), params.timezone);
+      routeTimezone = params.timezone;
+    } catch {
+      /* Invalid route zones retain the existing creation default. */
+    }
   }
   const memberships = data.squad_members.filter((m) => m.user_id === userId);
   const allowedSquads = data.squads.filter((s) =>
@@ -162,14 +174,16 @@ function PlanBuilderScreen() {
       (Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"),
   );
   const [startDate, setStartDate] = useState(() =>
-    typeof params.startDate === "string" && isLocalDate(params.startDate) ? params.startDate : localDate(
-      new Date(Date.now() + 86400000),
-      sourcePlan?.timezone ??
-        seedTemplate?.timezone ??
-        routeTimezone ??
-        Intl.DateTimeFormat().resolvedOptions().timeZone ??
-        "UTC",
-    ),
+    typeof params.startDate === "string" && isLocalDate(params.startDate)
+      ? params.startDate
+      : localDate(
+          new Date(Date.now() + 86400000),
+          sourcePlan?.timezone ??
+            seedTemplate?.timezone ??
+            routeTimezone ??
+            Intl.DateTimeFormat().resolvedOptions().timeZone ??
+            "UTC",
+        ),
   );
   const [steps, setSteps] = useState<PlanStep[]>(
     seedSteps?.length ? seedSteps : [beaconSeed ?? blankStep()],
@@ -241,7 +255,11 @@ function PlanBuilderScreen() {
         Intl.DateTimeFormat().resolvedOptions().timeZone ??
         "UTC",
     );
-    setStartDate(typeof params.startDate === "string" && isLocalDate(params.startDate) ? params.startDate : addLocalDays(safeToday(template?.timezone ?? timezone), 1));
+    setStartDate(
+      typeof params.startDate === "string" && isLocalDate(params.startDate)
+        ? params.startDate
+        : addLocalDays(safeToday(template?.timezone ?? timezone), 1),
+    );
     const ownAspirationIds = new Set(aspirations.map((goal) => goal.id));
     setSteps(
       template?.steps?.length
@@ -350,12 +368,11 @@ function PlanBuilderScreen() {
     if (inside.length) {
       setInternalConflicts(inside);
       setPendingKey("");
-      throw new Error("Beacons in a Plan cannot overlap. Change the times or use After Previous Ends.");
+      throw new Error(
+        "Beacons in a Plan cannot overlap. Change the times or use After Previous Ends.",
+      );
     }
-    if (
-      againstMySchedule.length &&
-      pendingKey !== planInputKey
-    ) {
+    if (againstMySchedule.length && pendingKey !== planInputKey) {
       setConflicts(overlaps);
       setActivityConflictNotes([...new Set(againstMySchedule)]);
       setInternalConflicts(inside);
@@ -427,7 +444,7 @@ function PlanBuilderScreen() {
   }, [startDate, timezone, steps]);
 
   return (
-    <Screen
+    <ActivityFrame
       title="Beacon Plans"
       eyebrow="A set of beacons, on your schedule"
       create={false}
@@ -1021,6 +1038,6 @@ function PlanBuilderScreen() {
           run={saveTemplate}
         />
       </Sheet>
-    </Screen>
+    </ActivityFrame>
   );
 }

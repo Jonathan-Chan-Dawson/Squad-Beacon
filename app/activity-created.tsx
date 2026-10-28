@@ -6,8 +6,9 @@ import { useBeacon } from "@/src/shared/store";
 import { Dialog } from "@/src/shared/Dialogs";
 import ActivityDetail from "@/src/features/beacons/screens/ActivityDetailScreen";
 import PlanningDetailScreen from "@/src/features/planning/PlanningDetailScreen";
-import { View } from "react-native";
-import { AudiencePicker, Button, Txt } from "@/src/shared/ui";
+import { Pressable, Text, View } from "react-native";
+import { CheckCircle2, ChevronDown } from "lucide-react-native";
+import { AudiencePicker, Button, Txt, useTheme } from "@/src/shared/ui";
 import { eligibleCurrentBeacons } from "@/src/features/beacons/currentStatusBeacon";
 import {
   eligibleStatusAttachments,
@@ -26,6 +27,7 @@ export default function ActivityCreated() {
     intent?: string;
   }>();
   const { data, userId, act, getViewerEpoch } = useBeacon();
+  const { styles, semanticColors: colors } = useTheme();
   const submitting = useRef(false);
   const [confirm, setConfirm] = useState(false),
     [busy, setBusy] = useState(false),
@@ -47,6 +49,15 @@ export default function ActivityCreated() {
     (a) => a.id === id && a.type === type,
   );
   const status = liveOwnedStatuses(data, userId, now)[0];
+  const audienceName =
+    audience === "private"
+      ? "Only me"
+      : audience === "friends"
+        ? "Friends"
+        : (data.lists.find((item) => item.id === audienceId)?.name ??
+          data.squads.find((item) => item.id === audienceId)?.name ??
+          data.organizations.find((item) => item.id === audienceId)?.name ??
+          "Selected audience");
   const open = () =>
     router.replace({
       pathname: type === "beacon" ? "/activity/[id]" : "/council/[id]",
@@ -142,23 +153,55 @@ export default function ActivityCreated() {
           </View>
         }
       >
-        <Txt>
-          {confirm
-            ? "Replace your existing Featured activity with this one?"
-            : `Your ${type === "beacon" ? "Beacon" : type === "ping" ? "Ping" : "Council"} was created.`}
-        </Txt>
+        {confirm ? (
+          <Txt>Replace your existing Featured activity with this one?</Txt>
+        ) : (
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+            <View
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: 18,
+                backgroundColor: colors.accent + "18",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <CheckCircle2 size={21} color={colors.accent} />
+            </View>
+            <Text
+              style={[styles.body, { flex: 1 }]}
+            >{`Your ${type === "beacon" ? "Beacon" : type === "ping" ? "Ping" : "Council"} is ready.`}</Text>
+          </View>
+        )}
         {!confirm && live && (
-          <>
+          <View pointerEvents={busy ? "none" : "auto"} style={{ gap: 12 }}>
             <Txt muted>
               You can use this live Beacon as your Current Activity. Your
               Activity Note will end and remain in history.
             </Txt>
-            <Button
-              compact
-              secondary
-              title={audienceOpen ? "Hide audience options" : "Choose audience"}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Choose audience"
+              accessibilityState={{ expanded: audienceOpen, disabled: busy }}
+              disabled={busy}
               onPress={() => setAudienceOpen(!audienceOpen)}
-            />
+              style={{
+                minHeight: 44,
+                alignSelf: "flex-start",
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 6,
+                paddingHorizontal: 10,
+                borderRadius: 10,
+                backgroundColor: colors.surfaceRaised,
+              }}
+            >
+              <Text style={[styles.muted, { flexShrink: 1 }]}>
+                Audience: {audienceName}
+              </Text>
+              <ChevronDown size={15} color={colors.textSecondary} />
+            </Pressable>
             {audienceOpen && (
               <AudiencePicker
                 inline
@@ -171,9 +214,13 @@ export default function ActivityCreated() {
                 }}
               />
             )}
-          </>
+          </View>
         )}
-        {!!error && <Txt>{error}</Txt>}
+        {!!error && (
+          <Text accessibilityRole="alert" style={styles.error}>
+            {error}
+          </Text>
+        )}
       </Dialog>
     </>
   );

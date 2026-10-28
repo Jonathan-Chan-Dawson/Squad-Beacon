@@ -1,6 +1,7 @@
 Cross-feature shared code
 
 - types.ts, store.tsx, demo.ts, supabase.ts: shared data contracts, app state/actions, demo fixture/actions, and backend client.
+- accountReadiness.ts: shared required-profile readiness for app entry and optional onboarding-progress initialization; survey status never gates either.
 - domain.ts, browsing.ts: common validation, visibility, and feed derivation helpers.
 - ui.tsx, MotionPressable.tsx, themes.ts, preferences.tsx, useNow.ts: design primitives, reduced-motion-aware press feedback, paired light/dark palettes, device/light/dark appearance preferences, persisted display settings, and clock hook.
 - templates.ts, interestCatalog.ts: searchable built-in activity recipes and interest catalog.

@@ -304,6 +304,55 @@ test("bloom counts, direct exploration, reduced motion and phone layouts", async
           await iconSmall.getByTestId("cluster-friend-satellite").count(),
           2,
         );
+        // The map can inherit a much taller line-height than these tiny circles.
+        // The person artwork must remain centered and contained regardless.
+        await iconSmall.evaluate((node) => {
+          (node as HTMLElement).style.lineHeight = "24px";
+          (node as HTMLElement).style.fontSize = "24px";
+          for (const svg of node.querySelectorAll(
+            '[data-testid="cluster-friend-satellite"] svg',
+          ))
+            (svg as SVGElement).style.verticalAlign = "-8px";
+        });
+        const satelliteBounds = await iconSmall
+          .getByTestId("cluster-friend-satellite")
+          .evaluateAll((nodes) =>
+            nodes.map((node) => {
+              const circle = node.getBoundingClientRect();
+              const icon = node.querySelector("svg")!.getBoundingClientRect();
+              return {
+                circleX: circle.x,
+                circleY: circle.y,
+                circleWidth: circle.width,
+                circleHeight: circle.height,
+                iconX: icon.x,
+                iconY: icon.y,
+                iconWidth: icon.width,
+                iconHeight: icon.height,
+              };
+            }),
+          );
+        for (const bounds of satelliteBounds) {
+          assert.ok(
+            Math.abs(
+              bounds.iconX +
+                bounds.iconWidth / 2 -
+                (bounds.circleX + bounds.circleWidth / 2),
+            ) < 1,
+          );
+          assert.ok(
+            Math.abs(
+              bounds.iconY +
+                bounds.iconHeight / 2 -
+                (bounds.circleY + bounds.circleHeight / 2),
+            ) < 1,
+          );
+          assert.ok(
+            bounds.iconY >= bounds.circleY &&
+              bounds.iconY + bounds.iconHeight <=
+                bounds.circleY + bounds.circleHeight,
+          );
+        }
         assert.equal(
           await iconSmall.getByTestId("map-cluster-count").isVisible(),
           false,

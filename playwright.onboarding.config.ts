@@ -1,7 +1,7 @@
 import { defineConfig } from "@playwright/test";
 export default defineConfig({
   testDir: "tests/browser",
-  testMatch: "onboarding.spec.ts",
+  testMatch: ["onboarding.spec.ts", "accountEntry.spec.ts"],
   outputDir: "test-results/onboarding",
   fullyParallel: false,
   workers: 1,

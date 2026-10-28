@@ -3,11 +3,13 @@ import React, {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
 import { AppState } from "react-native";
 import { useBeacon } from "@/src/shared/store";
+import { accountReadiness } from "@/src/shared/accountReadiness";
 import { supabase } from "@/src/shared/supabase";
 import {
   listenOnboardingSuccess,
@@ -39,33 +41,17 @@ export function OnboardingProvider({
 }: {
   children: React.ReactNode;
 }) {
-  const {
-    userId,
-    demo,
-    viewerEpoch,
-    getViewerEpoch,
-    demoScenario,
-    data,
-    loading,
-    error,
-  } = useBeacon();
-  const profile =
-    data.viewer_id === userId
-      ? data.profiles.find((person) => person.id === userId)
-      : undefined;
+  const account = useBeacon();
+  const { userId, demo, viewerEpoch, getViewerEpoch, demoScenario } = account;
+  const ready = accountReadiness(account).state === "ready";
   return (
     <AccountProgress
-      key={`${userId}:${demo}:${viewerEpoch}`}
+      key={`${userId}:${demo}:${viewerEpoch}:${demo ? demoScenario : "live"}`}
       viewer={userId}
       demo={demo}
       epoch={viewerEpoch}
       getEpoch={getViewerEpoch}
-      canEnter={
-        !!profile &&
-        !loading &&
-        !error &&
-        profile.onboarding_survey_status !== "pending"
-      }
+      canEnter={ready}
       initial={
         demoScenario === "fresh" ? ["entry.eligible.v1"] : ["welcome.seen.v1"]
       }
@@ -106,10 +92,21 @@ function AccountProgress({
   const [success, setSuccess] = useState<SuccessKey | null>(null);
   const active = useRef(true);
   const sequence = useRef(0);
+  const readiness = useRef(canEnter);
+  const readinessGeneration = useRef(0);
+  // Commit readiness before async results or passive subscriptions can run.
+  useLayoutEffect(() => {
+    readiness.current = canEnter;
+    sequence.current++;
+    readinessGeneration.current++;
+    return () => {
+      readiness.current = false;
+    };
+  }, [canEnter]);
   const pending = useRef(new Set<OnboardingKey>());
   const inFlight = useRef(new Set<OnboardingKey>());
   const alive = useCallback(
-    () => active.current && epoch === getEpoch(),
+    () => active.current && readiness.current && epoch === getEpoch(),
     [epoch, getEpoch],
   );
   useEffect(() => {
@@ -155,7 +152,7 @@ function AccountProgress({
         setKeys(next);
         setStatus("ready");
       } catch {
-        setStatus("error");
+        if (alive() && request === sequence.current) setStatus("error");
       }
       for (const key of pending.current) {
         const result = await supabase.rpc("claim_onboarding_progress", {
@@ -170,7 +167,7 @@ function AccountProgress({
         pending.current.delete(key);
       }
     } catch {
-      if (alive()) setStatus("error");
+      if (alive() && request === sequence.current) setStatus("error");
     }
   }, [alive, demo, viewer, canEnter]);
   useEffect(() => {
@@ -203,6 +200,9 @@ function AccountProgress({
         setKeys(keysRef.current);
       }
       inFlight.current.add(key);
+      const generation = readinessGeneration.current;
+      const stillCurrent = () =>
+        alive() && generation === readinessGeneration.current;
       try {
         let inserted = demo;
         if (!demo) {
@@ -211,20 +211,20 @@ function AccountProgress({
             progress_key: key,
             expected_viewer: viewer,
           });
-          if (!alive()) return false;
+          if (!stillCurrent()) return false;
           if (result.error) {
             setStatus("error");
             return false;
           }
           inserted = result.data === true;
         }
-        if (!alive()) return false;
+        if (!stillCurrent()) return false;
         keysRef.current = new Set([...keysRef.current, key]);
         setKeys(keysRef.current);
         pending.current.delete(key);
         return inserted;
       } catch {
-        if (alive()) setStatus("error");
+        if (stillCurrent()) setStatus("error");
         return false;
       } finally {
         inFlight.current.delete(key);
@@ -249,8 +249,8 @@ function AccountProgress({
     <Context.Provider
       value={{
         keys,
-        status,
-        firstEntrySession,
+        status: canEnter ? status : "loading",
+        firstEntrySession: canEnter && firstEntrySession,
         consumeWelcome,
         tone,
         quips,
@@ -267,7 +267,7 @@ function AccountProgress({
           );
           setKeys(keysRef.current);
         },
-        success,
+        success: canEnter ? success : null,
         dismissSuccess,
       }}
     >

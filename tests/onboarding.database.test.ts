@@ -43,9 +43,29 @@ test("ordered migrations: owner progress, reliable entry evidence and atomic fir
       );
     }
     await db.query("insert into auth.users values($1,now())", [b]);
+    await db.query("select set_config('request.jwt.claim.sub',$1,false)", [b]);
+    await db.exec("set role authenticated");
     await db.query(
-      "insert into public.profiles(id,username,name) values($1,'newer','Newer')",
-      [b],
+      "select public.beacon_action('onboard',$1::jsonb,gen_random_uuid())",
+      [
+        JSON.stringify({
+          username: "newer",
+          name: "Newer",
+          birth_date: "2000-01-31",
+          timezone: "UTC",
+        }),
+      ],
+    );
+    await db.exec("reset role");
+    assert.equal(
+      (
+        await db.query<{ onboarding_survey_status: string }>(
+          "select onboarding_survey_status from public.profiles where id=$1",
+          [b],
+        )
+      ).rows[0].onboarding_survey_status,
+      "pending",
+      "real required setup creates an eligible profile without completing personalization",
     );
     assert.equal(
       (

@@ -28,7 +28,7 @@ type Options = {
   reducedMotion: boolean;
 };
 const personSvg =
-  '<svg aria-hidden="true" viewBox="0 0 24 24" width="100%" height="100%" fill="currentColor"><circle cx="12" cy="7" r="4"/><path d="M5 21v-3a7 7 0 0 1 14 0v3Z"/></svg>';
+  '<svg aria-hidden="true" viewBox="0 0 24 24" width="100%" height="100%" fill="currentColor" style="display:block;flex:none"><circle cx="12" cy="7" r="4"/><path d="M5 21v-3a7 7 0 0 1 14 0v3Z"/></svg>';
 /** Same bloom metrics, preview limits and satellites as native; no density disks or avatar piles. */
 export function webConstellation(
   presentation: NativeMapPresentation,
@@ -126,7 +126,7 @@ export function webConstellation(
     dot.dataset.testid = "cluster-friend-satellite";
     dot.dataset.memberId = point.id;
     dot.setAttribute("aria-hidden", "true");
-    dot.style.cssText = `position:absolute;left:${center + offset.x - s / 2}px;top:${center + offset.y - s / 2}px;width:${s}px;height:${s}px;box-sizing:border-box;border-radius:50%;background:${options.surface};color:${options.ink};border:1px solid ${options.line};padding:1px;z-index:30;pointer-events:none;opacity:${presentation.friendsProminent ? 0.8 : 0.62};`;
+    dot.style.cssText = `position:absolute;left:${center + offset.x - s / 2}px;top:${center + offset.y - s / 2}px;width:${s}px;height:${s}px;box-sizing:border-box;border-radius:50%;background:${options.surface};color:${options.ink};border:1px solid ${options.line};padding:1px;display:flex;align-items:center;justify-content:center;line-height:0;z-index:30;pointer-events:none;opacity:${presentation.friendsProminent ? 0.8 : 0.62};`;
     if (s >= 10) dot.innerHTML = personSvg;
     else {
       dot.style.background = options.ownership;

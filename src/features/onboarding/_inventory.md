@@ -6,4 +6,4 @@ Onboarding and entry presentation
 - OnboardingUI.tsx: compositions of the existing EmptyState primitive, welcome/returning content, inline contextual tips and first-success feedback.
 - scenarios.ts and DeveloperLab.tsx: development-only coherent demo fixtures and preview controls. Demo resets never write hosted progress.
 
-The optional survey gate is unchanged. See README.md for preview/testing commands and docs/ONBOARDING_ENTRY_VALIDATION.md for migration and acceptance boundaries.
+Root navigation and runtime progress initialization share src/shared/accountReadiness.ts. A loaded, viewer-matched required profile permits entry regardless of optional survey status. Progress failures retain safe presentation fallbacks. See README.md for preview/testing commands and docs/ONBOARDING_2_VALIDATION.md for Phase 4B acceptance boundaries.

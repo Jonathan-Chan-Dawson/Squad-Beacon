@@ -1,6 +1,24 @@
 import type { Profile } from "@/src/shared/types";
 import { avatarSeed } from "./avatarArt";
 
+/** Legacy personality prose stays intact; only bounded values can become badges. */
+export function surveyIdentityTags(
+  profile: Pick<Profile, "identity_tags" | "personality">,
+) {
+  const tags = profile.identity_tags ?? [];
+  const legacy = profile.personality?.trim();
+  const value = `Personality: ${legacy}`;
+  if (
+    !legacy ||
+    value.length > 60 ||
+    tags.length >= 50 ||
+    tags.includes(value) ||
+    tags.includes(legacy)
+  )
+    return [...tags];
+  return [...tags, value];
+}
+
 export function profileEditorDraft(profile: Profile) {
   return {
     name: profile.name,

@@ -56,6 +56,9 @@ import {
   Search,
   Maximize,
   Settings2,
+  X,
+  CalendarDays,
+  MessageCircle,
 } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import BeaconMap, {
@@ -3014,24 +3017,24 @@ export default function MapScreen() {
         </View>
       ) : null}
       {pickMode && !activeSearchVisible && pickedMapPoint && mapAnchor ? (
-        <MapCallout testID="map-place-confirmation" compact maxWidth={300} anchor={mapAnchor}
+        <MapCallout testID="map-place-confirmation" compact maxWidth={260} anchor={mapAnchor}
           bounds={{ ...mapSize, top: headerTop + 8, bottom: insets.bottom + tokens.layout.tabBarHeight + 12 }}>
-          <View style={{ padding: 10, gap: 8, borderRadius: 16, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.white }}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-              <MapPin size={18} color={colors.green} />
-              <Text numberOfLines={1} style={[styles.label, { flex: 1 }]}>{pickedMapPoint.label}</Text>
-              <IconButton label="Search for a location" onPress={() => { exploration.setQuery(""); setPlaceSearchOpen(true); }}><Search size={18} color={colors.green} /></IconButton>
+          <View style={{ padding: 8, gap: 4, borderRadius: 14, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.white }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+              <MapPin size={15} color={colors.green} />
+              <Text numberOfLines={1} style={[styles.label, { flex: 1, fontSize: 12 }]}>{pickedMapPoint.label}</Text>
+              <Pressable accessibilityRole="button" accessibilityLabel="Search for a location" hitSlop={2} onPress={() => { exploration.setQuery(""); setPlaceSearchOpen(true); }} style={{ width: 40, height: 40, alignItems: "center", justifyContent: "center" }}><Search size={16} color={colors.green} /></Pressable>
+              <Pressable accessibilityRole="button" accessibilityLabel="Cancel location placement" hitSlop={2} onPress={cancelPicking} style={{ width: 40, height: 40, alignItems: "center", justifyContent: "center" }}><X size={18} color={colors.ink} /></Pressable>
             </View>
             {!!locationPickError && <Text accessibilityRole="alert" style={styles.error}>{locationPickError}</Text>}
             <View style={{ flexDirection: "row", gap: 8 }}>
               {pickingDraft ? (
-                <View style={{ flex: 1 }}><Button compact title="Use This Location" onPress={confirmPickedLocation} /></View>
+                <Pressable accessibilityRole="button" onPress={confirmPickedLocation} style={{ flex: 1, minHeight: 44, justifyContent: "center", alignItems: "center", borderRadius: 10, backgroundColor: "#AFE8C3" }}><Text style={{ color: "#12382C", fontSize: 12, fontWeight: "700" }}>Use This Location</Text></Pressable>
               ) : <>
-                <View style={{ flex: 1 }}><Button compact title="Create Beacon" onPress={() => createAtPickedLocation("beacon")} /></View>
-                <View style={{ flex: 1 }}><Button compact secondary title="Create Ping" onPress={() => createAtPickedLocation("ping")} /></View>
+                <Pressable accessibilityRole="button" onPress={() => createAtPickedLocation("beacon")} style={{ flex: 1, minHeight: 44, flexDirection: "row", gap: 4, justifyContent: "center", alignItems: "center", borderRadius: 10, backgroundColor: "#AFE8C3" }}><CalendarDays size={15} color="#12382C" accessible={false} /><Text numberOfLines={1} style={{ flexShrink: 1, color: "#12382C", fontSize: 12, fontWeight: "700" }}>Create Beacon</Text></Pressable>
+                <Pressable accessibilityRole="button" onPress={() => createAtPickedLocation("ping")} style={{ flex: 1, minHeight: 44, flexDirection: "row", gap: 4, justifyContent: "center", alignItems: "center", borderRadius: 10, backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.line }}><MessageCircle size={15} color={colors.ink} accessible={false} /><Text numberOfLines={1} style={{ flexShrink: 1, color: colors.ink, fontSize: 12, fontWeight: "700" }}>Create Ping</Text></Pressable>
               </>}
             </View>
-            <Button compact secondary title="Cancel" onPress={cancelPicking} />
           </View>
         </MapCallout>
       ) : null}

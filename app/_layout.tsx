@@ -2,7 +2,8 @@ import { useNotificationHandling } from "@/src/platform/notifications";
 import React, { useEffect } from "react";
 import { setCreationDraftAccount } from "@/src/features/beacons/socialPlanningSession";
 import { PreferencesProvider } from "@/src/shared/preferences";
-import { useSegments } from "expo-router";
+import { useSegments, usePathname, useGlobalSearchParams } from "expo-router";
+import { rememberEntryIntent } from "@/src/features/auth/entryIntent";
 import { Platform } from "react-native";
 import { AppSystemBars, SystemBarsProvider } from "@/src/shared/SystemBars";
 import { DemoNoticeProvider } from "@/src/shared/design-system";
@@ -14,7 +15,7 @@ import "react-native-reanimated";
 import "@/src/platform/device";
 import { BeaconProvider, useBeacon } from "@/src/shared/store";
 import { Auth, Onboard } from "@/src/features/auth/Auth";
-import { ProfileSurvey } from "@/src/features/profile/ProfileSurvey";
+import { accountReadiness } from "@/src/shared/accountReadiness";
 import { Loading, Screen, Action, SheetIsolation, Txt } from "@/src/shared/ui";
 import { WidgetPreferencesProvider } from "@/src/features/widgets/preferences";
 import { WidgetSync } from "@/src/features/widgets/WidgetRuntime";
@@ -29,33 +30,36 @@ const DeveloperLab = __DEV__
   : () => null;
 export { ErrorBoundary } from "expo-router";
 function Navigation() {
-  const { userId, loading, data, error, refresh } = useBeacon(),
+  const account = useBeacon(),
     segments = useSegments();
-  useNotificationHandling(
-    !!userId &&
-      !loading &&
-      !error &&
-      data.profiles.some((p) => p.id === userId),
-    refresh,
-  );
+  const { userId, viewerEpoch, error, refresh } = account;
+  const readiness = accountReadiness(account);
+  const pathname = usePathname();
+  const query = JSON.stringify(useGlobalSearchParams());
+  useEffect(() => {
+    // Capture incoming routes, not readiness changes caused by sign-out.
+    rememberEntryIntent(pathname, JSON.parse(query));
+  }, [pathname, query]);
+  useNotificationHandling(readiness.state === "ready", refresh);
   const publicRoute =
     segments[0] === "auth" ||
     segments[0] === "legal" ||
     segments[0] === "invite";
   if (!publicRoute) {
-    if (loading) return <Loading />;
-    if (!userId) return <Auth />;
-    if (error)
+    if (readiness.state === "loading") return <Loading />;
+    if (readiness.state === "signed-out") return <Auth />;
+    if (readiness.state === "unavailable")
       return (
         <Screen title="Let’s reconnect." eyebrow="CONNECTION" create={false}>
-          <Txt>{error}</Txt>
+          <Txt>
+            {error ??
+              "Your account is not ready yet. Retry to load your profile."}
+          </Txt>
           <Action title="Retry" run={refresh} />
         </Screen>
       );
-    if (!data.profiles.some((p) => p.id === userId)) return <Onboard />;
-    const profile = data.profiles.find((p) => p.id === userId)!;
-    if (profile.onboarding_survey_status === "pending")
-      return <ProfileSurvey profile={profile} activities={data.activities} />;
+    if (readiness.state === "needs-profile")
+      return <Onboard key={`${userId}:${viewerEpoch}`} />;
   }
   return <AppNavigation />;
 }

@@ -149,14 +149,18 @@ export function FriendFilterSelector({
       row.name.toLocaleLowerCase().includes(search) ||
       eligiblePeople(row.members).length > 0,
   );
-  const renderPerson = (person: (typeof data.profiles)[number]) => {
+  const renderPerson = (
+    person: (typeof data.profiles)[number],
+    compact = false,
+  ) => {
     const checked = selectedIds.includes(person.id);
     return (
       <SocialChoiceRow
         key={person.id}
         label={person.name}
         accessibilityLabel={`${selectionLabel} ${person.name}`}
-        icon={<ProfileAvatar profile={person} size={32} />}
+        icon={<ProfileAvatar profile={person} size={compact ? 28 : 32} />}
+        compact={compact}
         selected={checked}
         disabled={
           disabled ||
@@ -330,7 +334,7 @@ export function FriendFilterSelector({
                   browse
                   expanded={expanded}
                   disabled={disabled}
-                  detail="Browse eligible friends"
+                  detail="Choose friends"
                   onPress={() => {
                     setGroupKey(expanded ? null : row.key);
                     setGroupShown(8);
@@ -338,7 +342,9 @@ export function FriendFilterSelector({
                 />
                 {expanded && (
                   <View style={{ paddingLeft: 16, paddingBottom: 8 }}>
-                    {members.slice(0, groupShown).map(renderPerson)}
+                    {members
+                      .slice(0, groupShown)
+                      .map((person) => renderPerson(person, true))}
                     {members.length > groupShown && (
                       <Button
                         compact
@@ -357,7 +363,7 @@ export function FriendFilterSelector({
               </View>
             );
           })
-        : people.slice(0, shown).map(renderPerson)}
+        : people.slice(0, shown).map((person) => renderPerson(person))}
       {(directoryMode ? directory.length : people.length) > shown && (
         <Button
           compact

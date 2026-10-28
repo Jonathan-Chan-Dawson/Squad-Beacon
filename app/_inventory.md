@@ -23,3 +23,5 @@ Keep route paths stable; move reusable screens and feature logic into src/featur
 - activity/[id]/chat.tsx: dedicated permission-gated Beacon chat route around the existing ChatThread; native Overview and tool actions use this screen.
 
 - activity-note.tsx and activity-created.tsx: shared Activity Note editor/history route and post-publication optional linking without republishing.
+
+- your-activity.tsx, plans.tsx and calendar.tsx render the same Your Activity workspace with compatible default subtabs and retained incoming parameters; see docs/YOUR_ACTIVITY_UX_VALIDATION.md.

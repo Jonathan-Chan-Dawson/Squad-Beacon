@@ -53,9 +53,8 @@ test("Plan timeline can create a reusable manual Routine", async ({ page }) => {
   await page
     .getByLabel("Plan name", { exact: true })
     .fill("Friday test itinerary");
-  await page.getByRole("button", { name: "Create Plan", exact: true }).click();
-  await page.getByRole("button", { name: "+ Add Stop", exact: true }).click();
-  await page.getByRole("button", { name: "Add Activity", exact: true }).click();
+  await page.getByRole("button", { name: "Save Plan", exact: true }).click();
+  await page.getByRole("button", { name: "+ Beacon", exact: true }).click();
   await page
     .getByRole("button", { name: "Dinner together", exact: true })
     .click();
@@ -91,7 +90,7 @@ test("Routine quick start offers source Plans and the shared Plan builder", asyn
     .click();
   await expect(page.getByLabel("Plan name", { exact: true })).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Create Plan", exact: true }),
+    page.getByRole("button", { name: "Save Plan", exact: true }),
   ).toBeVisible();
 });
 
@@ -231,9 +230,29 @@ for (const preset of ["Grocery Run", "General Hangout"]) {
       exact: true,
     });
     await expect(success).toBeVisible();
-    await expect.poll(() => success.evaluate((node) => getComputedStyle(node.parentElement!).opacity)).toBe("1");
+    await expect
+      .poll(() =>
+        success.evaluate(
+          (node) => getComputedStyle(node.parentElement!).opacity,
+        ),
+      )
+      .toBe("1");
     await expect(page.getByTestId("activity-detail-hero")).toHaveCount(1);
-    await page.screenshot({ path: `.expo/prompt3-success-${preset.replaceAll(" ", "-")}.png` });
+    await page.screenshot({
+      path: `.expo/prompt3-success-${preset.replaceAll(" ", "-")}.png`,
+    });
+    const audience = success.getByRole("button", {
+      name: "Choose audience",
+      exact: true,
+    });
+    if (await audience.count()) {
+      await audience.click();
+      await expect(page.getByRole("dialog")).toHaveCount(1);
+      await success
+        .getByRole("radio", { name: "Only me · Private to you", exact: true })
+        .click();
+      await expect(audience).toContainText("Only me");
+    }
     await success.getByRole("button", { name: "Not Now", exact: true }).click();
     await expect(page.getByTestId("activity-detail-hero")).toBeVisible();
     const panel = page;

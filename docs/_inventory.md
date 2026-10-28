@@ -1,5 +1,7 @@
 Documentation guide
 
+- ONBOARDING_2_VALIDATION.md: Phase 4B shared readiness, direct entry, voluntary personalization, callback configuration and validation boundaries.
+
 - ONBOARDING_ENTRY_VALIDATION.md: Phase 4A implementation, screenshot review, developer scenarios, private progress migration and Phase 4B/4C acceptance boundaries.
 
 - DEVICE_ACCEPTANCE.md: device smoke and acceptance checklist.
@@ -25,3 +27,5 @@ Documentation guide
 
 - beacon-creation-mobile-polish.md: compact saved drafts, inline visibility/community, full-screen friend selection, rendered evidence and verification limits.
 - PLANS_OVERHAUL_VALIDATION.md: Living Plans, collaborative decisions and unified repeats implementation, additive migrations, validation evidence and hosted/native acceptance boundaries.
+
+- YOUR_ACTIVITY_UX_VALIDATION.md: intermediate pre-4C workspace implementation, route/Back/restoration contracts and validation evidence.

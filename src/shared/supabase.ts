@@ -80,12 +80,14 @@ export async function rpc(
   payload: Record<string, unknown> = {},
   explicitRequestId?: string,
   expectedViewerId?: string,
+  assertCurrent?: () => void,
 ) {
   if (!supabase) throw new Error("Connect Supabase to use a real account.");
   const {
     data: { session },
   } = await supabase.auth.getSession();
   if (!session) throw new Error("Sign in to continue.");
+  assertCurrent?.();
   if (expectedViewerId && session.user.id !== expectedViewerId) throw new Error(action === "rsvp" ? "Your account changed. Refresh before responding." : "Your account changed before publication. Return to the account that started this Beacon.");
   const key = session.user.id + ":" + action;
   // Keep only the latest operation of each kind in memory. Coordinates are never retried.
@@ -120,6 +122,7 @@ export async function rpc(
       : "beacon_action",
     discoveryParams ?? { action, payload: expectedViewerId ? { ...payload, expected_actor_id: expectedViewerId } : payload, request_id: requestId },
   );
+  assertCurrent?.();
   if (status !== 0) pendingRequests.delete(key);
   if (error) {
     const failure = new Error(error.message) as Error & { definitive?: boolean };

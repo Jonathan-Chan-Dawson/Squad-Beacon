@@ -1,1 +1,5 @@
-export { default } from "@/src/features/beacons/screens/CalendarScreen";
+import React from "react";
+import YourActivityWorkspace from "@/src/features/activity/YourActivityWorkspace";
+export default function Route() {
+  return <YourActivityWorkspace initialTab="calendar" />;
+}

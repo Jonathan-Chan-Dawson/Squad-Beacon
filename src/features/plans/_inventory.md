@@ -28,3 +28,5 @@ select cron.schedule(
 ```
 
 The runner function is executable only by `service_role`; do not call it from a client app or expose a service key. Reminder notices enter the normal server notice/push queue when due; delivery still depends on device permission/settings.
+
+- planWorkspaceSelectors.ts: readable, contributor-eligible unfinished Plan selection and human-readable authorized list summaries; planCreationRecovery.ts: account/epoch-scoped in-session request recovery across temporary route loss.

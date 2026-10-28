@@ -17,6 +17,8 @@ import { DEMO_ID, demoAction, makeDemo } from "@/src/shared/demo";
 import type { DemoScenario } from "@/src/features/onboarding/scenarios";
 import { firstSuccessCandidate } from "@/src/features/onboarding/presentation";
 import { reportOnboardingSuccess } from "@/src/features/onboarding/progress";
+import { clearEntryIntent } from "@/src/features/auth/entryIntent";
+import { clearAuthLink } from "@/src/features/auth/authLink";
 import {
   normalizeActivityHistoryQuery,
   parseActivityHistoryPage,
@@ -79,6 +81,7 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
     [loading, setLoading] = useState(!!supabase),
     [error, setError] = useState<string | null>(null);
   const dataRef = useRef(data);
+  const sessionRef = useRef(session);
   const [demoScenario, setDemoScenario] = useState<DemoScenario>("populated");
   const demoRequests = useRef(new Map<string, Record<string, unknown>>());
   const setData = useCallback((next: Data) => {
@@ -89,7 +92,8 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
   const getCurrentProfile = useCallback(() => {
     const viewer = demo ? DEMO_ID : (session?.user.id ?? null);
     const snapshot = dataRef.current;
-    if (!viewer || snapshot.viewer_id !== viewer) return null;
+    if (!viewer || snapshot.viewer_id !== viewer ||
+      (!demo && sessionRef.current?.user.id !== viewer)) return null;
     const profile = snapshot.profiles.find((person) => person.id === viewer);
     return profile ? structuredClone(profile) : null;
   }, [demo, session?.user.id]);
@@ -100,7 +104,11 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
   const getViewerEpoch = useCallback(() => viewerEpochRef.current, []);
   useEffect(() => {
     if (!supabase) return;
+    let active = true;
+    const generation = epoch.current;
     supabase.auth.getSession().then(({ data, error }) => {
+      if (!active || generation !== epoch.current) return;
+      sessionRef.current = data.session;
       setSession(data.session);
       if (error) setError(error.message);
       setLoading(!!data.session);
@@ -108,18 +116,22 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((event, next) => {
-      if (event === "SIGNED_OUT" || event === "SIGNED_IN") {
+      if (event === "SIGNED_OUT" || event === "SIGNED_IN" || event === "PASSWORD_RECOVERY" ||
+        sessionRef.current?.user.id !== next?.user.id) {
         epoch.current++;
         viewerEpochRef.current++;
         setViewerEpoch(viewerEpochRef.current);
         setData(emptyData());
-        if (event === "SIGNED_OUT") clearPendingRequests();
+        clearPendingRequests();
+        if (event === "SIGNED_OUT") { clearEntryIntent(); clearAuthLink(); }
       }
+      sessionRef.current = next;
       setSession(next);
       setDemo(false);
-      if (event === "SIGNED_IN") setLoading(true);
+      if (event === "SIGNED_OUT") { setLoading(false); setError(null); }
+      if (next && event !== "TOKEN_REFRESHED" && event !== "USER_UPDATED") setLoading(true);
     });
-    return () => subscription.unsubscribe();
+    return () => { active = false; subscription.unsubscribe(); };
   }, [setData]);
   const refresh = useCallback(async () => {
     if (demo || !session || !supabase) return;
@@ -281,9 +293,9 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
   );
   useEffect(() => {
     if (demo || !session || !supabase) return;
-    // Refresh crosses an async database boundary; state changes happen after the response.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void refresh();
+    let active = true;
+    // Defer the initial read, and do not start it after this account unmounts.
+    void Promise.resolve().then(() => { if (active) void refresh(); });
     const timer = setInterval(() => {
       if (AppState.currentState === "active" || AppState.currentState == null)
         void refresh();
@@ -330,6 +342,7 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
       } else supabase!.auth.stopAutoRefresh();
     });
     return () => {
+      active = false;
       clearInterval(timer);
       listener.remove();
       void supabase!.removeChannel(channel);
@@ -558,9 +571,15 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
       const generation = epoch.current;
       const viewer = session.user.id;
       const beforeAction = dataRef.current;
+      const profileAction = action === "onboard" || action === "save_profile";
       const atomicCreation = action === "create_activity_with_invitees" || action === "create_plan_beacon_with_invitees";
       const actorScoped = action.includes("plan") || action.includes("routine") || action.includes("planning") || action.includes("council") || atomicCreation || action === "create_activity" || action === "create_plan_beacon" || ["rsvp","start_location","stop_location","save_activity_note","end_activity_note","update_presence","save_status_note","create_planning_thread","add_council_proposal"].includes(action);
       const assertAtomicViewer = () => {
+        if (profileAction && (generation !== epoch.current ||
+          sessionRef.current?.user.id !== viewer ||
+          (action === "save_profile" && (dataRef.current.viewer_id !== viewer ||
+            !dataRef.current.profiles.some((profile) => profile.id === viewer)))))
+          throw new Error("Your account changed. Reopen your profile to continue.");
         if (actorScoped && (generation !== epoch.current || dataRef.current.viewer_id !== viewer)) throw new Error(action === "rsvp" ? "Your account changed. Refresh before responding." : "Your account changed before publication. Return to the account that started this Beacon.");
       };
       assertAtomicViewer();
@@ -571,10 +590,13 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
         network.isInternetReachable === false
       )
         throw new Error("Reconnect to save changes. Nothing was queued.");
-      const result = await rpc(action, payload, requestId, actorScoped ? viewer : undefined);
+      const result = await rpc(action, payload, requestId, actorScoped || profileAction ? viewer : undefined, profileAction ? assertAtomicViewer : undefined);
       assertAtomicViewer();
       if (generation === epoch.current) await refresh();
       assertAtomicViewer();
+      if (profileAction && (dataRef.current.viewer_id !== viewer ||
+        !dataRef.current.profiles.some((profile) => profile.id === viewer)))
+        throw new Error("Your profile could not be confirmed. Reconnect and retry.");
       if (generation === epoch.current && dataRef.current.viewer_id === viewer) {
         const successKey = firstSuccessCandidate(beforeAction, dataRef.current, viewer, action);
         if (successKey) reportOnboardingSuccess({ viewer, epoch: viewerEpochRef.current, key: successKey });
@@ -585,19 +607,26 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
   );
   async function signOut() {
     if (!demo && session) {
-      await rpc("stop_location");
+      const missingProfile = !loading && !error && dataRef.current.viewer_id === session.user.id &&
+        !dataRef.current.profiles.some((profile) => profile.id === session.user.id);
+      // A positively confirmed new account cannot have started sharing yet.
+      if (!missingProfile) await rpc("stop_location");
       await stopDeviceLocation();
       await clearPush();
-      const { error } = await supabase!.auth.signOut();
-      if (error) throw error;
+      const { error: failure } = await supabase!.auth.signOut();
+      if (failure) throw failure;
     }
     epoch.current++;
     viewerEpochRef.current++;
     setViewerEpoch(viewerEpochRef.current);
     clearPendingRequests();
+    clearEntryIntent();
+    clearAuthLink();
     demoRequests.current.clear();
     setDemo(false);
     setSession(null);
+    sessionRef.current = null;
+    setLoading(false);
     setData(emptyData());
     setError(null);
   }

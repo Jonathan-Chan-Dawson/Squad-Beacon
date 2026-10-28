@@ -1,7 +1,15 @@
-import React from "react";
-import { Platform, Pressable, Text, View, ScrollView } from "react-native";
+import React, { useEffect, useState } from "react";
+import {
+  Animated,
+  Platform,
+  Pressable,
+  Text,
+  View,
+  ScrollView,
+} from "react-native";
 import { Check, ChevronRight, Plus } from "lucide-react-native";
 import { useDesignTheme } from "@/src/theme";
+import { useReducedMotion } from "@/src/shared/design-system";
 
 /** One row language; browsing never performs selection. */
 export function SocialChoiceRow({
@@ -12,6 +20,7 @@ export function SocialChoiceRow({
   disabled = false,
   browse = false,
   expanded,
+  compact = false,
   multiple = true,
   accessibilityLabel = label,
   onPress,
@@ -23,11 +32,24 @@ export function SocialChoiceRow({
   disabled?: boolean;
   browse?: boolean;
   expanded?: boolean;
+  compact?: boolean;
   multiple?: boolean;
   accessibilityLabel?: string;
   onPress: () => void;
 }) {
   const { colors, tokens } = useDesignTheme();
+  const reducedMotion = useReducedMotion();
+  const [rotation] = useState(() => new Animated.Value(expanded ? 1 : 0));
+  useEffect(() => {
+    if (!browse) return;
+    const animation = Animated.timing(rotation, {
+      toValue: expanded ? 1 : 0,
+      duration: reducedMotion ? 0 : 150,
+      useNativeDriver: true,
+    });
+    animation.start();
+    return () => animation.stop();
+  }, [browse, expanded, reducedMotion, rotation]);
   const styles = {
     body: { ...tokens.type.body, color: colors.textPrimary },
     muted: { ...tokens.type.caption, color: colors.textSecondary },
@@ -57,11 +79,11 @@ export function SocialChoiceRow({
           }
         : {})}
       style={({ pressed }) => ({
-        minHeight: 52,
+        minHeight: compact ? 48 : 52,
         flexDirection: "row",
         alignItems: "center",
         gap: 10,
-        paddingVertical: 6,
+        paddingVertical: compact ? 4 : 6,
         paddingHorizontal: 6,
         borderBottomWidth: 1,
         borderBottomColor: colors.border,
@@ -77,9 +99,20 @@ export function SocialChoiceRow({
         {detail ? <Text style={styles.muted}>{detail}</Text> : null}
       </View>
       {browse ? (
-        <View style={{ transform: [{ rotate: expanded ? "90deg" : "0deg" }] }}>
+        <Animated.View
+          style={{
+            transform: [
+              {
+                rotate: rotation.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: ["0deg", "90deg"],
+                }),
+              },
+            ],
+          }}
+        >
           <ChevronRight size={18} color={colors.textSecondary} />
-        </View>
+        </Animated.View>
       ) : (
         <View
           accessible={false}

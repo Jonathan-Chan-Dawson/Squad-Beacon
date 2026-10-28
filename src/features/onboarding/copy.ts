@@ -37,12 +37,20 @@ export const copy = {
     body: "Search for a place, or choose to use your location. Location sharing stays off.",
   },
   "empty.calendar": {
-    title: "A little space for possibility.",
-    body: "Your upcoming Beacons and Plans will appear here.",
+    title: "Nothing scheduled for this day.",
+    body: "Choose Schedule to make time for a Beacon, Plan, or Routine.",
+  },
+  "empty.planFilter": {
+    title: "No Plans in this view.",
+    body: "Try another audience, or show all your Plans.",
+  },
+  "empty.planStops": {
+    title: "No stops yet. What should we do first?",
+    body: "Save an idea, add a Beacon, or decide together.",
   },
   "empty.plans": {
-    title: "Start with an idea.",
-    body: "Link Beacons into one outing. The details can come together as you go.",
+    title: "Start with a name. Figure out the stops later.",
+    body: "Save a Plan, then add ideas and Beacons whenever you’re ready.",
   },
   "empty.routines": {
     title: "Make a good thing a regular thing.",

@@ -439,6 +439,7 @@ function LivingMapPinComponent({
                 <Svg
                   width={s - 4}
                   height={s - 4}
+                  style={{ position: "absolute", left: 1, top: 1 }}
                   viewBox="0 0 24 24"
                   fill={colors.ink}
                 >
