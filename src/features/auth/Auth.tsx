@@ -18,7 +18,9 @@ import {
   authCallbackUrl,
   basicProfilePayload,
   profileEntryError,
+  accountEmail,
 } from "./accountEntry";
+import { ResendAuthEmail } from "./ResendAuthEmail";
 
 export function Auth() {
   const { colors, styles } = useTheme();
@@ -30,6 +32,7 @@ export function Auth() {
   const [password, setPassword] = useState("");
   const [visible, setVisible] = useState(false);
   const [message, setMessage] = useState("");
+  const [needsConfirmation, setNeedsConfirmation] = useState(false);
   const [busy, setBusy] = useState(false);
   const lock = useRef(false);
   const active = useRef(true);
@@ -43,6 +46,7 @@ export function Auth() {
     if (lock.current) return;
     setMode(next);
     setMessage("");
+    setNeedsConfirmation(false);
     setVisible(false);
   }
   async function submit() {
@@ -51,9 +55,7 @@ export function Auth() {
     setBusy(true);
     setMessage("");
     try {
-      const address = email.trim();
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address))
-        throw new Error("Enter a valid email address.");
+      const address = accountEmail(email);
       if (mode === "Reset password") {
         const { error } = await supabase.auth.resetPasswordForEmail(address, {
           redirectTo: authCallbackUrl(true),
@@ -61,7 +63,7 @@ export function Auth() {
         if (error) throw error;
         if (active.current)
           setMessage(
-            "If an account uses this email, you’ll receive a password reset link. Open it on this device.",
+            "If an account uses this email, you’ll receive a password reset link. Check your inbox and spam folder.",
           );
       } else if (mode === "Create account") {
         if (password.length < 10)
@@ -72,10 +74,12 @@ export function Auth() {
           options: { emailRedirectTo: authCallbackUrl() },
         });
         if (error) throw error;
-        if (!data.session && active.current)
+        if (!data.session && active.current) {
+          setNeedsConfirmation(true);
           setMessage(
-            "Check your email for a verification link. Open it on this device, then sign in if asked.",
+            "Check your email, then select Confirm and continue on the page that opens.",
           );
+        }
       } else {
         if (!password) throw new Error("Enter your password.");
         const { error } = await supabase.auth.signInWithPassword({
@@ -174,6 +178,9 @@ export function Auth() {
               run={submit}
             />
             {!!message && <Txt>{message}</Txt>}
+            {needsConfirmation && mode === "Create account" && (
+              <ResendAuthEmail email={email} />
+            )}
             <Button
               secondary
               compact

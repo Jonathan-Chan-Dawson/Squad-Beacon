@@ -1,3 +1,31 @@
 {
-  "rewrites": [{ "source": "/(.*)", "destination": "/" }]
+  "headers": [
+    {
+      "headers": [
+        {
+          "value": "no-store",
+          "key": "Cache-Control"
+        },
+        {
+          "value": "no-referrer",
+          "key": "Referrer-Policy"
+        }
+      ],
+      "source": "/auth/:path*"
+    }
+  ],
+  "rewrites": [
+    {
+      "destination": "/auth/confirm.html",
+      "source": "/auth/confirm"
+    },
+    {
+      "destination": "/auth/callback.html",
+      "source": "/auth/callback"
+    },
+    {
+      "destination": "/",
+      "source": "/(.*)"
+    }
+  ]
 }

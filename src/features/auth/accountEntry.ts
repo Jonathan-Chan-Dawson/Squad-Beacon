@@ -50,11 +50,61 @@ export function profileEntryError(failure: unknown) {
     : message;
 }
 
-export function authCallbackUrl(recovery = false) {
-  const base =
-    typeof window !== "undefined" &&
-    window.location?.protocol.startsWith("http")
-      ? `${window.location.origin}/auth/callback`
-      : "squadbeacon://auth/callback";
-  return base + (recovery ? "?type=recovery" : "");
+export function authOrigin(configured = process.env.EXPO_PUBLIC_AUTH_ORIGIN) {
+  const failure = () =>
+    new Error(
+      "Account emails are not configured. Set EXPO_PUBLIC_AUTH_ORIGIN to your public HTTPS website and rebuild the app.",
+    );
+  if (!configured?.trim()) throw failure();
+  let url: URL;
+  try {
+    url = new URL(configured.trim().replace(/\/+$/, ""));
+  } catch {
+    throw failure();
+  }
+  if (
+    url.protocol !== "https:" ||
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash ||
+    url.pathname !== "/"
+  )
+    throw failure();
+  return url.origin;
+}
+
+export function authCallbackUrl(
+  recovery = false,
+  configured = process.env.EXPO_PUBLIC_AUTH_ORIGIN,
+) {
+  return `${authOrigin(configured)}/auth/confirm${recovery ? "?type=recovery" : ""}`;
+}
+
+export function accountEmail(value: string) {
+  const address = value.trim();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(address))
+    throw new Error("Enter a valid email address.");
+  return address;
+}
+
+export function usableAuthLink(params: {
+  code?: unknown;
+  token_hash?: unknown;
+  type?: unknown;
+  error_description?: unknown;
+}) {
+  if (params.error_description) return false;
+  if (params.code != null)
+    return (
+      typeof params.code === "string" &&
+      !!params.code.trim() &&
+      params.token_hash == null
+    );
+  return (
+    typeof params.token_hash === "string" &&
+    !!params.token_hash.trim() &&
+    ["email", "signup", "recovery"].includes(String(params.type)) &&
+    typeof params.type === "string"
+  );
 }
