@@ -1,5 +1,10 @@
 Supabase database and functions
 
+- templates/confirmation.html and templates/recovery.html: reviewed token-hash email templates using hosted Site URL. Copy into hosted Auth email settings only after the HTTPS confirmation route is deployed; source files do not change hosted configuration.
+
+- `20261028193122_guest_beacon_foundation.sql`: Phase 5.1 verified guests, hashed/revocable sharing, canonical RSVP ownership/admission, narrow service-only guest RPCs and guest_sharing capability.
+- `20261029000145_guest_planning_continuity.sql`: Phase 5.2 canonical guest planning ownership/tallies, safe decision/selected Plan/Status projections, authorized result navigation, moderation and transactional member claiming; guest_planning capability. Both migrations are source-only until explicitly applied to the selected hosted backend. Setup belongs in README.md.
+
 - 20261026185923_onboarding_progress.sql: owner-only optional UI progress, first-profile eligibility trigger and one idempotent claim RPC. Existing accounts are not marked new. Requires preceding ordered migrations; source-only until separately deployed. Does not change the survey gate.
 
 - `20261025203005_living_plans.sql`: undated Plans, stable independent stops, backfill, scoped server actions/RLS and the living_plans capability.

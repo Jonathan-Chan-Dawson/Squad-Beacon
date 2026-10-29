@@ -1,0 +1,4 @@
+
+> squad-beacon@1.0.0 lint
+> eslint app src components --max-warnings=0
+

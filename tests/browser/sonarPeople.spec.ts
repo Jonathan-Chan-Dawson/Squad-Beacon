@@ -21,11 +21,11 @@ for (const width of [320, 430]) {
         .getByRole("button", { name: "Open Sonar", exact: true })
         .click();
       const sheet = page.getByRole("dialog", {
-        name: "Start Sonar",
+        name: "Share location with",
         exact: true,
       });
       const search = sheet.getByRole("textbox", {
-        name: "Search people and groups",
+        name: "Search friends",
         exact: true,
       });
       const firstLabel = (await sheet
@@ -57,6 +57,7 @@ for (const width of [320, 430]) {
         .getByRole("button", { name: "Selected · 2", exact: true })
         .click();
       await expect(sheet.getByRole("checkbox")).toHaveCount(2);
+      await sheet.getByRole("button", { name: "Filter", exact: true }).click();
       for (const category of [
         "Favorites",
         "Private Lists",
@@ -88,9 +89,16 @@ for (const width of [320, 430]) {
         .click();
       await expect(sheet.getByRole("checkbox")).toHaveCount(2);
       await sheet
+        .getByRole("button", { name: /^Review Sharing.*2 people$/ })
+        .click();
+      const review = page.getByRole("dialog", {
+        name: "Ready to share?",
+        exact: true,
+      });
+      await review
         .getByRole("button", { name: "30 minutes", exact: true })
         .click();
-      const start = sheet.getByRole("button", {
+      const start = review.getByRole("button", {
         name: "Start Sonar · 2 people",
         exact: true,
       });
@@ -105,8 +113,10 @@ for (const width of [320, 430]) {
         path: `.expo/sonar/people-${width}-${appearance}.png`,
       });
       await start.click();
-      await expect(sheet.getByRole("alert")).toContainText("demo never shares");
-      await sheet.getByRole("button", { name: "Close", exact: true }).click();
+      await expect(review.getByRole("alert")).toContainText(
+        "demo never shares",
+      );
+      await review.getByRole("button", { name: "Close", exact: true }).click();
       await expect(
         page.getByRole("button", { name: "Open Sonar", exact: true }),
       ).toBeVisible();

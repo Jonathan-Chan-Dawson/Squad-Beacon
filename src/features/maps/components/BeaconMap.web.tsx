@@ -894,11 +894,11 @@ export default function BeaconMap(props: MapProps) {
       )
         continue;
       if (
-        point.activityId &&
+        !point.stopNumber && point.activityId &&
         !renderedSingletonIds.has(`beacon:${point.activityId}`)
       )
         continue;
-      if (point.activityId) {
+      if (point.activityId && !point.stopNumber) {
         decorationCache.use(
           `context:${point.id}`,
           JSON.stringify([point, colors.green]),
@@ -920,30 +920,34 @@ export default function BeaconMap(props: MapProps) {
           () => {
             const node = document.createElement("button");
             node.type = "button";
-            node.textContent = point.publicBeaconId
+            node.textContent = point.stopNumber ? String(point.stopNumber) : point.publicBeaconId
               ? categoryMarkerGlyphs[point.category ?? "Other"]
               : "?";
             node.setAttribute(
               "aria-label",
-              `${point.publicBeaconId ? "Public Beacon" : "Suggestion"}: ${point.title}`,
+              `${point.stopNumber ? `Plan stop ${point.stopNumber}` : point.publicBeaconId ? "Public Beacon" : "Suggestion"}: ${point.title}`,
             );
             node.style.cssText = `max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-height:44px;padding:5px 8px;border:1px dashed ${colors.green};border-radius:12px;background:${colors.white};color:${colors.green};font:11px system-ui;cursor:pointer;`;
+            if (point.stopNumber) node.style.cssText = `width:44px;height:44px;border:2px solid ${colors.green};border-radius:22px;background:${colors.white};color:${colors.green};font:bold 18px system-ui;cursor:pointer;`;
             if (point.publicBeaconId)
               node.style.cssText = `width:46px;height:46px;border:3px solid ${colors.green};border-radius:16px 16px 16px 5px;background:${colors.white};font-size:25px;cursor:pointer;box-shadow:0 3px 8px #172c2920;`;
             L.DomEvent.disableClickPropagation(node);
             node.onclick = () => markerCache.activate(contextKey);
             return L.marker([point.latitude, point.longitude], {
+              // The inner button owns keyboard focus and its accessible name.
+              keyboard: false,
               zIndexOffset: -100,
               icon: L.divIcon({
                 html: node,
                 className: "beacon-marker",
-                iconSize: [point.publicBeaconId ? 46 : 88, 46],
-                iconAnchor: [point.publicBeaconId ? 23 : 44, 23],
+                iconSize: [point.stopNumber ? 44 : point.publicBeaconId ? 46 : 88, 46],
+                iconAnchor: [point.stopNumber ? 22 : point.publicBeaconId ? 23 : 44, 23],
               }),
             }).addTo(group);
           },
           () => {
-            if (!onPick) onContextPoint?.(point);
+            const current = latest.current.contextPoints?.find(row => row.id === point.id);
+            if (!latest.current.onPick && current) latest.current.onContextPoint?.(current);
           },
         );
       }
@@ -1517,7 +1521,7 @@ export default function BeaconMap(props: MapProps) {
         {
           paddingTopLeft: [mapInsets.left + 24, mapInsets.top + 24],
           paddingBottomRight: [mapInsets.right + 24, mapInsets.bottom + 24],
-          maxZoom: 18,
+          maxZoom: 16,
           // Apply explicit relationship fits atomically during initial map layout.
           animate: false,
         },

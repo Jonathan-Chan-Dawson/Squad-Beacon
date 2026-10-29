@@ -46,7 +46,7 @@ export function CreationInvitees({
   useOverlayPresence(overlayId, open, "Add People");
   const top = useTopOverlay(overlayId);
   const closePicker = useCallback(() => setOpen(false), []);
-  const focus = useCallback(() => focusOverlay(dialogRef, "Back"), []);
+  const focus = useCallback(() => focusOverlay(dialogRef, "Cancel"), []);
   useOverlayKeyboardFocus(dialogRef, open && top, closePicker, focus);
   const openPicker = () => {
     if (Platform.OS === "web" && typeof document !== "undefined")
@@ -204,7 +204,7 @@ export function CreationInvitees({
                     <Button
                       compact
                       secondary
-                      title="Back"
+                      title="Cancel"
                       onPress={() => setOpen(false)}
                     />
                     <Text

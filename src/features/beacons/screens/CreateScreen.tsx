@@ -1,3 +1,6 @@
+import { ActivityCategoryChoices } from "../components/ActivityCategoryChoices";
+import { finishCreationPublicListing, type CreationPublicListing } from "../creationPublicListing";
+import { BeaconTimingEditor } from "../components/BeaconTimingEditor";
 import { ConfirmDialog } from "@/src/shared/Dialogs";
 import { needsLargeInviteConfirmation } from "../createHandoff";
 import { LinkedPlanningBeacon } from "@/src/features/planning/ConnectedPlanningActions";
@@ -10,10 +13,7 @@ import {
 import { CreationAppearance } from "../components/CreationAppearance";
 import { validCreationMeetingLink } from "../creationValidation";
 import { BeaconIdentity } from "../components/BeaconIdentity";
-import { CreationDateField } from "../components/CreationDateField";
-import { localDate, validateActivity } from "@/src/shared/domain";
-import { addLocalDays } from "@/src/features/plans/routines";
-import { planLocalDateTimeToISO } from "@/src/features/plans/domain";
+import { validateActivity } from "@/src/shared/domain";
 import {
   CreationRow,
   CreationSwitch,
@@ -840,6 +840,27 @@ function CreateEditor() {
       "pendingPublication",
       null,
     );
+  const [publicListing, setPublicListing] = usePlanningDraftState<CreationPublicListing>(userId, draftToken, "publicListing", () => ({ enabled: false, area: "" }));
+  const [publicWorking, setPublicWorking] = useState(false);
+  const publicEligible = kind !== "Status" && audience !== "organization" && !templateEditor && addTo !== "Vote / Draw" && !params.planningOptionId;
+  async function applyPublicListing(id: string) {
+    if (!publicListing.enabled || !userId) return;
+    const epoch = getViewerEpoch();
+    setPublicWorking(true);
+    try {
+      await finishCreationPublicListing(publicListing, userId, id, placeType === "In person" ? pin : null,
+        () => getViewerEpoch() === epoch && dataRef.current.viewer_id === userId,
+        async () => { setCreationDraftField(userId, draftToken, "publicListing", publicListing); setPublicListing({ ...publicListing }); await checkpoint(); },
+        (value, requestId) => act("publish_beacon_discovery", { ...value }, requestId), randomUUID);
+    } finally { if (epoch === getViewerEpoch()) setPublicWorking(false); }
+  }
+  function finishCreatedFlow(id: string) {
+    completePlanningDraft(userId, draftToken);
+    const planId = params.returnPlanId || (addTo === "Plan" ? selectedPlanId : undefined);
+    if (planId) router.dismissTo({ pathname: "/plan/[id]", params: { id: planId } });
+    else if (params.sourcePlanningId) router.replace({ pathname: "/activity/[id]", params: { id } });
+    else router.replace({ pathname: "/activity-created", params: { id, type: "beacon" } });
+  }
   const publicationBusy = useRef(false);
   const [beaconControlDraft, setBeaconControlDraft] = usePlanningDraftState<{
     routeKey: string;
@@ -910,11 +931,6 @@ function CreateEditor() {
       : when === "In 30 min"
         ? currentTime + 1800000
         : Date.parse(starts);
-  }
-  function chooseCustomEnd() {
-    if (duration !== "Custom")
-      setEnds(resolveActivityEndAt(effectiveStartAt(), duration, ends));
-    setDuration("Custom");
   }
   async function saveTemplate() {
     const templateDescription = descriptionWithPrep();
@@ -1121,6 +1137,7 @@ function CreateEditor() {
       throw new Error(
         "Confirm the pending publication before creating another Beacon.",
       );
+    if (publicListing.enabled && (!publicEligible || !publicListing.area.trim() || publicListing.area.trim().length > 120)) throw new Error("Review Public listing: choose an eligible Beacon and a city or general area (up to 120 characters).");
     if (previous && !reuseReviewed) {
       reveal("people");
       throw new Error(
@@ -1248,6 +1265,7 @@ function CreateEditor() {
 
       const result = await durableAction("publish_planning_beacon", {thread_id: params.sourcePlanningId, claim_token: params.planningClaimToken || undefined, proposal_id: params.planningProposalId || undefined, slot_id: params.planningSlotId || undefined, invitee_ids: inviteeIds, payload, confirmed: true});
       if (typeof result.id !== "string") throw new Error("Could not verify the resulting Beacon. Keep this draft and retry.");
+      await applyPublicListing(result.id);
       if (result.already_published) return;
       if(params.returnPlanId) router.dismissTo({pathname:"/plan/[id]",params:{id:params.returnPlanId}});
       else router.replace({pathname:"/activity/[id]",params:{id:result.id}});
@@ -1319,6 +1337,7 @@ function CreateEditor() {
             position: planPosition === "End" ? count : Number(planPosition) - 1,
           })
         : await create();
+      if (result.id) await applyPublicListing(String(result.id));
       if (invitationSession.current.pendingIds.length) return;
       if (!result.id)
         throw new Error("The Beacon could not be added to this Plan.");
@@ -1343,7 +1362,9 @@ function CreateEditor() {
             )
           ).createdId,
         };
+    if (typeof result.id === "string") await applyPublicListing(result.id);
     if (invitationSession.current.pendingIds.length) return;
+    if (typeof result.id !== "string") throw new Error("The Beacon publication could not be verified.");
     completePlanningDraft(userId, draftToken);
     if (typeof result.id === "string" && params.returnPlanId) {
       router.dismissTo({pathname:"/plan/[id]",params:{id:params.returnPlanId}});
@@ -1393,7 +1414,8 @@ function CreateEditor() {
     setWorkflowError("");
     try {
       const result = await publishAtomic(attempt.action, attempt.payload);
-      if (result.id)
+      if (result.id) await applyPublicListing(String(result.id));
+      if (result.id && !invitationSession.current.pendingIds.length)
         router.replace({
           pathname: "/activity/[id]",
           params: { id: result.id },
@@ -1445,6 +1467,13 @@ function CreateEditor() {
       setRetryBusy(false);
     }
   }
+  if (publicListing.createdId && (!publicListing.completed || !createdSession?.pendingIds.length)) return <Screen title="Finish public listing" eyebrow="" create={false}>
+    <Txt>Beacon created; public listing {publicWorking ? "is being confirmed." : "needs confirmation."}</Txt>
+    {!!workflowError && <Text accessibilityRole="alert" style={styles.error}>{workflowError}</Text>}
+    <Action title="Retry public listing" disabled={publicWorking} run={async () => { await applyPublicListing(publicListing.createdId!); if (!invitationSession.current.pendingIds.length) finishCreatedFlow(publicListing.createdId!); }} />
+    <Button secondary title="Open Beacon" disabled={publicWorking} onPress={() => router.push({ pathname: "/activity/[id]", params: { id: publicListing.createdId! } })} />
+    <Txt muted>Retry only confirms the public listing. It never creates another Beacon. This draft keeps the pending listing available.</Txt>
+  </Screen>;
   if (pendingPublication)
     return (
       <Screen
@@ -1482,6 +1511,12 @@ function CreateEditor() {
             if (attempt.action === "create_planning_thread") {
               setDecisionId(String(result.id));
               await checkpoint();
+              return;
+            }
+            if (["create_activity", "create_plan_beacon", "publish_planning_beacon"].includes(attempt.action)) {
+              if (typeof result.id !== "string") throw new Error("Could not confirm the created Beacon.");
+              await applyPublicListing(result.id);
+              finishCreatedFlow(result.id);
               return;
             }
             completePlanningDraft(userId, draftToken);
@@ -1618,13 +1653,6 @@ function CreateEditor() {
         ) : null}
       </Screen>
     );
-  const standardDurations = ["30 min", "1 hour", "2 hours"];
-  const durationOptions = [
-    ...(standardDurations.includes(duration) || duration === "Custom"
-      ? standardDurations
-      : [duration, ...standardDurations]),
-    "Custom",
-  ];
   if (home)
     return (
       <CreateHome
@@ -1996,6 +2024,11 @@ function CreateEditor() {
         }}
       >
         {errorFor("people")}
+        <View style={{ gap: 6, paddingVertical: 8 }}>
+          <CreationSwitch title="Public listing" value={publicListing.enabled} onChange={(enabled) => setPublicListing({ enabled, area: publicListing.area })} detail="Let people discover a public preview and join or request access. Exact meeting details and Sonar stay protected." />
+          {!publicEligible && <Txt muted>Public listing is available for group Beacons outside Network audiences, not templates or decision options. Turn it off to continue with this configuration.</Txt>}
+          {publicListing.enabled && <Field label="City or general area" maxLength={120} value={publicListing.area} onChangeText={(area) => setPublicListing({ ...publicListing, area })} placeholder="Chicago" />}
+        </View>
         <CreationPeople
           audience={audience}
           audienceId={audienceId}
@@ -2172,12 +2205,7 @@ function CreateEditor() {
               <Action secondary title="Save as template" run={saveTemplate} />
             </>
           ) : null}
-          <Text style={styles.h2}>Public discovery</Text>
-          <Txt muted>
-            Manage public discovery after creating. Exact meeting details and
-            participant tools keep their existing access protections. Sonar
-            sharing is separate.
-          </Txt>
+
         </CreationDisclosure>
       </View>
       {!templateEditor ? (
@@ -2193,65 +2221,7 @@ function CreateEditor() {
           </Txt>
         </Pressable>
       ) : null}
-      <Sheet
-        title="When shall we?"
-        visible={timing}
-        onClose={() => setTiming(false)}
-      >
-        {workflowError ? (
-          <Text accessibilityRole="alert" style={styles.error}>
-            {workflowError}
-          </Text>
-        ) : null}
-        <Chips
-          options={["Now", "In 30 min", "Later today", "Tomorrow", "Pick time"]}
-          value={when}
-          onChange={(value) => {
-            if (value === "Tomorrow") {
-              setStarts(
-                planLocalDateTimeToISO(
-                  addLocalDays(
-                    localDate(new Date(currentTime), creationTimezone),
-                    1,
-                  ),
-                  "17:00",
-                  creationTimezone,
-                ),
-              );
-              setWhen("Pick time");
-            } else if (value === "Later today") {
-              setStarts(new Date(currentTime + 3600000).toISOString());
-              setWhen("Pick time");
-            } else setWhen(value);
-          }}
-        />
-        {when === "Pick time" && (
-          <CreationDateField
-            label="Starts"
-            value={starts}
-            onChange={setStarts}
-            timezone={creationTimezone}
-          />
-        )}
-        <Txt muted>How long?</Txt>
-        <Chips
-          options={durationOptions}
-          value={duration}
-          onChange={(nextDuration) => {
-            if (nextDuration === "Custom") chooseCustomEnd();
-            else setDuration(nextDuration);
-          }}
-        />
-        {duration === "Custom" && (
-          <CreationDateField
-            label="Ends"
-            value={ends}
-            onChange={setEnds}
-            timezone={creationTimezone}
-          />
-        )}
-        <Button title="Done" onPress={() => setTiming(false)} />
-      </Sheet>
+      <BeaconTimingEditor visible={timing} starts={new Date(effectiveStartAt()).toISOString()} ends={resolveActivityEndAt(effectiveStartAt(), duration, ends)} timezone={creationTimezone} when={when} onClose={() => setTiming(false)} onDone={(value) => { setStarts(value.starts); setEnds(value.ends); setWhen(value.when); setDuration(formatDurationLabel(value.minutes)); setTiming(false); }} />
 
       <Sheet
         title="Appearance"
@@ -2262,23 +2232,11 @@ function CreateEditor() {
         }
       >
         <Text style={styles.h2}>Category</Text>
-        <Chips
-          options={
-            [
-              "Fitness",
-              "Study",
-              "Gaming",
-              "Creative",
-              "Social",
-              "Other",
-            ] as const
-          }
-          value={category}
-          onChange={(value) => {
-            textEdited.current.category = true;
-            setCategory(value);
-          }}
-        />
+        <ActivityCategoryChoices value={category} onChange={(value, idea) => {
+          textEdited.current.category = true;
+          setCategory(value);
+          if (idea && !title.trim()) { textEdited.current.title = true; setTitle(idea); }
+        }} />
         <CreationAppearance
           value={beaconControls}
           onChange={setBeaconControls}

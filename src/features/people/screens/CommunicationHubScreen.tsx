@@ -27,6 +27,7 @@ import {
   ChevronRight,
   Layers3,
   MessageCircle,
+  Search,
 } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
@@ -557,8 +558,12 @@ export function CommunicationHub({
             borderRadius: 12,
             backgroundColor: colors.white,
             paddingHorizontal: 12,
+            gap: pageName === "Chats" ? 8 : 0,
           }}
         >
+          {pageName === "Chats" && (
+            <Search size={17} color={colors.muted} accessible={false} />
+          )}
           <TextInput
             maxLength={pageName === "Communities" ? 80 : undefined}
             accessibilityLabel={
@@ -610,34 +615,46 @@ export function CommunicationHub({
                   key={filter}
                   accessibilityRole="button"
                   accessibilityLabel={filter}
+                  aria-pressed={conversationFilter === filter}
                   accessibilityState={{
                     selected: conversationFilter === filter,
                   }}
                   onPress={() => onConversationFilterChange(filter)}
                   style={{
                     minHeight: 44,
-                    paddingHorizontal: 14,
+                    minWidth: 44,
                     justifyContent: "center",
-                    borderRadius: 22,
-                    backgroundColor:
-                      conversationFilter === filter
-                        ? semanticColors.accent
-                        : colors.white,
+                    alignItems: "center",
                   }}
                 >
-                  <Text
-                    style={[
-                      styles.label,
-                      {
-                        color:
-                          conversationFilter === filter
-                            ? semanticColors.onAccent
-                            : colors.muted,
-                      },
-                    ]}
+                  <View
+                    testID={`chat-filter-visual-${filter}`}
+                    style={{
+                      minHeight: 32,
+                      paddingVertical: 5,
+                      paddingHorizontal: 12,
+                      justifyContent: "center",
+                      borderRadius: 16,
+                      backgroundColor:
+                        conversationFilter === filter
+                          ? semanticColors.accent
+                          : colors.white,
+                    }}
                   >
-                    {filter}
-                  </Text>
+                    <Text
+                      style={[
+                        styles.label,
+                        {
+                          color:
+                            conversationFilter === filter
+                              ? semanticColors.onAccent
+                              : colors.muted,
+                        },
+                      ]}
+                    >
+                      {filter}
+                    </Text>
+                  </View>
                 </Pressable>
               ))}
             </ScrollView>
@@ -688,6 +705,12 @@ export function CommunicationHub({
                 <ChevronRight size={18} color={colors.muted} />
               </Pressable>
             ) : null}
+            <View
+              testID="chat-list-divider"
+              accessibilityElementsHidden
+              importantForAccessibility="no"
+              style={{ height: 1, backgroundColor: colors.line, marginTop: 4 }}
+            />
           </>
         ) : (
           <Text style={styles.h2}>Your Communities</Text>

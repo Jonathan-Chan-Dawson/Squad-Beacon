@@ -1,6 +1,6 @@
-import React, { useState } from "react";
+import React, { useCallback, useState } from "react";
 import { Modal, Share, Text, View } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { Pencil, QrCode, Settings, Sparkles, X } from "lucide-react-native";
 import { useBeacon } from "@/src/shared/store";
 import {
@@ -37,7 +37,11 @@ function ProfileScreenBody() {
   }>();
   const [saved, setSaved] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
-  const [tab, setTab] = useState<ProfileTab>("Overview");
+  const params = useLocalSearchParams<{ section?: string }>();
+  const [tab, setTab] = useState<ProfileTab>(params.section === "aspirations" ? "About" : "Overview");
+  const [sectionScroll, setSectionScroll] = useState<{ y: number; sequence: number }>();
+  const displayedTab = params.section === "aspirations" ? "About" : tab;
+  const focusAspirations = useCallback((y: number) => { if (params.section !== "aspirations") return; setTab("About"); setSectionScroll({ y, sequence: Date.now() }); router.setParams({ section: undefined }); }, [params.section]);
   const profile =
     data.viewer_id === userId
       ? data.profiles.find((p) => p.id === userId)
@@ -71,6 +75,7 @@ function ProfileScreenBody() {
       compactHeader
       create={false}
       scrollStateKey={`${userId}:${tab}`}
+      scrollRequest={sectionScroll}
       headerAction={
         <IconButton label="Settings" onPress={() => router.push("/settings")}>
           <Settings size={22} color={colors.textPrimary} />
@@ -81,8 +86,9 @@ function ProfileScreenBody() {
         <ProfileExperience
           key={profile.id}
           profile={profile}
-          tab={tab}
+          tab={displayedTab}
           onTabChange={setTab}
+          onAspirationPosition={focusAspirations}
           actions={
             <>
               <Button

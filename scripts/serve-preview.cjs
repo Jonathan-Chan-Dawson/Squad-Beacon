@@ -7,6 +7,10 @@ http
     const requested = decodeURIComponent(
       new URL(request.url, "http://localhost").pathname,
     );
+    if (requested.startsWith("/auth/")) {
+      response.setHeader("Cache-Control", "no-store");
+      response.setHeader("Referrer-Policy", "no-referrer");
+    }
     let file = path.resolve(root, "." + requested);
     if (file !== root && !file.startsWith(root + path.sep)) {
       response.writeHead(403);

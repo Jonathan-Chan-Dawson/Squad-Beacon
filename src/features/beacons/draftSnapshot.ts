@@ -174,6 +174,18 @@ export function parseCreationSnapshot(
     throw new Error("Saved template settings could not be restored.");
   if (value.fields.pendingPublication != null)
     validateAttempt(value.fields.pendingPublication, viewer);
+  const listing = value.fields.publicListing;
+  if (listing !== undefined) {
+    if (!record(listing) || typeof listing.enabled !== "boolean" || typeof listing.area !== "string" || listing.area.length > 120)
+      throw new Error("Saved public listing choices could not be restored.");
+    if (listing.createdId !== undefined && (
+      listing.viewer !== viewer || typeof listing.createdId !== "string" || !listing.createdId ||
+      typeof listing.requestId !== "string" || !/^[0-9a-f-]{36}$/i.test(listing.requestId) ||
+      !record(listing.payload) || listing.payload.activity_id !== listing.createdId ||
+      typeof listing.payload.area_label !== "string" || !listing.payload.area_label.trim() || listing.payload.area_label.length > 120 ||
+      (listing.completed !== undefined && typeof listing.completed !== "boolean")
+    )) throw new Error("Saved public listing recovery could not be verified.");
+  }
   const session = value.fields.invitationSession;
   if (session !== undefined) {
     if (
@@ -250,6 +262,7 @@ export async function runFrozenPublication(
 export function creationSnapshotNeedsRecovery(snapshot: CreationSnapshot) {
   const fields = snapshot.fields;
   if (fields.pendingPublication != null) return true;
+  if (record(fields.publicListing) && fields.publicListing.createdId) return true;
   const session = fields.invitationSession;
   return (
     record(session) &&

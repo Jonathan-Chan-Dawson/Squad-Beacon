@@ -7,6 +7,7 @@ Expo Router map
 - space/[id].tsx: independent Space overview, people and privacy-preserving Squad links.
 
 - _layout.tsx, +html.tsx, +not-found.tsx: root app shell, web HTML wrapper, and fallback route.
+- auth/confirm.tsx: explicit, non-consuming-on-load email confirmation around the shared auth link service. auth/callback.tsx retains legacy PKCE/signup/recovery links.
 - (tabs)/: persistent Map, Beacons, Squads, and Profile tabs; screen implementations live in src/features.
 - activity/[id].tsx, create.tsx: thin exports of the feature-owned ActivityDetailScreen and CreateScreen; route paths and parameters stay stable.
 - councils.tsx and council/[id].tsx: Pings & Councils routes backed by src/features/planning.
@@ -19,6 +20,8 @@ Expo Router map
 - modal.tsx: modal route.
 
 Keep route paths stable; move reusable screens and feature logic into src/features rather than growing route files.
+
+- g/[token].tsx: public invitation receiver with browser fallback. share.tsx and guest-claim.tsx: protected host-sharing and explicit member-claim entrypoints; preserve invitation/target parameters through sign-in.
 
 - activity/[id]/chat.tsx: dedicated permission-gated Beacon chat route around the existing ChatThread; native Overview and tool actions use this screen.
 

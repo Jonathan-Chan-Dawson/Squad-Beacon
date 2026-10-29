@@ -19,3 +19,5 @@ Planning feature
 - CouncilChoices.tsx: compact Pick One/approval choices and authorized inline proposal review.
 - ConnectedPlanningActions.tsx and PlanningControls.tsx: canonical result doorway, continuation/backup-host actions, private replies, and compact native controls.
 - connected.ts, handoff.ts, and demoConnected.ts: scheduling rules, reviewed Beacon editor handoffs, and demo action parity. Hosted authority remains in the additive connected_planning migration.
+
+- PlanningTimeField and ZonedTimeField platform adapters use the shared DateField ISO-instant boundary with explicit timezone; wall-time conversion is owned by shared/dateTime.ts.

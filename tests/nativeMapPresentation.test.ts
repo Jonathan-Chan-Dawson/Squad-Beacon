@@ -149,7 +149,7 @@ test("all groups use their requested zoom tier and actual nearby friends never m
     assert.equal(mixed.group.longitude, base.group.longitude);
     assert.equal(mixed.group.id, base.group.id);
     assert.deepEqual(input, snapshot);
-    assert.equal(presentationOpensExplorer(mixed), false);
+    assert.equal(presentationOpensExplorer(mixed), true);
   }
 });
 
@@ -216,11 +216,11 @@ test("friend-only groups use mini petals for two to four and compact totals for 
     assert.equal(item.overflow, 0);
     assert.equal(item.friendOverflow, count >= 5 ? count : 0);
     assert.equal(item.visible.length, count < 5 ? count : 0);
-    assert.equal(presentationOpensExplorer(item), count >= 5);
+    assert.equal(presentationOpensExplorer(item), true);
   }
 });
 
-test("small far-zoom expansions retain every Beacon and friend artwork model", () => {
+test("compact far-zoom groups retain all IDs while drawing only their previews", () => {
   const beaconItem = nativePresentation(
     group([...points(5), ...points(11, "person")]),
     "micro",
@@ -235,7 +235,7 @@ test("small far-zoom expansions retain every Beacon and friend artwork model", (
     presentationArtworkPoints(beaconItem).filter(
       (point) => point.kind === "beacon",
     ).length,
-    5,
+    2,
   );
   const friendItem = nativePresentation(
     group(points(4, "person")),
@@ -244,7 +244,7 @@ test("small far-zoom expansions retain every Beacon and friend artwork model", (
     new Set(),
   );
   assert.equal(friendItem.visible.length, 0);
-  assert.equal(presentationArtworkPoints(friendItem).length, 4);
+  assert.equal(presentationArtworkPoints(friendItem).length, 0);
 });
 
 test("only supplied eligible points contribute; removing an entity updates count and ownership", () => {
@@ -475,8 +475,8 @@ test("far tiers group loose Beacons, retain every authorized member, and never r
     },
   ];
   const grouped = nativeMapPresentations(input, camera, "atmosphere");
-  assert.equal(grouped.length, 1);
-  assert.equal(grouped[0].beacons.length, 2);
+  assert.equal(grouped.length, 2);
+  assert.deepEqual(grouped.map(item => item.group.longitude).sort(), input.map(point => point.longitude).sort());
   const selected = nativeMapPresentations(input, camera, "atmosphere", {
     "beacon:a": { tier: -3 },
   });
@@ -502,7 +502,7 @@ test("far tiers group loose Beacons, retain every authorized member, and never r
       new Set(),
     );
     assert.equal(friends.visible.length, 0);
-    assert.equal(presentationArtworkPoints(friends).length, 3);
-    assert.equal(presentationOpensExplorer(friends), false);
+    assert.equal(presentationArtworkPoints(friends).length, 0);
+    assert.equal(presentationOpensExplorer(friends), true);
   }
 });

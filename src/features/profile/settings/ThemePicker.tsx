@@ -12,6 +12,16 @@ import {
   type ThemeName,
 } from "@/src/theme/palettes";
 
+const descriptions: Record<ThemeName, string> = {
+  Essential: "Warm neutral",
+  Midnight: "Quiet navy",
+  Ocean: "Coastal blue",
+  Mint: "Fresh sage",
+  Sunset: "Warm coral",
+  Berry: "Soft plum",
+  Sunflower: "Soft gold",
+};
+
 function ThemePreviewChoice({
   name,
   appearance,
@@ -110,6 +120,11 @@ function ThemePreviewChoice({
         </Text>
         {selected && <Check size={14} color={colors.primary} />}
       </View>
+      <Text
+        style={{ color: colors.textSecondary, fontSize: 11, lineHeight: 15 }}
+      >
+        {descriptions[name]}
+      </Text>
     </Pressable>
   );
 }
@@ -124,7 +139,7 @@ export function ThemePicker() {
   };
   return (
     <View testID="theme-picker" style={{ gap: 12 }}>
-      <Text style={styles.label}>ESSENTIAL · NEUTRAL</Text>
+      <Text style={styles.label}>ESSENTIAL · WARM NEUTRAL</Text>
       <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
         {(["dark", "light"] as const).map((appearance) => (
           <ThemePreviewChoice

@@ -6,10 +6,12 @@
     "@expo/ui": "~57.0.22",
     "@gorhom/bottom-sheet": "^5.2.14",
     "@react-native-community/datetimepicker": "9.1.0",
+    "@resvg/resvg-js": "2.6.2",
     "@shopify/flash-list": "2.0.2",
     "@supabase/supabase-js": "^2.115.0",
     "expo": "~57.0.27",
     "expo-blur": "~57.0.3",
+    "expo-clipboard": "~57.0.2",
     "expo-constants": "~57.0.17",
     "expo-contacts": "~57.0.6",
     "expo-crypto": "~57.0.3",
@@ -65,6 +67,7 @@
     "esbuild": "0.28.2",
     "eslint": "^9.39.5",
     "eslint-config-expo": "~57.0.2",
+    "jsqr": "1.4.0",
     "prettier": "^3.9.6",
     "tsx": "^4.23.13",
     "typescript": "~6.0.3"
@@ -88,7 +91,11 @@
     "test:plans": "tsx --test tests/livingPlans.test.ts tests/livingPlans.database.test.ts tests/plans.test.ts tests/plansRoutine.test.ts tests/plansRoutine.database.test.ts tests/createFlow.test.ts tests/calendar.test.ts tests/calendarProjection.test.ts tests/calendarProjection.database.test.ts tests/mapContextFilters.test.ts tests/connectedPlanning.test.ts tests/connectedPlanning.database.test.ts",
     "test:onboarding": "tsx --test tests/accountEntry.test.ts tests/profileEditor.test.ts tests/onboarding.test.ts tests/onboarding.database.test.ts",
     "build:onboarding-preview": "expo export --dev --platform web --max-workers 2 --output-dir .expo/onboarding-dev",
-    "test:onboarding:browser": "playwright test --config playwright.onboarding.config.ts"
+    "test:onboarding:browser": "playwright test --config playwright.onboarding.config.ts",
+    "build:auth-preview": "expo export --dev --platform web --max-workers 2 --output-dir .expo/auth-email-dev",
+    "test:auth:browser": "playwright test --config playwright.auth.config.ts",
+    "test:guest": "tsx --test --test-concurrency=1 tests/guestSharing.test.ts tests/guestFoundation.database.test.ts tests/guestPlanning.database.test.ts",
+    "test:guest:browser": "playwright test --config playwright.guest.config.ts"
   },
   "reanimated": {
     "staticFeatureFlags": {

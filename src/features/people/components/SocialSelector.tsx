@@ -415,12 +415,14 @@ export function SocialSelector({
   disabled,
   maxSelected,
   selectionLabel,
+  compactFilters,
   ...props
 }: React.ComponentProps<typeof StandardSocialSelector> & {
   groupBehavior?: "select" | "filterFriends";
   disabled?: boolean;
   maxSelected?: number;
   selectionLabel?: string;
+  compactFilters?: boolean;
 }) {
   return groupBehavior === "filterFriends" ? (
     <FriendFilterSelector
@@ -431,6 +433,7 @@ export function SocialSelector({
       maxSelected={maxSelected}
       selectionLabel={selectionLabel}
       bulk={props.bulk}
+      compactFilters={compactFilters}
     />
   ) : (
     <StandardSocialSelector {...props} />

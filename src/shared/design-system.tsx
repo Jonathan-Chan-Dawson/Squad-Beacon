@@ -233,7 +233,7 @@ export function Chip({
           borderRadius: radius.pill,
           borderWidth: 1,
           borderColor: selected ? colors.accent : colors.border,
-          backgroundColor: selected ? colors.accent : colors.surface,
+          backgroundColor: selected ? colors.surfaceSelected : colors.surface,
           opacity: isDisabled
             ? motion.disabledOpacity
             : pressed
@@ -243,12 +243,12 @@ export function Chip({
         style,
       ]}
     >
-      {icon}
+      {selected && !textStyle ? tintIcon(icon, colors.accent) : icon}
       <Text
         maxFontSizeMultiplier={themeTokens.type.denseMaxMultiplier}
         style={[
           {
-            color: selected ? colors.onAccent : colors.textPrimary,
+            color: selected ? colors.accent : colors.textPrimary,
             ...type.secondary,
             fontWeight: type.weight.semibold,
             flexShrink: 1,
@@ -262,7 +262,7 @@ export function Chip({
         <Text
           maxFontSizeMultiplier={themeTokens.type.denseMaxMultiplier}
           style={{
-            color: selected ? colors.onAccent : colors.textSecondary,
+            color: selected ? colors.accent : colors.textSecondary,
             ...type.caption,
             fontWeight: type.weight.bold,
           }}
@@ -479,7 +479,13 @@ function DesignButton({
         style,
       ]}
     >
-      {busy ? <ActivityIndicator color={foreground} /> : icon}
+      {busy ? (
+        <ActivityIndicator color={foreground} />
+      ) : primary ? (
+        tintIcon(icon, foreground)
+      ) : (
+        icon
+      )}
       {content && typeof content === "string" ? (
         <Text
           maxFontSizeMultiplier={themeTokens.type.denseMaxMultiplier}

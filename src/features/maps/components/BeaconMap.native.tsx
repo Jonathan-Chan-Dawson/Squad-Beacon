@@ -1097,11 +1097,11 @@ export default function BeaconMap({
                   !pins.some(
                     (place) => place.activity_id === point.publicBeaconId,
                   ))) &&
-              (!point.activityId ||
+              (!!point.stopNumber || !point.activityId ||
                 renderedSingletonIds.has(`beacon:${point.activityId}`)),
           )
           .map((point) =>
-            point.activityId ? (
+            point.activityId && !point.stopNumber ? (
               <Circle
                 key={`context:${point.id}`}
                 center={point}
@@ -1117,7 +1117,7 @@ export default function BeaconMap({
                 coordinate={point}
                 anchor={{ x: 0.5, y: 0.5 }}
                 zIndex={2}
-                accessibilityLabel={`${point.publicBeaconId ? "Public Beacon" : "Suggestion"}: ${point.title}`}
+                accessibilityLabel={`${point.stopNumber ? `Plan stop ${point.stopNumber}` : point.publicBeaconId ? "Public Beacon" : "Suggestion"}: ${point.title}`}
                 onPress={(event) => {
                   event.stopPropagation();
                   if (!onPick) onContextPoint?.(point);
@@ -1142,7 +1142,7 @@ export default function BeaconMap({
                       alignItems: "center",
                       justifyContent: "center",
                       borderWidth: point.publicBeaconId ? 3 : 1,
-                      borderStyle: point.publicBeaconId ? "solid" : "dashed",
+                      borderStyle: point.publicBeaconId || point.stopNumber ? "solid" : "dashed",
                       borderColor: colors.green,
                       backgroundColor: colors.white,
                     }}
@@ -1155,7 +1155,7 @@ export default function BeaconMap({
                         fontSize: point.publicBeaconId ? 25 : 11,
                       }}
                     >
-                      {point.publicBeaconId
+                      {point.stopNumber ? String(point.stopNumber) : point.publicBeaconId
                         ? categoryMarkerGlyphs[point.category ?? "Other"]
                         : "? Suggestion"}
                     </Text>

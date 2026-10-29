@@ -69,8 +69,8 @@ test("badge totals, satellite collapse, and micro Friends mode are independent o
   ]);
   assert.equal(bloomGeometry(make(40, 0)).countBadge?.text, "✦ 40");
   assert.equal(bloomGeometry(make(1, 0)).countBadge, undefined);
-  assert.equal(bloomGeometry(make(2, 2)).countBadge, undefined);
-  assert.equal(make(2, 2).satellites.length, 2);
+  assert.equal(bloomGeometry(make(2, 2)).countBadge?.peopleCount, 2);
+  assert.equal(make(2, 2).satellites.length, 0);
   assert.equal(bloomGeometry(make(2, 25)).countBadge?.activation, "friends");
   const micro = bloomGeometry(make(40, 60, "micro")).countBadge!;
   assert.deepEqual(micro.parts, [{ kind: "beacons", count: 40 }]);
@@ -83,7 +83,7 @@ test("badge totals, satellite collapse, and micro Friends mode are independent o
   );
   assert.equal(
     bloomGeometry(make(2, 25, "micro")).countBadge?.activation,
-    "expand",
+    "cluster",
   );
 });
 
@@ -413,17 +413,17 @@ test("shared clock changes update location accessibility without restarting bitm
   assert.equal(after.visualRevision, before.visualRevision);
 });
 
-test("satellite capacities follow 3/5/7 petals and disappear at distant zooms", () => {
+test("only a single close Beacon can show one nearby avatar", () => {
   for (const [petals, limit] of [
-    [1, 3],
-    [2, 3],
-    [3, 5],
-    [5, 5],
-    [6, 7],
-    [7, 7],
+    [1, 1],
+    [2, 0],
+    [3, 0],
+    [5, 0],
+    [6, 0],
+    [7, 0],
   ]) {
     assert.equal(friendSatelliteLimit(petals, "close"), limit);
-    assert.equal(friendSatelliteLimit(petals, "medium"), limit);
+    assert.equal(friendSatelliteLimit(petals, "medium"), 0);
     assert.equal(friendSatelliteLimit(petals, "far"), 0);
     assert.equal(friendSatelliteLimit(petals, "micro"), 0);
   }
@@ -495,7 +495,7 @@ test("nearby artwork reduces satellites without shifting petals or mutating auth
   const after = bloomGeometry(item);
   assert.notEqual(before, after);
   assert.deepEqual(before.offsets, after.offsets);
-  assert.ok(after.satellites.length < before.satellites.length);
+  assert.ok(after.satellites.length <= before.satellites.length);
   assert.ok(after.countBadge);
   for (const point of after.satelliteOffsets)
     for (const obstacle of item.decorationObstacles)
@@ -536,7 +536,7 @@ test("satellite thresholds switch the entire friend set to a total, not just ove
         new Set(),
       );
       const geometry = bloomGeometry(item);
-      if (people <= limit) {
+      if (people === 0) {
         assert.equal(
           geometry.satellites.length,
           people,

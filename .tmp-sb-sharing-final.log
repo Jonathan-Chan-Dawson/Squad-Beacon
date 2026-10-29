@@ -1,0 +1,35 @@
+✔ invitation tokens have 256-bit entropy, a fixed URL-safe representation and one-way hashes (8.9253ms)
+✔ guest origin rejects credentials, insecure transport, paths and query strings (1.6314ms)
+✔ server-rendered metadata is escaped and includes no guest response or private profile (33.4392ms)
+✔ unavailable pages suppress details, previews, calendar and app links (1.059ms)
+✔ preview-only, cancelled and ended invitations offer no verification or response forms (1.8747ms)
+✔ full invitations preserve existing Going responses but disable new Going (1.2194ms)
+✔ ICS has stable identity, UTC instants, escaped content and byte-safe folding (1.9777ms)
+✔ QR flyer contains a real QR matrix and sanitized labels (22.9729ms)
+✔ rendered flyers independently decode to the exact invitation and authorized child URLs (3090.9829ms)
+✔ GET passes only a token hash and adds no-store and restrictive security headers (4.8577ms)
+✔ invalid links never reach the backend (1.2029ms)
+✔ unconfigured deployments fail closed (0.6844ms)
+✔ cross-origin, missing custom headers and unsupported content types cannot mutate (2.2747ms)
+✔ oversized and malformed request bodies are rejected (12.4022ms)
+✔ unverified clients cannot supply another guest actor (4.0116ms)
+✔ guest identity comes from Auth verification, not request body; tokens go only into HttpOnly cookies (6.0512ms)
+✔ expired email verification cannot create a guest identity (4.4103ms)
+✔ verified returning guest writes as its session actor and forwards idempotency key (3.5962ms)
+✔ member sharing requires verified member bearer rather than a guest cookie (2.334ms)
+✔ sharing generates its token on the server and stores only the hash (3.1468ms)
+✔ revoked invitations deny writes before verification or mutation (2.1433ms)
+✔ backend failure never leaks diagnostic strings or secrets (1.1982ms)
+✔ calendar and flyer routes do not depend on guest sessions (10.1491ms)
+✔ PNG social cards have standard image dimensions and omit guest-specific projections (179.1972ms)
+✔ domain association files require actual configured credentials and matching origins (2.0829ms)
+✔ claiming requires both sessions and ignores forged identity fields (3.4459ms)
+✔ nested target requests preserve parent authorization and validate target syntax (1.9073ms)
+ℹ tests 27
+ℹ suites 0
+ℹ pass 27
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4450.5567

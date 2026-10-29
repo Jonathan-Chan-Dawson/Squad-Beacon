@@ -6,7 +6,7 @@ import {
   type BeaconDraft,
   type PlanningThread,
 } from "../src/shared/types";
-import { resolveMapContext } from "../src/features/maps/contextFilters";
+import { resolveMapContext, mapContextCameraKind } from "../src/features/maps/contextFilters";
 import { readablePlanForActivity } from "../src/features/beacons/screens/discoveryPlan";
 import { showBeaconOnMap } from "../src/features/maps/mapDiscovery";
 
@@ -125,6 +125,7 @@ test("hidden Plan steps never leak locations or connect the path across the gap"
     ["first", "second"],
   );
   assert.equal(view.paths.length, 0);
+  assert.deepEqual(view.points.map(point => point.stopNumber), [1, 3]);
   assert.ok(view.points.every((point) => point.latitude !== 0));
 });
 test("context rechecks viewer and Plan access on every resolution", () => {
@@ -277,4 +278,10 @@ test("callouts reserve the control rail only where they overlap it", () => {
     mapTooltip.width,
   );
   assert.equal(away.width, mapTooltip.width);
+});
+
+test("Plan fits handle single, coincident and widely separated physical stops", () => {
+  assert.equal(mapContextCameraKind([{latitude: 10, longitude: 20}]), "focus");
+  assert.equal(mapContextCameraKind([{latitude: 10, longitude: 20}, {latitude: 10.00001, longitude: 20.00001}]), "focus");
+  assert.equal(mapContextCameraKind([{latitude: 10, longitude: 20}, {latitude: -30, longitude: 60}]), "fit");
 });

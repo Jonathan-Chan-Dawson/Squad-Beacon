@@ -355,7 +355,7 @@ test("Calendar itineraries open individual Beacons and restore their expanded st
   await itinerary.click();
   await expect(page.getByTestId("calendar-itinerary")).toBeVisible();
   await page.screenshot({
-    path: "docs/screenshots/your-activity/calendar-itinerary.png",
+    path: test.info().outputPath("calendar-itinerary.png"),
     fullPage: true,
   });
   await page
@@ -401,7 +401,7 @@ for (const width of [320, 390]) {
       await expect(
         page.getByRole("textbox", { name: "Message", exact: true }),
       ).toBeVisible();
-      await page.getByRole("button", { name: "Back", exact: true }).click();
+      await page.getByRole("button", { name: "Back to Overview", exact: true }).click();
       await expect(page).toHaveURL(detailUrl);
       await expect(
         page.getByRole("tab", { name: "Overview", exact: true }),
@@ -414,7 +414,7 @@ for (const width of [320, 390]) {
       ).toHaveCount(0);
       await expect(page.getByTestId("activity-detail-hero")).toBeVisible();
       await page.screenshot({
-        path: `docs/screenshots/phase4ca/${appearance}-${width}-beacon-overview.png`,
+        path: test.info().outputPath(`${appearance}-${width}-beacon-overview.png`),
         fullPage: true,
       });
       await page.getByRole("button", { name: "Back", exact: true }).click();

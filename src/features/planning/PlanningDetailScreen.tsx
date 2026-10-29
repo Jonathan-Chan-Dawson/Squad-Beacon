@@ -1,4 +1,5 @@
 import {EarlierTimeSlots} from "./TimeFinder";
+import { GuestShareButton } from "@/src/features/sharing/GuestShareSheet";
 import {CouncilProposalReview} from "./CouncilChoices";
 import { ConnectedPlanningActions, OrganizerMessageEditor, LinkedPlanningBeacon } from "./ConnectedPlanningActions";
 import { canOpenSquadPing } from "@/src/features/people/communication";
@@ -226,6 +227,7 @@ export default function PlanningDetailScreen({
     );
 
   if (thread.kind === "time" || thread.resolution_policy === "explicit") return <PlanningFrame embedded={embedded} title={thread.title} eyebrow={thread.kind === "time" ? "FIND A TIME" : thread.kind.toUpperCase()}>
+    {manages && <GuestShareButton kind="decision" target={thread.id} title={thread.title} readOnly={thread.kind === "draw"} />}
     {thread.body && <Txt>{thread.body}</Txt>}
     {!thread.materialized_activity_id && <PlanningResponseControls threadId={thread.id}/>}
     <CouncilProposalReview thread={thread}/>
@@ -243,6 +245,7 @@ export default function PlanningDetailScreen({
       title={thread.title}
       eyebrow={thread.kind.toUpperCase()}
     >
+      {manages && <GuestShareButton kind="decision" target={thread.id} title={thread.title} readOnly={thread.kind === "draw"} />}
       <Button
         title={
           thread.kind === "ping"

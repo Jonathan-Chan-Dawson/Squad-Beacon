@@ -31,3 +31,5 @@ People feature
 - components/PrivateListAvatar.tsx: shared Close Friends people icon and deterministic theme-aware custom-list initial colors in the selector and management.
 
 - components/FriendFilterSelector.tsx and friendGroupFilters.ts: SocialSelector's filterFriends mode for invitations and Sonar; authorized group/list browsing narrows context-eligible accepted friends without selecting group audiences. Private List management stays inline.
+
+- ResponsesScreen owns Needs Action and ordinary notice Updates. Bell/Chats enter /responses directly; unread notice counts remain separate from action counts. FriendFilterSelector compact filters preserve complete eligible bulk sets and reject unions above the caller limit.

@@ -3,7 +3,7 @@ import {
   LivingActivitySection,
   LivingActivityHighlights,
 } from "@/src/features/beacons/components/feed/LivingActivitySection";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Text, View, useWindowDimensions } from "react-native";
 import Animated, {
   useSharedValue,
@@ -206,14 +206,18 @@ export function ProfileExperience({
   accessory,
   tab,
   onTabChange,
+  onAspirationPosition,
 }: {
   profile: Profile;
   actions: React.ReactNode;
   accessory?: React.ReactNode;
   tab: ProfileTab;
   onTabChange: (tab: ProfileTab) => void;
+  onAspirationPosition?: (y: number) => void;
 }) {
   const { data, userId } = useBeacon();
+  const sectionRoot = useRef<View>(null);
+  const aspirationRef = useRef<View>(null);
   const { width: profileWidth } = useWindowDimensions();
   const { styles, semanticColors: colors, tokens } = useTheme();
   const reduced = useReducedMotion();
@@ -413,7 +417,7 @@ export function ProfileExperience({
     </View>
   );
   return (
-    <View style={{ gap: 14 }}>
+    <View ref={sectionRoot} style={{ gap: 14 }}>
       <View
         testID={own ? "profile-identity" : "person-profile-identity"}
         style={{ gap: 10, padding: 2, overflow: "hidden", borderRadius: 22 }}
@@ -830,7 +834,7 @@ export function ProfileExperience({
           {(own ||
             profile.aspiration_goals?.length > 0 ||
             !!profile.aspirations) && (
-            <View style={{ gap: 12 }}>
+            <View ref={aspirationRef} onLayout={() => { if (tab === "About" && sectionRoot.current && onAspirationPosition) aspirationRef.current?.measureLayout(sectionRoot.current, (_x, y) => onAspirationPosition(y), () => {}); }} style={{ gap: 12 }}>
               <View style={styles.between}>
                 <Text style={styles.h2}>Making time for</Text>
                 {own && (

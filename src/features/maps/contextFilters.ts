@@ -24,6 +24,7 @@ export type MapContextPoint = Coordinate & {
   id: string;
   title: string;
   activityId?: string;
+  stopNumber?: number;
   publicBeaconId?: string;
   category?: Category;
   threadId?: string;
@@ -132,11 +133,15 @@ export function resolveMapContext(
     const links=(data.plan_stops??[]).filter(s=>s.plan_id===plan.id&&s.approval==="approved"&&s.state==="active").sort((a,b)=>a.position-b.position);
     const useStops=data.is_demo ? plan.revision!=null || links.length>0 : data.capabilities?.living_plans===true;
     const itinerary=useStops?links.map(s=>data.activities.find(a=>a.id===(s.activity_id??data.planning_threads.find(t=>t.id===s.thread_id)?.materialized_activity_id))):data.activities.filter(a=>a.plan_id===plan.id).sort((a,b)=>(a.plan_step_index??0)-(b.plan_step_index??0));
-    for (const activity of itinerary) {
+    for (const [index, activity] of itinerary.entries()) {
       if(!activity){finishPath();continue;}
       const coordinate = addActivity(activity.id, false);
       // Do not connect across a hidden, virtual, or missing step.
-      if (coordinate) path.push(coordinate);
+      if (coordinate) {
+        const point = result.points.find(row => row.activityId === activity.id);
+        if (point) point.stopNumber = index + 1;
+        path.push(coordinate);
+      }
       else finishPath();
     }
     finishPath();
@@ -164,4 +169,10 @@ export function resolveMapContext(
     }
   }
   return result;
+}
+
+/** Avoid extreme fits for one stop or several stops at effectively the same place. */
+export function mapContextCameraKind(points: Coordinate[]): "focus" | "fit" {
+  const first = points[0];
+  return first && points.every(point => Math.abs(point.latitude - first.latitude) < 0.001 && Math.abs(((point.longitude - first.longitude + 540) % 360) - 180) < 0.001) ? "focus" : "fit";
 }

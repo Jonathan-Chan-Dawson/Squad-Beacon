@@ -1,7 +1,7 @@
 // In-memory only: retain supported incoming destinations across auth callbacks.
 let pending: string | null = null;
 const supported =
-  /^\/(?:invite|activity\/[^/]+(?:\/chat)?|person\/[^/]+|squad\/[^/]+|squad-chat\/[^/]+|messages\/[^/]+|space\/[^/]+|organization\/[^/]+|council\/[^/]+|plan\/[^/]+|activities|profile|map|squads)\/?$/;
+  /^\/(?:invite|guest-claim|share|activity\/[^/]+(?:\/chat)?|person\/[^/]+|squad\/[^/]+|squad-chat\/[^/]+|messages\/[^/]+|space\/[^/]+|organization\/[^/]+|council\/[^/]+|plan\/[^/]+|activities|profile|map|squads)\/?$/;
 
 export function rememberEntryIntent(
   path: string,

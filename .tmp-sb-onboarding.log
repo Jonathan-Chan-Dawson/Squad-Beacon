@@ -1,0 +1,37 @@
+
+> squad-beacon@1.0.0 test:onboarding
+> tsx --test tests/accountEntry.test.ts tests/profileEditor.test.ts tests/onboarding.test.ts tests/onboarding.database.test.ts
+
+✔ account emails use the configured HTTPS origin, independent of client platform (5.4768ms)
+✔ email addresses are trimmed and malformed auth links fail before exchange (0.8153ms)
+✔ pending: required-profile readiness permits both entry and progress (171.7495ms)
+✔ skipped: required-profile readiness permits both entry and progress (34.6653ms)
+✔ completed: required-profile readiness permits both entry and progress (10.7132ms)
+✔ only a successful viewer-matched read can establish missing required profile (76.689ms)
+✔ demo/live snapshots cannot be interchanged (29.403ms)
+✔ basic setup validates dates and the exact age boundary without optional fields (10.0235ms)
+✔ entry intent preserves supported parameters, rejects external paths and clears on consumption (2.0273ms)
+✔ ordered migrations: owner progress, reliable entry evidence and atomic first-success claims (9490.7557ms)
+✔ empty is not new: reliable first-entry evidence and loaded progress are required (108.8439ms)
+✔ content precedence distinguishes failure, loading, access, filters and emptiness (0.4142ms)
+✔ all ten scenarios have valid profiles and no orphaned fixture relationships (268.0616ms)
+✔ pending requests remain prominent; friends and populated accounts suppress introduction (58.5207ms)
+✔ public discovery is authorized projection without fabricated connections (10.0108ms)
+✔ copy is deterministic, editable by tone, and optional (2.3058ms)
+✔ first-success candidates require confirmed action transitions and matching viewers (54.3761ms)
+✔ first Beacon and completion require a new confirmed Beacon, excluding status and Activity Notes (21.5496ms)
+✔ progress parsing is bounded and action listeners detach safely (1.1409ms)
+✔ survey preserves legacy personality prose without generating invalid badges (134.9969ms)
+✔ editor merges only changed fields with the synchronous latest settings and profile (17.7557ms)
+✔ settings payload preserves profile edits and never writes private projections (31.946ms)
+✔ survey/editor weekly-target edits preserve existing aspiration identity and unrelated fields (12.1335ms)
+✔ owner guard rejects null, signed-out and changed-viewer snapshots (15.9085ms)
+✔ editor trims text and rejects invalid server-bound weekly targets (16.6442ms)
+ℹ tests 25
+ℹ suites 0
+ℹ pass 25
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 11129.4092

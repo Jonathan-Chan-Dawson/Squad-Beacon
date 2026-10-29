@@ -5,7 +5,63 @@ import { makeScenario } from "../src/features/onboarding/scenarios";
 import {
   basicProfilePayload,
   profileEntryError,
+  authOrigin,
+  authCallbackUrl,
+  accountEmail,
+  usableAuthLink,
 } from "../src/features/auth/accountEntry";
+
+test("account emails use the configured HTTPS origin, independent of client platform", () => {
+  const origin = "https://squad-beacon.vercel.app";
+  assert.equal(authOrigin(`  ${origin}///  `), origin);
+  assert.equal(authCallbackUrl(false, origin), `${origin}/auth/confirm`);
+  assert.equal(
+    authCallbackUrl(true, origin),
+    `${origin}/auth/confirm?type=recovery`,
+  );
+  assert.equal(
+    authCallbackUrl(false, "https://new-domain.example/"),
+    "https://new-domain.example/auth/confirm",
+  );
+  for (const value of [
+    "",
+    " ",
+    "http://localhost:8081",
+    "squadbeacon://auth/callback",
+    "https://site.example/path",
+    "https://site.example?next=foo",
+    "https://site.example#token",
+    "https://user:pass@site.example",
+    "not-a-url",
+  ]) {
+    assert.throws(
+      () => authCallbackUrl(false, value),
+      /EXPO_PUBLIC_AUTH_ORIGIN/,
+    );
+  }
+});
+
+test("email addresses are trimmed and malformed auth links fail before exchange", () => {
+  assert.equal(
+    accountEmail(" fixture@example.invalid "),
+    "fixture@example.invalid",
+  );
+  assert.throws(() => accountEmail("no address"));
+  for (const type of ["email", "signup", "recovery"])
+    assert.equal(usableAuthLink({ token_hash: "fixture", type }), true);
+  assert.equal(usableAuthLink({ code: "pkce" }), true);
+  for (const input of [
+    {},
+    { code: [] },
+    { code: " " },
+    { token_hash: [] },
+    { token_hash: "hash", type: "unknown" },
+    { token_hash: "hash", type: ["email"] },
+    { token_hash: "hash", type: "email", code: "code" },
+    { token_hash: "hash", type: "email", error_description: "expired" },
+  ])
+    assert.equal(usableAuthLink(input), false);
+});
 import {
   rememberEntryIntent,
   consumeEntryIntent,

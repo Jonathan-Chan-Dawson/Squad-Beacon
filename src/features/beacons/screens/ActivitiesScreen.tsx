@@ -12,7 +12,6 @@ import {
   Pressable,
   RefreshControl,
   ScrollView,
-  Share,
   Text,
   View,
 } from "react-native";
@@ -22,7 +21,7 @@ import {
   useLocalSearchParams,
   type Href,
 } from "expo-router";
-import * as ExpoLinking from "expo-linking";
+import { shareBeaconInvitation } from "@/src/features/sharing/shareBeacon";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Bookmark, CalendarDays, ChevronRight } from "lucide-react-native";
 import type { Activity } from "@/src/shared/types";
@@ -166,16 +165,9 @@ export default function ActivitiesScreen() {
 
   const shareActivity = useCallback(
     async (activity: Activity) => {
-      const url = ExpoLinking.createURL("/activity/" + activity.id);
-      const message =
-        activity.title +
-        " · " +
-        activityWhen(activity, new Date(now)) +
-        "\n" +
-        url;
-      await Share.share({ title: activity.title, message, url });
+      await shareBeaconInvitation(data,userId,activity);
     },
-    [now],
+    [data,userId],
   );
 
   const respond = useCallback(
@@ -567,13 +559,6 @@ export default function ActivitiesScreen() {
         ) : null}
 
         <SharedStatusControl compact />
-        {home.pending > 0 ? (
-          <Button
-            secondary
-            title="View invitations & responses"
-            onPress={() => router.push("/responses")}
-          />
-        ) : null}
         {!hasPersonal &&
         (home.kind === "welcome" || home.kind === "compact") ? (
           <HomeInvitation

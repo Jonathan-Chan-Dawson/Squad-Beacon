@@ -12,9 +12,9 @@ import { useBeacon } from "@/src/shared/store";
 import { useNow } from "@/src/shared/useNow";
 import { useTheme } from "@/src/shared/ui";
 import { router } from "expo-router";
-import * as ExpoLinking from "expo-linking";
+import { shareBeaconInvitation } from "@/src/features/sharing/shareBeacon";
 import React from "react";
-import { Share, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { MapTooltipClose } from "./MapTooltipShell";
 import type { MapContextFilter } from "./contextFilters";
 import type { MapBeaconFeature } from "./mapBeaconFeatures";
@@ -64,7 +64,6 @@ export function MapTooltip({
           router.push({ pathname: "/plan/[id]", params: { id: plan.id } }),
       }
     : undefined;
-  const url = ExpoLinking.createURL(`/activity/${activity.id}`);
   const feedProps = activityFeedCardProps(data, activity, userId, now, {
     onOpen: onDetails,
     onMap: onDetails,
@@ -83,11 +82,7 @@ export function MapTooltip({
       });
     },
     onShare: async () => {
-      await Share.share({
-        title: activity.title,
-        message: `${activity.title}\n${url}`,
-        url,
-      });
+      await shareBeaconInvitation(data,userId,activity);
     },
   });
   const strictCapacityLabel =

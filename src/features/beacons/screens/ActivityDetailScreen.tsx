@@ -1,5 +1,7 @@
+import { BeaconTimingEditor } from "../components/BeaconTimingEditor";
 import { RepeatBeaconAction } from "@/src/features/plans/RepeatBeaconAction";
-import DateField from "@/components/DateField";
+import { GuestShareSheet } from "@/src/features/sharing/GuestShareSheet";
+import { guestSharingOrigin } from "@/src/features/sharing/guestTransport";
 import {
   resolveActivityToolEntry,
   type BeaconToolId as ToolId,
@@ -277,6 +279,7 @@ export default function ActivityDetail() {
   const commentsSectionRef = useRef<View>(null);
   const appliedCommentsEntry = useRef<string | null>(null);
   const [edit, setEdit] = useState(false);
+  const [editTiming, setEditTiming] = useState(false);
   const [title, setTitle] = useState("");
   const [starts, setStarts] = useState("");
   const [ends, setEnds] = useState("");
@@ -297,6 +300,7 @@ export default function ActivityDetail() {
 
   const [reactionBusy, setReactionBusy] = useState(false);
   const [shareBusy, setShareBusy] = useState(false);
+  const [guestShareOpen, setGuestShareOpen] = useState(false);
   const [saveBusy, setSaveBusy] = useState(false);
   const [interactionError, setInteractionError] = useState("");
   const [retryAction, setRetryAction] = useState<(() => void) | null>(null);
@@ -418,7 +422,7 @@ export default function ActivityDetail() {
             ) : (
               <>
                 <Empty
-                  title="This plan is no longer visible."
+                  title="This Beacon is no longer visible."
                   body="It may have been removed, or its audience may have changed."
                 />
                 <Button
@@ -742,14 +746,20 @@ export default function ActivityDetail() {
   const openMap = () =>
     router.push({ pathname: "/(tabs)", params: { beacon: activity.id } });
   const shareActivity = async () => {
+    if (data.capabilities?.guest_planning && guestSharingOrigin() && userId === activity.owner_id && activity.mode === "solo" && activity.solo_purpose !== "activity_note") {
+      setGuestShareOpen(true);
+      return;
+    }
+    if (data.capabilities?.guest_sharing && guestSharingOrigin() && userId && activity.mode !== "solo" && (activity.owner_id === userId || canManageBeacon(data, activity, userId))) {
+      setGuestShareOpen(true);
+      return;
+    }
     if (shareBusy) return;
     setShareBusy(true);
     setInteractionError("");
     setRetryAction(null);
     try {
-      const shareUrl = ExpoLinking.createURL(
-        "/activity/" + encodeURIComponent(activity.id),
-      );
+      const shareUrl = guestSharingOrigin() ? `${guestSharingOrigin()}/activity/${encodeURIComponent(activity.id)}` : ExpoLinking.createURL("/activity/" + encodeURIComponent(activity.id));
       await Share.share({
         title: activity.title,
         message:
@@ -1056,7 +1066,7 @@ export default function ActivityDetail() {
                 width: contentWidth,
                 maxWidth: "100%",
                 alignSelf: "center",
-                paddingTop: width <= 375 || height <= 667 ? 196 : 228,
+                paddingTop: 228,
                 paddingBottom: bottomClearance,
                 gap: tokens.space.md,
               },
@@ -1692,6 +1702,7 @@ export default function ActivityDetail() {
             onChat={
               canAccess && chatEnabled ? () => selectTab("Chat") : undefined
             }
+            backLabel={visibleTab === "Chat" ? "Back to Overview" : "Back"}
             onBack={() => {
               if (visibleTab === "Chat") selectTab("Overview");
               else if (router.canGoBack()) router.back();
@@ -1894,6 +1905,7 @@ export default function ActivityDetail() {
         ]}
       />
 
+      <GuestShareSheet visible={guestShareOpen} onClose={() => setGuestShareOpen(false)} target={activity.id} title={activity.mode === "solo" ? "A note from Squad Beacon" : activity.title} kind={activity.mode === "solo" ? "status" : "beacon"} statusText={activity.title} expiresAt={activity.ends_at} readOnly={activity.mode === "solo"} />
       {owner ? (
         <PersonProfilePreview
           personId={owner.id}
@@ -1905,11 +1917,11 @@ export default function ActivityDetail() {
       <Sheet
         title="Update the Beacon"
         visible={edit}
-        onClose={() => setEdit(false)}
+        onClose={() => { setEdit(false); setEditTiming(false); }}
       >
         <Field label="Title" value={title} onChangeText={setTitle} />
-        <DateField label="Starts" value={starts} onChange={setStarts} />
-        <DateField label="Ends" value={ends} onChange={setEnds} />
+        <Button secondary title="Change date & time" onPress={() => setEditTiming(true)} />
+        <Txt muted>{new Date(starts).toLocaleString()} – {new Date(ends).toLocaleString()}</Txt>
         <Action
           title="Save and notify attendees"
           run={async () => {
@@ -1925,6 +1937,7 @@ export default function ActivityDetail() {
         />
       </Sheet>
 
+      <BeaconTimingEditor visible={edit && editTiming} starts={starts} ends={ends} quickStarts={false} timezone={activity.timezone || data.plans.find((plan) => plan.id === activity.plan_id)?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone} onClose={() => setEditTiming(false)} onDone={(value) => { setStarts(value.starts); setEnds(value.ends); setEditTiming(false); }} />
       <Sheet
         title="Report Beacon"
         visible={report}

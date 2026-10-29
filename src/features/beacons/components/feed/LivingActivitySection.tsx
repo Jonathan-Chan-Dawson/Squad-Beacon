@@ -1,3 +1,6 @@
+import { ActivityCategoryChoices } from "../ActivityCategoryChoices";
+import { GuestShareButton } from "@/src/features/sharing/GuestShareSheet";
+import { DurationControl } from "@/src/shared/DurationControl";
 import {canReadPlanningThread} from "@/src/features/planning/domain";
 import { ProfileSonarCard } from "@/src/features/profile/components/ProfileSonarCard";
 import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
@@ -8,7 +11,6 @@ import type { Activity, Audience, Category, Payload } from "@/src/shared/types";
 import {
   AudiencePicker,
   Button,
-  Chips,
   Field,
   Sheet,
   Txt,
@@ -84,6 +86,7 @@ export function ActivityNoteEditor({
 }) {
   const { data, userId, act, getViewerEpoch } = useBeacon();
   const { styles } = useTheme();
+  const noteNow = useNow();
   const key = `${userId}:${note?.id ?? "new"}`;
   const initial = (): NoteDraft =>
     drafts.get(key) ??
@@ -195,18 +198,15 @@ export function ActivityNoteEditor({
   return (
     <Sheet
       title={note ? "Edit Activity Note" : "What are you doing?"}
+      centered
+      maxHeightPercent={92}
+      footer={<View style={{ flexDirection: "row", gap: 8 }}><View style={{ flex: 1 }}><Button secondary title="Cancel" disabled={busy} onPress={onClose} /></View><View style={{ flex: 2 }}><Button title={busy ? "Saving…" : note ? "Save Changes" : "Share Activity"} disabled={busy} onPress={() => void save()} /></View></View>}
       visible={visible}
       onClose={() => {
         if (!busy) onClose();
       }}
     >
-      <View style={{ gap: 16 }}>
-        <View style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
-          <BeaconIcon category={draft.category} emoji={draft.emoji} size={48} />
-          <View style={{ flex: 1 }}>
-            <Txt muted>Share what you’re doing.</Txt>
-          </View>
-        </View>
+      <View style={{ gap: 10 }}>
         <Field
           label="What are you up to?"
           value={draft.title}
@@ -214,20 +214,7 @@ export function ActivityNoteEditor({
           onChangeText={(title) => update({ title })}
           placeholder="Shooting hoops, studying, taking a walk…"
         />
-        <Chips
-          options={
-            [
-              "Fitness",
-              "Study",
-              "Gaming",
-              "Creative",
-              "Social",
-              "Other",
-            ] as const
-          }
-          value={draft.category}
-          onChange={(category) => update({ category })}
-        />
+        <ActivityCategoryChoices value={draft.category} onChange={(category, idea) => update({ category, ...(idea && !draft.title.trim() ? { title: idea } : {}) })} />
         {draft.endsAt ? (
           <>
             <Txt muted>
@@ -245,14 +232,10 @@ export function ActivityNoteEditor({
             />
           </>
         ) : (
-          <Field
-            label="Duration · minutes"
-            value={draft.minutes}
-            keyboardType="numeric"
-            onChangeText={(minutes) => update({ minutes })}
-          />
+          <View style={{ gap: 4 }}><DurationControl value={Number(draft.minutes)} minimum={5} maximum={1440} presets={[15, 30, 60, 120]} onChange={(minutes) => update({ minutes: String(minutes) })} />{Number.isFinite(Number(draft.minutes)) && <Txt muted>Ends at {new Date(noteNow + Number(draft.minutes) * 60000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</Txt>}</View>
         )}
         <AudiencePicker
+          triggerLabel={`Visible to: ${draft.audience === "friends" ? "Friends" : draft.audience === "private" ? "Only me" : eligibleDefaultTargets(data, userId ?? "", draft.audience).find((row) => row.id === draft.audienceId)?.name ?? "Selected audience"} · Change`}
           value={draft.audience}
           id={draft.audienceId}
           onChange={(audience, audienceId) => update({ audience, audienceId })}
@@ -298,11 +281,7 @@ export function ActivityNoteEditor({
             {error}
           </Text>
         )}
-        <Button
-          title={busy ? "Saving…" : note ? "Save Changes" : "Share Activity"}
-          disabled={busy}
-          onPress={() => void save()}
-        />
+
       </View>
     </Sheet>
   );
@@ -564,6 +543,7 @@ export function LivingStatusHeader({
           {!renderIdentity && availabilityControl}
         </View>
       )}
+      {status && <GuestShareButton label="Share selected Status Note" kind="status" target={status.id} title="A note from Squad Beacon" statusText={status.title} expiresAt={status.ends_at} readOnly />}
       <Modal transparent visible={open} animationType="none" onRequestClose={() => setOpen(false)}>
         <Pressable accessibilityLabel="Dismiss availability menu" onPress={() => setOpen(false)} style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0 }} />
         <View role="dialog" accessibilityViewIsModal accessibilityLabel="Availability & sharing" style={{

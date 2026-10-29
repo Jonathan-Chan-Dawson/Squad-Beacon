@@ -24,6 +24,8 @@ export async function mockOnboardingAccount(
     failProfileSave?: boolean;
     callbackWithoutSession?: boolean;
     holdProgress?: boolean;
+    failVerify?: boolean;
+    failResend?: number;
   } = {},
 ) {
   const url =
@@ -109,17 +111,50 @@ export async function mockOnboardingAccount(
   });
   const actions: { action: string; payload: Record<string, unknown> }[] = [];
   const authCalls: string[] = [];
+  const authRequests: {
+    path: string;
+    url: string;
+    body: Record<string, unknown> | null;
+  }[] = [];
   let profileSaveFailed = false;
   let snapshotReads = 0;
   await page.route(`https://${host}/**`, async (route) => {
     const path = new URL(route.request().url()).pathname;
-    if (path.startsWith("/auth/v1/")) authCalls.push(path);
+    if (path.startsWith("/auth/v1/")) {
+      authCalls.push(path);
+      authRequests.push({
+        path,
+        url: route.request().url(),
+        body: route.request().postData()
+          ? route.request().postDataJSON()
+          : null,
+      });
+      if (
+        (path === "/auth/v1/verify" && options.failVerify) ||
+        (path === "/auth/v1/resend" && options.failResend)
+      ) {
+        await route.fulfill({
+          status: path.endsWith("resend") ? options.failResend : 403,
+          contentType: "application/json",
+          body: JSON.stringify({
+            code: path.endsWith("resend")
+              ? "over_email_send_rate_limit"
+              : "otp_expired",
+            msg: "Fixture request rejected",
+          }),
+        });
+        return;
+      }
+    }
     let body: unknown = [];
     if (path === "/auth/v1/user")
       body = route.request().method() === "PUT" ? { user } : user;
     else if (path === "/auth/v1/token")
       body = options.callbackWithoutSession ? { user, session: null } : session;
-    else if (["/auth/v1/recover", "/auth/v1/logout"].includes(path)) body = {};
+    else if (
+      ["/auth/v1/recover", "/auth/v1/logout", "/auth/v1/resend"].includes(path)
+    )
+      body = {};
     else if (path === "/auth/v1/signup") body = { user, session: null };
     else if (path === "/auth/v1/verify")
       body = options.callbackWithoutSession ? { user, session: null } : session;
@@ -227,6 +262,7 @@ export async function mockOnboardingAccount(
     snapshot,
     actions,
     authCalls,
+    authRequests,
     releaseProgress,
     storageKey: `sb-${host.split(".")[0]}-auth-token`,
     get completedReads() {

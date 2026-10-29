@@ -48,6 +48,33 @@ node scripts/serve-preview.cjs
 
 Open http://127.0.0.1:4173. Web includes an interactive OpenStreetMap map. Native maps support street/satellite views and compass controls; the contacts picker runs on phones. Real phone testing needs an Expo development build, not just Expo Go.
 
+## Account email configuration
+
+Set this public, non-secret value in local `.env`, Vercel Production/Preview/Development environment settings, and the matching EAS build environment:
+
+```dotenv
+EXPO_PUBLIC_AUTH_ORIGIN=https://squad-beacon.vercel.app
+```
+
+Expo embeds public environment values into web/native builds. Changing a hosted environment value requires a new web deployment or native build/update. Email requests never infer this URL from localhost or a temporary preview. Missing or malformed configuration disables email sending with a configuration error; ordinary password sign-in remains available.
+
+In the same hosted Supabase project used by the app:
+
+1. Add the exact allowed redirects `https://squad-beacon.vercel.app/auth/confirm` and `https://squad-beacon.vercel.app/auth/confirm?type=recovery`. Preserve valid existing callbacks, including the HTTPS `/auth/callback` variants and installed-app `squadbeacon://auth/callback` variants.
+2. Deploy the new confirmation route and configured origin before changing templates. Keep the explicit auth rewrites/headers in `vercel.json`; they serve matching exported HTML with no-store/no-referrer protection while preserving guest routes.
+3. Set Auth **Site URL** to `https://squad-beacon.vercel.app`. When template editing is available, copy [confirmation.html](supabase/templates/confirmation.html) into **Confirm signup** and [recovery.html](supabase/templates/recovery.html) into **Reset password**. Both templates use `{{ .SiteURL }}`, so the domain is not duplicated in template HTML. Template files are rollout inputs; they are not automatically applied to hosted Supabase. The hosted Free project currently requires custom SMTP or a Pro upgrade to edit templates; the owner chose to retain the default sender for now, so these template changes are deferred.
+4. Send fresh test emails and verify signup, a different browser, recovery, expired links, and resend. Old localhost links cannot be repaired; use **Resend confirmation email**. Disable email-provider click tracking if it rewrites authentication links.
+
+The HTTPS page does not verify on load. **Confirm and continue** consumes the link once, protecting it from simple email-link prefetching. Token-hash emails work without the original tab's PKCE verifier. Legacy code links still require that verifier. Browser sessions remain tab-scoped; no session-storage redesign is included. See Supabase's [email-template guidance](https://supabase.com/docs/guides/auth/auth-email-templates) and [redirect URL configuration](https://supabase.com/docs/guides/auth/redirect-urls).
+
+Until the custom templates are enabled, default emails verify through Supabase before redirecting and retain the legacy PKCE requirement: finish the callback in the tab that requested the email. A different tab/browser may need ordinary sign-in after email confirmation. Password recovery requires the original verifier; request a new reset link from the tab you will use. The explicit page alone does not make default email links resistant to upstream prefetching or guarantee cross-browser sessions. Supabase's default sender is restricted to project-team addresses and has a low sending limit; see [default SMTP limitations](https://supabase.com/docs/guides/auth/auth-smtp).
+
+### Changing the account-email domain
+
+Bring the replacement HTTPS domain online with the auth routes first. Add its callback URLs to Supabase, update `EXPO_PUBLIC_AUTH_ORIGIN`, rebuild/redeploy, then update Supabase's **Site URL**. Retain the old domain/callbacks while previously sent links can still be valid. Changing the app environment variable alone does not change Supabase's hosted Site URL or allow list.
+
+Future iOS Universal Links/Android App Links can use this same HTTPS route once real signing identities and domain-association files are available. Until those are verified, email links open the website; installed-app auto-opening is not claimed. See [email-link validation and rollout](docs/AUTH_EMAIL_LINKS_VALIDATION.md).
+
 ## Implemented pilot
 
 - Four tabs: Map, Beacons (Now / Upcoming / Past), Squads, and Profile. A raised circular Create button sits in the center. Notifications stays in tab headers; Profile has a Settings gear.
@@ -74,7 +101,7 @@ Notification handling and native contacts setup: [docs/NOTIFICATIONS.md](docs/NO
 1. Create a Supabase project in your chosen US region. Copy `.env.example` to `.env`; set `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. Never put a service-role key in the mobile app.
 2. Install/use the Supabase CLI (`npx supabase`). Run `npx supabase login`, `npx supabase link --project-ref YOUR_REF`, then `npx supabase db push`. Apply all migrations in `supabase/migrations` before serving clients.
 3. Require confirmed email, a minimum ten-character password, and production SMTP. Configure Resend with a verified sending domain in Supabase Auth. The default Supabase sender is not a production email service.
-4. Add `squadbeacon://auth/callback` and `squadbeacon://auth/callback?type=recovery` to Auth redirect URLs, plus the exact deployed web callback URLs (including the recovery query). The app handles PKCE `code` links and `token_hash` links with `type=signup` or `type=recovery`. Web callbacks use the current origin; native callbacks use the registered `squadbeacon` scheme. PKCE needs the initiating browser tab/device because web session and verifier storage is tab-scoped. For verification across devices, customize the Supabase email templates to use the token-hash callback. See [Phase 4B validation](docs/ONBOARDING_2_VALIDATION.md) for configuration and acceptance limits.
+4. Set `EXPO_PUBLIC_AUTH_ORIGIN=https://squad-beacon.vercel.app` in the app build environment and follow [Account email configuration](#account-email-configuration). New email links use the configured HTTPS website on every platform. The legacy `/auth/callback` route continues to accept PKCE and signup/recovery links. Hosted Supabase settings and email templates must be aligned separately; editing local `supabase/config.toml` does not update the hosted project.
 5. Deploy `delete-account` and `push-worker` with `npx supabase functions deploy FUNCTION_NAME`. Both verify requests inside their handlers: deletion validates the bearer token with Auth; the worker requires its secret header. Do not remove those checks when using `verify_jwt=false`.
 6. Set server-only `WORKER_SECRET` to a cryptographically random secret. Configure `WEB_ORIGINS` as a comma-separated allowlist if using web account deletion. Optionally set `EXPO_ACCESS_TOKEN` when Expo enhanced push security is enabled. Supabase supplies the server URL/service-role environment values.
 7. In Supabase Vault, create `beacon_worker_url` and `beacon_worker_secret`; the latter must match `WORKER_SECRET`. Run `supabase/schedules.sql` in the SQL editor to schedule minute-level delivery and independent cleanup. Monitor failed cron and function runs.
@@ -83,7 +110,7 @@ Notification handling and native contacts setup: [docs/NOTIFICATIONS.md](docs/NO
    The role is never editable by clients. The moderator’s Profile shows the safety inbox.
 9. Set `EXPO_PUBLIC_SUPPORT_EMAIL`. Replace the public support draft with the operator’s reviewed privacy policy, contact information, providers, retention details, and community standards before distribution.
 
-No cloud project, paid account, deployment, or store listing has been created automatically. Real account and provider setup requires your credentials.
+The existing Vercel project hosts the web build; see [account-email rollout evidence](docs/AUTH_EMAIL_LINKS_VALIDATION.md). Paid provider accounts, custom SMTP credentials and store listings require separate setup. Application deployments do not automatically apply database migrations.
 
 ## Mobile builds
 
@@ -125,7 +152,7 @@ Living Plans and reviewed Routine sources require the three ordered Plan migrati
 
 Browser tests exercise the demo’s Now/favorites, RSVP/chat, personal templates, Profile/Settings, Notifications, organizations and narrow-screen flows. On Windows they use installed Chrome; elsewhere they use Playwright Chromium.
 
-For onboarding scenarios, run `npm run test:onboarding`, then `npm run build:onboarding-preview` followed by `npm run test:onboarding:browser`. This includes required-profile entry, optional personalization, callbacks, and Phase 4A scenarios. The development export exposes a demo-only lab; ordinary production exports exclude its controls. The default populated demo is preserved. Optional onboarding progress requires the additive migration listed in [the backend inventory](supabase/_inventory.md), but unavailable progress never blocks app entry. See [Phase 4A validation](docs/ONBOARDING_ENTRY_VALIDATION.md) for its rollout and [Phase 4B validation](docs/ONBOARDING_2_VALIDATION.md) for current entry behavior.
+For onboarding scenarios, run `npm run test:onboarding`, then `npm run build:onboarding-preview` followed by `npm run test:onboarding:browser`. For account-email confirmation, run `npm run build:auth-preview` and `npm run test:auth:browser`; its separate preview uses port 4189. This includes required-profile entry, optional personalization, callbacks, and Phase 4A scenarios. The development export exposes a demo-only lab; ordinary production exports exclude its controls. The default populated demo is preserved. Optional onboarding progress requires the additive migration listed in [the backend inventory](supabase/_inventory.md), but unavailable progress never blocks app entry. See [Phase 4A validation](docs/ONBOARDING_ENTRY_VALIDATION.md) for its rollout and [Phase 4B validation](docs/ONBOARDING_2_VALIDATION.md) for current entry behavior.
 
 The installed dependency audit reports 15 moderate advisories (the same count reported before feature dependencies were added). Review the dependency audit before public release; no forced SDK upgrade was applied.
 
@@ -160,7 +187,7 @@ Map workspace migration: apply `supabase/migrations/202609290002_map_workspace.s
 - Friends Now uses compact vertical status rows with direct stars, message/profile targets and Free/Starred filters. Demo Find Friends uses fictional profiles; no real accounts are created.
 - Test fixture data lives in `tests/fixtures/neighborhood.ts`; test instructions live in `tests/README.md`.
 - Tap your Profile avatar to style the built-in SVG character (216 combinations). Uploaded photos remain supported in Edit profile. Apply `202609290003_mini_avatars.sql` to persist choices for real accounts.
-- Essential, Mint, Sunset, Midnight, Ocean and Berry each have light/dark versions, with Essential/Dark as the fresh-install default. Settings → Appearance saves the palette and Device/Light/Dark choice separately. Device follows system changes; legacy saved themes retain their former appearance.
+- Essential, Mint, Sunset, Midnight, Ocean, Berry and Sunflower each have light/dark versions, with Essential/Dark as the fresh-install default. Settings → Appearance saves the palette and Device/Light/Dark choice separately. Device follows system changes; legacy saved themes retain their former appearance.
 - Map selection opens an inline RSVP tooltip positioned relative to the map coordinate. Details opens a separate translucent workspace with Overview, People, Comments and Chat. No native callout or modal is used for RSVP.
 
 Avatar art is generated locally from a bounded numeric seed; this is an original simple illustration system, not a Snapchat/Bitmoji integration. Web map avatars are illustrated; private uploaded photos remain in app profile views. Live-location illustrations still respect permission and freshness checks. Theme transparency is a tinted overlay, not a native blur effect.
@@ -199,3 +226,17 @@ Tips are limited to 180 characters, one per author per place. Helpful endorsemen
 Activity interest is an explicit, two-hour opt-in, limited to one area/activity per person. The server stores only a coarse 0.02-degree area cell for interest. A place shows a signal only when at least five other people are interested in a relevant activity in that cell. Responses contain no participant identities, coordinates or counts. Create Beacon retains the selected venue; Ping People opens the existing composer with a place question and explicit audience selection. It does not message anonymous interested people.
 
 Reads exclude expired information immediately. The existing service-role `cleanup_pulse_reports()` also removes expired interest, stale tips and old rate-limit events when run by the existing cleanup scheduler. Demo examples remain offline. This workspace does not apply remote migrations or configure hosted automation.
+
+## Guest invitations (SB Connections)
+
+Phases 5.1 and 5.2 are implemented in source, with sharing disabled until configured and accepted on the selected hosted backend. Guests use the canonical RSVP/planning records, not a separate planning engine. Sharing requires the backend `guest_sharing`/`guest_planning` capability and configured HTTPS guest origin. See [the feature inventory, contracts and verification boundaries](docs/SB_CONNECTIONS_VALIDATION.md).
+
+Keep `SB_GUEST_ENABLED` absent or `false` in production until hosted acceptance passes. Apply the complete ordered migration history, including `20261028193122_guest_beacon_foundation.sql` followed by `20261029000145_guest_planning_continuity.sql`, to the explicitly selected backend. Configure Vercel server-only `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, a random `SB_GUEST_RATE_SECRET`, and the exact HTTPS `SB_PUBLIC_ORIGIN`. Never prefix privileged keys with `EXPO_PUBLIC_`. Set `EXPO_PUBLIC_GUEST_ORIGIN` to the same origin at client build time; browser management and member claiming must run on that origin. Release additive schema first, server contracts second, and capability-enabled clients last.
+
+Guest verification requires production Supabase SMTP and a passwordless email template displaying `{{ .Token }}`. Preserve existing signup/recovery templates and callback configuration. Test actual delivery, invalid/expired codes, returning sessions and logout. Tokens must not appear in application logs. Apply reviewed additive schema before server activation, and publish capability-enabled clients last.
+
+On an isolated preview, set `SB_GUEST_ENABLED=true` and verify `/g/<token>`, `/g/<token>/calendar.ics`, `/g/<token>/card.png`, `/g/<token>/flyer.svg`, `/api/guest` and existing Expo routes. Preserve guest/association rewrites ahead of the Expo catch-all and the function's bundled browser client/font files in `vercel.json`. Verify real email, new/returning guests, organizer approval/removal, last-seat concurrency on PostgreSQL, decisions/deadlines, selected Plan privacy and dual-session member claiming. Then enable production. Disabling the switch stops access without deleting responses. Calendar handoffs are manual; downloaded flyers and cached social previews cannot be recalled.
+
+Native association setup: set the actual `APPLE_TEAM_ID` (10 uppercase letters/digits) and comma-separated `ANDROID_APP_LINK_FINGERPRINTS` (SHA-256 signing-certificate fingerprints) in both build and server environments, with matching guest origins. `app.config.ts` conditionally configures associated domains/verified intent filters; the guest handler serves `/.well-known/apple-app-site-association` and `/.well-known/assetlinks.json` for `com.squadbeacon.app` and `/g/*`. Missing/invalid credentials leave associations disabled. Verify HTTP 200 JSON without authentication or redirects on the invitation domain, rebuild signed apps (also needed for `expo-clipboard`), and test installed-app/browser fallback on iOS and Android. The native `/g/[token]` receiver preserves the invitation and opens the focused guest browser. No domain/signing credentials have been fabricated or deployed.
+
+Focused checks: `npm run test:guest`. Browser checks: `npm run test:guest:browser`. Canonical browser journeys use the real ordered-history PGlite database with external Auth/email substituted; hosted Auth, multi-connection PostgreSQL and native-device acceptance remain separate.

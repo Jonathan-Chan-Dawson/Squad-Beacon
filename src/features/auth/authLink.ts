@@ -1,4 +1,5 @@
 import { supabase } from "@/src/shared/supabase";
+import { usableAuthLink } from "./accountEntry";
 
 export type LinkParams = {
   code?: string;
@@ -13,6 +14,8 @@ async function completeLink(params: LinkParams) {
     throw new Error(
       "This link is invalid or expired. Request a fresh email link.",
     );
+  if (!usableAuthLink(params))
+    throw new Error("This link is incomplete. Request a fresh email link.");
   let recovery = false;
   const {
     data: { subscription },
@@ -29,7 +32,9 @@ async function completeLink(params: LinkParams) {
       linkedUser = data.session?.user.id;
     } else if (
       params.token_hash &&
-      (params.type === "recovery" || params.type === "signup")
+      (params.type === "recovery" ||
+        params.type === "signup" ||
+        params.type === "email")
     ) {
       const { data, error } = await supabase.auth.verifyOtp({
         token_hash: params.token_hash,
@@ -58,13 +63,20 @@ let operation: {
   key: string;
   promise: ReturnType<typeof completeLink>;
 } | null = null;
-export function completeAuthLink(params: LinkParams) {
-  const key = JSON.stringify([
+function linkKey(params: LinkParams) {
+  return JSON.stringify([
     params.code,
     params.token_hash,
     params.type,
     params.error_description,
   ]);
+}
+/** Only resumes an exchange already initiated by the user for this exact link. */
+export function existingAuthLink(params: LinkParams) {
+  return operation?.key === linkKey(params) ? operation.promise : null;
+}
+export function completeAuthLink(params: LinkParams) {
+  const key = linkKey(params);
   if (operation?.key !== key)
     operation = { key, promise: completeLink(params) };
   return operation.promise;

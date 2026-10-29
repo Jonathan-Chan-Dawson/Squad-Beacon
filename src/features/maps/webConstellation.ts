@@ -213,7 +213,7 @@ export function webConstellation(
     renderCount(clusterBadge, anchor.parts, anchor.fontSize);
     clusterBadge.setAttribute(
       "aria-label",
-      `${clusterCountAccessibilityLabel(anchor.peopleCount, anchor.beaconTotal)}. Nearby does not mean attending. ${anchor.activation === "expand" ? "Expand to select every Beacon" : "Open searchable cluster explorer"}`,
+      `${clusterCountAccessibilityLabel(anchor.peopleCount, anchor.beaconTotal)}. Nearby does not mean attending. ${presentation.group.members.length <= 5 ? "Choose from nearby items" : "Open searchable cluster explorer"}`,
     );
   };
   if (

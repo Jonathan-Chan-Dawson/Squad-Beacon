@@ -1,24 +1,23 @@
 # Theme refinement
 
-The existing family names remain **Midnight, Ocean, Mint, Sunset, and Berry**. Essential adds one neutral family; its Dark/Light previews select an appearance within that family.
+Seven stable families provide paired light/dark palettes: Essential, Midnight, Ocean, Mint, Sunset, Berry and Sunflower.
 
-## Preferences
+## Color direction
 
-- New or invalid preferences initialize Essential Dark. A valid explicitly saved appearance is retained.
-- Existing family IDs remain unchanged. Legacy stored Midnight without an appearance remains dark; other legacy families remain light. Saved Light, Dark, and System preferences are preserved.
-- Selecting a color family retains appearance. Essential preview shortcuts select their displayed appearance. System follows live device changes.
+- Essential is warm neutral with restrained gold accents. Sunflower uses cream/butter surfaces and stronger sunflower gold. Sunset retains its distinct coral/terracotta hue.
+- Every family separates page, card, raised and selected surfaces. Soft selected chips use readable accent text; primary actions use the solid accent with the corresponding foreground. Structural labels remain neutral.
+- Primary button icons inherit the button foreground. Destructive dialog actions retain their danger styling. Category and availability meanings, map-provider imagery, avatars and relationship indicators remain independent of the selected family.
 
-## Colors and compatibility
+## Compatibility
 
-- All twelve variants use the supplied background, surface, primary, and text foundations. Essential also preserves the exact neutral raised, border, supporting-text, and button foreground colors.
-- Secondary text, outlines, containers, and raised surfaces are derived consistently for colorful families. Semantic roles include background, surface, surfaceRaised, surfaceSelected, textPrimary, textSecondary, primary, onPrimary, primaryContainer, outline, success, warning, and danger.
-- Existing color names and exports remain compatible. Shared controls and overlays receive the refined palettes through the current theme engine.
-- Category foregrounds and availability meanings stay independent of family. Map/profile availability badges and Beacon admission badges use those roles. Owned stars, rose relationship hearts, avatars, QR contrast, and map providers retain their intentional colors.
-- Appearance has compact two-column previews of the background, surface, text, and primary CTA, with separate System/Light/Dark controls. Other screens retain their layouts and dimensions.
+Theme IDs, legacy aliases and palette exports stay compatible. Essential/Dark remains the default. Explicit Light/Dark/System preferences and original implicit legacy appearances survive. Selecting a family retains appearance; Essential shortcuts select their displayed appearance. System follows live device changes.
+
+Settings previews include a small descriptor for each family and Sunflower is discoverable through settings search. No backend change or preference migration is required.
 
 ## Validation
 
-- 74 focused unit checks passed. Validation covers defaults, every saved family/appearance, exact Essential colors, legacy aliases, button and surface contrast, and independent category/status colors.
-- 27 focused browser checks passed. Coverage checks all families in both appearances across Map, Beacons, Create, Squads, Friends, Profile, and Appearance, with 320/375/430px widths. It also verifies preview persistence and live System appearance.
+Theme tests cover all fourteen variants, primary/supporting text, selected and raised surfaces, button foregrounds, semantic category/availability roles, stable IDs, saved preferences and System appearance. Browser checks capture the main screens and centered choices across phone widths in both appearances. Screenshots are generated under .expo/sunflower-themes/.
 
-- Type checking and changed-source lint passed. Web and Android/Hermes exports succeeded. Native device runtime validation was not performed.
+Validation for this pass: typecheck and full lint passed; 38 focused theme/map-presentation tests and 24 browser checks passed. Web export succeeded. All seven families were captured on the main screens in both appearances across 320/390/430px widths, with additional Essential/Sunflower/Sunset comparisons at 390px and Sunflower at 430px.
+
+No Android device was connected. Native-device appearance, accessibility scaling and system bars require device verification; browser/export results do not establish native acceptance.

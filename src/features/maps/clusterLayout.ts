@@ -15,8 +15,7 @@ export function beaconPetalLimit(count: number, scale: BloomScale = "medium") {
 }
 /** Preview capacity follows Beacon petals; distant tiers deliberately use fewer marks. */
 export function friendSatelliteLimit(petals: number, scale: BloomScale) {
-  const capacity = petals <= 2 ? 3 : petals <= 5 ? 5 : 7;
-  return scale === "far" || scale === "micro" ? 0 : capacity;
+  return scale === "close" && petals === 1 ? 1 : 0;
 }
 export const friendGroupUsesCount = (count: number, scale: BloomScale) =>
   count >= 5 || ((scale === "far" || scale === "micro") && count > 1);

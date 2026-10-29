@@ -1,5 +1,7 @@
 Documentation guide
 
+- AUTH_EMAIL_LINKS_VALIDATION.md: configured account-email origin, confirmation/resend behavior, hosted template rollout and verification boundaries. Setup instructions remain in README.md.
+
 - PHASE_4CA_NAVIGATION_VALIDATION.md: navigation contract audit, localized Beacon Back/accessibility repairs, regression evidence and Phase 4C-B review targets.
 
 - ONBOARDING_2_VALIDATION.md: Phase 4B shared readiness, direct entry, voluntary personalization, callback configuration and validation boundaries.
@@ -11,7 +13,7 @@ Documentation guide
 - UI_GUIDE.md: interface and accessibility conventions.
 - spec-review.md: implemented requirements, scope decisions, and remaining gaps.
 
-- theme-refinement.md: six families under stable original names, neutral Essential defaults, saved preference compatibility, semantic role refinements, Appearance previews, and validation boundaries.
+- theme-refinement.md: seven families including Sunflower, warm Essential defaults, saved preference compatibility, semantic role refinements, Appearance previews, and validation boundaries.
 
 - MOBILE_UI_POLISH_VALIDATION.md: mobile location, chat, Profile, navigation/sheet/system-UI changes; automated verification and outstanding native device acceptance.
 
@@ -31,3 +33,6 @@ Documentation guide
 - PLANS_OVERHAUL_VALIDATION.md: Living Plans, collaborative decisions and unified repeats implementation, additive migrations, validation evidence and hosted/native acceptance boundaries.
 
 - YOUR_ACTIVITY_UX_VALIDATION.md: intermediate pre-4C workspace implementation, route/Back/restoration contracts and validation evidence.
+- SB_CONNECTIONS_VALIDATION.md: Phase 5 implementation inventory, actual guest contracts, local verification evidence and hosted/native acceptance boundaries; setup remains in README.md.
+
+- PHASE_4R_VALIDATION.md: dated interface/integration evidence and native/hosted limits. PHASE_4R_CATEGORY_FOLLOWUP.md: lightweight category mappings and a simpler future chooser/data-contract proposal.

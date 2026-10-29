@@ -1,0 +1,53 @@
+
+> squad-beacon@1.0.0 test:rsvp
+> tsx --test --test-concurrency=1 tests/smartRsvp.test.ts tests/smartRsvp.database.test.ts tests/beaconControls.test.ts tests/createHandoff.test.ts tests/creationAtomic.database.test.ts tests/activityHistory.test.ts tests/snapshotNormalization.test.ts
+
+✔ demo history includes hosted shared Beacons and approved Going non-solo history only (26.9114ms)
+✔ history search uses only visible activity labels and visible host names (1.0545ms)
+✔ history keyset pagination is stable for equal timestamps and applies page bounds (3.6056ms)
+✔ history RPC parser maps a valid page and rejects malformed page envelopes (2.9863ms)
+✔ capacity counts host plus distinct accepted Going, never requests or interest (5.9825ms)
+✔ role powers stay dormant until approved Going and respect role hierarchy (1.5012ms)
+✔ turning a tool off pauses writes without hiding authorized history (0.6077ms)
+✔ manual arrival is self-only, never opens pending access, and Present is time-bounded (0.5949ms)
+✔ server-projected current access overrides stale list audience membership (0.5529ms)
+✔ control validation restricts capacity, decorations, and music hosts (1.3358ms)
+✔ settings drafts remount when the detail route changes even for matching controls (0.7573ms)
+✔ demo host settings enforce seat limits and pause modules without dropping history (80.7876ms)
+✔ demo attendance is self-only, time-bounded, and read-only after completion (58.8291ms)
+✔ 50 Beacon invitations is advisory and counts distinct selected people (2.0226ms)
+✔ invitee parsing preserves stale IDs for review and malformed input blocks until explicitly cleared (1.6802ms)
+✔ permission changes before publishing prevent any Beacon creation (73.9152ms)
+✔ partial invitation retry keeps one created Beacon and never repeats successful invitations (11.1534ms)
+✔ existing going/requested/invited/declined responses are preserved without another invitation action (9.2154ms)
+✔ lost eligibility after creating remains a visible pending failure and does not recreate (8.9204ms)
+✔ status conversion seeds text/category only and leaves source history/settings untouched (13.6149ms)
+✔ creation handoff retains selection, source, scheduling and only confirmed finite coordinates (1.5501ms)
+✔ late status hydration seeds untouched fields while preserving text the user has edited (0.6045ms)
+✔ concurrent creation/retry calls share one run and never duplicate the Beacon or invitations (16.2546ms)
+✔ an explicitly removed pending recipient is skipped after an earlier invitation completes (10.6317ms)
+✔ atomic publication retains original payload, selection and UUID after a lost committed response (22.8167ms)
+✔ unverified atomic replies retain the same request until authoritative acknowledgement (8.7826ms)
+✔ atomic definitive rollback releases the attempt for corrected draft while prevalidation never locks it (12.3561ms)
+✔ atomic concurrent attempts share one run and account changes cannot reuse publication (26.0591ms)
+✔ demo atomic invitation failure proves rollback and leaves the helper draft editable (82.8471ms)
+✔ an account change during an atomic response cannot navigate with the previous account result (7.6105ms)
+✔ server actor mismatch cannot discard an ambiguous original-account request (19.8321ms)
+✔ a failed created-ID checkpoint blocks invitations and retry never recreates (24.8685ms)
+✔ atomic creation/invitations commit once and roll back all writes on eligibility or quota failures (27517.5472ms)
+✔ smart RSVP preserves resolved invitations, legacy reads, capacity and privacy (9107.2216ms)
+✔ discovery, tentative response, and withdrawal never fabricate an invitation (100.4213ms)
+✔ invitation decline remains resolved and editable without participation access (49.9293ms)
+✔ confirmation reasons distinguish harmless changes from consequential departures (27.2638ms)
+✔ normalization merges resolved rows, gates capability and fails closed on unknown statuses (18.9397ms)
+✔ approval requests and capacity remain independent of arrival and declined identities (42.0269ms)
+✔ reactions aggregate actual independently authorized emoji rows (27.8108ms)
+✔ legacy snapshots normalize planning arrays and new thread metadata (4.9277ms)
+ℹ tests 41
+ℹ suites 0
+ℹ pass 41
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 47893.1875

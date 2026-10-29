@@ -11,7 +11,6 @@ import {
   unlockWebSheetScroll,
   useTopOverlay,
 } from "./overlays";
-import { pendingSocialCount } from "@/src/features/people/communication";
 import {
   Card,
   Avatar as DesignAvatar,
@@ -34,7 +33,6 @@ import {
   type ThemeName,
 } from "@/src/shared/themes";
 import type { Audience, Category } from "@/src/shared/types";
-import { useNow } from "@/src/shared/useNow";
 import {
   getDesignTheme,
   useDesignTheme,
@@ -128,7 +126,7 @@ const makeStyles = (colors: SemanticColors, tokens: DesignTokens) =>
     label: {
       ...tokens.type.caption,
       fontWeight: tokens.type.weight.semibold,
-      color: colors.accent,
+      color: colors.textSecondary,
       textTransform: "none",
     },
     card: {
@@ -1472,14 +1470,14 @@ export function AudiencePicker({
           paddingVertical: 8,
         }}
       >
-        <Text style={{ color: colors.green, fontSize: 20 }}>＋</Text>
+        {triggerLabel ? <Users size={18} color={colors.muted} /> : <Text style={{ color: colors.green, fontSize: 20 }}>＋</Text>}
         <View style={{ flex: 1, gap: 2 }}>
           <Text style={styles.body}>
             {triggerLabel ?? selected ?? "Choose audience"}
           </Text>
-          <Text style={styles.muted}>
+          {!triggerLabel && <Text style={styles.muted}>
             {selected ? "Audience · Change" : "Choose one audience"}
-          </Text>
+          </Text>}
         </View>
       </Pressable>
       <Sheet
@@ -1539,148 +1537,22 @@ export function BackButton({ iconOnly = false }: { iconOnly?: boolean }) {
 }
 
 export function InboxButton() {
-  const { styles, semanticColors, tokens } = useTheme();
-
-  const { data, userId, act } = useBeacon();
-  const [open, setOpen] = useState(false);
-  const nextNavigation = React.useRef<(() => void) | null>(null);
-  const pending = pendingSocialCount(data, userId, useNow());
+  const { semanticColors: colors, tokens } = useTheme();
+  const { data, userId } = useBeacon();
   const params = useLocalSearchParams<{ inbox?: string }>();
-  useFocusEffect(
-    useCallback(() => {
-      if (params.inbox === "yes") {
-        setOpen(true);
-        router.setParams({ inbox: undefined });
-      }
-    }, [params.inbox]),
-  );
-  const unread = data.notices.filter((n) => !n.read_at).length;
-  return (
-    <>
-      <IconButton
-        label={unread ? `Notifications, ${unread} unread` : "Notifications"}
-        onPress={() => setOpen(true)}
-      >
-        <View style={{ alignItems: "center", justifyContent: "center" }}>
-          <Bell size={tokens.iconSize.md} color={semanticColors.textPrimary} />
-          {unread > 0 && (
-            <View
-              style={{
-                position: "absolute",
-                top: -tokens.space.sm,
-                right: -tokens.space.sm,
-                borderRadius: tokens.radius.circle,
-                backgroundColor: semanticColors.accent,
-                minWidth: tokens.type.caption.lineHeight + tokens.space.sm,
-                minHeight: tokens.type.caption.lineHeight + tokens.space.sm,
-                alignItems: "center",
-                justifyContent: "center",
-                paddingHorizontal: tokens.space.xs,
-              }}
-            >
-              <Text
-                maxFontSizeMultiplier={tokens.type.denseMaxMultiplier}
-                style={{
-                  ...tokens.type.caption,
-                  color: semanticColors.onAccent,
-                  fontWeight: tokens.type.weight.bold,
-                }}
-              >
-                {unread > 99 ? "99+" : unread}
-              </Text>
-            </View>
-          )}
-        </View>
-      </IconButton>
-      <Sheet
-        title="Notifications"
-        visible={open}
-        onClose={() => setOpen(false)}
-        onDismiss={() => {
-          const next = nextNavigation.current;
-          nextNavigation.current = null;
-          next?.();
-        }}
-      >
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Responses & Invitations"
-          onPress={() => {
-            nextNavigation.current = () => router.push("/responses");
-            setOpen(false);
-          }}
-          style={{
-            minHeight: 44,
-            flexDirection: "row",
-            alignItems: "center",
-            gap: 10,
-            paddingVertical: 8,
-          }}
-        >
-          <Bell size={18} color={semanticColors.accent} />
-          <Text
-            style={{
-              flex: 1,
-              color: semanticColors.textPrimary,
-              fontSize: 14,
-              lineHeight: 20,
-            }}
-          >
-            Responses & Invitations
-          </Text>
-          {pending > 0 ? (
-            <Text style={{ color: semanticColors.textSecondary, fontSize: 12 }}>
-              {pending}
-            </Text>
-          ) : null}
-        </Pressable>
-        {unread > 0 && (
-          <Action
-            title="Mark all read"
-            secondary
-            run={() => act("read_notices")}
-          />
-        )}
-        {!data.notices.length && (
-          <Txt muted>
-            You are all caught up. Invitations and beacon updates will appear
-            here.
-          </Txt>
-        )}
-        {data.notices
-          .slice()
-          .sort((a, b) => b.created_at.localeCompare(a.created_at))
-          .slice(0, 50)
-          .map((n) => (
-            <View key={n.id} style={styles.card}>
-              <Text
-                style={[styles.body, { fontWeight: n.read_at ? "400" : "700" }]}
-              >
-                {n.body}
-              </Text>
-              <Button
-                secondary
-                title={
-                  n.activity_id ? "Open on map" : "Review Pings & invitations"
-                }
-                onPress={() => {
-                  setOpen(false);
-                  router.push(
-                    n.activity_id
-                      ? {
-                          pathname: "/(tabs)",
-                          params: { beacon: n.activity_id },
-                        }
-                      : {
-                          pathname: "/(tabs)/squads",
-                          params: { tab: "Pings" },
-                        },
-                  );
-                }}
-              />
-            </View>
-          ))}
-      </Sheet>
-    </>
-  );
+  useFocusEffect(useCallback(() => {
+    if (params.inbox === "yes") {
+      router.setParams({ inbox: undefined });
+      router.push("/responses");
+    }
+  }, [params.inbox]));
+  const unread = data.viewer_id === userId ? data.notices.filter((notice) => !notice.read_at).length : 0;
+  return <IconButton label={unread ? `Notifications, ${unread} unread` : "Notifications"} onPress={() => router.push("/responses")}>
+    <View style={{ alignItems: "center", justifyContent: "center" }}>
+      <Bell size={tokens.iconSize.md} color={colors.textPrimary} />
+      {unread > 0 && <View style={{ position: "absolute", top: -8, right: -8, borderRadius: 12, backgroundColor: colors.accent, minWidth: 20, minHeight: 20, alignItems: "center", justifyContent: "center", paddingHorizontal: 4 }}>
+        <Text style={{ ...tokens.type.caption, color: colors.onAccent, fontWeight: "700" }}>{unread > 99 ? "99+" : unread}</Text>
+      </View>}
+    </View>
+  </IconButton>;
 }

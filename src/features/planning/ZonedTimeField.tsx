@@ -1,22 +1,6 @@
 import React from "react";
-import DateField from "./PlanningTimeField";
-import { instantToWallField, wallTimeToInstant } from "./connected";
-export default function ZonedTimeField({
-  label,
-  value,
-  timezone,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  timezone: string;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <DateField
-      label={`${label} · ${timezone}`}
-      value={instantToWallField(value, timezone)}
-      onChange={(v) => onChange(wallTimeToInstant(v, timezone))}
-    />
-  );
-}
+import DateField from "@/components/DateField";
+import type { DateTimeFieldProps } from "@/src/shared/dateTime";
+
+/** Convert wall time once, inside the shared field; callers retain ISO instants. */
+export default function ZonedTimeField(props: DateTimeFieldProps) { return <DateField {...props} />; }

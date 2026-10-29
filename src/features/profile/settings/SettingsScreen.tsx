@@ -567,7 +567,7 @@ function SettingsForm({ profile }: { profile: Profile }) {
     },
   ];
   const showAppearance = match(
-    "Appearance palette theme Essential Mint Sunset Midnight Ocean Berry System Light Dark Device avatars",
+    "Appearance palette theme Essential Mint Sunset Sunflower Midnight Ocean Berry warm neutral soft gold warm coral System Light Dark Device avatars",
   );
   const hasResults =
     showAppearance || groups.some((group) => group.items.length);

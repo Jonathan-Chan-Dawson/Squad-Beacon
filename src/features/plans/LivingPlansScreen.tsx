@@ -1,4 +1,5 @@
 import { ActivityActionBar } from "@/src/features/activity/ActivityActionBar";
+import { GuestShareButton } from "@/src/features/sharing/GuestShareSheet";
 import {
   pendingPlanCreation,
   retainPlanCreation,
@@ -691,6 +692,7 @@ function PlanTimeline({ planId }: { planId: string }) {
       eyebrow={squad?.name ?? "PERSONAL PLAN"}
       create={false}
     >
+      {access.editor && !plan.routine_source && <GuestShareButton kind="plan" target={plan.id} title={plan.title} readOnly stops={stops.filter(s=>s.approval==="approved" && s.state==="active").map(s=>({id:s.id,title:stopActivity(data,s,userId)?.title || stopThread(data,s,userId)?.title || s.title || "Plan stop"}))} />}
       <Txt muted>
         {planDateLabel(plan.start_date, now)} ·{" "}
         {data.plan_members.filter((m) => m.plan_id === plan.id).length + 1}{" "}

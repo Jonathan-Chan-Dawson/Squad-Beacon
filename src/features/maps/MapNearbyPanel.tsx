@@ -27,7 +27,9 @@ export function MapNearbyPanel({
   onBeacon,
   onPerson,
   onFit,
+  compact = false,
 }: {
+  compact?: boolean;
   beaconIds: string[];
   publicBeacons?: PublicBeaconSummary[];
   onPublicBeacon?: (id: string) => void;
@@ -92,7 +94,7 @@ export function MapNearbyPanel({
           <X size={20} color={colors.ink} />
         </IconButton>
       </View>
-      <TextInput
+      {!compact && <TextInput
         accessibilityLabel="Search nearby Beacons and friends"
         value={query}
         onChangeText={setQuery}
@@ -102,8 +104,8 @@ export function MapNearbyPanel({
           styles.input,
           { minHeight: 36, paddingVertical: 6, fontSize: 13 },
         ]}
-      />
-      <View
+      />}
+      {!compact && <View
         accessibilityRole="tablist"
         accessibilityLabel="Nearby sections"
         style={[styles.row, { justifyContent: "flex-start" }]}
@@ -128,7 +130,7 @@ export function MapNearbyPanel({
             <Text style={styles.body}>{value}</Text>
           </Pressable>
         ))}
-      </View>
+      </View>}
       <ScrollView
         style={{ flex: 1, minHeight: 0 }}
         keyboardShouldPersistTaps="handled"
@@ -137,10 +139,10 @@ export function MapNearbyPanel({
           paddingBottom: tokens.space.md,
         }}
       >
-        {tab === "Beacons" &&
+        {(compact || tab === "Beacons") &&
           beacons
             .filter((activity) => matchesSearch(query, activity.title))
-            .slice(0, expanded || query ? undefined : 3)
+            .slice(0, compact || expanded || query ? undefined : 3)
             .map((activity) => {
               const place =
                 userId && canReadBeaconMeetingDetails(data, activity, userId)
@@ -169,12 +171,12 @@ export function MapNearbyPanel({
                 </Pressable>
               );
             })}
-        {tab === "Beacons" &&
+        {(compact || tab === "Beacons") &&
           publicBeacons
             .filter((row) => matchesSearch(query, row.title, row.area_label))
             .slice(
               0,
-              expanded || query ? undefined : Math.max(0, 3 - beacons.length),
+              compact || expanded || query ? undefined : Math.max(0, 3 - beacons.length),
             )
             .map((row) => (
               <Pressable
@@ -195,12 +197,12 @@ export function MapNearbyPanel({
                 </View>
               </Pressable>
             ))}
-        {tab === "Friends" &&
+        {(compact || tab === "Friends") &&
           people
             .filter((person) =>
               matchesSearch(query, person.name, person.username),
             )
-            .slice(0, expanded || query ? undefined : 3)
+            .slice(0, compact || expanded || query ? undefined : 3)
             .map((person) => (
               <Pressable
                 key={person.id}
@@ -218,7 +220,7 @@ export function MapNearbyPanel({
                 </View>
               </Pressable>
             ))}
-        {!query &&
+        {!compact && !query &&
           (tab === "Beacons"
             ? beacons.length + publicBeacons.length
             : people.length) > 3 && (

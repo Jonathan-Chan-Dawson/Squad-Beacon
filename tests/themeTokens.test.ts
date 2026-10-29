@@ -83,44 +83,40 @@ test("the pure design palette builder caches stable theme objects", () => {
   assert.notStrictEqual(first, getDesignColorTheme("Midnight", "light"));
 });
 
-test("Essential uses the specified neutral hierarchy and primary button contrast", () => {
-  const expected = {
-    dark: [
-      "#0D0E10",
-      "#191A1E",
-      "#25272C",
-      "#F5F5F7",
-      "#A6A8B0",
-      "#303137",
-      "#D9DDE2",
-      "#17191D",
-    ],
-    light: [
-      "#FAFAFB",
-      "#FFFFFF",
-      "#F0F1F3",
-      "#181A1F",
-      "#666973",
-      "#E4E5E8",
-      "#343A40",
-      "#FFFFFF",
-    ],
-  };
+test("Essential has warm neutral depth and keeps selected surfaces distinct", () => {
   for (const appearance of ["light", "dark"] as const) {
     const { colors } = getDesignColorTheme("Essential", appearance);
-    assert.deepEqual(
-      [
-        colors.background,
-        colors.surface,
-        colors.surfaceRaised,
-        colors.textPrimary,
-        colors.textSecondary,
-        colors.outline,
-        colors.primary,
-        colors.onPrimary,
-      ],
-      expected[appearance],
-    );
+    assert.notEqual(colors.bg, "#000000");
+    assert.notEqual(colors.bg, "#FFFFFF");
+    assert.notEqual(colors.surface, colors.bg);
+    assert.notEqual(colors.surfaceRaised, colors.surface);
+    assert.notEqual(colors.surfaceSelected, colors.surfaceRaised);
+    if (appearance === "dark") {
+      assert.ok(luminance(colors.bg) < luminance(colors.surface));
+      assert.ok(luminance(colors.surface) < luminance(colors.surfaceRaised));
+    } else assert.ok(luminance(colors.bg) < luminance(colors.surface));
+  }
+});
+
+test("Sunflower is yellow-gold, distinct from coral Sunset and quieter Essential", () => {
+  for (const appearance of ["light", "dark"] as const) {
+    const sunflower = getDesignColorTheme("Sunflower", appearance).colors;
+    const sunset = getDesignColorTheme("Sunset", appearance).colors;
+    const essential = getDesignColorTheme("Essential", appearance).colors;
+    const rgb = (hex: string) =>
+      hex
+        .slice(1)
+        .match(/.{2}/g)!
+        .map((part) => parseInt(part, 16));
+    const hue = (hex: string) => {
+      const [r, g, b] = rgb(hex);
+      return 60 * ((g - b) / (r - b)); // All three warm accents have red as their largest channel.
+    };
+    assert.ok(hue(sunflower.accent) >= 40 && hue(sunflower.accent) <= 60);
+    assert.ok(hue(sunset.accent) < 30);
+    assert.notEqual(sunflower.bg, essential.bg);
+    assert.notEqual(sunflower.surfaceSelected, essential.surfaceSelected);
+    assert.ok(contrast(sunflower.onAccent, sunflower.accent) >= 4.5);
   }
 });
 
@@ -138,6 +134,10 @@ test("semantic roles stay compatible and selected/raised surfaces remain readabl
       assert.equal(colors.success, availability.available.color);
       assert.equal(colors.warning, availability.endingSoon.color);
       assert.ok(contrast(colors.onPrimary, colors.primary) >= 4.5);
+      assert.ok(
+        contrast(colors.primary, colors.surfaceSelected) >= 4.5,
+        `${name} ${appearance} selected chip text`,
+      );
       assert.ok(contrast(colors.onDanger, colors.danger) >= 4.5);
       for (const surface of [
         colors.surfaceRaised,

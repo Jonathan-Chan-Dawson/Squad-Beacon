@@ -48,6 +48,7 @@ function ProfileSonarControl({
   const pulseStyle = useAnimatedStyle(() => ({ opacity: pulse.value }));
   const now = useNow();
   const [open, setOpen] = useState(false);
+  const [step, setStep] = useState<"people" | "review">("people");
   const [selected, setSelected] = useState<string[]>([]);
   const [duration, setDuration] = useState<Duration>("15 minutes");
   const [activityId, setActivityId] = useState("");
@@ -120,6 +121,7 @@ function ProfileSonarControl({
     // Reading a preference does not request location or start a session.
     const request = ++opening.current;
     openedSessionId.current = session?.id ?? null;
+    setStep("people");
     setSelected(session ? [...(data.location_recipients ?? [])] : []);
     setSharingError("");
     setActivityId("");
@@ -419,7 +421,8 @@ function ProfileSonarControl({
         </>
       )}
       <Sheet
-        title={session ? "Manage Sonar" : "Start Sonar"}
+        title={step === "people" ? "Share location with" : session ? "Manage Sonar" : "Ready to share?"}
+        centered
         visible={open}
         onClose={close}
         onDismiss={onDismiss}
@@ -431,19 +434,21 @@ function ProfileSonarControl({
               </Text>
             )}
             <Button
-              title={`${session ? "Save people" : "Start Sonar"} · ${picked.length} ${picked.length === 1 ? "person" : "people"}`}
+              title={step === "people" ? `Review Sharing · ${picked.length} people` : `${session ? "Save people" : "Start Sonar"} · ${picked.length} ${picked.length === 1 ? "person" : "people"}`}
               disabled={
                 busy ||
                 !picked.length ||
                 selected.length > 50 ||
                 picked.length !== selected.length ||
-                (!session &&
+                (step === "review" && !session &&
                   duration === "Until activity ends" &&
                   !eligible.some((a) => a.id === activityId))
               }
-              onPress={() => void submit(!session)}
+              onPress={() => step === "people" ? setStep("review") : void submit(!session)}
             />
-            {session && (
+            {step === "review" && <Button compact secondary title="Back to people" onPress={() => setStep("people")} />}
+            <Button compact secondary title="Cancel" disabled={busy} onPress={close} />
+            {step === "review" && session && (
               <Button
                 secondary
                 title="Extend Sonar"
@@ -463,7 +468,7 @@ function ProfileSonarControl({
         }
       >
         <View testID="profile-sonar-confirmation" style={{ gap: 12 }}>
-          <ContextTip name="sonar" />
+          {step === "review" && <ContextTip name="sonar" />}
           {session ? (
             <Action
               title="Stop Sonar"
@@ -482,7 +487,7 @@ function ProfileSonarControl({
             />
           ) : null}
           <Text style={styles.body}>
-            Choose which friends can temporarily see your live location.
+            Choose the friends who can see your live location.
           </Text>
           {session && (
             <Txt muted>
@@ -490,8 +495,11 @@ function ProfileSonarControl({
               remaining. Save people keeps the current end time.
             </Txt>
           )}
+          {step === "people" ? <>
           <SocialSelector
             groupBehavior="filterFriends"
+            compactFilters
+            bulk
             supportedKinds={["friend"]}
             selected={selected.map((id) => ({ kind: "friend", id }))}
             onChange={(rows) =>
@@ -517,6 +525,10 @@ function ProfileSonarControl({
               />
             </View>
           )}
+          </> : <>
+            <Txt>Sharing with {picked.length} {picked.length === 1 ? "friend" : "friends"}</Txt>
+            <Txt muted>{picked.map((id) => friends.find((friend) => friend.id === id)?.name ?? "Friend").slice(0, 3).join(", ")}{picked.length > 3 ? ` +${picked.length - 3} more` : ""}</Txt>
+            <Txt muted>{session ? `Current sharing ends at ${new Date(session.expires_at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}. Save people keeps this expiry.` : `Sharing ends at ${new Date(duration === "Until activity ends" ? eligible.find((activity) => activity.id === activityId)?.ends_at ?? now : now + ({ "15 minutes": 15, "30 minutes": 30, "1 hour": 60, "4 hours": 240 }[duration] ?? 15) * 60000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}.`}</Txt>
           <Text style={styles.h2}>{session ? "Extend by" : "Duration"}</Text>
           <ScrollView
             horizontal
@@ -608,6 +620,7 @@ function ProfileSonarControl({
             ends device updates immediately; reconnect to revoke server access
             before expiry.
           </Txt>
+          </>}
         </View>
       </Sheet>
     </View>

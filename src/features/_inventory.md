@@ -18,3 +18,4 @@ Feature map
 Keep Expo route entry files in app/ thin. Feature code should be imported directly from its canonical feature path; avoid duplicate forwarding modules.
 
 - activity/: unified personal Your Activity workspace; see activity/_inventory.md.
+- sharing/: common share sheet/host response management, protected share and member-claim screens, public native invitation receiver, verified transport and Beacon share helper. Used by Beacons, planning decisions, selected Plans and own Status Notes behind backend capabilities and configured origin. Focused guest web rendering lives under server/guest/.

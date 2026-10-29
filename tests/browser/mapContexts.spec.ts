@@ -3,11 +3,11 @@ import { expect, test } from "@playwright/test";
 for (const example of [
   {
     route: "/plan/demo-routine:demo-you:friday:plan",
-    action: "Show Full Plan",
+    action: "Map",
     chip: "Plan: Friday Night Routine · First plan",
   },
   {
-    route: "/council/demo-draw-result",
+    route: "/council/demo-draw-result?mode=manage",
     action: "Show Suggested Beacons",
     chip: "Draw: Crew’s surprise meetup",
   },
@@ -60,7 +60,7 @@ for (const example of [
 test("suggested Beacon context is removable independently of normal filters", async ({
   page,
 }) => {
-  await page.goto("/council/demo-vote-weekend");
+  await page.goto("/council/demo-vote-weekend?mode=manage");
   await page.getByRole("button", { name: /Explore the demo/ }).click();
   await page
     .getByRole("button", { name: "Show Suggested Beacons", exact: true })

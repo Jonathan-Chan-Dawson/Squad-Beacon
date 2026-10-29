@@ -16,6 +16,7 @@ Authored product areas:
 - components/: shared date inputs, not-found theme compatibility, and web map styling. Platform-specific siblings stay together.
 - assets/: app icons, splash artwork, and fonts; see assets/_inventory.md.
 - public/: static web support files.
+- api/guest.js and server/guest/: isolated guest invitation endpoint, rendering and browser client; fail closed until the Phase 5 database contracts and release switch are available.
 - tests/: unit, database, and browser tests; see tests/_inventory.md.
 - supabase/: migrations, edge functions, and database schedule SQL; see supabase/_inventory.md.
 - docs/: product, device, notification, and UI guidance; see docs/_inventory.md.

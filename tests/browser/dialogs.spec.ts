@@ -39,7 +39,7 @@ test.beforeAll(async () => {
           builder.onLoad({ filter: /.*/, namespace: "dialog-theme" }, () => ({
             contents: `
         import {useSyncExternalStore} from 'react';
-        const colors={surface:'#fff',surfaceRaised:'#f1f3f5',textPrimary:'#17202a',textSecondary:'#485563',border:'#ddd',danger:'#b42318',scrim:'rgba(0,0,0,.35)'};
+        const colors={surface:'#fff',surfaceRaised:'#f1f3f5',textPrimary:'#17202a',textSecondary:'#485563',accent:'#795d17',onAccent:'#fff',border:'#ddd',danger:'#b42318',scrim:'rgba(0,0,0,.35)'};
         export const useTheme=()=>({semanticColors:colors,tokens:{radius:{sheet:20},space:{md:16},type:{title:{fontSize:20,lineHeight:26}}},styles:{body:{fontSize:16,color:colors.textPrimary},error:{color:colors.danger}}});
         export const useDesignTheme=()=>({colors});
         export const Sheet=()=>{throw new Error('Anchored test unexpectedly fell back to a sheet')};

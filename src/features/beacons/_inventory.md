@@ -41,3 +41,5 @@ Beacons feature
 - Live creationOptionalSection is retained across Map handoffs but omitted from durable snapshots, so resumed saved drafts begin with optional sections collapsed.
 
 - Focused mobile polish: CreationPeople uses mutually exclusive inline visibility/community/joining panels; CreationInvitees hosts the existing SocialSelector in a full-screen modal with local gesture/sheet support. Saved draft pill styling is compact without changing storage or recovery.
+
+- components/ActivityCategoryChoices.tsx, components/BeaconTimingEditor.tsx and creationPublicListing.ts: compact category grid and optional activity ideas; staged creation/manage timing; recoverable opt-in public discovery after authoritative publication.

@@ -1,4 +1,3 @@
-import { SemanticEmpty } from "@/src/features/onboarding/OnboardingUI";
 import { BeaconCommunitiesProvider } from "@/src/features/discovery/BeaconCommunityRow";
 import { useBeaconCommunities } from "@/src/features/discovery/useBeaconCommunities";
 import { finishCreationLocationPick } from "@/src/features/beacons/socialPlanningSession";
@@ -166,6 +165,7 @@ import {
 import {
   canReadMapPlan,
   mapContextKey,
+  mapContextCameraKind,
   resolveMapContext,
   type MapContextFilter,
 } from "../contextFilters";
@@ -274,18 +274,20 @@ export default function MapScreen() {
     string | undefined
   >();
   const [mapPreferenceError, setMapPreferenceError] = useState("");
-  const [hintIndex, setHintIndex] = useState(3);
-  const seenHint = useRef<number | null>(null);
   const [spacePreviewId, setSpacePreviewId] = useState<string | null>(null);
 
   const exploration = useExploration();
-  const [discoveryHintDismissed, setDiscoveryHintDismissed] = useState(false);
+  const [feedbackAction, setFeedbackAction] = useState(0);
+  const [dismissedFeedback, setDismissedFeedback] = useState(0);
+  const [feedbackResult, setFeedbackResult] = useState(0);
+  const resolvedFeedback = useRef(0);
+  const [dismissedMapError, setDismissedMapError] = useState<string | null>(null);
   const nearMeArea = useRef<ExplorationArea | null>(null);
   useEffect(() => {
     if (exploration.area?.kind === "near-me" && exploration.area.coordinate)
       nearMeArea.current = exploration.area;
   }, [exploration.area]);
-  const { data, userId, demo, loading, act, searchDirectory, refresh, demoScenario } = useBeacon();
+  const { data, userId, viewerEpoch, demo, loading, act, searchDirectory, refresh } = useBeacon();
   useFocusEffect(useCallback(() => { void refresh(); }, [refresh]));
 
   const params = useLocalSearchParams<{
@@ -326,34 +328,39 @@ export default function MapScreen() {
     categoriesChanged: boolean;
     selectionChanged: boolean;
   } | null>(null);
+  const viewerKey = `${userId}:${viewerEpoch}:${demo}`;
+  const previousPlanState = useRef<{ viewerKey: string; camera: MapViewport | null; selected: string | null; person: string | null; detail: MapBeaconFeature | null } | null>(null);
   const previousContextCamera = useRef<MapViewport | null>(null);
   const [contextState, setContextState] = useState<{
     viewerId: string | null;
+    viewerKey: string;
     filters: MapContextFilter[];
-  }>({ viewerId: userId, filters: [] });
+  }>({ viewerId: userId, viewerKey, filters: [] });
   const contextViews = useMemo(
     () =>
-      contextState.viewerId === userId && !discoveryActive
+      contextState.viewerKey === viewerKey && !discoveryActive
         ? contextState.filters.flatMap((filter) => {
             const view = resolveMapContext(data, userId, filter);
             return view ? [view] : [];
           })
         : [],
-    [contextState, data, userId, discoveryActive],
+    [contextState, data, userId, viewerKey, discoveryActive],
   );
+  const planFocus = [...contextViews].reverse().find(view => view.key.startsWith("context:plan:"));
+  const displayedContexts = useMemo(() => planFocus ? [planFocus] : contextViews, [planFocus, contextViews]);
   const contextPoints = useMemo(
     () => [
       ...new Map(
-        contextViews
+        displayedContexts
           .flatMap((view) => view.points)
           .map((point) => [point.id, point]),
       ).values(),
     ],
-    [contextViews],
+    [displayedContexts],
   );
   const contextPaths = useMemo(
-    () => contextViews.flatMap((view) => view.paths),
-    [contextViews],
+    () => displayedContexts.flatMap((view) => view.paths),
+    [displayedContexts],
   );
   const [detailTab, setDetailTab] = useState<MapBeaconFeature | null>(null);
   const [squadPreviewId, setSquadPreviewId] = useState<string | null>(null);
@@ -557,35 +564,11 @@ export default function MapScreen() {
     router.setParams({ beacon: undefined, person: undefined });
   }, [userId, params.beacon, params.person]);
   useEffect(() => {
-    if (
-      !preferencesReady ||
-      hintIndex >= 3 ||
-      pulsePlace ||
-      placeSearchOpen ||
-      optionsOpen ||
-      calm ||
-      seenHint.current === hintIndex
-    )
-      return;
-    seenHint.current = hintIndex;
-    void writeMapDevicePreferences({ hintsSeen: hintIndex + 1 }).catch(
-      () => {},
-    );
-  }, [
-    preferencesReady,
-    hintIndex,
-    pulsePlace,
-    placeSearchOpen,
-    optionsOpen,
-    calm,
-  ]);
-  useEffect(() => {
     let active = true;
     void readMapDevicePreferences()
       .then((preferences) => {
         if (!active) return;
         setMapPreferences(preferences);
-        setHintIndex(preferences.hintsSeen);
         setMapStyle(preferences.style);
         if (!exploration.area && preferences.camera)
           exploration.setArea({
@@ -1142,6 +1125,16 @@ export default function MapScreen() {
           : null,
       ),
   );
+  useEffect(() => {
+    if (loading || !publicDiscovery.ready || feedbackAction <= resolvedFeedback.current) return;
+    const timer = setTimeout(() => {
+      resolvedFeedback.current = feedbackAction;
+      setFeedbackResult(!hasVisibleBeacons && !publicMapRows.length && !hasVisiblePeople ? feedbackAction : 0);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [feedbackAction, loading, publicDiscovery.ready, hasVisibleBeacons, publicMapRows.length, hasVisiblePeople]);
+  if (feedbackResult > dismissedFeedback && (hasVisibleBeacons || publicMapRows.length || hasVisiblePeople)) setDismissedFeedback(feedbackResult);
+
   const publicPoints = publicMapRows.map((row) => ({
     id: `public:${row.activity_id}`,
     publicBeaconId: row.activity_id,
@@ -1726,7 +1719,7 @@ export default function MapScreen() {
     if (pickMode) return;
     if (discoveryActive && userMoved && discoveryRestore.current)
       discoveryRestore.current.cameraChanged = true;
-    if (preferencesReady && (!discoveryActive || userMoved))
+    if (preferencesReady && !planFocus && (!discoveryActive || userMoved))
       void writeMapDevicePreferences({ camera: next }).catch(() => {});
     if (userMoved) {
       setClusterActivityIds(null);
@@ -1744,6 +1737,7 @@ export default function MapScreen() {
       const view = resolveMapContext(data, userId, filter);
       if (!view) return;
       if (!contextViews.length) previousContextCamera.current = viewport;
+      if (filter.kind === "plan" && !planFocus) previousPlanState.current = { viewerKey, camera: viewport, selected, person, detail: detailTab };
       clearRouteSelection();
       setSelected(null);
       setPerson(null);
@@ -1752,16 +1746,17 @@ export default function MapScreen() {
       setClusterPersonIds(null);
       setContextState((current) => ({
         viewerId: userId,
+        viewerKey,
         filters: [
-          ...(current.viewerId === userId
-            ? current.filters.filter((item) => mapContextKey(item) !== view.key)
+          ...(current.viewerKey === viewerKey
+            ? current.filters.filter((item) => mapContextKey(item) !== view.key && (filter.kind !== "plan" || item.kind !== "plan"))
             : []),
           filter,
         ],
       }));
       if (view.points.length)
         setControlCommand((previous) => ({
-          kind: "fit",
+          kind: mapContextCameraKind(view.points),
           coordinates: view.points,
           revision: (previous?.revision ?? 0) + 1,
         }));
@@ -1770,6 +1765,7 @@ export default function MapScreen() {
       data,
       userId,
       contextViews.length,
+      planFocus, viewerKey, selected, person, detailTab,
       viewport,
       clearRouteSelection,
       setSelected,
@@ -1902,6 +1898,18 @@ export default function MapScreen() {
 
   function clearContexts(key?: string) {
     const remaining = contextViews.filter((view) => key && view.key !== key);
+    if (planFocus && (!key || key === planFocus.key)) {
+      const saved = previousPlanState.current;
+      if (saved?.viewerKey === viewerKey) {
+        if (saved.camera) setControlCommand(previous => ({ kind: "restore", camera: saved.camera!, revision: (previous?.revision ?? 0) + 1 }));
+        const valid = saved.selected && data.activities.some(activity => activity.id === saved.selected && canReadBeaconActivity(data, activity, userId!));
+        setSelected(valid ? saved.selected : null);
+        setDetailTab(valid ? saved.detail : null);
+        setPerson(saved.person && mapLocations.some(row => row.owner_id === saved.person) ? saved.person : null);
+      }
+      previousPlanState.current = null;
+      if (!remaining.length) previousContextCamera.current = null;
+    }
     if (!remaining.length && previousContextCamera.current) {
       const camera = previousContextCamera.current;
       setControlCommand((previous) => ({
@@ -1912,7 +1920,7 @@ export default function MapScreen() {
       previousContextCamera.current = null;
     }
     if (
-      selected &&
+      !(planFocus && (!key || key === planFocus.key)) && selected &&
       !normalActivities.some((activity) => activity.id === selected) &&
       !remaining.some((view) =>
         view.activities.some((activity) => activity.id === selected),
@@ -2053,6 +2061,7 @@ export default function MapScreen() {
   }
 
   function searchSubmit(value: string) {
+    setFeedbackAction((value) => value + 1);
     const next = value.trim().replace(/\s+/g, " ");
     if (next) rememberSearch(next);
     exploration.setQuery(next);
@@ -2327,7 +2336,7 @@ export default function MapScreen() {
         <BeaconMap
           friendsProminent={exploration.filters.audience === "Friends"}
           fullScreen
-          contextPoints={[...contextPoints, ...publicPoints]}
+          contextPoints={planFocus ? contextPoints : [...contextPoints, ...publicPoints]}
           contextPaths={contextPaths}
           onContextPoint={(point) => {
             if (pickMode) return;
@@ -2343,8 +2352,8 @@ export default function MapScreen() {
               });
           }}
           calm={calm}
-          pulseSummaries={mapPreferences.liveUpdates ? pulse.summaries : []}
-          pulsePlaces={knownPulsePlaces}
+          pulseSummaries={!planFocus && mapPreferences.liveUpdates ? pulse.summaries : []}
+          pulsePlaces={planFocus ? [] : knownPulsePlaces}
           pulsePopToken={pulsePopToken}
           pulsePopPlaceKey={pulsePopPlaceKey}
           onPlace={choosePulsePlace}
@@ -2368,7 +2377,7 @@ export default function MapScreen() {
           }}
           hideControls
           viewportInsets={{
-            top: insets.top + headerHeight + 16,
+            top: insets.top + headerHeight + (planFocus ? 136 : 16),
             right: 68,
             bottom: mapBottomClearance,
             left: 12,
@@ -2383,15 +2392,15 @@ export default function MapScreen() {
             pickMode ? pickedMapPoint : clusterActivityIds ? clusterCenter : focusedCoordinate
           }
           onAnchor={setMapAnchor}
-          activities={
+          activities={planFocus ? [] :
             focusedBeacon &&
             !activities.some((activity) => activity.id === selected)
               ? [...activities, focusedBeacon]
               : activities
           }
-          availabilityActivities={discoveryActive ? [] : availabilityActivities}
+          availabilityActivities={discoveryActive || planFocus ? [] : availabilityActivities}
           places={safePlaces}
-          locations={mapLocations}
+          locations={planFocus ? [] : mapLocations}
           profiles={data.profiles}
           clusterPriorities={clusterPriorities}
           areaName={
@@ -2548,7 +2557,7 @@ export default function MapScreen() {
           onQueryChange={exploration.setQuery}
           onQuerySubmit={searchSubmit}
           calm={calm}
-          onQuickFilter={chooseQuickFilter}
+          onQuickFilter={(value) => { setFeedbackAction((n) => n + 1); chooseQuickFilter(value); }}
           selectedQuickFilter={selectedQuickFilter}
           nowSelected={exploration.filters.time === "Now"}
           onExploreArea={() => {
@@ -2576,6 +2585,19 @@ export default function MapScreen() {
         />}
       </View>
 
+      {planFocus && !pickMode && !activeSearchVisible ? (
+        <View testID="map-plan-focus" style={[styles.card, { position: "absolute", top: headerTop + headerHeight + 8, left: 12, right: 80, zIndex: 12, padding: 10, gap: 4 }]}>
+          <View style={styles.row}>
+            <View style={{ flex: 1 }}><Text style={styles.body} numberOfLines={1}>{planFocus.label}</Text><Text style={styles.muted}>{planFocus.points.length ? `${planFocus.points.length} visible physical stops` : "No visible physical stops"}</Text></View>
+            <IconButton label="Exit Plan Focus" onPress={() => clearContexts(planFocus.key)}><X size={20} color={colors.ink} /></IconButton>
+          </View>
+          <View style={[styles.row, { justifyContent: "flex-start" }]}>
+            <Button title="Fit Plan" secondary compact disabled={!planFocus.points.length} onPress={() => setControlCommand(previous => ({ kind: mapContextCameraKind(planFocus.points), coordinates: planFocus.points, revision: (previous?.revision ?? 0) + 1 }))} />
+            <Button title="View Plan" secondary compact onPress={() => router.push({ pathname: "/plan/[id]", params: { id: planFocus.key.slice("context:plan:".length) } })} />
+          </View>
+        </View>
+      ) : null}
+
       {activeSearchVisible ? (
         <View
           style={{
@@ -2590,6 +2612,7 @@ export default function MapScreen() {
               (mapSize.width - tokens.layout.contentMaxWidth) / 2,
             ),
             zIndex: 13,
+            paddingTop: (publicDiscovery.error && publicDiscovery.error !== dismissedMapError) || (feedbackResult > dismissedFeedback && !hasVisibleBeacons && !publicMapRows.length && !hasVisiblePeople && publicDiscovery.ready) ? 48 : 0,
             paddingHorizontal: tokens.layout.screenGutter,
           }}
         >
@@ -2683,72 +2706,14 @@ export default function MapScreen() {
         </View>
       ) : null}
 
-      {snapshotReady &&
-        (viewport?.zoom ?? 13) < 16 &&
-        !loading &&
-        !activeSearchVisible &&
-        !selected &&
-        !person &&
-        !selectedPublic &&
-        !pulsePlace &&
-        !panel &&
-        !pickMode &&
-        !optionsOpen &&
-        !compassSheetOpen &&
-        !calm &&
-        ((!hasVisibleBeacons &&
-          !publicMapRows.length &&
-          !hasVisiblePeople &&
-          publicDiscovery.ready) ||
-          (preferencesReady && hintIndex < 3 && !discoveryHintDismissed)) && (
-          <View
-            testID="map-discovery-help"
-            style={{
-              position: "absolute",
-              top: headerTop + headerHeight + (demo ? 52 : 12),
-              left: 12,
-              right: 12,
-              padding: 12,
-              gap: 8,
-              borderRadius: 16,
-              backgroundColor: colors.white,
-              borderWidth: 1,
-              borderColor: colors.line,
-              zIndex: 8,
-            }}
-          >
-            {!hasVisibleBeacons &&
-            !publicMapRows.length &&
-            !hasVisiblePeople ? (
-              <SemanticEmpty density="section" illustration={publicDiscovery.error || directoryResult?.error || (__DEV__ && demo && demoScenario === "offline") ? "disconnected" : "discovery"}
-                name={publicDiscovery.error || directoryResult?.error || (__DEV__ && demo && demoScenario === "offline") ? "state.error" : exploration.area?.kind === "near-me" && !exploration.area.coordinate ? "empty.location" : exploration.query.trim() || activeFilterCount ? "empty.filtered" : exploration.filters.audience === "Friends" && !friends.length ? "empty.friends" : "empty.discovery"}
-                action={publicDiscovery.error || directoryResult?.error || (__DEV__ && demo && demoScenario === "offline") ? { label: "Try again", onPress: publicDiscovery.refresh } : exploration.query.trim() || activeFilterCount ? { label: "Clear filters", onPress: () => { resetFilters(); exploration.setQuery(""); } } : exploration.filters.audience === "Friends" && !friends.length ? { label: "Find Friends", onPress: () => router.push("/find-friends") } : { label: "Choose an area", onPress: () => setPlaceSearchOpen(true) }}
-              />
-            ) : preferencesReady && hintIndex < 3 && !discoveryHintDismissed ? (
-              <>
-                <Text style={styles.body}>
-                  Explore what&apos;s happening nearby
-                </Text>
-                <Text style={styles.muted}>
-                  Search for an activity, a person or another city. Tap a Beacon
-                  to preview and join.
-                </Text>
-                <Button
-                  title="Got it"
-                  compact
-                  secondary
-                  onPress={() => {
-                    setDiscoveryHintDismissed(true);
-                    setHintIndex(3);
-                    void writeMapDevicePreferences({ hintsSeen: 3 }).catch(
-                      () => {},
-                    );
-                  }}
-                />
-              </>
-            ) : null}
-          </View>
-        )}
+      {snapshotReady && !loading && !selected && !person && !selectedPublic && !pulsePlace && !panel && !pickMode && !optionsOpen && !compassSheetOpen && !contextViews.length && !calm &&
+        ((publicDiscovery.error && publicDiscovery.error !== dismissedMapError) || (feedbackResult > dismissedFeedback && !hasVisibleBeacons && !publicMapRows.length && !hasVisiblePeople && publicDiscovery.ready)) ? (
+        <View testID="map-result-status" accessibilityLiveRegion="polite" style={{ position: "absolute", top: headerTop + headerHeight, left: 12, right: activeSearchVisible ? 12 : 80, flexDirection: "row", alignItems: "center", backgroundColor: colors.white, paddingLeft: 12, borderBottomWidth: 1, borderColor: colors.line, zIndex: 14 }}>
+          <Text numberOfLines={2} style={[styles.muted, { flex: 1 }]}>{publicDiscovery.error ? "Couldn't refresh results." : "No matches for these filters."}</Text>
+          {publicDiscovery.error ? <Button compact secondary title="Retry" onPress={() => { setDismissedMapError(null); publicDiscovery.refresh(); }} /> : null}
+          <IconButton label="Dismiss map message" onPress={() => { setDismissedFeedback(feedbackAction); setDismissedMapError(publicDiscovery.error ?? null); }}><X size={18} color={colors.ink} /></IconButton>
+        </View>
+      ) : null}
       {createdNotice ? (
         <View
           accessibilityLiveRegion="polite"
@@ -3142,7 +3107,7 @@ export default function MapScreen() {
       {!pickMode && clusterActivityIds && clusterPersonIds ? (
         <MapCallout
           anchor={mapAnchor}
-          height={320}
+          height={clusterActivityIds.length + clusterPersonIds.length <= 5 ? Math.min(320, 100 + (clusterActivityIds.length + clusterPersonIds.length) * 58) : 320}
           maxWidth={320}
           bounds={{
             ...mapSize,
@@ -3151,6 +3116,7 @@ export default function MapScreen() {
           }}
         >
           <MapNearbyPanel
+            compact={clusterActivityIds.length + clusterPersonIds.length <= 5}
             key={`${clusterSection}:${clusterActivityIds.join()}:${clusterPersonIds.join()}`}
             initialSection={clusterSection}
             beaconIds={clusterActivityIds}
@@ -3360,7 +3326,7 @@ export default function MapScreen() {
         visible={advancedFiltersOpen}
         onClose={() => setAdvancedFiltersOpen(false)}
         filters={exploration.filters}
-        onChange={exploration.setFilters}
+        onChange={(value) => { setFeedbackAction((n) => n + 1); exploration.setFilters(value); }}
         audiences={mapAudiences}
         planOptions={planFilterOptions}
         resultCount={visibleActivities.length}

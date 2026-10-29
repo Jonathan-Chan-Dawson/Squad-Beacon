@@ -27,16 +27,19 @@ const filters = ["All", "Pings", "Decisions", "Invites"] as const;
 type Filter = (typeof filters)[number];
 
 export default function ResponsesScreen() {
-  const { userId } = useBeacon();
-  return <ResponsesContent key={userId ?? "signed-out"} />;
+  const { userId, viewerEpoch, demo } = useBeacon();
+  return <ResponsesContent key={`${userId}:${viewerEpoch}:${demo}`} />;
 }
 
 function ResponsesContent() {
   const { styles, colors } = useTheme();
-  const { data, userId, loading, error, refresh } = useBeacon();
+  const { data, userId, loading, error, refresh, act } = useBeacon();
   const now = useNow();
   const { invitations } = usePlanningResponses(now);
-  const params = useLocalSearchParams<{ threadId?: string }>();
+  const params = useLocalSearchParams<{ threadId?: string; section?: string }>();
+  const [section, setSection] = useState<"actions" | "updates">(params.section === "updates" && !params.threadId ? "updates" : "actions");
+  const notices = data.viewer_id === userId ? data.notices.slice().sort((a, b) => b.created_at.localeCompare(a.created_at)) : [];
+  const unread = notices.filter((notice) => !notice.read_at).length;
   const [filter, setFilter] = useState<Filter>("All");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = invitations.find((item) => item.id === selectedId);
@@ -89,6 +92,7 @@ function ResponsesContent() {
       regroup();
       focusedLink.current = null;
       if (params.threadId) {
+        setSection("actions");
         setExpandedId(params.threadId);
         setFilter("All");
       }
@@ -196,6 +200,19 @@ function ResponsesContent() {
       scrollRequest={scrollRequest}
       scrollStateKey="responses"
     >
+      <View accessibilityRole="tablist" style={{ flexDirection: "row", gap: 8 }}>
+        {(["actions", "updates"] as const).map((value) => <Pressable key={value} accessibilityRole="tab" accessibilityState={{ selected: section === value }} aria-selected={section === value} onPress={() => setSection(value)} style={{ flex: 1, minHeight: 44, alignItems: "center", justifyContent: "center", borderBottomWidth: 2, borderColor: section === value ? colors.green : colors.line }}><Text style={styles.label}>{value === "actions" ? "Needs Action" : `Updates${unread ? ` · ${unread}` : ""}`}</Text></Pressable>)}
+      </View>
+      {section === "updates" ? <View style={{ gap: 12 }}>
+        {error ? <Txt>Couldn&apos;t load updates. {error}</Txt> : null}
+        <Action secondary title="Refresh updates" run={refresh} />
+        {unread > 0 && <Action secondary title="Mark all read" run={() => act("read_notices")} />}
+        {!loading && !error && !notices.length && <Txt muted>You&apos;re all caught up. New updates will appear here.</Txt>}
+        {notices.slice(0, 50).map((notice) => <View key={notice.id} style={[styles.card, { gap: 8 }]}>
+          <Text style={[styles.body, { fontWeight: notice.read_at ? "400" : "700" }]}>{!notice.read_at ? "• " : ""}{notice.body}</Text>
+          <Button compact secondary title={notice.activity_id ? "Open on map" : "Review responses"} onPress={() => notice.activity_id ? router.push({ pathname: "/(tabs)", params: { beacon: notice.activity_id } }) : setSection("actions")} />
+        </View>)}
+      </View> : <>
       <View
         style={{
           flexDirection: "row",
@@ -582,6 +599,7 @@ function ResponsesContent() {
           />
         </>
       )}
+      </>}
     </Screen>
   );
 }

@@ -240,12 +240,20 @@ function DialogButton({
         padding: 12,
         borderRadius: 10,
         opacity: disabled ? 0.5 : pressed ? 0.7 : 1,
-        backgroundColor: primary ? colors.surfaceRaised : "transparent",
+        backgroundColor: primary
+          ? destructive
+            ? colors.surfaceRaised
+            : colors.accent
+          : "transparent",
       })}
     >
       <Text
         style={{
-          color: destructive ? colors.danger : colors.textPrimary,
+          color: destructive
+            ? colors.danger
+            : primary
+              ? colors.onAccent
+              : colors.textPrimary,
           fontSize: 16,
           fontWeight: primary ? "600" : "500",
           textAlign: "center",

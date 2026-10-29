@@ -1,3 +1,19 @@
 {
-  "rewrites": [{ "source": "/(.*)", "destination": "/" }]
+  "functions": { "api/guest.js": { "includeFiles": "{assets/fonts/*.ttf,server/guest/client.js}" } },
+  "headers": [
+    { "source": "/auth/:path*", "headers": [
+      { "key": "Cache-Control", "value": "no-store" },
+      { "key": "Referrer-Policy", "value": "no-referrer" }
+    ] }
+  ],
+  "rewrites": [
+    { "source": "/.well-known/apple-app-site-association", "destination": "/api/guest?association=apple" },
+    { "source": "/.well-known/assetlinks.json", "destination": "/api/guest?association=android" },
+    { "source": "/g/:token/:format", "destination": "/api/guest?token=:token&format=:format" },
+    { "source": "/g/:token", "destination": "/api/guest?token=:token" },
+    { "source": "/api/guest", "destination": "/api/guest" },
+    { "source": "/auth/confirm", "destination": "/auth/confirm.html" },
+    { "source": "/auth/callback", "destination": "/auth/callback.html" },
+    { "source": "/(.*)", "destination": "/" }
+  ]
 }

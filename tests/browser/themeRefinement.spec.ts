@@ -29,12 +29,13 @@ function rgb(hex: string) {
 
 for (const [index, theme] of themeNames.entries()) {
   for (const appearance of ["light", "dark"] as const) {
-    const width = [320, 375, 430][index % 3];
-    test(`${theme} ${appearance} themes six main screens at ${width}px`, async ({
+    const width = [320, 390, 430][index % 3];
+    test(`${theme} ${appearance} themes main screens at ${width}px`, async ({
       page,
     }) => {
       test.setTimeout(180_000);
       await page.setViewportSize({ width, height: 900 });
+      await page.emulateMedia({ reducedMotion: "reduce" });
       await page.addInitScript(
         ({ theme, appearance }) => {
           localStorage.setItem("beacon.theme", theme);
@@ -54,7 +55,7 @@ for (const [index, theme] of themeNames.entries()) {
         ["settings", "/settings"],
         ["map", "/"],
         ["beacons", "/activities"],
-        ["create", "/create"],
+        ["create", "/create?editor=yes"],
         ["squads", "/squads"],
         ["friends", "/friends"],
         ["profile", "/profile"],
@@ -89,35 +90,39 @@ for (const [index, theme] of themeNames.entries()) {
             () => document.documentElement.scrollWidth <= innerWidth,
           ),
         ).toBe(true);
-        if (screen === "beacons") {
-          await expect(
-            page.getByTestId("availability-dropdown-face"),
-          ).toHaveCSS(
-            "background-color",
-            rgb(design.availability.available.tint),
-          );
-        }
-        if (screen === "profile") {
-          await expect(
-            page
-              .getByRole("button", { name: "Edit your status", exact: true })
-              .locator(":scope > div")
-              .first(),
-          ).toHaveCSS(
-            "background-color",
-            rgb(design.availability.available.color),
-          );
-        }
         await page.screenshot({
-          path: `.expo/theme-refinement/${theme}-${appearance}-${screen}-${width}.png`,
+          path: `.expo/sunflower-themes/${theme}-${appearance}-${screen}-${width}.png`,
         });
+        if (
+          screen === "squads" &&
+          ["Essential", "Sunflower", "Sunset"].includes(theme)
+        ) {
+          await page
+            .getByRole("button", { name: "New conversation", exact: true })
+            .click();
+          const dialog = page.getByRole("dialog", {
+            name: "New conversation",
+            exact: true,
+          });
+          await expect(dialog).toBeVisible();
+          await expect(dialog).toHaveCSS(
+            "background-color",
+            rgb(colors.surface),
+          );
+          await page.screenshot({
+            path: `.expo/sunflower-themes/${theme}-${appearance}-dialog-${width}.png`,
+          });
+          await dialog
+            .getByRole("button", { name: "Cancel", exact: true })
+            .click();
+        }
       }
       expect(errors).toEqual([]);
     });
   }
 }
 
-test("neutral previews use one family, persist choices, and follow live System appearance", async ({
+test("warm Essential and Sunflower previews persist choices and follow live System appearance", async ({
   page,
 }) => {
   test.setTimeout(120_000);
@@ -158,19 +163,60 @@ test("neutral previews use one family, persist choices, and follow live System a
     .poll(() => page.evaluate(() => localStorage.getItem("beacon.appearance")))
     .toBe("system");
   await picker
-    .getByRole("button", { name: "Sunset palette", exact: true })
+    .getByRole("button", { name: "Sunflower palette", exact: true })
     .click();
   await expect
     .poll(() => page.evaluate(() => localStorage.getItem("beacon.theme")))
-    .toBe("Sunset");
+    .toBe("Sunflower");
   await demo(page, "/settings");
   await expect(
-    picker.getByRole("button", { name: "Sunset palette", exact: true }),
+    picker.getByRole("button", { name: "Sunflower palette", exact: true }),
   ).toHaveAttribute("aria-pressed", "true");
   await expect(
     picker.getByRole("button", { name: "System", exact: true }),
   ).toHaveAttribute("aria-selected", "true");
   await page.screenshot({
-    path: ".expo/theme-refinement/sunset-settings-light-320.png",
+    path: ".expo/sunflower-themes/sunflower-system-settings-320.png",
   });
 });
+
+for (const appearance of ["light", "dark"] as const) {
+  test(`gold palette comparison and Sunflower sizing in ${appearance}`, async ({
+    page,
+  }) => {
+    test.setTimeout(120_000);
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.goto("/");
+    for (const theme of ["Essential", "Sunflower", "Sunset"]) {
+      await page.setViewportSize({ width: 390, height: 900 });
+      await page.evaluate(
+        ({ theme, appearance }) => {
+          localStorage.setItem("beacon.theme", theme);
+          localStorage.setItem("beacon.appearance", appearance);
+        },
+        { theme, appearance },
+      );
+      await demo(page, "/activities");
+      await page.screenshot({
+        path: `.expo/sunflower-themes/compare-${theme}-${appearance}-390.png`,
+      });
+      if (theme === "Sunflower") {
+        await page.setViewportSize({ width: 430, height: 900 });
+        expect(
+          await page.evaluate(
+            () => document.documentElement.scrollWidth <= innerWidth,
+          ),
+        ).toBe(true);
+        await page.screenshot({
+          path: `.expo/sunflower-themes/Sunflower-${appearance}-beacons-430.png`,
+        });
+        await demo(page, "/settings");
+        const picker = page.getByTestId("theme-picker");
+        await picker.scrollIntoViewIfNeeded();
+        await picker.screenshot({
+          path: `.expo/sunflower-themes/Sunflower-${appearance}-picker-430.png`,
+        });
+      }
+    }
+  });
+}

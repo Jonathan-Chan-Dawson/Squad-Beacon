@@ -166,6 +166,7 @@ test("original theme IDs stay unchanged and every saved explicit appearance surv
     "Mint",
     "Sunset",
     "Berry",
+    "Sunflower",
   ]);
   for (const theme of themeNames) {
     for (const appearanceMode of ["light", "dark", "system"] as const) {

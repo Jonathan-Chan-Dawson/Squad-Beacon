@@ -24,6 +24,7 @@ export type ActivityDetailHeroProps = {
   demo: boolean;
   scrollY: Animated.Value;
   onBack: () => void;
+  backLabel?: string;
   onOverflow: () => void;
   onChat?: () => void;
 };
@@ -38,6 +39,7 @@ export function ActivityDetailHero({
   demo,
   scrollY,
   onBack,
+  backLabel = "Back",
   onOverflow,
   onChat,
 }: ActivityDetailHeroProps) {
@@ -51,7 +53,7 @@ export function ActivityDetailHero({
   const categoryToken = categories[category];
   const CategoryIcon = categoryToken.icon;
   const compact = screenWidth <= 375 || screenHeight <= 667;
-  const expandedHeight = compact ? 180 : 212;
+  const expandedHeight = 212;
   const collapseDistance = expandedHeight - 56;
   useEffect(() => {
     const listener = scrollY.addListener(({ value }) => {
@@ -179,7 +181,7 @@ export function ActivityDetailHero({
       >
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Back"
+          accessibilityLabel={backLabel}
           onPress={onBack}
           style={({ pressed }) => ({
             width: 44,
@@ -341,7 +343,7 @@ export function ActivityDetailHero({
         <Text
           accessibilityRole="header"
           accessibilityElementsHidden={collapsedForAccessibility}
-          numberOfLines={compact ? 1 : 2}
+          numberOfLines={2}
           style={{
             color: heroText,
             fontSize: compact ? 22 : 30,

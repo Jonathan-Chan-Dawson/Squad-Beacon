@@ -1,5 +1,8 @@
 Test map
 
+- browser/authEmailLinks.spec.ts: canonical signup/reset/resend destinations, explicit confirmation with no prefetch exchange, cross-browser token-hash entry, recovery and expired-link handling. Uses playwright.auth.config.ts and the separate auth-email preview.
+- browser/authConfirmationLayout.spec.ts: 320px/390px light/dark confirmation screenshots, focus, tap targets, horizontal fit and reduced-motion checks without consuming a token.
+
 - accountEntry.test.ts and browser/accountEntry.spec.ts: shared required-profile readiness, all optional survey statuses, new-profile entry, invitation continuity, account/recovery callbacks, voluntary personalization and phone screenshots. Included in the onboarding test commands.
 
 - onboarding.test.ts and onboarding.database.test.ts: explicit first-session evidence, state precedence, coherent demo fixtures, deterministic copy, confirmed success transitions and owner-scoped atomic progress claims through the ordered migration history.
@@ -33,8 +36,11 @@ Test map
 
 Tests should exercise product flows through public routes/actions and preserve existing suites when adding coverage.
 
-- browser/themeRefinement.spec.ts: all six families in Light/Dark across Map, Beacons, Create, Squads, Friends and Profile at mobile widths; neutral preview persistence and live System appearance. themes/themeTokens tests cover legacy defaults, exact neutral colors and readable semantic roles.
+- browser/themeRefinement.spec.ts: all seven families in Light/Dark across Map, Beacons, Create, Squads, Friends and Profile at mobile widths; neutral preview persistence and live System appearance. themes/themeTokens tests cover legacy defaults, warm Essential/Sunflower distinction and readable semantic roles.
 
 - browser/unifiedPeople.spec.ts, browser/creationMobilePolish.spec.ts and browser/sonarPeople.spec.ts: staged invitation cancellation/Done, secondary list filters, inline list management, advisory large batches, canonical location route, keyboard selection, and responsive creation/Sonar screens. createHandoff and creationAtomic.database cover the 50-person recommendation and atomic 51-recipient publication.
 
 - activityWorkspace.test.ts and browser/activityWorkspace.spec.ts: unfinished lifecycle selection, date-only presentation, request recovery/isolation, retained subtabs, creation handoffs, lost-reply replay, phone screenshots, dirty-edit protection, Beacon direct-entry/Chat Back fallback and Calendar/Plan return paths.
+- guestSharing.test.ts, guestFoundation.database.test.ts, guestPlanning.database.test.ts and guestDatabase.ts: isolated guest server/security and complete ordered-history canonical RSVP/planning/Plan/Status/claiming integration. browser/guestInvitations.spec.ts, guestCanonical.spec.ts and guestPlanning.spec.ts cover browser-to-handler-to-database journeys. External Auth/email is substituted locally; hosted/native acceptance remains separate. Use playwright.guest.config.ts or test:guest scripts.
+
+- refinementSelection.test.ts, refinementTiming.test.ts, creationPublicListing.test.ts and browser/refinement.spec.ts: full filtered selection limits, timezone/DST, frozen public-listing continuation, quiet Map, direct Inbox, staged composer/timing, category shortcuts and responsive screenshots.

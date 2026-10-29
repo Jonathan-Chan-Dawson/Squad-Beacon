@@ -13,13 +13,12 @@ import {
   Pressable,
   RefreshControl,
   SectionList,
-  Share,
   Text,
   TextInput,
   View,
 } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
-import * as ExpoLinking from "expo-linking";
+import { shareBeaconInvitation } from "@/src/features/sharing/shareBeacon";
 import {
   ArrowLeft,
   Bookmark,
@@ -483,14 +482,9 @@ export default function BrowseBeaconsScreen() {
     async (activityId: string) => {
       const activity = data.activities.find((row) => row.id === activityId);
       if (!activity) throw new Error("This Beacon is no longer available.");
-      const url = ExpoLinking.createURL(`/activity/${activity.id}`);
-      await Share.share({
-        title: activity.title,
-        message: `${activity.title}\n${url}`,
-        url,
-      });
+      await shareBeaconInvitation(data,userId,activity);
     },
-    [data.activities],
+    [data,userId],
   );
   const onRefresh = useCallback(async () => {
     setRefreshing(true);

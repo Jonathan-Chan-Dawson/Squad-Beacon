@@ -202,7 +202,7 @@ for (const width of [320, 375, 430, 1024]) {
       await page.screenshot({
         path: `.expo/creation-mobile/invitations-${width}-${theme}.png`,
       });
-      await modal.getByRole("button", { name: "Back", exact: true }).click();
+      await modal.getByRole("button", { name: "Cancel", exact: true }).click();
       await expect(
         page.getByRole("button", { name: "+ Add People", exact: true }),
       ).toBeFocused();

@@ -12,6 +12,7 @@ import {
   recipientCategory,
   recipientKey,
   selectableSocialGroups,
+  filteredFriendSelection,
   type SocialRecipient,
 } from "../socialSelection";
 import type { PeopleListSelection } from "../privateLists";
@@ -32,6 +33,7 @@ export function FriendFilterSelector({
   maxSelected,
   selectionLabel = "Select",
   bulk = false,
+  compactFilters = false,
 }: {
   selected: SocialRecipient[];
   onChange(rows: SocialRecipient[]): void;
@@ -40,9 +42,11 @@ export function FriendFilterSelector({
   maxSelected?: number;
   selectionLabel?: string;
   bulk?: boolean;
+  compactFilters?: boolean;
 }) {
   const { data, userId } = useBeacon();
   const { colors, styles } = useTheme();
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<Category>("Friends");
   const [groupKey, setGroupKey] = useState<string | null>(null);
@@ -149,6 +153,12 @@ export function FriendFilterSelector({
       row.name.toLocaleLowerCase().includes(search) ||
       eligiblePeople(row.members).length > 0,
   );
+  const bulkPeople = directoryMode
+    ? directory.filter((row) => row.key === groupKey).flatMap((row) => eligiblePeople(row.members, !row.name.toLocaleLowerCase().includes(search)))
+    : people;
+  const filteredIds = new Set(bulkPeople.map((person) => person.id));
+  const bulkSelection = filteredFriendSelection(selectedIds, [...filteredIds], maxSelected);
+  const bulkOverLimit = !bulkSelection.allowed;
   const renderPerson = (
     person: (typeof data.profiles)[number],
     compact = false,
@@ -197,7 +207,7 @@ export function FriendFilterSelector({
   return (
     <View testID="social-selector" style={{ gap: 8 }}>
       <Field
-        label="Search people and groups"
+        label={compactFilters ? "Search friends" : "Search people and groups"}
         value={query}
         onChangeText={(value) => {
           setQuery(value);
@@ -206,13 +216,15 @@ export function FriendFilterSelector({
         editable={!disabled}
         placeholder={directoryMode ? "Search groups" : "Search friends"}
       />
+      {compactFilters && <View style={{ flexDirection: "row", gap: 8 }}><Button compact secondary title={filtersOpen ? "Hide filters" : "Filter"} onPress={() => setFiltersOpen(!filtersOpen)} /><Button compact secondary title={`Selected · ${selectedIds.length}`} onPress={() => changeCategory("Selected")} /></View>}
+      {(!compactFilters || filtersOpen) && <>
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ gap: 4 }}
       >
-        {categories.map((value) =>
+        {categories.filter(value => !compactFilters || value !== "Selected").map((value) =>
           tab(
             value === "Selected" ? `Selected · ${selectedIds.length}` : value,
             category === value,
@@ -276,6 +288,7 @@ export function FriendFilterSelector({
           </ScrollView>
         </View>
       )}
+      </>}
       <Text style={styles.muted}>
         {selectedIds.length} selected ·{" "}
         {directoryMode
@@ -287,22 +300,14 @@ export function FriendFilterSelector({
           Choose up to {maxSelected} friends. Remove someone to add another.
         </Text>
       )}
-      {bulk && !directoryMode && people.length > 0 && (
-        <Button
-          compact
-          secondary
-          title="Add shown friends"
-          disabled={disabled}
-          onPress={() => {
-            const next = new Set(selectedIds);
-            for (const person of people.slice(0, shown)) {
-              if (maxSelected != null && next.size >= maxSelected) break;
-              next.add(person.id);
-            }
-            onChange([...next].map((id) => ({ kind: "friend", id })));
-          }}
-        />
-      )}
+      {bulk && bulkPeople.length > 0 && <View style={{ gap: 4 }}>
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+          <Button compact secondary title={`Select all filtered (${filteredIds.size})`} disabled={disabled || bulkOverLimit} onPress={() => { if (bulkSelection.allowed) onChange(bulkSelection.ids.map((id) => ({ kind: "friend", id }))); }} />
+          <Button compact secondary title="Deselect filtered" disabled={disabled} onPress={() => onChange(selected.filter((row) => !filteredIds.has(row.id)))} />
+          {!!selectedIds.length && <Button compact secondary title="Clear selection" disabled={disabled} onPress={() => onChange([])} />}
+        </View>
+        {bulkOverLimit && <Text style={styles.muted}>Choose up to {maxSelected} friends. Narrow this filter or select people individually.</Text>}
+      </View>}
       {directoryMode
         ? directory.slice(0, shown).map((row) => {
             const expanded = groupKey === row.key;

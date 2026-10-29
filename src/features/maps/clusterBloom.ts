@@ -122,7 +122,7 @@ function calculateBloomGeometry(item: NativeMapPresentation) {
       displayedPeople && !item.overflow
         ? "friends"
         : beaconTotal <= 5 && !displayedPeople
-          ? "expand"
+          ? "cluster"
           : "cluster";
     const artworkBottom = Math.max(
       fullBeacon ? 36 : 0,
@@ -247,5 +247,5 @@ export function bloomGeometry(item: NativeMapPresentation) {
 export function bloomAccessibilityLabel(item: NativeMapPresentation) {
   const beacons = item.beacons.length,
     people = item.people.length;
-  return `Map cluster: ${beacons} beacons, ${people} people. ${people ? "Nearby shared friend locations; proximity does not indicate Beacon attendance. " : ""}${beacons > 5 || (!beacons && people >= 5) ? "Open searchable cluster explorer" : "Expand to select an item"}`;
+  return `Map cluster: ${beacons} beacons, ${people} people. ${people ? "Nearby shared friend locations; proximity does not indicate Beacon attendance. " : ""}${beacons > 5 || (!beacons && people >= 5) ? "Open searchable cluster explorer" : "Choose from nearby items"}`;
 }

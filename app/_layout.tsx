@@ -44,6 +44,7 @@ function Navigation() {
   const publicRoute =
     segments[0] === "auth" ||
     segments[0] === "legal" ||
+    pathname.startsWith("/g/") ||
     segments[0] === "invite";
   if (!publicRoute) {
     if (readiness.state === "loading") return <Loading />;

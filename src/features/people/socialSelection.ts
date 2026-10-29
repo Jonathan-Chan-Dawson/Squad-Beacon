@@ -12,6 +12,12 @@ export type SocialRecipient = {
 };
 export type RecipientKind = SocialRecipient["kind"];
 export const recipientKey = (row: SocialRecipient) => `${row.kind}:${row.id}`;
+
+/** Complete filtered selection, never a rendered-page slice or a truncated batch. */
+export function filteredFriendSelection(selected: string[], filtered: string[], maximum?: number) {
+  const ids = [...new Set([...selected, ...filtered])];
+  return { ids, allowed: maximum == null || ids.length <= maximum };
+}
 export const socialCategories = [
   "All",
   "Friends",

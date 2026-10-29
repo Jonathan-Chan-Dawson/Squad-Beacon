@@ -17,3 +17,5 @@ Feature-specific business rules belong under src/features/; keep only true cross
 - AppNavigation.tsx / AppNavigation.native.tsx and SystemBars.tsx / SystemBars.native.tsx: preserve web presentation while native opts into themed push/modal transitions and focused system-bar requests.
 
 - SocialChoiceRow.tsx: shared accessible selection/browse rows and category rail for people, creation audiences and community association.
+
+- dateTime.ts and DurationControl.tsx: timezone-aware local date/time conversion and shared hours/minutes presets/validation. components/DateField(.native).tsx supplies labeled platform controls.

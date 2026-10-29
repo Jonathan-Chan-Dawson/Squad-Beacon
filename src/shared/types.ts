@@ -522,7 +522,7 @@ export interface Data {
   rsvps: RSVP[];
   resolved_beacon_responses?: RSVP[];
   presence?: Presence[];
-  capabilities?: { living_plans?: boolean; collaborative_plans?: boolean; repeatable_plans?: boolean; connected_planning?: boolean; living_activity?: boolean; rsvp_decline?: boolean; beacon_supplies?: boolean; status_privacy?: boolean; status_attachments?: boolean; status_current_beacon?: boolean };
+  capabilities?: { guest_sharing?: boolean; guest_planning?: boolean; living_plans?: boolean; collaborative_plans?: boolean; repeatable_plans?: boolean; connected_planning?: boolean; living_activity?: boolean; rsvp_decline?: boolean; beacon_supplies?: boolean; status_privacy?: boolean; status_attachments?: boolean; status_current_beacon?: boolean };
   comments: Comment[];
   reactions: Reaction[];
   locations: LocationSession[];
@@ -636,6 +636,8 @@ export function normalizeData(value: Partial<Data> | null | undefined): Data {
   data.capabilities.living_plans = data.is_demo === true || value?.capabilities?.living_plans === true;
   data.capabilities.collaborative_plans = data.is_demo === true || value?.capabilities?.collaborative_plans === true;
   data.capabilities.repeatable_plans = data.is_demo === true || value?.capabilities?.repeatable_plans === true;
+  data.capabilities.guest_sharing = data.is_demo !== true && value?.capabilities?.guest_sharing === true;
+  data.capabilities.guest_planning = data.is_demo !== true && value?.capabilities?.guest_planning === true;
   data.plan_members = Array.isArray(data.plan_members) ? data.plan_members : [];
   data.plan_routines = Array.isArray(data.plan_routines)
     ? data.plan_routines
