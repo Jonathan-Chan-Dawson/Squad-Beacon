@@ -32,12 +32,14 @@ function ProfileSonarControl({
   compact = false,
   row = false,
   pill = false,
+  iconOnly = false,
   autoOpen = false,
   onDismiss,
 }: {
   compact?: boolean;
   row?: boolean;
   pill?: boolean;
+  iconOnly?: boolean;
   autoOpen?: boolean;
   onDismiss?: () => void;
 }) {
@@ -344,7 +346,7 @@ function ProfileSonarControl({
       ) : compact ? (
         <HomeAction
           title={
-            session
+            iconOnly ? undefined : session
               ? `Sonar · ${sonarMinutesRemaining(session.expires_at, now)}m`
               : "Sonar"
           }

@@ -1,13 +1,36 @@
 import { SemanticEmpty } from "@/src/features/onboarding/OnboardingUI";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { FlatList, Pressable, Text, View } from "react-native";
+import {
+  Animated,
+  FlatList,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+} from "react-native";
 import { router, useFocusEffect } from "expo-router";
-import { ArrowLeft, UsersRound } from "lucide-react-native";
+import { ArrowLeft, ChevronDown, Search } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useDesignTheme } from "@/src/shared/design-system";
+import { useDesignTheme, useReducedMotion } from "@/src/shared/design-system";
+import { useBeacon } from "@/src/shared/store";
+import { matchesSearch } from "@/src/shared/search";
+import { SocialChoiceRow } from "@/src/shared/SocialChoiceRow";
+import { CommunityAvatar } from "@/src/features/people/components/CommunityAvatar";
+import { PrivateListsSheet } from "@/src/features/people/components/PrivateListsSheet";
+import { filteredFriendIds } from "@/src/features/people/friendGroupFilters";
+import {
+  recipientCategory,
+  recipientKey,
+  selectableSocialGroups,
+  socialCategories,
+  type SocialCategory,
+} from "@/src/features/people/socialSelection";
 import { ChatKeyboardFrame } from "@/src/features/messages/ChatKeyboard";
 import { HomeAction } from "../components/HomeAction";
 import { useSocialFriendsController } from "../components/feed/SocialFriendsSection";
+import { filterSocialFriends } from "../socialFriends";
+import { setPlanningSelection } from "../socialPlanningSession";
 import {
   friendsScrollOffset,
   rememberFriendsScrollOffset,
@@ -17,14 +40,21 @@ import type { SocialFriend } from "../socialFriends";
 
 export default function FriendsScreen() {
   const { colors, tokens } = useDesignTheme();
+  const { data } = useBeacon();
   const insets = useSafeAreaInsets();
   const controller = useSocialFriendsController({
     showSelectedPeople: true,
-    sharedSelector: true,
   });
   const { friends, filtered, available, loading, userId, selectedIds } =
     controller;
-  const [browse] = useFriendsBrowseState(userId);
+  const [browse, updateBrowse] = useFriendsBrowseState(userId);
+  const [category, setCategory] = useState<SocialCategory>("All");
+  const [groupsOpen, setGroupsOpen] = useState(false);
+  const [friendsOpen, setFriendsOpen] = useState(true);
+  const [expandedGroup, setExpandedGroup] = useState<string | null>(null);
+  const [shownGroups, setShownGroups] = useState(8);
+  const [shownMembers, setShownMembers] = useState(8);
+  const [listsOpen, setListsOpen] = useState(false);
   const list = useRef<FlatList<SocialFriend>>(null);
   const [initialOffset] = useState(() => friendsScrollOffset(userId));
   const restore = useRef({
@@ -68,6 +98,167 @@ export default function FriendsScreen() {
     }
   }, [browse, restore]);
   const inBeacons = friends.filter((friend) => friend.beacon).length;
+  const showFriends = category === "All" || category === "Friends";
+  const showGroups =
+    category !== "Friends" && (category !== "All" || groupsOpen);
+  const baseFriends = filterSocialFriends(friends, data, userId, {
+    query: "",
+    filter: browse.filter,
+    listId: browse.listId,
+  });
+  const groups = selectableSocialGroups(data, userId)
+    .filter(
+      (group) =>
+        category === "All" || recipientCategory[group.kind] === category,
+    )
+    .map((group) => {
+      const eligible = filteredFriendIds(data, userId, { group });
+      const members = baseFriends.filter((friend) => eligible.has(friend.id));
+      const nameMatches = matchesSearch(browse.query, group.name);
+      const matching = nameMatches
+        ? members
+        : members.filter((friend) =>
+            matchesSearch(browse.query, friend.name, friend.note?.title ?? ""),
+          );
+      return { ...group, members: matching, nameMatches };
+    })
+    .filter((group) => group.nameMatches || group.members.length > 0);
+  const listName = data.lists.find(
+    (item) => item.id === browse.listId && item.owner_id === userId,
+  )?.name;
+  const tab = (label: string, active: boolean, onPress: () => void) => (
+    <Pressable
+      key={label}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ selected: active }}
+      aria-pressed={active}
+      onPress={onPress}
+      style={{
+        minHeight: 44,
+        minWidth: 44,
+        paddingHorizontal: 10,
+        justifyContent: "center",
+        borderBottomWidth: 2,
+        borderBottomColor: active ? colors.accent : "transparent",
+      }}
+    >
+      <Text
+        style={{
+          color: active ? colors.accent : colors.textSecondary,
+          fontSize: 13,
+          fontWeight: active ? "600" : "400",
+        }}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+  const friendControls = (
+    <View style={{ gap: 2 }}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ gap: 4 }}
+      >
+        {(["Favorites", "Available", "In a Beacon"] as const).map((value) =>
+          tab(value, browse.filter === value, () =>
+            updateBrowse({ filter: browse.filter === value ? "All" : value }),
+          ),
+        )}
+        <HomeAction
+          title={`Select all shown (${filtered.length})`}
+          label={`Select all shown (${filtered.length})`}
+          disabled={!filtered.length}
+          onPress={() =>
+            setPlanningSelection(userId, [
+              ...selectedIds,
+              ...filtered.map((friend) => friend.id),
+            ])
+          }
+          plain
+        />
+      </ScrollView>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+        <HomeAction
+          title={listName ? `Private list · ${listName}` : "Private Lists"}
+          label="Manage Private Lists"
+          onPress={() => setListsOpen(true)}
+          plain
+        />
+        {browse.listId && (
+          <HomeAction
+            title="Clear list"
+            onPress={() => updateBrowse({ listId: null })}
+            plain
+          />
+        )}
+      </View>
+    </View>
+  );
+  const groupRows = showGroups ? (
+    <View>
+      {groups.slice(0, shownGroups).map((group) => {
+        const key = recipientKey(group);
+        const expanded = expandedGroup === key;
+        return (
+          <View
+            key={key}
+            style={
+              expanded
+                ? {
+                    backgroundColor: colors.surfaceRaised,
+                    borderRadius: 12,
+                    paddingHorizontal: 6,
+                  }
+                : undefined
+            }
+          >
+            <SocialChoiceRow
+              label={group.name}
+              detail={`${group.members.length} eligible friends`}
+              icon={<CommunityAvatar type={group.kind} size={32} />}
+              accessibilityLabel={`Filter friends in ${group.name}`}
+              browse
+              expanded={expanded}
+              onPress={() => {
+                setExpandedGroup(expanded ? null : key);
+                setShownMembers(8);
+              }}
+            />
+            {expanded && (
+              <View style={{ paddingLeft: 12, paddingBottom: 6 }}>
+                {group.members.slice(0, shownMembers).map(controller.row)}
+                {group.members.length > shownMembers && (
+                  <HomeAction
+                    title="Show more friends"
+                    onPress={() => setShownMembers((value) => value + 8)}
+                  />
+                )}
+                {!group.members.length && (
+                  <Text style={{ color: colors.textSecondary, padding: 10 }}>
+                    No eligible friends in this group.
+                  </Text>
+                )}
+              </View>
+            )}
+          </View>
+        );
+      })}
+      {groups.length > shownGroups && (
+        <HomeAction
+          title="Show more groups"
+          onPress={() => setShownGroups((value) => value + 8)}
+        />
+      )}
+      {!groups.length && (
+        <Text style={{ color: colors.textSecondary, paddingVertical: 10 }}>
+          No matching groups.
+        </Text>
+      )}
+    </View>
+  ) : null;
   return (
     <View
       testID="friends-screen"
@@ -86,7 +277,7 @@ export default function FriendsScreen() {
             maxWidth: tokens.layout.contentMaxWidth,
             alignSelf: "center",
             paddingHorizontal: tokens.layout.screenGutter,
-            minHeight: 80,
+            minHeight: 64,
             flexDirection: "row",
             alignItems: "center",
             gap: 10,
@@ -109,33 +300,6 @@ export default function FriendsScreen() {
           >
             <ArrowLeft size={21} color={colors.textPrimary} />
           </Pressable>
-          <View
-            style={{
-              width: 44,
-              height: 44,
-              borderRadius: 16,
-              backgroundColor: tokens.availability.available.tint,
-              borderWidth: 1,
-              borderColor: colors.accent,
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <UsersRound size={22} color={colors.accent} />
-            <View
-              style={{
-                position: "absolute",
-                right: -3,
-                top: -3,
-                width: 9,
-                height: 9,
-                borderRadius: 5,
-                backgroundColor: colors.accent,
-                borderWidth: 2,
-                borderColor: colors.bg,
-              }}
-            />
-          </View>
           <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
             <Text
               accessibilityRole="header"
@@ -152,7 +316,7 @@ export default function FriendsScreen() {
               testID="friends-summary"
               style={{ color: colors.textSecondary, ...tokens.type.caption }}
             >
-              <Text style={{ color: colors.accent }}>
+              <Text style={{ color: tokens.availability.available.color }}>
                 {available} available
               </Text>
               {" · "}
@@ -177,10 +341,10 @@ export default function FriendsScreen() {
             maxWidth: tokens.layout.contentMaxWidth,
             alignSelf: "center",
             paddingHorizontal: tokens.layout.screenGutter,
-            paddingTop: 16,
+            paddingTop: 12,
             paddingBottom: 16 + (selectedIds.length ? 0 : insets.bottom),
           }}
-          data={filtered}
+          data={showFriends && friendsOpen ? filtered : []}
           extraData={selectedIds}
           keyExtractor={(friend) => friend.id}
           renderItem={({ item }) => controller.row(item)}
@@ -215,42 +379,74 @@ export default function FriendsScreen() {
           }}
           scrollEventThrottle={100}
           ListHeaderComponent={
-            <View style={{ gap: 8, paddingBottom: 8 }}>
-              {controller.controls}
-              <Text
-                style={{ color: colors.textSecondary, ...tokens.type.caption }}
+            <View style={{ gap: 4, paddingBottom: 4 }}>
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 8,
+                  backgroundColor: colors.surface,
+                  borderRadius: 12,
+                  paddingHorizontal: 12,
+                }}
               >
-                Tap + to select for planning. Invitations wait until you
-                publish.
-              </Text>
-              <Text
-                accessibilityLiveRegion="polite"
-                style={{ color: colors.textSecondary, ...tokens.type.caption }}
+                <Search
+                  size={17}
+                  color={colors.textSecondary}
+                  accessible={false}
+                />
+                <TextInput
+                  accessibilityLabel="Search people and groups"
+                  placeholder="Search people and groups"
+                  placeholderTextColor={colors.textSecondary}
+                  value={browse.query}
+                  onChangeText={(query) => updateBrowse({ query })}
+                  style={{
+                    flex: 1,
+                    minWidth: 0,
+                    minHeight: 44,
+                    color: colors.textPrimary,
+                    fontSize: 14,
+                  }}
+                />
+              </View>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                contentContainerStyle={{ gap: 4 }}
               >
-                {filtered.length} {filtered.length === 1 ? "friend" : "friends"}
-                {browse.query || browse.filter !== "All" || browse.listId
-                  ? " matching"
-                  : ""}
-              </Text>
-            </View>
-          }
-          ListFooterComponent={
-            <View
-              style={{
-                marginTop: 12,
-                paddingTop: 8,
-                borderTopWidth: 1,
-                borderTopColor: colors.border,
-              }}
-            >
-              <HomeAction
-                title="Find/Add Friends"
-                onPress={() => router.push("/find-friends")}
-              />
+                {socialCategories.map((value) =>
+                  tab(value, category === value, () => {
+                    setCategory(value);
+                    setShownGroups(8);
+                    if (value === "All")
+                      updateBrowse({ filter: "All", listId: null });
+                  }),
+                )}
+              </ScrollView>
+              {category === "All" && (
+                <FriendsDisclosure
+                  title="Groups"
+                  count={groups.length}
+                  open={groupsOpen}
+                  onPress={() => setGroupsOpen(!groupsOpen)}
+                />
+              )}
+              {groupRows}
+              {showFriends && (
+                <FriendsDisclosure
+                  title="Friends"
+                  count={filtered.length}
+                  open={friendsOpen}
+                  onPress={() => setFriendsOpen(!friendsOpen)}
+                />
+              )}
+              {showFriends && friendsOpen && friendControls}
             </View>
           }
           ListEmptyComponent={
-            loading ? (
+            !(showFriends && friendsOpen) ? null : loading ? (
               <Text style={{ color: colors.textSecondary, padding: 24 }}>
                 Loading your people…
               </Text>
@@ -304,7 +500,85 @@ export default function FriendsScreen() {
           </View>
         ) : null}
       </ChatKeyboardFrame>
+      <PrivateListsSheet
+        visible={listsOpen}
+        onClose={() => setListsOpen(false)}
+        onSelect={(selection) => {
+          updateBrowse({
+            listId: selection.startsWith("custom:") ? selection.slice(7) : null,
+            filter: selection === "favorites" ? "Favorites" : "All",
+          });
+        }}
+      />
       {controller.detailSheet}
     </View>
+  );
+}
+
+function FriendsDisclosure({
+  title,
+  count,
+  open,
+  onPress,
+}: {
+  title: string;
+  count: number;
+  open: boolean;
+  onPress: () => void;
+}) {
+  const { colors } = useDesignTheme();
+  const reducedMotion = useReducedMotion();
+  const [rotation] = useState(() => new Animated.Value(open ? 1 : 0));
+  useEffect(() => {
+    const animation = Animated.timing(rotation, {
+      toValue: open ? 1 : 0,
+      duration: reducedMotion ? 0 : 150,
+      useNativeDriver: true,
+    });
+    animation.start();
+    return () => animation.stop();
+  }, [open, reducedMotion, rotation]);
+  return (
+    <Pressable
+      accessibilityRole="button"
+      accessibilityLabel={`${title} (${count})`}
+      accessibilityState={{ expanded: open }}
+      aria-expanded={open}
+      onPress={onPress}
+      style={{
+        minHeight: 44,
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 7,
+      }}
+    >
+      <Text
+        style={{
+          flex: 1,
+          color: colors.textPrimary,
+          fontSize: 15,
+          fontWeight: "600",
+        }}
+      >
+        {title}{" "}
+        <Text style={{ color: colors.textSecondary, fontWeight: "400" }}>
+          {count}
+        </Text>
+      </Text>
+      <Animated.View
+        style={{
+          transform: [
+            {
+              rotate: rotation.interpolate({
+                inputRange: [0, 1],
+                outputRange: ["-90deg", "0deg"],
+              }),
+            },
+          ],
+        }}
+      >
+        <ChevronDown size={18} color={colors.textSecondary} />
+      </Animated.View>
+    </Pressable>
   );
 }

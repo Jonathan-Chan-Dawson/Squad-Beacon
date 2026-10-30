@@ -7,7 +7,7 @@ Profile feature
 - Profile personalization opens voluntarily from the compact Profile identity accessory or existing editor. Closing does not save or change survey status; successful saves merge with the latest owner snapshot.
 - privacy.ts and screens/ProfilePrivacySettings.tsx: viewer-specific full-profile privacy gates and profile visibility controls at /settings/privacy.
 
-- settings/ThemePicker.tsx: compact full-color-role previews; Essential Dark/Light shortcuts share one warm-neutral family; Sunflower adds soft gold alongside the five original color-family IDs.
+- settings/ThemePicker.tsx: surface, primary and complementary-highlight previews; Essential Dark/Light shortcuts share one family and preserve saved family/appearance preferences.
 
 - sonarSelection.ts and components/ProfileSonarCard.tsx: individual-recipient review, expiry-preserving Save people, explicit extension, and the shared filtered people picker. app/location.tsx (including legacy Map links) opens this canonical control; device/session logic stays here.
 

@@ -90,8 +90,15 @@ for (const [index, theme] of themeNames.entries()) {
             () => document.documentElement.scrollWidth <= innerWidth,
           ),
         ).toBe(true);
+        if (screen === "create") {
+          const title = page.getByRole("textbox", { name: "Activity title", exact: true });
+          await title.focus();
+          await expect(title).toHaveCSS("border-top-color", rgb(colors.primary));
+          await title.blur();
+          await expect(title).toHaveCSS("border-top-color", rgb(colors.borderStrong));
+        }
         await page.screenshot({
-          path: `.expo/sunflower-themes/${theme}-${appearance}-${screen}-${width}.png`,
+          path: test.info().outputPath(`${theme}-${appearance}-${screen}-${width}.png`),
         });
         if (
           screen === "squads" &&

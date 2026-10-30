@@ -548,7 +548,7 @@ export function IconButton({
           borderRadius: radius.button,
           alignItems: "center",
           justifyContent: "center",
-          backgroundColor: selected ? colors.surfaceRaised : colors.surface,
+          backgroundColor: selected ? colors.surfaceSelected : colors.surface,
           borderWidth: 1,
           borderColor: selected ? colors.accent : colors.border,
           opacity: disabled

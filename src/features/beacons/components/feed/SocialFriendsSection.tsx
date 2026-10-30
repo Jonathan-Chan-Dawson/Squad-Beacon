@@ -281,6 +281,7 @@ export function useSocialFriendsController({
       openProfile={openProfile}
       openDetail={setDetailId}
       toggle={toggle}
+      mintSelection={showSelectedPeople}
     />
   );
   const detailSheet = (
@@ -331,6 +332,7 @@ export function SocialFriendRow({
   openProfile,
   openDetail,
   toggle,
+  mintSelection = false,
 }: {
   friend: SocialFriend;
   selected: boolean;
@@ -338,6 +340,7 @@ export function SocialFriendRow({
   openProfile: (id: string) => void;
   openDetail: (id: string) => void;
   toggle: (id: string) => void;
+  mintSelection?: boolean;
 }) {
   const { colors, tokens } = useDesignTheme();
   const { showAvatars } = usePreferences();
@@ -358,7 +361,7 @@ export function SocialFriendRow({
         gap: 8,
         minHeight: 64,
         paddingVertical: 8,
-        borderBottomWidth: 1,
+        borderBottomWidth: mintSelection ? 0 : 1,
         borderBottomColor: colors.border,
       }}
     >
@@ -547,13 +550,15 @@ export function SocialFriendRow({
 
         accessibilityHint="Select for planning. Invitations are sent only when you publish a Beacon."
         accessibilityState={{ selected }}
+        aria-pressed={selected}
         onPress={() => toggle(friend.id)}
-        style={{
+        style={({ pressed }) => ({
           width: 44,
           height: 44,
           alignItems: "center",
           justifyContent: "center",
-        }}
+          opacity: pressed ? 0.7 : 1,
+        })}
       >
         <View
           style={{
@@ -561,16 +566,40 @@ export function SocialFriendRow({
             height: 28,
             borderRadius: 14,
             borderWidth: 1,
-            borderColor: selected ? colors.accent : colors.textSecondary,
-            backgroundColor: selected ? colors.accent : "transparent",
+            borderColor: mintSelection
+              ? tokens.availability.available.color
+              : selected
+                ? colors.accent
+                : colors.textSecondary,
+            backgroundColor: selected
+              ? mintSelection
+                ? tokens.availability.available.color
+                : colors.accent
+              : mintSelection
+                ? tokens.availability.available.tint
+                : "transparent",
             alignItems: "center",
             justifyContent: "center",
           }}
         >
           {selected ? (
-            <Check size={13} color={colors.onAccent} />
+            <Check
+              size={13}
+              color={
+                mintSelection
+                  ? tokens.availability.available.onColor
+                  : colors.onAccent
+              }
+            />
           ) : (
-            <Plus size={15} color={colors.accent} />
+            <Plus
+              size={15}
+              color={
+                mintSelection
+                  ? tokens.availability.available.color
+                  : colors.accent
+              }
+            />
           )}
         </View>
       </Pressable>

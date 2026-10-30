@@ -3,8 +3,10 @@ import { expect, test } from "@playwright/test";
 for (const [width, appearance] of [
   [320, "dark"],
   [430, "dark"],
+  [390, "dark"],
   [320, "light"],
   [430, "light"],
+  [390, "light"],
   [1024, "dark"],
 ] as const) {
   test(`identity-attached status at ${width}px in ${appearance}`, async ({
@@ -39,9 +41,11 @@ for (const [width, appearance] of [
       1,
     );
     expect(sonarBox.height).toBeGreaterThanOrEqual(44);
-    await expect(home).toContainText("Sonar Off");
+    await expect(sonar).toHaveAccessibleName("Open Sonar");
     const myStatus = page.getByTestId("home-my-status");
-    expect((await myStatus.boundingBox())!.height).toBeLessThanOrEqual(230);
+    expect((await myStatus.boundingBox())!.height).toBeLessThanOrEqual(280);
+    await expect(page.getByTestId("home-status-card")).toHaveCount(0);
+    await expect(page.getByTestId("home-personal-timeline")).toHaveCSS("border-top-width", "1px");
     expect(
       (await myStatus.getByTestId("add-activity-note").boundingBox())!.height,
     ).toBeLessThanOrEqual(56);
@@ -50,18 +54,22 @@ for (const [width, appearance] of [
     ).toHaveCount(0);
     await sonar.click();
     const sonarMenu = page.getByRole("dialog", {
-      name: "Start Sonar",
+      name: "Share location with",
       exact: true,
     });
     await expect(sonarMenu).toBeVisible();
     await sonarMenu.getByRole("button", { name: "Close", exact: true }).click();
-    expect(Math.abs(noteBoxAtHome.x - homeBox.x)).toBeLessThanOrEqual(1);
-    expect(Math.abs(noteBoxAtHome.width - homeBox.width)).toBeLessThanOrEqual(
-      1,
+    const avatarBox = (await avatar.boundingBox())!;
+    expect(avatarBox.width).toBeGreaterThanOrEqual(76);
+    expect(avatarBox.height).toBeGreaterThanOrEqual(
+      (noteBoxAtHome.y + noteBoxAtHome.height - availabilityBoxAtHome.y) * 0.7,
     );
-    expect(noteBoxAtHome.y).toBeGreaterThanOrEqual(
-      (await avatar.boundingBox())!.y + 44,
-    );
+    expect(await home.getByText("Alex Morgan", { exact: true }).evaluate(
+      (node) => node.scrollWidth <= node.clientWidth + 1,
+    )).toBe(true);
+    expect(noteBoxAtHome.x).toBeGreaterThanOrEqual(avatarBox.x + avatarBox.width + 8);
+    expect(noteBoxAtHome.x + noteBoxAtHome.width).toBeLessThanOrEqual(homeBox.x + homeBox.width + 1);
+    expect(noteBoxAtHome.y).toBeGreaterThanOrEqual(avatarBox.y);
     await homeNote.click();
     const editor = page.getByRole("dialog", {
       name: /Edit your status|Share your status/,
@@ -91,7 +99,7 @@ for (const [width, appearance] of [
     await expect(availability).toHaveCount(0);
     await expect(homeNote).toContainText("Coffee, then a creative afternoon");
     await page.screenshot({
-      path: `.expo/identity-status/beacons-${width}-${appearance}.png`,
+      path: test.info().outputPath(`beacons-${width}-${appearance}.png`),
       fullPage: true,
     });
     if (width === 320 && appearance === "dark") {
@@ -219,6 +227,9 @@ test("compact homepage previews preserve Activity Note editing and explicit Beac
   const note = section.getByTestId("activity-note-card");
   await expect(note).toContainText("Shooting hoops");
   expect((await note.boundingBox())!.height).toBeLessThanOrEqual(140);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.screenshot({ path: test.info().outputPath("beacons-current-note.png") });
+  await page.setViewportSize({ width: 320, height: 844 });
   await note
     .getByRole("button", { name: "Edit Activity Note", exact: true })
     .click();

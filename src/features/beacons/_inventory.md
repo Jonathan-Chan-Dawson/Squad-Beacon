@@ -25,7 +25,7 @@ Beacons feature
 
 - components/CreationLocationInput.tsx, socialPlanningSession.ts: web/native debounced Places suggestions and account-scoped editor/Map location round trips; only location changes on confirm, and completed/account-switched drafts reject results.
 
-- livingActivity.ts, demoLivingActivity.ts, components/feed/LivingActivitySection.tsx: owner-first authorized Current Activity, independent Activity Note lifecycle, compact profile presence, direct editor, and contextual planning handoffs.
+- livingActivity.ts, demoLivingActivity.ts, components/feed/LivingActivitySection.tsx: owner-first authorized Current Activity, independent Activity Note lifecycle, compact profile presence, direct editor, and contextual planning handoffs. Beacons places the editable note beside the avatar, above a separate activity card and the retained My Activity divider.
 
 - creationDraftStorage.ts, draftSnapshot.ts: versioned account-owned local draft snapshots, size-safe native storage chunks, serialized commits, validation, and frozen canonical publication recovery. Publication is blocked when its initial checkpoint fails.
 - components/CreationControls.tsx, creationModules.ts: compact disclosure rows, real module switches/configuration, and explicit recommendations; People & Access separates visibility, eligible invitations, delivery effects, approval, capacity, and post-publication role management.

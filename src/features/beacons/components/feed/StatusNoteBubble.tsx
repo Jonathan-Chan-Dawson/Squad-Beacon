@@ -31,7 +31,7 @@ export function NoteSpeechBubble({
           ...(dense ? { paddingVertical: 6, paddingHorizontal: 10 } : {}),
           borderRadius: compact ? 18 : 22,
           gap: 8,
-          backgroundColor: colors.green + "18",
+          backgroundColor: colors.secondaryContainer,
           overflow: "hidden",
         }}
       >
@@ -43,8 +43,8 @@ export function NoteSpeechBubble({
         >
           <Defs>
             <LinearGradient id={gradientId} x1="0" y1="0" x2="1" y2="1">
-              <Stop offset="0" stopColor={colors.green} stopOpacity={0.12} />
-              <Stop offset="1" stopColor={colors.green} stopOpacity={0.015} />
+              <Stop offset="0" stopColor={colors.secondary} stopOpacity={0.06} />
+              <Stop offset="1" stopColor={colors.secondary} stopOpacity={0} />
             </LinearGradient>
           </Defs>
           <Rect width="100%" height="100%" fill={`url(#${gradientId})`} />
@@ -63,9 +63,9 @@ export function NoteSpeechBubble({
             ...(tailTowardIdentity
               ? {
                   borderBottomWidth: 10,
-                  borderBottomColor: colors.green + "18",
+                  borderBottomColor: colors.secondaryContainer,
                 }
-              : { borderTopWidth: 10, borderTopColor: colors.green + "18" }),
+              : { borderTopWidth: 10, borderTopColor: colors.secondaryContainer }),
             borderLeftColor: "transparent",
             borderRightColor: "transparent",
           }}

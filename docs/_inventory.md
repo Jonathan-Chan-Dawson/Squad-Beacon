@@ -36,3 +36,4 @@ Documentation guide
 - SB_CONNECTIONS_VALIDATION.md: Phase 5 implementation inventory, actual guest contracts, local verification evidence and hosted/native acceptance boundaries; setup remains in README.md.
 
 - PHASE_4R_VALIDATION.md: dated interface/integration evidence and native/hosted limits. PHASE_4R_CATEGORY_FOLLOWUP.md: lightweight category mappings and a simpler future chooser/data-contract proposal.
+- THEME_REFINEMENT_2026-10-30.md: dated Beacons alignment and seven-family color refinement, design references, contrast/browser evidence and before/after screenshots.

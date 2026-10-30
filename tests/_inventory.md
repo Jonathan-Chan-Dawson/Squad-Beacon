@@ -36,7 +36,7 @@ Test map
 
 Tests should exercise product flows through public routes/actions and preserve existing suites when adding coverage.
 
-- browser/themeRefinement.spec.ts: all seven families in Light/Dark across Map, Beacons, Create, Squads, Friends and Profile at mobile widths; neutral preview persistence and live System appearance. themes/themeTokens tests cover legacy defaults, warm Essential/Sunflower distinction and readable semantic roles.
+- browser/themeRefinement.spec.ts: all seven families in Light/Dark across Settings, Map, Beacons, Create, Squads, Friends and Profile; input focus, preview persistence and live System appearance. themes/themeTokens tests cover legacy defaults, readable semantic/secondary roles and control outlines. identityStatus.spec.ts verifies the separate Beacons profile row, balanced avatar, note editing and retained My Activity divider.
 
 - browser/unifiedPeople.spec.ts, browser/creationMobilePolish.spec.ts and browser/sonarPeople.spec.ts: staged invitation cancellation/Done, secondary list filters, inline list management, advisory large batches, canonical location route, keyboard selection, and responsive creation/Sonar screens. createHandoff and creationAtomic.database cover the 50-person recommendation and atomic 51-recipient publication.
 

@@ -6,4 +6,4 @@ src source guide
 
 There are no feature implementation files at the src/ root. Add new product code to its owning feature, shared infrastructure to shared/, and platform adapters to platform/.
 
-- theme/palettes.ts and theme/data.ts: six paired light/dark families, neutral Essential default, stable original family names and legacy aliases, semantic surface/primary/status roles, and independent category/availability colors.
+- theme/palettes.ts and theme/data.ts: seven paired light/dark families, Essential default, stable family names and legacy aliases, neutral surface depth, primary actions, complementary secondary highlights, strong control outlines, and independent category/availability colors.

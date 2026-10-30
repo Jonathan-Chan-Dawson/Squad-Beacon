@@ -56,7 +56,7 @@ for (const width of [320, 375, 430, 1024]) {
     });
     await search.fill("no-match-example");
     await expect(
-      screen.getByText("No friends match. Try another search or filter.", {
+      screen.getByText("No matches with these filters.", {
         exact: true,
       }),
     ).toBeVisible();
@@ -238,10 +238,17 @@ test("full-network search and private/favorite filters stay distinct", async ({
   await screen.getByRole("button", { name: "All", exact: true }).click();
   await screen.getByRole("button", { name: "Friends", exact: true }).click();
   await screen
-    .getByRole("button", { name: "Close Friends", exact: true })
+    .getByRole("button", { name: "Manage Private Lists", exact: true })
+    .click();
+  await page
+    .getByRole("dialog", { name: "Private Lists", exact: true })
+    .getByRole("button", {
+      name: "Filter people by Close Friends",
+      exact: true,
+    })
     .click();
   await expect(
-    screen.getByText("No friends match. Try another search or filter.", {
+    screen.getByText("No matches with these filters.", {
       exact: true,
     }),
   ).toBeVisible();
@@ -252,9 +259,7 @@ test("full-network search and private/favorite filters stay distinct", async ({
     .getByRole("button", { name: "View all friends", exact: true })
     .click();
   await expect(screen.getByTestId(/^social-friend-/)).toHaveCount(0);
-  await screen
-    .getByRole("button", { name: "All Friends", exact: true })
-    .click();
+  await screen.getByRole("button", { name: "Clear list", exact: true }).click();
   await expect(screen.getByTestId(/^social-friend-/).first()).toBeVisible();
 });
 

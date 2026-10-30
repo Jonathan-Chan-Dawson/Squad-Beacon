@@ -109,8 +109,13 @@ export type SemanticColors = {
   primary: string;
   onPrimary: string;
   primaryContainer: string;
+  secondary: string;
+  secondaryContainer: string;
+  onSecondary: string;
+  onSecondaryContainer: string;
   surfaceSelected: string;
   outline: string;
+  borderStrong: string;
   success: string;
   warning: string;
   onDanger: string;
@@ -277,8 +282,13 @@ export function getDesignColorTheme(
     primary: palette.green,
     onPrimary: palette.onPrimary,
     primaryContainer: palette.lime,
+    secondary: palette.secondary,
+    secondaryContainer: palette.secondaryContainer,
+    onSecondary: onColor(palette.secondary),
+    onSecondaryContainer: palette.secondary,
     surfaceSelected: palette.lime,
     outline: palette.line,
+    borderStrong: palette.borderStrong,
     success: availabilityColors[appearance].available,
     warning: availabilityColors[appearance].endingSoon,
     onDanger: onColor(palette.red),

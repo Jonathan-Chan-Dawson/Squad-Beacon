@@ -25,6 +25,8 @@ import {
 } from "@/src/shared/design-system";
 import { usePreferences } from "@/src/shared/preferences";
 import { useBeacon } from "@/src/shared/store";
+import { useNow } from "@/src/shared/useNow";
+import { pendingSocialCount } from "@/src/features/people/communication";
 import {
   themeNames,
   themeVariants,
@@ -155,7 +157,7 @@ const makeStyles = (colors: SemanticColors, tokens: DesignTokens) =>
     },
     input: {
       borderWidth: 1,
-      borderColor: colors.border,
+      borderColor: colors.borderStrong,
       borderRadius: tokens.radius.sm,
       padding: tokens.space.md,
       minHeight: tokens.layout.minTapTarget,
@@ -220,7 +222,7 @@ export function useTheme() {
       muted: semantic.textSecondary,
       line: semantic.border,
       green: semantic.accent,
-      lime: semantic.surfaceRaised,
+      lime: semantic.surfaceSelected,
       white: semantic.surface,
       red: semantic.danger,
     };
@@ -306,7 +308,7 @@ export function IconButton({
       disabled={disabled}
       onPress={onPress}
       style={
-        selected ? { backgroundColor: semanticColors.surfaceRaised } : undefined
+        selected ? { backgroundColor: semanticColors.surfaceSelected } : undefined
       }
     >
       {children}
@@ -375,6 +377,7 @@ export function Field({
   leadingAdornment?: React.ReactNode;
 }) {
   const { styles, colors, tokens } = useTheme();
+  const [focused, setFocused] = useState(false);
 
   const input = (
     <TextInput
@@ -382,8 +385,11 @@ export function Field({
       accessibilityLabel={label}
       placeholderTextColor={colors.muted}
       {...props}
+      onFocus={(event) => { setFocused(true); props.onFocus?.(event); }}
+      onBlur={(event) => { setFocused(false); props.onBlur?.(event); }}
       style={[
         styles.input,
+        focused && { borderColor: colors.primary },
         leadingAdornment ? { paddingLeft: 38 } : undefined,
         props.multiline && {
           minHeight:
@@ -1539,6 +1545,7 @@ export function BackButton({ iconOnly = false }: { iconOnly?: boolean }) {
 export function InboxButton() {
   const { semanticColors: colors, tokens } = useTheme();
   const { data, userId } = useBeacon();
+  const now = useNow();
   const params = useLocalSearchParams<{ inbox?: string }>();
   useFocusEffect(useCallback(() => {
     if (params.inbox === "yes") {
@@ -1546,12 +1553,15 @@ export function InboxButton() {
       router.push("/responses");
     }
   }, [params.inbox]));
-  const unread = data.viewer_id === userId ? data.notices.filter((notice) => !notice.read_at).length : 0;
-  return <IconButton label={unread ? `Notifications, ${unread} unread` : "Notifications"} onPress={() => router.push("/responses")}>
+  const pending = pendingSocialCount(data, userId, now);
+  const unread = userId && data.viewer_id === userId ? data.notices.filter((notice) => !notice.read_at).length : 0;
+  const count = pending || unread;
+  const label = ["Notifications", pending ? `${pending} pending responses and invitations` : null, unread ? `${unread} unread` : null].filter(Boolean).join(", ");
+  return <IconButton label={label} onPress={() => router.push("/responses")}>
     <View style={{ alignItems: "center", justifyContent: "center" }}>
       <Bell size={tokens.iconSize.md} color={colors.textPrimary} />
-      {unread > 0 && <View style={{ position: "absolute", top: -8, right: -8, borderRadius: 12, backgroundColor: colors.accent, minWidth: 20, minHeight: 20, alignItems: "center", justifyContent: "center", paddingHorizontal: 4 }}>
-        <Text style={{ ...tokens.type.caption, color: colors.onAccent, fontWeight: "700" }}>{unread > 99 ? "99+" : unread}</Text>
+      {count > 0 && <View testID="notifications-badge" accessible={false} style={{ position: "absolute", top: -4, right: -7, borderRadius: tokens.radius.circle, backgroundColor: colors.accent, minWidth: 16, height: 16, alignItems: "center", justifyContent: "center", paddingHorizontal: 3 }}>
+        <Text maxFontSizeMultiplier={tokens.type.denseMaxMultiplier} style={{ fontSize: 10, lineHeight: 12, color: colors.onAccent, fontWeight: tokens.type.weight.bold }}>{count > 99 ? "99+" : count}</Text>
       </View>}
     </View>
   </IconButton>;

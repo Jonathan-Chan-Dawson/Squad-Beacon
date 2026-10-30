@@ -83,6 +83,40 @@ test("the pure design palette builder caches stable theme objects", () => {
   assert.notStrictEqual(first, getDesignColorTheme("Midnight", "light"));
 });
 
+test("complementary highlights and control outlines remain readable in every family", () => {
+  for (const name of themeNames)
+    for (const appearance of ["light", "dark"] as const) {
+      const { colors } = getDesignColorTheme(name, appearance);
+      const label = `${name} ${appearance}`;
+      assert.notEqual(
+        colors.secondary,
+        colors.primary,
+        `${label} complementary hue`,
+      );
+      assert.notEqual(colors.secondaryContainer, colors.primaryContainer);
+      assert.ok(
+        contrast(colors.onSecondary, colors.secondary) >= 4.5,
+        `${label} secondary fill`,
+      );
+      assert.ok(
+        contrast(colors.onSecondaryContainer, colors.secondaryContainer) >= 4.5,
+        `${label} secondary highlight`,
+      );
+      for (const surface of [colors.bg, colors.surface]) {
+        assert.ok(
+          contrast(colors.borderStrong, surface) >= 3,
+          `${label} input outline`,
+        );
+      }
+      for (const foreground of [colors.textPrimary, colors.textSecondary]) {
+        assert.ok(
+          contrast(foreground, colors.secondaryContainer) >= 4.5,
+          `${label} highlight text`,
+        );
+      }
+    }
+});
+
 test("Essential has warm neutral depth and keeps selected surfaces distinct", () => {
   for (const appearance of ["light", "dark"] as const) {
     const { colors } = getDesignColorTheme("Essential", appearance);

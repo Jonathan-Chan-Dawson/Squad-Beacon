@@ -13,13 +13,13 @@ import {
 } from "@/src/theme/palettes";
 
 const descriptions: Record<ThemeName, string> = {
-  Essential: "Warm neutral",
-  Midnight: "Quiet navy",
-  Ocean: "Coastal blue",
-  Mint: "Fresh sage",
-  Sunset: "Warm coral",
-  Berry: "Soft plum",
-  Sunflower: "Soft gold",
+  Essential: "Neutral & blue",
+  Midnight: "Indigo & sea glass",
+  Ocean: "Blue & copper",
+  Mint: "Sage & plum",
+  Sunset: "Coral & teal",
+  Berry: "Plum & honey",
+  Sunflower: "Gold & ink",
 };
 
 function ThemePreviewChoice({
@@ -107,6 +107,36 @@ function ThemePreviewChoice({
           </Text>
         </View>
       </View>
+      <View
+        aria-hidden
+        accessibilityElementsHidden
+        importantForAccessibility="no-hide-descendants"
+        style={{ flexDirection: "row", gap: 4 }}
+      >
+        {[
+          colors.surfaceRaised,
+          colors.primaryContainer,
+          colors.secondaryContainer,
+        ].map((color) => (
+          <View
+            key={color}
+            style={{
+              flex: 1,
+              height: 8,
+              borderRadius: 4,
+              backgroundColor: color,
+            }}
+          />
+        ))}
+        <View
+          style={{
+            width: 8,
+            height: 8,
+            borderRadius: 4,
+            backgroundColor: colors.secondary,
+          }}
+        />
+      </View>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
         <Text
           style={{
@@ -139,7 +169,7 @@ export function ThemePicker() {
   };
   return (
     <View testID="theme-picker" style={{ gap: 12 }}>
-      <Text style={styles.label}>ESSENTIAL · WARM NEUTRAL</Text>
+      <Text style={styles.label}>ESSENTIAL · NEUTRAL BALANCE</Text>
       <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
         {(["dark", "light"] as const).map((appearance) => (
           <ThemePreviewChoice

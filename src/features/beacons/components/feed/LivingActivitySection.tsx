@@ -432,7 +432,7 @@ export function LivingStatusHeader({
                   ? "Hidden"
                   : "Not sharing"}
           </Text>
-          <ChevronDown size={13} color={colors.muted} />
+          {variant !== "compact" && <ChevronDown size={13} color={colors.muted} />}
         </View>
       </Pressable>
       {presence?.sharing === false && <EyeOff size={17} color={colors.muted} />}
@@ -487,39 +487,45 @@ export function LivingStatusHeader({
       style={{ gap: 4 }}
     >
       {variant === "compact" ? (
-        <View>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-            <Pressable
-              testID="home-status-avatar"
-              accessibilityRole="button"
-              accessibilityLabel="Open your profile"
-              onPress={() => router.push("/(tabs)/profile")}
-              style={{
-                minWidth: 44,
-                minHeight: 44,
-                justifyContent: "center",
-              }}
+        <View
+          style={{ flexDirection: "row", alignItems: "center", gap: 10 }}
+        >
+          <Pressable
+            testID="home-status-avatar"
+            accessibilityRole="button"
+            accessibilityLabel="Open your profile"
+            onPress={() => router.push("/(tabs)/profile")}
+            style={{
+              minWidth: 76,
+              minHeight: 76,
+              justifyContent: "center",
+            }}
+          >
+            <ProfileAvatar profile={profile} size={76} />
+          </Pressable>
+          <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+            <View
+              style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
             >
-              <ProfileAvatar profile={profile} size={34} />
-            </Pressable>
-            <Text
-              numberOfLines={1}
-              ellipsizeMode="tail"
-              style={{
-                flex: 1,
-                minWidth: 0,
-                alignSelf: "center",
-                fontSize: 14,
-                fontWeight: "600",
-                color: colors.ink,
-              }}
-            >
-              {profile?.name || "Your status"}
-            </Text>
-            {availabilityControl}
-            <ProfileSonarCard compact pill />
+              <Text
+                numberOfLines={1}
+                ellipsizeMode="tail"
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  alignSelf: "center",
+                  fontSize: 14,
+                  fontWeight: "600",
+                  color: colors.ink,
+                }}
+              >
+                {profile?.name || "Your status"}
+              </Text>
+              {availabilityControl}
+              <ProfileSonarCard compact iconOnly />
+            </View>
+            {noteControl}
           </View>
-          {noteControl}
         </View>
       ) : (
         <View style={{ gap: 2 }}>
@@ -798,10 +804,15 @@ export function LivingActivitySection({
     <View style={{ gap: compact ? 4 : 12 }}>
       {(own || current) && (
         <View style={{ gap: 8 }}>
-          {!compact && (
-            <Text style={[styles.label, { color: colors.ink }]}>
-              Current Activity
-            </Text>
+          {(!compact || current) && (
+            <View
+              style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
+            >
+              {compact && <Zap size={14} color={colors.green} />}
+              <Text style={[styles.label, { color: colors.ink }]}>
+                Current Activity
+              </Text>
+            </View>
           )}
           {!current && own ? (
             <View style={{ gap: 4 }}>
@@ -903,7 +914,7 @@ export function LivingActivitySection({
               style={[
                 surface,
                 {
-                  backgroundColor: colors.surfaceRaised,
+                  backgroundColor: compact ? colors.green + "0C" : colors.surfaceRaised,
                   borderColor: categoryTone.color + "28",
                   padding: compact ? 8 : 12,
                   gap: compact ? 4 : 8,
