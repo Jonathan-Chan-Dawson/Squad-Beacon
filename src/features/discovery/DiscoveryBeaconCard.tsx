@@ -91,6 +91,17 @@ export function DiscoveryBeaconCard({
   feedback,
 }: DiscoveryBeaconCardProps) {
   const { colors, tokens } = useDesignTheme();
+  const contextBlockStyle = {
+    width: "100%" as const,
+    minWidth: 0,
+    minHeight: 44,
+    alignSelf: "stretch" as const,
+    flexShrink: 0,
+    backgroundColor: colors.surfaceRaised,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 2,
+  };
   const categoryToken = tokens.categories[category] ?? tokens.categories.Other;
   const metadata = discoveryCardMetadata({
     goingCount,
@@ -268,14 +279,7 @@ export function DiscoveryBeaconCard({
           )}
         </View>
         {planContext || context || communityContext ? (
-          <View
-            testID="map-beacon-context"
-            style={{
-              backgroundColor: colors.surfaceRaised,
-              borderRadius: 10,
-              paddingHorizontal: 8,
-            }}
-          >
+          <View testID="map-beacon-context" style={contextBlockStyle}>
             {!!planContext?.title.trim() && (
               <Pressable
                 accessibilityRole="button"
@@ -560,58 +564,60 @@ export function DiscoveryBeaconCard({
         }}
       />
 
-      {planContext?.title.trim() ? (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Open Plan ${planContext.title}`}
-          onPress={planContext.onPress}
-          style={({ pressed }) => ({
-            minHeight: 44,
-            flexDirection: "row",
-            alignItems: "center",
-            gap: 8,
-            opacity: pressed ? 0.7 : 1,
-          })}
-        >
-          <View
-            accessibilityElementsHidden
-            style={{
-              width: 24,
-              height: 24,
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <CalendarDays size={18} color={colors.textSecondary} />
-          </View>
-          <Text
-            style={{
-              flex: 1,
-              minWidth: 0,
-              color: colors.textSecondary,
-              fontSize: 12,
-              lineHeight: 17,
-            }}
-          >
-            <Text style={{ fontWeight: "600" }}>Plan</Text>
-            {` · ${planContext.title.trim()}`}
-          </Text>
-          <View
-            style={{
-              width: 24,
-              height: 24,
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <ChevronRight size={16} color={colors.textSecondary} />
-          </View>
-        </Pressable>
-      ) : null}
+      {planContext || context || communityContext ? (
+        <View testID="beacon-linked-context" style={contextBlockStyle}>
+          {planContext?.title.trim() ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Open Plan ${planContext.title}`}
+              onPress={planContext.onPress}
+              style={({ pressed }) => ({
+                minHeight: 44,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 8,
+                opacity: pressed ? 0.7 : 1,
+              })}
+            >
+              <View
+                accessibilityElementsHidden
+                style={{
+                  width: 24,
+                  height: 24,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <CalendarDays size={18} color={colors.textSecondary} />
+              </View>
+              <Text
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  color: colors.textSecondary,
+                  fontSize: 12,
+                  lineHeight: 17,
+                }}
+              >
+                <Text style={{ fontWeight: "600" }}>Plan</Text>
+                {` · ${planContext.title.trim()}`}
+              </Text>
+              <View
+                style={{
+                  width: 24,
+                  height: 24,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <ChevronRight size={16} color={colors.textSecondary} />
+              </View>
+            </Pressable>
+          ) : null}
 
-      {context ? <View style={{ gap: tokens.space.xs }}>{context}</View> : null}
-      {communityContext ? (
-        <View style={{ gap: tokens.space.xs }}>{communityContext}</View>
+          {context}
+          {communityContext}
+        </View>
       ) : null}
 
       {shortcutActions}

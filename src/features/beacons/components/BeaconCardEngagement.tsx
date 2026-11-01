@@ -87,11 +87,11 @@ export function BeaconCardEngagement({
   const groups = preview.allReactionGroups;
   // Reserve room for React, Comments and overflow before choosing chip density.
   const reserved =
-    (preview.canReact ? (labeled && !groups.length ? 64 : 44) : 0) +
+    (preview.canReact ? (labeled && !groups.length ? 68 : 44) : 0) +
     (mode !== "reactions" && preview.canReadComments
       ? labeled && !preview.commentCount
-        ? 88
-        : 48
+        ? 96
+        : 56
       : 0);
   const chipWidth = Math.max(
     50,
@@ -134,7 +134,7 @@ export function BeaconCardEngagement({
         flexDirection: "row",
         alignItems: "center",
         flexWrap: "wrap",
-        gap: 2,
+        gap: 4,
       }}
     >
       {mode !== "comments" ? (
@@ -256,7 +256,7 @@ export function BeaconCardEngagement({
             ...face,
             flexDirection: "row",
             gap: 4,
-            marginLeft: labeled ? undefined : "auto",
+            marginLeft: labeled ? 8 : "auto",
           }}
         >
           <View
@@ -398,7 +398,7 @@ export function BeaconToolsButton({
   menuOwner?: BeaconToolsMenuOwner;
 }) {
   const { data, userId } = useBeacon();
-  const { colors } = useDesignTheme();
+  const { colors, tokens } = useDesignTheme();
   const preview = beaconEngagement(data, userId, activityId);
   const anchor = useRef<View>(null);
   const identity = `${userId}:${activityId}`;
@@ -445,9 +445,32 @@ export function BeaconToolsButton({
             </Text>
           ) : null}
           {count ? (
-            <Text style={{ color: colors.textSecondary, fontSize: 10 }}>
-              {count}
-            </Text>
+            <View
+              accessible={false}
+              style={{
+                position: "absolute",
+                top: -4,
+                right: -3,
+                minWidth: 16,
+                height: 16,
+                paddingHorizontal: 3,
+                borderRadius: tokens.radius.circle,
+                backgroundColor: colors.accent,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <Text
+                style={{
+                  color: colors.onAccent,
+                  fontSize: 10,
+                  lineHeight: 14,
+                  fontWeight: "600",
+                }}
+              >
+                {count}
+              </Text>
+            </View>
           ) : null}
         </Pressable>
       </View>

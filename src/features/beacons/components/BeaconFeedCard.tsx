@@ -638,7 +638,7 @@ export function BeaconFeedCard({
         <BeaconCardShortcuts
           activityId={activityId}
           section="social"
-          labeledSocial={mapPreview}
+          labeledSocial
         />
       }
       actionShortcuts={
@@ -1070,7 +1070,7 @@ export function BeaconFeedCard({
           <BeaconCardShortcuts
             activityId={activityId}
             section="social"
-            labeledSocial={mapPreview}
+            labeledSocial
           />
           <View
             testID="discovery-card-actions"
@@ -1233,6 +1233,9 @@ export function BeaconFeedCard({
                   .filter(Boolean)
                   .join(" · ")}
               </Text>
+            </View>
+            <View style={{ width: "100%", minWidth: 0 }}>
+              <BeaconCardShortcuts activityId={activityId} section="social" />
             </View>
             <View style={{ flex: 1, minWidth: 0 }}>
               <ParticipationButtons
@@ -1552,7 +1555,7 @@ export function BeaconFeedCard({
           <BeaconCardShortcuts
             activityId={activityId}
             section="social"
-            labeledSocial={mapPreview}
+            labeledSocial
           />
           <View
             style={{

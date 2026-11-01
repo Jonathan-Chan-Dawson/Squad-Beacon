@@ -17,7 +17,7 @@ export function BeaconCardShortcuts({
   onChat,
   section = "all",
   menuOwner,
-  labeledSocial = false,
+  labeledSocial = true,
 }: {
   activityId: string;
   onChat?: () => void;

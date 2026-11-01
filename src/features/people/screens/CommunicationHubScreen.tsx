@@ -29,6 +29,7 @@ import {
   Layers3,
   MessageCircle,
   Search,
+  SquarePen,
 } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
@@ -674,6 +675,48 @@ export function CommunicationHub({
               importantForAccessibility="no"
               style={{ height: 1, backgroundColor: colors.line, marginTop: 4 }}
             />
+            <View
+              testID="conversations-heading"
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+                minHeight: 44,
+                gap: 8,
+              }}
+            >
+              <Text
+                accessibilityRole="header"
+                style={{ color: colors.muted, fontSize: 12, fontWeight: "600" }}
+              >
+                Conversations
+              </Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="New conversation"
+                onPress={() => onNewMenuOpenChange(true)}
+                style={({ pressed }) => ({
+                  flexDirection: "row",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  minHeight: 44,
+                  gap: 6,
+                  paddingHorizontal: 2,
+                  opacity: pressed ? 0.65 : 1,
+                })}
+              >
+                <SquarePen size={16} color={colors.green} />
+                <Text
+                  style={{
+                    color: colors.green,
+                    fontSize: 12,
+                    fontWeight: "500",
+                  }}
+                >
+                  New chat
+                </Text>
+              </Pressable>
+            </View>
           </>
         ) : (
           <Text style={styles.h2}>Your Communities</Text>

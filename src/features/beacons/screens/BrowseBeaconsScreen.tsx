@@ -482,9 +482,9 @@ export default function BrowseBeaconsScreen() {
     async (activityId: string) => {
       const activity = data.activities.find((row) => row.id === activityId);
       if (!activity) throw new Error("This Beacon is no longer available.");
-      await shareBeaconInvitation(data,userId,activity);
+      await shareBeaconInvitation(data, userId, activity);
     },
-    [data,userId],
+    [data, userId],
   );
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -603,19 +603,24 @@ export default function BrowseBeaconsScreen() {
           presentation="discovery"
           adaptiveDiscovery
           compactFooter={
-            <View style={{ gap: tokens.space.xs }}>
-              {visibleContextLabel ? (
-                <Text
-                  style={{
-                    color: colors.textSecondary,
-                    ...tokens.type.caption,
-                  }}
-                >
-                  {visibleContextLabel}
-                </Text>
-              ) : null}
-              <BeaconCommunityRow activityId={activity.id} compact />
-            </View>
+            visibleContextLabel ||
+            communityAssociations.some(
+              (row) => row.activity_id === activity.id,
+            ) ? (
+              <View style={{ gap: tokens.space.xs }}>
+                {visibleContextLabel ? (
+                  <Text
+                    style={{
+                      color: colors.textSecondary,
+                      ...tokens.type.caption,
+                    }}
+                  >
+                    {visibleContextLabel}
+                  </Text>
+                ) : null}
+                <BeaconCommunityRow activityId={activity.id} compact />
+              </View>
+            ) : null
           }
           planContext={
             plan

@@ -37,3 +37,5 @@ People feature
 - MessagingHubScreen bounds its Chats/Communities header and virtualized content to the shared Profile content-width token; scrolling and retained section state remain in CommunicationHub.
 
 - Chats/Communities and Friends category navigation share underlined tabs; Chats and Friends availability filters share compact chips.
+
+- Messaging utilities align with the primary tabs; the compact Conversations heading owns New chat. Friends aligns Private Lists with its category tabs and keeps active-list clearing in its filter row.

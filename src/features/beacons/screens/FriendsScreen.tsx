@@ -11,7 +11,7 @@ import {
   View,
 } from "react-native";
 import { router, useFocusEffect } from "expo-router";
-import { ArrowLeft, ChevronDown, Search } from "lucide-react-native";
+import { ArrowLeft, ChevronDown, List, Search } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useDesignTheme, useReducedMotion } from "@/src/shared/design-system";
 import { useBeacon } from "@/src/shared/store";
@@ -157,22 +157,15 @@ export default function FriendsScreen() {
           }
           plain
         />
-      </ScrollView>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-        <HomeAction
-          title={listName ? `Private list · ${listName}` : "Private Lists"}
-          label="Manage Private Lists"
-          onPress={() => setListsOpen(true)}
-          plain
-        />
-        {browse.listId && (
+        {browse.listId ? (
           <HomeAction
-            title="Clear list"
+            title={`${listName ?? "Private list"} \u00d7`}
+            label="Clear list"
             onPress={() => updateBrowse({ listId: null })}
             plain
           />
-        )}
-      </View>
+        ) : null}
+      </ScrollView>
     </View>
   );
   const groupRows = showGroups ? (
@@ -388,26 +381,52 @@ export default function FriendsScreen() {
                   }}
                 />
               </View>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                keyboardShouldPersistTaps="handled"
-                contentContainerStyle={{ gap: 4 }}
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 4,
+                  minWidth: 0,
+                }}
               >
-                {socialCategories.map((value) => (
-                  <PrimaryTab
-                    key={value}
-                    label={value}
-                    selected={category === value}
-                    onPress={() => {
-                      setCategory(value);
-                      setShownGroups(8);
-                      if (value === "All")
-                        updateBrowse({ filter: "All", listId: null });
-                    }}
-                  />
-                ))}
-              </ScrollView>
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  keyboardShouldPersistTaps="handled"
+                  testID="friends-primary-tabs"
+                  style={{ flex: 1, minWidth: 0 }}
+                  contentContainerStyle={{ gap: 4 }}
+                >
+                  {socialCategories.map((value) => (
+                    <PrimaryTab
+                      key={value}
+                      label={value}
+                      selected={category === value}
+                      onPress={() => {
+                        setCategory(value);
+                        setShownGroups(8);
+                        if (value === "All")
+                          updateBrowse({ filter: "All", listId: null });
+                      }}
+                    />
+                  ))}
+                </ScrollView>
+                <HomeAction
+                  label="Manage Private Lists"
+                  onPress={() => setListsOpen(true)}
+                  plain
+                  selected={!!browse.listId}
+                  icon={
+                    <List
+                      size={20}
+                      color={
+                        browse.listId ? colors.accent : colors.textSecondary
+                      }
+                    />
+                  }
+                />
+              </View>
+
               {category === "All" && (
                 <FriendsDisclosure
                   title="Groups"

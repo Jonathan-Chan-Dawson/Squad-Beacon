@@ -10,72 +10,116 @@ async function openHub(page: Page) {
   ).toBeVisible();
 }
 
-for (const width of [320, 375, 430])
-  test(`compact hub keeps contextual state and all controls at ${width}px`, async ({
-    page,
-  }) => {
-    await page.setViewportSize({ width, height: 740 });
-    const errors: string[] = [];
-    page.on("pageerror", (error) => errors.push(error.message));
-    await openHub(page);
-    for (const filter of ["All", "Squads", "Friends", "Unread"])
+for (const appearance of ["light", "dark"] as const)
+  for (const width of [320, 390, 430, 1024])
+    test(`compact hub keeps contextual state and all controls at ${width}px ${appearance}`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 740 });
+      const errors: string[] = [];
+      page.on("pageerror", (error) => errors.push(error.message));
+      await page.addInitScript(
+        (value) => localStorage.setItem("beacon.appearance", value),
+        appearance,
+      );
+      await openHub(page);
+      for (const filter of ["All", "Squads", "Friends", "Unread"])
+        await expect(
+          page.getByRole("button", { name: filter, exact: true }),
+        ).toBeVisible();
       await expect(
-        page.getByRole("button", { name: filter, exact: true }),
+        page.getByRole("button", { name: "Private Lists", exact: true }),
       ).toBeVisible();
-    await expect(
-      page.getByRole("button", { name: "Private Lists", exact: true }),
-    ).toBeVisible();
-    await expect(
-      page.getByRole("button", { name: "Starred", exact: true }),
-    ).toHaveCount(0);
-    await expect(
-      page.getByText("Your conversations", { exact: true }),
-    ).toHaveCount(0);
-    const chatUrl = page.url();
-    await page
-      .getByRole("textbox", { name: "Search conversations", exact: true })
-      .fill("training");
-    await expect(
-      page.getByRole("button", {
-        name: "Message The training crew",
+      const lists = page.getByRole("button", {
+        name: "Private Lists",
         exact: true,
-      }),
-    ).toBeVisible();
-    await page
-      .getByRole("button", { name: "Communities", exact: true })
-      .click();
-    expect(page.url()).toBe(chatUrl);
-    await expect(
-      page.getByText("Your Communities", { exact: true }),
-    ).toBeVisible();
-    await page
-      .getByRole("textbox", { name: "Search communities", exact: true })
-      .fill("lake");
-    await expect(
-      page.getByRole("button", { name: "Explore Communities", exact: true }),
-    ).toBeVisible();
-    await page.getByRole("button", { name: "Chats", exact: true }).click();
-    await expect(
-      page.getByRole("textbox", { name: "Search conversations", exact: true }),
-    ).toHaveValue("training");
-    await page
-      .getByRole("button", { name: "Communities", exact: true })
-      .click();
-    await expect(
-      page.getByRole("textbox", { name: "Search communities", exact: true }),
-    ).toHaveValue("lake");
-    await page.getByRole("button", { name: "Chats", exact: true }).click();
-    await page
-      .getByRole("button", { name: "Clear search", exact: true })
-      .click();
-    await page.screenshot({ path: `test-results/prompt1-chats-${width}.png` });
-    expect(
-      await page.evaluate(
-        () => document.documentElement.scrollWidth <= innerWidth,
-      ),
-    ).toBe(true);
-    expect(errors).toEqual([]);
-  });
+      });
+      const tabsBounds = (await page
+        .getByTestId("messaging-primary-tabs")
+        .boundingBox())!;
+      const listsBounds = (await lists.boundingBox())!;
+      expect(Math.abs(tabsBounds.y - listsBounds.y)).toBeLessThanOrEqual(2);
+      expect(listsBounds.x).toBeGreaterThanOrEqual(
+        tabsBounds.x + tabsBounds.width,
+      );
+      const heading = page.getByTestId("conversations-heading");
+      const divider = (await page
+        .getByTestId("chat-list-divider")
+        .boundingBox())!;
+      expect((await heading.boundingBox())!.y).toBeGreaterThanOrEqual(
+        divider.y + divider.height,
+      );
+      await heading
+        .getByRole("button", { name: "New conversation", exact: true })
+        .click();
+      await expect(
+        page.getByRole("dialog", { name: "New conversation", exact: true }),
+      ).toBeVisible();
+      await page.keyboard.press("Escape");
+      await lists.click();
+      await expect(
+        page.getByRole("button", {
+          name: "Filter people by Friends",
+          exact: true,
+        }),
+      ).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expect(
+        page.getByRole("button", { name: "Starred", exact: true }),
+      ).toHaveCount(0);
+      await expect(
+        page.getByText("Your conversations", { exact: true }),
+      ).toHaveCount(0);
+      const chatUrl = page.url();
+      await page
+        .getByRole("textbox", { name: "Search conversations", exact: true })
+        .fill("training");
+      await expect(
+        page.getByRole("button", {
+          name: "Message The training crew",
+          exact: true,
+        }),
+      ).toBeVisible();
+      await page
+        .getByRole("button", { name: "Communities", exact: true })
+        .click();
+      expect(page.url()).toBe(chatUrl);
+      await expect(
+        page.getByText("Your Communities", { exact: true }),
+      ).toBeVisible();
+      await page
+        .getByRole("textbox", { name: "Search communities", exact: true })
+        .fill("lake");
+      await expect(
+        page.getByRole("button", { name: "Explore Communities", exact: true }),
+      ).toBeVisible();
+      await page.getByRole("button", { name: "Chats", exact: true }).click();
+      await expect(
+        page.getByRole("textbox", {
+          name: "Search conversations",
+          exact: true,
+        }),
+      ).toHaveValue("training");
+      await page
+        .getByRole("button", { name: "Communities", exact: true })
+        .click();
+      await expect(
+        page.getByRole("textbox", { name: "Search communities", exact: true }),
+      ).toHaveValue("lake");
+      await page.getByRole("button", { name: "Chats", exact: true }).click();
+      await page
+        .getByRole("button", { name: "Clear search", exact: true })
+        .click();
+      await page.screenshot({
+        path: `docs/screenshots/card-context-social-2026-10-31/${appearance}-${width}-chats.png`,
+      });
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+      ).toBe(true);
+      expect(errors).toEqual([]);
+    });
 
 test("Private Lists creates, edits, filters, sends a DM and deletes without changing audiences", async ({
   page,
@@ -86,12 +130,12 @@ test("Private Lists creates, edits, filters, sends a DM and deletes without chan
     .click();
   await expect(
     page.getByRole("button", {
-      name: "Filter chats by Favorites",
+      name: "Filter people by Favorites",
       exact: true,
     }),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Filter chats by Friends", exact: true }),
+    page.getByRole("button", { name: "Filter people by Friends", exact: true }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Create List", exact: true }).click();
   await page
@@ -119,7 +163,7 @@ test("Private Lists creates, edits, filters, sends a DM and deletes without chan
     .getByRole("button", { name: "Close", exact: true })
     .click();
   await page
-    .getByRole("button", { name: "Filter chats by Study Friends", exact: true })
+    .getByRole("button", { name: "Filter people by Study Friends", exact: true })
     .click();
   await expect(
     page.getByRole("button", {
@@ -167,7 +211,7 @@ test("Private Lists creates, edits, filters, sends a DM and deletes without chan
     .click();
   await expect(
     page.getByRole("button", {
-      name: "Filter chats by Study Friends",
+      name: "Filter people by Study Friends",
       exact: true,
     }),
   ).toHaveCount(0);
@@ -185,7 +229,9 @@ test("Squad composer stays stable, previews are compact and header navigation re
   await composer.fill(
     "A draft\nwith several\nlines of text\nand one more\nand another\nlast line",
   );
-  await expect.poll(async () => (await composer.boundingBox())?.height ?? 0).toBeGreaterThan(initial!.height);
+  await expect
+    .poll(async () => (await composer.boundingBox())?.height ?? 0)
+    .toBeGreaterThan(initial!.height);
   const expanded = await composer.boundingBox();
   expect(expanded!.height).toBeLessThanOrEqual(122);
   await expect(
@@ -294,7 +340,7 @@ test("compact Ping and Beacon previews open canonical destinations and hide unav
   const bounds = await ping.boundingBox();
   expect(bounds!.height).toBeLessThanOrEqual(80);
   await ping.click();
-  await expect(page).toHaveURL(/\/council\//);
+  await expect(page).toHaveURL(/\/responses\?threadId=demo-squad-ping-boxing$/);
   await page.getByRole("button", { name: "Back", exact: true }).click();
   const composer = page.getByRole("textbox", { name: "Message", exact: true });
   await composer.fill("Meet at squadbeacon://activity/a1");
@@ -318,13 +364,24 @@ test("compact Ping and Beacon previews open canonical destinations and hide unav
   ).toBeVisible();
 });
 
-test("legacy Communities and explicit Squad Ping URLs retain their destinations", async ({ page }) => {
+test("legacy Communities and explicit Squad Ping URLs retain their destinations", async ({
+  page,
+}) => {
   await page.goto("/communities");
   await page.getByRole("button", { name: /Explore the demo/ }).click();
-  await expect(page.getByRole("textbox", { name: "Search communities", exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("textbox", { name: "Search communities", exact: true }),
+  ).toBeVisible();
   await expect(page).toHaveURL(/\/squads\?section=Communities$/);
   await page.goto("/squad-chat/boxing?ping=demo-squad-ping-boxing");
   await page.getByRole("button", { name: /Explore the demo/ }).click();
-  await expect(page.getByRole("button", { name: "Open ping A quick boxing session?", exact: true })).toBeInViewport();
-  await expect(page).toHaveURL(/\/squad-chat\/boxing\?ping=demo-squad-ping-boxing$/);
+  await expect(
+    page.getByRole("button", {
+      name: "Open ping A quick boxing session?",
+      exact: true,
+    }),
+  ).toBeInViewport();
+  await expect(page).toHaveURL(
+    /\/squad-chat\/boxing\?ping=demo-squad-ping-boxing$/,
+  );
 });

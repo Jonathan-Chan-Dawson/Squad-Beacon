@@ -43,3 +43,5 @@ Documentation guide
 - UNIFIED_TAB_NAVIGATION_2026-10-31.md: shared primary tabs, secondary chips, responsive screenshots and verification evidence.
 
 - FINAL_BEACON_CARD_REFINEMENT_2026-10-31.md: shared primary/shortcut/Tools hierarchy, compact Map context and social rows, screenshots and verification boundaries.
+
+- CARD_CONTEXT_SOCIAL_CHAT_POLISH_2026-10-31.md: linked-context sizing, shared social rows, tab-aligned list utilities, compact chat creation and responsive evidence.

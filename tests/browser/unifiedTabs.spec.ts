@@ -49,7 +49,9 @@ for (const appearance of ["light", "dark"] as const) {
         expect((await tab.boundingBox())!.height).toBeGreaterThanOrEqual(44);
         await noOverflow();
       }
-      await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+      await page.evaluate(() =>
+        (document.activeElement as HTMLElement | null)?.blur(),
+      );
       await page.screenshot({
         path: `docs/screenshots/unified-tabs-2026-10-31/${appearance}-${width}-activity.png`,
       });
@@ -81,9 +83,26 @@ for (const appearance of ["light", "dark"] as const) {
       await expect(favorites).toHaveAttribute("aria-pressed", "true");
       await favorites.click();
       await expect(favorites).toHaveAttribute("aria-pressed", "false");
+      const lists = page.getByRole("button", {
+        name: "Manage Private Lists",
+        exact: true,
+      });
+      const tabsBounds = (await page
+        .getByTestId("friends-primary-tabs")
+        .boundingBox())!;
+      const listsBounds = (await lists.boundingBox())!;
+      expect(Math.abs(tabsBounds.y - listsBounds.y)).toBeLessThanOrEqual(2);
+      expect(listsBounds.x).toBeGreaterThanOrEqual(
+        tabsBounds.x + tabsBounds.width,
+      );
+      await lists.click();
+      await expect(
+        page.getByRole("dialog", { name: "Private Lists", exact: true }),
+      ).toBeVisible();
+      await page.keyboard.press("Escape");
       await noOverflow();
       await page.screenshot({
-        path: `docs/screenshots/unified-tabs-2026-10-31/${appearance}-${width}-friends.png`,
+        path: `docs/screenshots/card-context-social-2026-10-31/${appearance}-${width}-friends.png`,
       });
     });
   }

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Pressable, Share, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { List, Plus, SquarePen } from "lucide-react-native";
+import { List, Plus } from "lucide-react-native";
 import { useBeacon } from "@/src/shared/store";
 import { inviteContact } from "@/src/platform/contacts";
 import { InviteQR } from "../InviteQR";
@@ -98,49 +98,43 @@ export default function MessagingHubScreen({
           style={{
             paddingHorizontal: tokens.layout.screenGutter,
             flexDirection: "row",
-            gap: tokens.space.sm,
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 8,
           }}
         >
-          {(["Chats", "Communities"] as const).map((destination) => (
-            <PrimaryTab
-              key={destination}
-              label={destination}
-              selected={section === destination}
-              onPress={() => {
-                setSection(destination);
-                if (params.section || params.tab)
-                  router.setParams({ section: undefined, tab: undefined });
-              }}
-            />
-          ))}
-        </View>
-        <View
-          style={{
-            paddingHorizontal: tokens.layout.screenGutter,
-            flexDirection: "row",
-            justifyContent: "flex-end",
-          }}
-        >
+          <View
+            testID="messaging-primary-tabs"
+            style={{ flexDirection: "row", flex: 1, minWidth: 0, gap: 8 }}
+          >
+            {(["Chats", "Communities"] as const).map((destination) => (
+              <PrimaryTab
+                key={destination}
+                label={destination}
+                selected={section === destination}
+                onPress={() => {
+                  setSection(destination);
+                  if (params.section || params.tab)
+                    router.setParams({ section: undefined, tab: undefined });
+                }}
+              />
+            ))}
+          </View>
           {section === "Chats" ? (
             <HeaderAction
               label="Private Lists"
               onPress={() => setListsOpen(true)}
             >
-              <List size={21} color={colors.ink} />
+              <List size={20} color={colors.muted} />
             </HeaderAction>
-          ) : null}
-          <HeaderAction
-            label={
-              section === "Chats" ? "New conversation" : "Create community"
-            }
-            onPress={() => setNewChat(true)}
-          >
-            {section === "Chats" ? (
-              <SquarePen size={21} color={colors.ink} />
-            ) : (
-              <Plus size={22} color={colors.ink} />
-            )}
-          </HeaderAction>
+          ) : (
+            <HeaderAction
+              label="Create community"
+              onPress={() => setNewChat(true)}
+            >
+              <Plus size={20} color={colors.muted} />
+            </HeaderAction>
+          )}
         </View>
         <CommunicationHub
           initialSection={section}
