@@ -617,7 +617,11 @@ export default function YourActivityScreen() {
 
       {embedded && (
         <View
+          testID="activity-actions-column"
           style={{
+            width: "100%",
+            maxWidth: tokens.layout.contentMaxWidth,
+            alignSelf: "center",
             paddingHorizontal: tokens.layout.screenGutter,
             paddingTop: tokens.space.xs,
             paddingBottom: tokens.space.xxs,

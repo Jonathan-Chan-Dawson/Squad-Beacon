@@ -126,6 +126,12 @@ test("tips dismiss, remain dismissed on revisit and reset only in the demo lab",
   await expect(
     page.getByText("Link multiple Beacons into one outing.", { exact: true }),
   ).toBeVisible();
+  await page.goBack();
+  await page.getByRole("button", { name: /Developer lab:/ }).click();
+  await page.getByRole("button", { name: "Open Plans", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Dismiss plan tip" }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Dismiss plan tip" }).click();
   await page.goBack();
   await page.getByRole("button", { name: /Developer lab:/ }).click();
@@ -184,6 +190,7 @@ test("first published Beacon celebrates only after confirmation and does not rep
   await page.getByRole("button", { name: "Open Home", exact: true }).click();
   await expect(visibleId(page, "first-success")).toHaveCount(0);
   await expect(visibleId(page, "home-personal-timeline")).toBeVisible();
+  await expect(visibleId(page, "onboarding-welcome")).toBeVisible();
 });
 test("phone compositions, themes and restrained personality", async ({
   page,
@@ -261,6 +268,13 @@ test("account progress loads before introduction, persists across reload and doe
   await page.goto("/activities");
   await expect(visibleId(page, "onboarding-welcome")).toBeVisible();
   await expect.poll(() => account.keys.has("welcome.seen.v1")).toBe(true);
+  await page
+    .getByRole("button", { name: "Explore Beacons", exact: true })
+    .click();
+  await page.goBack();
+  await expect(visibleId(page, "onboarding-welcome")).toBeVisible();
+  await page.reload();
+  await expect(visibleId(page, "onboarding-welcome")).toBeVisible();
   await page
     .getByRole("button", { name: "Dismiss welcome", exact: true })
     .click();

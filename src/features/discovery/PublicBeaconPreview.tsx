@@ -14,12 +14,16 @@ import { HomeAction } from "@/src/features/beacons/components/HomeAction";
 import { beaconPreviewWhen } from "@/src/features/maps/discoveryRanking";
 import { DiscoveryBeaconCard } from "./DiscoveryBeaconCard";
 import { discoveryContextLabel } from "./discoveryCardPresentation";
+import { MoreHorizontal } from "lucide-react-native";
+import { ContextMenu } from "@/src/shared/ContextMenu";
+import { MapTooltipControl } from "@/src/features/maps/MapTooltipShell";
 import type { PublicBeaconSummary } from "./types";
 
 export type PublicBeaconPreviewProps = {
   summary: PublicBeaconSummary;
   /** Use the shared discovery shell only on Browse and Map surfaces. */
   adaptiveDiscovery?: boolean;
+  mapPreview?: boolean;
   compact?: boolean;
   showCommunityIdentity?: boolean;
   contextLabel?: string;
@@ -36,6 +40,7 @@ type PublicResponse = "going" | "requested" | null;
 export function PublicBeaconPreview({
   summary,
   adaptiveDiscovery = false,
+  mapPreview = false,
   compact = false,
   showCommunityIdentity = true,
   contextLabel,
@@ -46,6 +51,8 @@ export function PublicBeaconPreview({
   hideClose = false,
 }: PublicBeaconPreviewProps) {
   const { styles } = useTheme();
+  const [mapInfoOpen, setMapInfoOpen] = useState(false);
+  const mapInfoAnchor = useRef<View>(null);
   const { colors } = useDesignTheme();
   const { data, userId, act, getViewerEpoch } = useBeacon();
   const now = useNow();
@@ -88,7 +95,8 @@ export function PublicBeaconPreview({
   const viewerSnapshotMatches = !!userId && data.viewer_id === userId;
   const currentRsvp = viewerSnapshotMatches
     ? data.rsvps.find(
-        (row) => row.activity_id === summary.activity_id && row.user_id === userId,
+        (row) =>
+          row.activity_id === summary.activity_id && row.user_id === userId,
       )
     : undefined;
   const confirmedResponse =
@@ -100,10 +108,10 @@ export function PublicBeaconPreview({
     (summary.viewer_response === "requested" ||
       currentRsvp?.status === "requested");
   const going = confirmedResponse === "going" || serverGoing;
-  const pending = !serverGoing && (confirmedResponse === "requested" || serverPending);
+  const pending =
+    !serverGoing && (confirmedResponse === "requested" || serverPending);
   const detailsAction =
-    onDetails ??
-    (going ? () => onJoined(summary.activity_id) : undefined);
+    onDetails ?? (going ? () => onJoined(summary.activity_id) : undefined);
   const endTime = Date.parse(summary.ends_at);
   const startTime = Date.parse(summary.starts_at);
   const ended = Number.isFinite(endTime) && endTime <= now;
@@ -118,8 +126,9 @@ export function PublicBeaconPreview({
     summary.capacity_limit !== null &&
     summary.capacity_limit > 0 &&
     summary.accepted_seat_count >= summary.capacity_limit;
-  const adaptiveWhenLabel =
-    ended ? "Ended" : beaconPreviewWhen({ ...summary, timezone: "" }, now);
+  const adaptiveWhenLabel = ended
+    ? "Ended"
+    : beaconPreviewWhen({ ...summary, timezone: "" }, now);
   const strictCapacityLabel =
     summary.capacity_policy === "strict" &&
     Number.isFinite(summary.capacity_limit) &&
@@ -208,7 +217,9 @@ export function PublicBeaconPreview({
             : "Could not join this Beacon. Try again.",
         );
     } finally {
-      setSubmittingKey((currentKey) => (currentKey === key ? null : currentKey));
+      setSubmittingKey((currentKey) =>
+        currentKey === key ? null : currentKey,
+      );
     }
   };
 
@@ -272,6 +283,19 @@ export function PublicBeaconPreview({
   return (
     <View testID="map-public-preview" style={{ gap: 8 }}>
       <DiscoveryBeaconCard
+        mapPreview={mapPreview}
+        actionShortcuts={
+          mapPreview ? (
+            <View ref={mapInfoAnchor} collapsable={false}>
+              <MapTooltipControl
+                label="Beacon info & actions"
+                onPress={() => setMapInfoOpen(true)}
+                icon={<MoreHorizontal size={20} color={colors.textSecondary} />}
+                expanded={mapInfoOpen}
+              />
+            </View>
+          ) : undefined
+        }
         activityId={summary.activity_id}
         title={summary.title}
         category={summary.category}
@@ -294,6 +318,7 @@ export function PublicBeaconPreview({
             title={actionLabel}
             label={actionLabel}
             stretch
+            prominent={mapPreview}
             primary={!disabled}
             disabled={disabled}
             onPress={() => void joinPublicBeacon()}
@@ -338,6 +363,27 @@ export function PublicBeaconPreview({
       {!compact && !hideClose ? (
         <Button title="Close preview" secondary compact onPress={onClose} />
       ) : null}
+      {mapPreview && (
+        <ContextMenu
+          title="Public Beacon information"
+          mode="dropdown"
+          anchoredOnly
+          visible={mapInfoOpen}
+          anchorRef={mapInfoAnchor}
+          onClose={() => setMapInfoOpen(false)}
+        >
+          <Text style={styles.body}>Public Beacon · Approximate area</Text>
+          <Text style={styles.muted}>
+            {visibleContextLabel ||
+              (pending
+                ? "The host will review your request."
+                : "Join to see the meeting details and people going.")}
+          </Text>
+          {showCommunityIdentity && (
+            <BeaconCommunityRow activityId={summary.activity_id} compact />
+          )}
+        </ContextMenu>
+      )}
     </View>
   );
 }

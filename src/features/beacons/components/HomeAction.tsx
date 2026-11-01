@@ -16,6 +16,7 @@ export function HomeAction({
   stretch = false,
   outlined = false,
   tone,
+  prominent = false,
 }: {
   title?: string;
   label?: string;
@@ -29,10 +30,12 @@ export function HomeAction({
   stretch?: boolean;
   outlined?: boolean;
   tone?: { color: string; tint: string };
+  prominent?: boolean;
 }) {
   const { colors } = useDesignTheme();
   return (
     <Pressable
+      aria-pressed={selected}
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ disabled, selected }}
@@ -53,8 +56,8 @@ export function HomeAction({
         testID={testID ? `${testID}-face` : undefined}
         style={{
           width: stretch ? "100%" : undefined,
-          minHeight: outlined ? 34 : 30,
-          minWidth: outlined ? 36 : undefined,
+          minHeight: prominent ? 44 : outlined ? 34 : 30,
+          minWidth: prominent ? 44 : outlined ? 36 : undefined,
           paddingHorizontal: plain ? 4 : 10,
           paddingVertical: 5,
           flexDirection: "row",
@@ -68,7 +71,7 @@ export function HomeAction({
               : plain
                 ? "transparent"
                 : colors.surfaceRaised),
-          borderRadius: outlined ? 11 : stretch ? 9 : 15,
+          borderRadius: prominent ? 12 : outlined ? 11 : stretch ? 9 : 15,
           borderWidth: outlined ? 1 : plain || primary ? 0 : 1,
           borderColor: tone?.color ?? colors.border,
         }}
@@ -80,9 +83,9 @@ export function HomeAction({
               color:
                 tone?.color ??
                 (primary ? colors.onAccent : colors.textSecondary),
-              fontSize: 12,
-              lineHeight: 18,
-              fontWeight: "500",
+              fontSize: prominent ? 14 : 12,
+              lineHeight: prominent ? 20 : 18,
+              fontWeight: prominent ? "600" : "500",
             }}
           >
             {title}

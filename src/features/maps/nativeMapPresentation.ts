@@ -250,13 +250,10 @@ export function nativePresentation(
 }
 
 export function presentationOpensExplorer(item: NativeMapPresentation) {
-  return (
-    item.forceExplorer ||
-    (item.beacons.length > 1 || item.people.length > 1)
-  );
+  return new Set(item.group.members.map((member) => member.id)).size > 1;
 }
 
-/** Small blooms expand every primary member even when the far-tier preview is truncated. */
+/** Artwork follows the existing preview budget; activation never expands it. */
 export function presentationArtworkPoints(item: NativeMapPresentation) {
   if (presentationOpensExplorer(item)) return item.visible;
   return item.beacons.length
@@ -405,14 +402,26 @@ export function nativeMapPresentations(
   const people = ordinary.filter((point) => point.kind === "person");
   let pressured = false;
   const build = (radius: number) => {
-    const groups = clusterMapPoints(beacons, viewport, radius).flatMap(group => {
-      if (group.members.length < 2 || group.members.length > 3) return [group];
-      const separated = group.members.every((point, index) => group.members.slice(index + 1).every(other => {
-        const offset = nativePointOffset(point, other, viewport.zoom);
-        return Math.hypot(offset.x, offset.y) >= 48;
-      }));
-      return separated ? group.members.map(point => ({ id: `map-group:${point.id}`, latitude: point.latitude, longitude: point.longitude, members: [point] })) : [group];
-    });
+    const groups = clusterMapPoints(beacons, viewport, radius).flatMap(
+      (group) => {
+        if (group.members.length < 2 || group.members.length > 3)
+          return [group];
+        const separated = group.members.every((point, index) =>
+          group.members.slice(index + 1).every((other) => {
+            const offset = nativePointOffset(point, other, viewport.zoom);
+            return Math.hypot(offset.x, offset.y) >= 48;
+          }),
+        );
+        return separated
+          ? group.members.map((point) => ({
+              id: `map-group:${point.id}`,
+              latitude: point.latitude,
+              longitude: point.longitude,
+              members: [point],
+            }))
+          : [group];
+      },
+    );
     const remaining: ClusterPoint[] = [];
     // Grid lookup bounds the collision search, even with thousands of authorized friends.
     const cell = 96,

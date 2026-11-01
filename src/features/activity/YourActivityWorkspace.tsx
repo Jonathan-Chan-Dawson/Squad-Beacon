@@ -8,6 +8,7 @@ import { useTheme } from "@/src/shared/ui";
 import YourBeacons from "@/src/features/beacons/screens/YourActivityScreen";
 import PlansScreen from "@/src/features/plans/PlansScreen";
 import CalendarScreen from "@/src/features/beacons/screens/CalendarScreen";
+import { PrimaryTab } from "@/src/shared/NavigationTabs";
 import { ActivityEmbedded } from "./ActivityFrame";
 
 export type ActivityTab = "beacons" | "plans" | "calendar";
@@ -55,7 +56,11 @@ function Workspace({ initialTab }: { initialTab: ActivityTab }) {
         }}
       >
         <View
+          testID="activity-header-column"
           style={{
+            width: "100%",
+            maxWidth: tokens.layout.contentMaxWidth,
+            alignSelf: "center",
             flexDirection: "row",
             alignItems: "center",
             paddingHorizontal: tokens.layout.screenGutter,
@@ -79,50 +84,47 @@ function Workspace({ initialTab }: { initialTab: ActivityTab }) {
           <Text
             testID="your-activity-header"
             accessibilityRole="header"
-            style={{ color: c.textPrimary, ...tokens.type.titleSmall }}
+            style={{ color: c.textPrimary, ...tokens.type.title }}
           >
             Your Activity
           </Text>
         </View>
         <View
-          accessibilityRole="tablist"
           style={{
-            flexDirection: "row",
+            width: "100%",
+            maxWidth: tokens.layout.contentMaxWidth,
+            alignSelf: "center",
             paddingHorizontal: tokens.layout.screenGutter,
+            paddingBottom: tokens.space.sm,
           }}
         >
-          {tabs.map((tab) => (
-            <Pressable
-              key={tab}
-              accessibilityRole="tab"
-              aria-selected={selected === tab}
-              accessibilityState={{ selected: selected === tab }}
-              onPress={() => change(tab)}
-              style={{
-                flex: 1,
-                minHeight: 44,
-                alignItems: "center",
-                justifyContent: "center",
-                borderBottomWidth: 3,
-                borderBottomColor: selected === tab ? c.accent : "transparent",
-                paddingHorizontal: 4,
-              }}
-            >
-              <Text
-                style={{
-                  color: selected === tab ? c.accent : c.textSecondary,
-                  ...tokens.type.secondary,
-                  fontWeight: selected === tab ? "700" : "500",
-                }}
-              >
-                {tab === "beacons"
-                  ? "Beacons"
-                  : tab === "plans"
-                    ? "Plans"
-                    : "Calendar"}
-              </Text>
-            </Pressable>
-          ))}
+          <View
+            testID="activity-segmented-tabs"
+            accessibilityRole="tablist"
+            accessibilityLabel="Your Activity views"
+            style={{
+              flexDirection: "row",
+              alignSelf: "flex-start",
+              maxWidth: "100%",
+              gap: tokens.space.sm,
+            }}
+          >
+            {tabs.map((tab) => (
+              <PrimaryTab
+                key={tab}
+                role="tab"
+                label={
+                  tab === "beacons"
+                    ? "Beacons"
+                    : tab === "plans"
+                      ? "Plans"
+                      : "Calendar"
+                }
+                selected={selected === tab}
+                onPress={() => change(tab)}
+              />
+            ))}
+          </View>
         </View>
       </View>
       <ActivityEmbedded.Provider value>

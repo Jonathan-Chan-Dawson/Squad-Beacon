@@ -1,3 +1,4 @@
+import { NavigationFilterChip, PrimaryTab } from "@/src/shared/NavigationTabs";
 import { SemanticEmpty } from "@/src/features/onboarding/OnboardingUI";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -126,34 +127,6 @@ export default function FriendsScreen() {
   const listName = data.lists.find(
     (item) => item.id === browse.listId && item.owner_id === userId,
   )?.name;
-  const tab = (label: string, active: boolean, onPress: () => void) => (
-    <Pressable
-      key={label}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityState={{ selected: active }}
-      aria-pressed={active}
-      onPress={onPress}
-      style={{
-        minHeight: 44,
-        minWidth: 44,
-        paddingHorizontal: 10,
-        justifyContent: "center",
-        borderBottomWidth: 2,
-        borderBottomColor: active ? colors.accent : "transparent",
-      }}
-    >
-      <Text
-        style={{
-          color: active ? colors.accent : colors.textSecondary,
-          fontSize: 13,
-          fontWeight: active ? "600" : "400",
-        }}
-      >
-        {label}
-      </Text>
-    </Pressable>
-  );
   const friendControls = (
     <View style={{ gap: 2 }}>
       <ScrollView
@@ -162,11 +135,16 @@ export default function FriendsScreen() {
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ gap: 4 }}
       >
-        {(["Favorites", "Available", "In a Beacon"] as const).map((value) =>
-          tab(value, browse.filter === value, () =>
-            updateBrowse({ filter: browse.filter === value ? "All" : value }),
-          ),
-        )}
+        {(["Favorites", "Available", "In a Beacon"] as const).map((value) => (
+          <NavigationFilterChip
+            key={value}
+            label={value}
+            selected={browse.filter === value}
+            onPress={() =>
+              updateBrowse({ filter: browse.filter === value ? "All" : value })
+            }
+          />
+        ))}
         <HomeAction
           title={`Select all shown (${filtered.length})`}
           label={`Select all shown (${filtered.length})`}
@@ -416,14 +394,19 @@ export default function FriendsScreen() {
                 keyboardShouldPersistTaps="handled"
                 contentContainerStyle={{ gap: 4 }}
               >
-                {socialCategories.map((value) =>
-                  tab(value, category === value, () => {
-                    setCategory(value);
-                    setShownGroups(8);
-                    if (value === "All")
-                      updateBrowse({ filter: "All", listId: null });
-                  }),
-                )}
+                {socialCategories.map((value) => (
+                  <PrimaryTab
+                    key={value}
+                    label={value}
+                    selected={category === value}
+                    onPress={() => {
+                      setCategory(value);
+                      setShownGroups(8);
+                      if (value === "All")
+                        updateBrowse({ filter: "All", listId: null });
+                    }}
+                  />
+                ))}
               </ScrollView>
               {category === "All" && (
                 <FriendsDisclosure

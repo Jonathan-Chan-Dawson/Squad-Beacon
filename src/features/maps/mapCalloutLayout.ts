@@ -37,9 +37,16 @@ export function mapCalloutLayout(
   const above =
     aboveSpace >= naturalHeight ||
     (belowSpace < naturalHeight && aboveSpace >= belowSpace);
-  const maxHeight = anchor
-    ? Math.min(desiredHeight, Math.max(100, above ? aboveSpace : belowSpace))
-    : desiredHeight;
+  // On short screens, move the card within the viewport rather than clipping
+  // its actions just to preserve a gap from the geographic anchor.
+  const needsViewportSpace =
+    !requestedHeight &&
+    aboveSpace < naturalHeight &&
+    belowSpace < naturalHeight;
+  const maxHeight =
+    anchor && !needsViewportSpace
+      ? Math.min(desiredHeight, Math.max(100, above ? aboveSpace : belowSpace))
+      : desiredHeight;
   const cardHeight = requestedHeight
     ? maxHeight
     : Math.min(measuredHeight, maxHeight);

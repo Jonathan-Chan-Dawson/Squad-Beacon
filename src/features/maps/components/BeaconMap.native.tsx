@@ -20,7 +20,7 @@ import {
   type NativeMapMode,
   type NativeMapPresentation,
 } from "../nativeMapPresentation";
-import { ExpandedMapStack, LivingMapPin } from "./LivingMapMarkers.native";
+import { LivingMapPin } from "./LivingMapMarkers.native";
 import React, {
   useCallback,
   useEffect,
@@ -155,7 +155,6 @@ export default function BeaconMap({
   viewportInsets,
   focused,
   anchorCoordinate,
-  previewHeight,
   onAnchor,
   onCluster,
   clusterPriorities = {},
@@ -199,7 +198,6 @@ export default function BeaconMap({
   const didInitialFit = useRef(false);
   const appliedTargetRevision = useRef<number | null>(null);
   const appliedControlRevision = useRef<number | null>(null);
-  const appliedFocusedTarget = useRef<string | null>(null);
   const { height } = useWindowDimensions();
   const { showAvatars } = usePreferences();
   const now = useNow();
@@ -471,8 +469,6 @@ export default function BeaconMap({
     mapPadding.bottom,
     mapPadding.left,
   ]);
-  const focusedLat = focused?.latitude,
-    focusedLng = focused?.longitude;
   useEffect(() => {
     if (!explorationTarget) {
       appliedTargetRevision.current = null;
@@ -500,62 +496,6 @@ export default function BeaconMap({
     );
     appliedTargetRevision.current = explorationTarget.revision;
   }, [ready, onPick, explorationTarget, mapSize]);
-  useEffect(() => {
-    if (onPick) return;
-    if (focusedLat == null || focusedLng == null) {
-      appliedFocusedTarget.current = null;
-      return;
-    }
-    const focusKey = `${focusedLat},${focusedLng}`;
-    if (appliedFocusedTarget.current === focusKey) return;
-    if (
-      ready &&
-      hasUsableMapViewport(mapSize) &&
-      isValidCoordinate({ latitude: focusedLat, longitude: focusedLng })
-    ) {
-      const currentMap = map.current;
-      if (!currentMap) return;
-      currentMap.animateToRegion(
-        {
-          latitude:
-            focusedLat +
-            0.006 *
-              (((mapPadding.top - mapPadding.bottom) / 2 +
-                (previewHeight
-                  ? Math.min(
-                      previewHeight / 2,
-                      Math.max(
-                        0,
-                        (mapSize.height - mapPadding.top - mapPadding.bottom) /
-                          2 -
-                          48,
-                      ),
-                    )
-                  : 0)) /
-                mapSize.height),
-          longitude:
-            focusedLng -
-            0.006 * ((mapPadding.left - mapPadding.right) / 2 / mapSize.width),
-          latitudeDelta: 0.006,
-          longitudeDelta: 0.006,
-        },
-        reducedMotion ? 0 : 500,
-      );
-      appliedFocusedTarget.current = focusKey;
-    }
-  }, [
-    ready,
-    focusedLat,
-    focusedLng,
-    onPick,
-    mapSize,
-    mapPadding.top,
-    mapPadding.bottom,
-    mapPadding.left,
-    mapPadding.right,
-    previewHeight,
-    reducedMotion,
-  ]);
   function recenter() {
     if (onRecenter) onRecenter();
     else if (points.length && hasUsableMapViewport(mapSize))
@@ -724,11 +664,6 @@ export default function BeaconMap({
       )
       .map((item) => item.group.members[0].id),
   );
-  const [expandedStack, setExpandedStack] = useState<{
-    id: string;
-    x: number;
-    y: number;
-  } | null>(null);
   const [cameraMoving, setCameraMoving] = useState(false);
   const [countBadges, setCountBadges] = useState<
     {
@@ -795,20 +730,7 @@ export default function BeaconMap({
     mapPadding.bottom,
     mapPadding.left,
   ]);
-  const expansionRevision = useRef(0);
-  const closeStack = useCallback(() => {
-    expansionRevision.current++;
-    setExpandedStack(null);
-  }, []);
-  const expandedPresentation = expandedStack
-    ? presentations.find(
-        (item) =>
-          item.group.id === expandedStack.id &&
-          !presentationOpensExplorer(item),
-      )
-    : undefined;
   function selectStackMember(member: ClusterPoint) {
-    closeStack();
     if (onPick) return;
     if (member.kind === "beacon") {
       const context = contextPoints.find(
@@ -824,7 +746,6 @@ export default function BeaconMap({
   }
   async function pressPresentation(presentation: NativeMapPresentation) {
     if (onPick) return;
-    closeStack();
     if (presentationOpensExplorer(presentation)) {
       void pressCluster(
         presentation.group,
@@ -835,14 +756,8 @@ export default function BeaconMap({
       );
       return;
     }
-    const revision = expansionRevision.current;
-    try {
-      const point = await map.current?.pointForCoordinate(presentation.group);
-      if (point && revision === expansionRevision.current)
-        setExpandedStack({ id: presentation.group.id, x: point.x, y: point.y });
-    } catch {
-      // The native accessibility actions still provide exact-item selection.
-    }
+    const member = presentation.group.members[0];
+    if (member) selectStackMember(member);
   }
   const availableHaloSlots = Math.max(
     0,
@@ -869,20 +784,6 @@ export default function BeaconMap({
   ) {
     const currentMap = map.current;
     if (!currentMap) return;
-    const zoom = nativeMapZoom(region.longitudeDelta, mapSize.width);
-    const targetZoom = areaSummary
-      ? 13
-      : Math.min(MAP_MAX_ZOOM, zoom + (zoom < 16 ? 0.5 : 0));
-    const scale = 2 ** (zoom - targetZoom);
-    currentMap.animateToRegion(
-      {
-        latitude: group.latitude,
-        longitude: group.longitude,
-        latitudeDelta: region.latitudeDelta * scale,
-        longitudeDelta: region.longitudeDelta * scale,
-      },
-      reducedMotion ? 0 : 300,
-    );
     if (areaSummary) return;
     try {
       const anchor = await currentMap.pointForCoordinate({
@@ -943,7 +844,6 @@ export default function BeaconMap({
           if (!isValidMapRegion(nextRegion)) return;
           setCountBadges([]);
           setCameraMoving(false);
-          closeStack();
           setRegion(nextRegion);
           setPresentationMode((previous) =>
             nativeMapMode(
@@ -978,13 +878,11 @@ export default function BeaconMap({
           void updateAnchor();
         }}
         onPanDrag={() => {
-          closeStack();
           gestureActive.current = true;
           onGestureChange?.(true);
         }}
         onRegionChange={(next, details) => {
           setCameraMoving(true);
-          closeStack();
           if (details?.isGesture) {
             gestureActive.current = true;
             onGestureChange?.(true);
@@ -1010,7 +908,7 @@ export default function BeaconMap({
         rotateEnabled
         pitchEnabled
         toolbarEnabled={false}
-        moveOnMarkerPress={!onPick}
+        moveOnMarkerPress={false}
         showsCompass={!hideControls}
         accessibilityLabel={
           onPick
@@ -1048,7 +946,6 @@ export default function BeaconMap({
               event.nativeEvent.coordinate.longitude,
             );
           } else {
-            closeStack();
             onMapTap?.();
           }
         }}
@@ -1097,7 +994,8 @@ export default function BeaconMap({
                   !pins.some(
                     (place) => place.activity_id === point.publicBeaconId,
                   ))) &&
-              (!!point.stopNumber || !point.activityId ||
+              (!!point.stopNumber ||
+                !point.activityId ||
                 renderedSingletonIds.has(`beacon:${point.activityId}`)),
           )
           .map((point) =>
@@ -1142,7 +1040,10 @@ export default function BeaconMap({
                       alignItems: "center",
                       justifyContent: "center",
                       borderWidth: point.publicBeaconId ? 3 : 1,
-                      borderStyle: point.publicBeaconId || point.stopNumber ? "solid" : "dashed",
+                      borderStyle:
+                        point.publicBeaconId || point.stopNumber
+                          ? "solid"
+                          : "dashed",
                       borderColor: colors.green,
                       backgroundColor: colors.white,
                     }}
@@ -1155,9 +1056,11 @@ export default function BeaconMap({
                         fontSize: point.publicBeaconId ? 25 : 11,
                       }}
                     >
-                      {point.stopNumber ? String(point.stopNumber) : point.publicBeaconId
-                        ? categoryMarkerGlyphs[point.category ?? "Other"]
-                        : "? Suggestion"}
+                      {point.stopNumber
+                        ? String(point.stopNumber)
+                        : point.publicBeaconId
+                          ? categoryMarkerGlyphs[point.category ?? "Other"]
+                          : "? Suggestion"}
                     </Text>
                   </View>
                 </View>
@@ -1186,20 +1089,18 @@ export default function BeaconMap({
           .filter(
             (item) => item.mode !== "stack" || item.group.members.length > 1,
           )
-          .map((presentation) =>
-            expandedPresentation?.group.id === presentation.group.id ? null : (
-              <LivingMapPin
-                key={presentation.group.id}
-                presentation={presentation}
-                members={modelsFor(presentation)}
-                categoryColors={categoryColors}
-                availabilityColors={availabilityColors}
-                appearanceKey={clusterAppearanceKey}
-                onPress={handlePresentation}
-                onMember={handleMember}
-              />
-            ),
-          )}
+          .map((presentation) => (
+            <LivingMapPin
+              key={presentation.group.id}
+              presentation={presentation}
+              members={modelsFor(presentation)}
+              categoryColors={categoryColors}
+              availabilityColors={availabilityColors}
+              appearanceKey={clusterAppearanceKey}
+              onPress={handlePresentation}
+              onMember={handleMember}
+            />
+          ))}
         {pins
           .filter((place) =>
             renderedSingletonIds.has(`beacon:${place.activity_id}`),
@@ -1327,11 +1228,7 @@ export default function BeaconMap({
       {!cameraMoving &&
         !onPick &&
         countBadges
-          .filter(
-            (badge) =>
-              presentations.includes(badge.item) &&
-              badge.item.group.id !== expandedPresentation?.group.id,
-          )
+          .filter((badge) => presentations.includes(badge.item))
           .map((badge) => (
             <Pressable
               key={`counts:${badge.item.group.id}`}
@@ -1339,7 +1236,6 @@ export default function BeaconMap({
               accessibilityLabel={`${clusterCountAccessibilityLabel(badge.peopleCount, badge.beaconTotal)}. Explore cluster; nearby does not mean attending`}
               testID="map-cluster-count"
               onPress={() => {
-                closeStack();
                 if (badge.activation === "expand")
                   void pressPresentation(badge.item);
                 else
@@ -1424,22 +1320,6 @@ export default function BeaconMap({
               </View>
             </Pressable>
           ))}
-      {expandedStack && expandedPresentation && !onPick && (
-        <ExpandedMapStack
-          presentation={expandedPresentation}
-          anchor={expandedStack}
-          size={mapSize}
-          onPeople={() => {
-            closeStack();
-            void pressCluster(expandedPresentation.group, false, "Friends");
-          }}
-          members={modelsFor(expandedPresentation)}
-          availabilityColors={availabilityColors}
-          categoryColors={categoryColors}
-          onMember={handleMember}
-          onClose={closeStack}
-        />
-      )}
       {!onPick && !hideControls && (
         <View
           style={{ position: "absolute", top: controlsTop, right: 16, gap: 8 }}

@@ -1,5 +1,7 @@
 # Theme and Beacons refinement — 2026-10-30
 
+Historical screenshots referenced by this report were removed during repository cleanup.
+
 The Beacons profile/status row is unboxed. Its 76px avatar balances the name, availability and editable note beside it; Current Activity has its own surface. The divider above Your Activity / My Activity remains. Compact Sonar retains a full touch target and an accessible name. The availability control is simplified on compact rows so the profile name fits at 320px.
 
 ## Color direction
@@ -36,14 +38,14 @@ These are local web/demo checks; native OS rendering, physical-device accessibil
 
 | Family | Light | Dark |
 | --- | --- | --- |
-| Essential | [Light](screenshots/themes-2026-10-30/after/Essential-light-beacons-320.png) | [Dark](screenshots/themes-2026-10-30/after/Essential-dark-beacons-320.png) |
-| Midnight | [Light](screenshots/themes-2026-10-30/after/Midnight-light-beacons-390.png) | [Dark](screenshots/themes-2026-10-30/after/Midnight-dark-beacons-390.png) |
-| Ocean | [Light](screenshots/themes-2026-10-30/after/Ocean-light-beacons-430.png) | [Dark](screenshots/themes-2026-10-30/after/Ocean-dark-beacons-430.png) |
-| Mint | [Light](screenshots/themes-2026-10-30/after/Mint-light-beacons-320.png) | [Dark](screenshots/themes-2026-10-30/after/Mint-dark-beacons-320.png) |
-| Sunset | [Light](screenshots/themes-2026-10-30/after/Sunset-light-beacons-390.png) | [Dark](screenshots/themes-2026-10-30/after/Sunset-dark-beacons-390.png) |
-| Berry | [Light](screenshots/themes-2026-10-30/after/Berry-light-beacons-430.png) | [Dark](screenshots/themes-2026-10-30/after/Berry-dark-beacons-430.png) |
-| Sunflower | [Light](screenshots/themes-2026-10-30/after/Sunflower-light-beacons-320.png) | [Dark](screenshots/themes-2026-10-30/after/Sunflower-dark-beacons-320.png) |
+| Essential | Light | Dark |
+| Midnight | Light | Dark |
+| Ocean | Light | Dark |
+| Mint | Light | Dark |
+| Sunset | Light | Dark |
+| Berry | Light | Dark |
+| Sunflower | Light | Dark |
 
-Essential comparison at 390px: [old light](screenshots/themes-2026-10-30/before/compare-Essential-light-390.png) / [new light](screenshots/themes-2026-10-30/after/compare-Essential-light-390.png), [old dark](screenshots/themes-2026-10-30/before/compare-Essential-dark-390.png) / [new dark](screenshots/themes-2026-10-30/after/compare-Essential-dark-390.png). Before images come from the preserved pre-palette export.
+Essential comparison at 390px: old light / new light, old dark / new dark. Before images originally came from the pre-palette export.
 
-The [theme chooser](screenshots/themes-2026-10-30/after/Essential-dark-settings-320.png) shows the surface and complementary colors. The [finished Beacons layout with an active Activity Note](screenshots/themes-2026-10-30/after/beacons-current-note.png) shows the separate profile row, balanced avatar, activity card and retained divider.
+The theme chooser shows the surface and complementary colors. The finished Beacons layout with an active Activity Note shows the separate profile row, balanced avatar, activity card and retained divider.

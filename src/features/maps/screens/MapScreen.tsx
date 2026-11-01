@@ -411,6 +411,7 @@ export default function MapScreen() {
       ).length,
     [data, userId],
   );
+  const [clusterSelectionId, setClusterSelectionId] = useState<string | null>(null);
   const [clusterSection, setClusterSection] = useState<"Beacons" | "Friends">("Beacons");
   const [clusterActivityIds, setClusterActivityIds] = useState<string[] | null>(
     null,
@@ -1144,28 +1145,34 @@ export default function MapScreen() {
     longitude: row.coarse_lng!,
     suggestion: false,
   }));
+  useEffect(() => {
+    if (!clusterActivityIds || !clusterPersonIds) return;
+    const beacons = clusterActivityIds.filter(id => activities.some(row => row.id === id) || publicDiscovery.rows.some(row => row.activity_id === id));
+    const people = clusterPersonIds.filter(id => mapLocations.some(row => row.owner_id === id));
+    if (beacons.length === clusterActivityIds.length && people.length === clusterPersonIds.length) return;
+    const frame = requestAnimationFrame(() => {
+      setClusterActivityIds(beacons.length || people.length ? beacons : null);
+      setClusterPersonIds(beacons.length || people.length ? people : null);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [activities, publicDiscovery.rows, mapLocations, clusterActivityIds, clusterPersonIds]);
+
   function choosePublicBeacon(id: string) {
     if (discoveryRestore.current) {
       discoveryRestore.current.selectionChanged = true;
-      discoveryRestore.current.cameraChanged = true;
     }
     closePopovers();
+    clearRouteSelection();
+    setDetailTab(null);
     setSelected(null);
     setPerson(null);
     setClusterActivityIds(null);
     setClusterPersonIds(null);
     setPulsePlace(null);
+    setContextPoint(null);
     setPublicSelection(id);
     setPlaceSearchOpen(false);
-    const row = publicDiscovery.rows.find((item) => item.activity_id === id);
-    if (row?.coarse_lat != null && row.coarse_lng != null)
-      exploration.setArea({
-        kind: "place",
-        label: row.area_label,
-        coordinate: { latitude: row.coarse_lat, longitude: row.coarse_lng },
-        zoom: 13,
-        source: "saved",
-      });
+
   }
 
   const searchActivityResults = userId
@@ -1494,10 +1501,10 @@ export default function MapScreen() {
   function chooseBeacon(id: string) {
     if (discoveryRestore.current) {
       discoveryRestore.current.selectionChanged = true;
-      discoveryRestore.current.cameraChanged = true;
     }
     closePopovers();
     setDetailTab(null);
+    setPublicSelection(null);
     if (
       !userId ||
       !data.activities.some(
@@ -1522,7 +1529,6 @@ export default function MapScreen() {
   function choosePerson(id: string) {
     if (discoveryRestore.current) {
       discoveryRestore.current.selectionChanged = true;
-      discoveryRestore.current.cameraChanged = true;
     }
     setCompassSheetOpen(false);
     if (
@@ -1533,6 +1539,7 @@ export default function MapScreen() {
       return;
     uiHaptics.light();
     setDetailTab(null);
+    setPublicSelection(null);
     setPulsePlace(null);
     setContextPoint(null);
     clearRouteSelection();
@@ -1721,10 +1728,6 @@ export default function MapScreen() {
       discoveryRestore.current.cameraChanged = true;
     if (preferencesReady && !planFocus && (!discoveryActive || userMoved))
       void writeMapDevicePreferences({ camera: next }).catch(() => {});
-    if (userMoved) {
-      setClusterActivityIds(null);
-      setClusterPersonIds(null);
-    }
   }
 
   function resetFilters() {
@@ -2389,7 +2392,7 @@ export default function MapScreen() {
           }
           focused={focusedCoordinate}
           anchorCoordinate={
-            pickMode ? pickedMapPoint : clusterActivityIds ? clusterCenter : focusedCoordinate
+            pickMode ? pickedMapPoint : selectedPublic ? { latitude: selectedPublic.coarse_lat!, longitude: selectedPublic.coarse_lng! } : clusterActivityIds ? clusterCenter : focusedCoordinate
           }
           onAnchor={setMapAnchor}
           activities={planFocus ? [] :
@@ -2422,6 +2425,7 @@ export default function MapScreen() {
           onCluster={(nextCluster, anchor, section) => {
             if (pickMode) return;
             setMapAnchor(anchor ?? null);
+            setClusterSelectionId(nextCluster.id);
             setClusterCenter({
               latitude: nextCluster.latitude,
               longitude: nextCluster.longitude,
@@ -2435,6 +2439,7 @@ export default function MapScreen() {
             uiHaptics.light();
             clearRouteSelection();
             setDetailTab(null);
+            setPublicSelection(null);
             setPulsePlace(null);
             setContextPoint(null);
             setSelected(null);
@@ -3007,9 +3012,10 @@ export default function MapScreen() {
       {!pickMode && selectedPublic && !person && !selected && (
         <MapCallout
           testID="map-public-callout"
+          onDismiss={() => setPublicSelection(null)}
           compact
           maxWidth={mapTooltip.width}
-          anchor={null}
+          anchor={mapAnchor}
           bounds={{
             ...mapSize,
             top: headerTop + headerHeight + 12,
@@ -3025,6 +3031,9 @@ export default function MapScreen() {
               key={selectedPublic.activity_id}
               summary={selectedPublic}
               adaptiveDiscovery
+              compact
+              hideClose
+              mapPreview
               headerAccessory={
                 <MapTooltipClose
                   label="Close map preview"
@@ -3049,6 +3058,7 @@ export default function MapScreen() {
             clearRouteSelection();
             setPerson(null);
             setSelected(null);
+            setPublicSelection(null);
             setDetailTab(null);
           }}
           maxWidth={mapTooltip.width}
@@ -3068,6 +3078,7 @@ export default function MapScreen() {
         >
           <ScrollView
             keyboardShouldPersistTaps="handled"
+            style={{ flexShrink: 1, maxHeight: mapTooltip.maxHeight }}
             contentContainerStyle={{ paddingBottom: 0 }}
           >
             {person ? (
@@ -3107,8 +3118,10 @@ export default function MapScreen() {
       {!pickMode && clusterActivityIds && clusterPersonIds ? (
         <MapCallout
           anchor={mapAnchor}
-          height={clusterActivityIds.length + clusterPersonIds.length <= 5 ? Math.min(320, 100 + (clusterActivityIds.length + clusterPersonIds.length) * 58) : 320}
-          maxWidth={320}
+          testID="map-cluster-callout"
+          onDismiss={() => { setClusterActivityIds(null); setClusterPersonIds(null); }}
+          compact
+          maxWidth={mapTooltip.width}
           bounds={{
             ...mapSize,
             top: headerTop + headerHeight + 12,
@@ -3117,13 +3130,13 @@ export default function MapScreen() {
         >
           <MapNearbyPanel
             compact={clusterActivityIds.length + clusterPersonIds.length <= 5}
-            key={`${clusterSection}:${clusterActivityIds.join()}:${clusterPersonIds.join()}`}
+            key={clusterSelectionId}
             initialSection={clusterSection}
             beaconIds={clusterActivityIds}
             personIds={clusterPersonIds.filter((id) =>
               mapLocations.some((row) => row.owner_id === id),
             )}
-            publicBeacons={publicMapRows.filter((row) =>
+            publicBeacons={publicDiscovery.rows.filter((row) =>
               clusterActivityIds.includes(row.activity_id),
             )}
             onPublicBeacon={choosePublicBeacon}

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { createContext, useEffect, useState } from "react";
 import Animated, {
   FadeIn,
   FadeOut,
@@ -6,10 +6,16 @@ import Animated, {
   ZoomOut,
   useReducedMotion,
 } from "react-native-reanimated";
+import { BackHandler, Platform } from "react-native";
 import { mapTooltip } from "./tooltipConstants";
 import Svg, { Path } from "react-native-svg";
 import { mapCalloutLayout } from "./mapCalloutLayout";
 import { useTheme } from "@/src/shared/ui";
+
+/** Natural card size avoids measuring only the already-clipped scroll viewport. */
+export const MapCalloutNaturalHeight = createContext<
+  ((height: number) => void) | null
+>(null);
 
 /** A map-owned callout follows the projected marker and stays inside map bounds. */
 export function MapCallout({
@@ -40,9 +46,9 @@ export function MapCallout({
   onDismiss?: () => void;
 }) {
   const reducedMotion = useReducedMotion();
-  const [swipeStart, setSwipeStart] = useState(0);
   const { colors, tokens } = useTheme();
   const [measuredHeight, setMeasuredHeight] = useState(height ?? 280);
+  const [naturalHeight, setNaturalHeight] = useState<number | null>(null);
   const {
     width,
     maxHeight,
@@ -55,11 +61,32 @@ export function MapCallout({
   } = mapCalloutLayout(
     anchor,
     bounds,
-    compact ? Math.min(measuredHeight, mapTooltip.maxHeight) : measuredHeight,
+    compact
+      ? Math.min(naturalHeight ?? measuredHeight, mapTooltip.maxHeight)
+      : measuredHeight,
     height,
     tokens.layout.screenGutter,
     maxWidth,
   );
+  useEffect(() => {
+    if (!onDismiss) return;
+    const back = BackHandler.addEventListener("hardwareBackPress", () => {
+      onDismiss();
+      return true;
+    });
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !event.defaultPrevented) {
+        event.preventDefault();
+        onDismiss();
+      }
+    };
+    if (Platform.OS === "web") document.addEventListener("keydown", escape);
+    return () => {
+      back.remove();
+      if (Platform.OS === "web")
+        document.removeEventListener("keydown", escape);
+    };
+  }, [onDismiss]);
   return (
     <Animated.View
       entering={
@@ -72,14 +99,7 @@ export function MapCallout({
           ? FadeOut.duration(mapTooltip.duration)
           : ZoomOut.duration(mapTooltip.duration)
       }
-      onStartShouldSetResponder={() => false}
-      onMoveShouldSetResponder={(event) =>
-        !!onDismiss && event.nativeEvent.pageY - swipeStart > 24
-      }
-      onTouchStart={(event) => setSwipeStart(event.nativeEvent.pageY)}
-      onResponderRelease={(event) => {
-        if (event.nativeEvent.pageY - swipeStart > 40) onDismiss?.();
-      }}
+      pointerEvents="box-none"
       testID={testID}
       onLayout={(event) => setMeasuredHeight(event.nativeEvent.layout.height)}
       style={{
@@ -120,7 +140,9 @@ export function MapCallout({
           />
         </Svg>
       )}
-      {children}
+      <MapCalloutNaturalHeight.Provider value={setNaturalHeight}>
+        {children}
+      </MapCalloutNaturalHeight.Provider>
     </Animated.View>
   );
 }

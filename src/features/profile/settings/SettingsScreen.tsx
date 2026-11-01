@@ -1,3 +1,4 @@
+import { ThemedSwitch } from "@/src/shared/ThemedSwitch";
 import { AvatarToggle } from "@/src/features/profile/AvatarToggle";
 import { profileSavePayload } from "@/src/features/profile/profileEditorDraft";
 import {
@@ -53,7 +54,6 @@ import {
   Linking,
   Platform,
   Pressable,
-  Switch,
   Text,
   View,
 } from "react-native";
@@ -434,13 +434,12 @@ function SettingsForm({ profile }: { profile: Profile }) {
           detail: pushSummary,
           icon: Bell,
           trailing: (
-            <Switch
+            <ThemedSwitch
               accessibilityLabel="Push notifications"
               disabled={
                 deviceBusy || demo || (!pushRegistered && !canEnablePush)
               }
               value={pushRegistered}
-              trackColor={{ false: colors.line, true: colors.green }}
               onValueChange={(value) => void togglePush(value)}
             />
           ),

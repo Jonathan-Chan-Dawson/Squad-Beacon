@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Pressable, Share, Text, View } from "react-native";
+import { Pressable, Share, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { List, Plus, SquarePen } from "lucide-react-native";
@@ -9,6 +9,7 @@ import { InviteQR } from "../InviteQR";
 import { CommunicationHub, type ChatFilter } from "../CommunicationHub";
 import { PrivateListsSheet } from "../components/PrivateListsSheet";
 import type { PeopleListSelection } from "../privateLists";
+import { PrimaryTab } from "@/src/shared/NavigationTabs";
 import { Action, Button, Field, Sheet, Txt, useTheme } from "@/src/shared/ui";
 
 export default function MessagingHubScreen({
@@ -16,7 +17,7 @@ export default function MessagingHubScreen({
 }: {
   communities?: boolean;
 }) {
-  const { styles, colors } = useTheme();
+  const { styles, colors, tokens } = useTheme();
   const params = useLocalSearchParams<{
     tab?: string;
     peopleLists?: string;
@@ -44,7 +45,15 @@ export default function MessagingHubScreen({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const me = data.profiles.find((profile) => profile.id === userId);
-  if (selection?.startsWith("custom:") && userId && data.viewer_id === userId && !data.lists.some(list => list.owner_id === userId && selection === `custom:${list.id}`)) setSelection(null);
+  if (
+    selection?.startsWith("custom:") &&
+    userId &&
+    data.viewer_id === userId &&
+    !data.lists.some(
+      (list) => list.owner_id === userId && selection === `custom:${list.id}`,
+    )
+  )
+    setSelection(null);
   const routeKey = JSON.stringify([
     params.section,
     params.tab,
@@ -76,100 +85,96 @@ export default function MessagingHubScreen({
   return (
     <SafeAreaView edges={["top"]} style={styles.screen}>
       <View
+        testID="chats-content-column"
         style={{
-          paddingHorizontal: 16,
-          flexDirection: "row",
-          alignItems: "center",
-          minHeight: 56,
+          flex: 1,
+          minHeight: 0,
+          width: "100%",
+          maxWidth: tokens.layout.contentMaxWidth,
+          alignSelf: "center",
         }}
       >
-        <View style={{ flex: 1, minWidth: 0, flexDirection: "row", gap: 14 }}>
+        <View
+          style={{
+            paddingHorizontal: tokens.layout.screenGutter,
+            flexDirection: "row",
+            gap: tokens.space.sm,
+          }}
+        >
           {(["Chats", "Communities"] as const).map((destination) => (
-            <Pressable
+            <PrimaryTab
               key={destination}
-              accessibilityRole="button"
-              accessibilityLabel={destination}
-              accessibilityState={{ selected: section === destination }}
+              label={destination}
+              selected={section === destination}
               onPress={() => {
                 setSection(destination);
                 if (params.section || params.tab)
                   router.setParams({ section: undefined, tab: undefined });
               }}
-              style={{
-                minHeight: 48,
-                flexShrink: 1,
-                justifyContent: "center",
-                borderBottomWidth: 2,
-                borderBottomColor:
-                  section === destination ? colors.green : "transparent",
-              }}
-            >
-              <Text
-                numberOfLines={1}
-                style={[
-                  styles.body,
-                  {
-                    fontWeight: "700",
-                    color: section === destination ? colors.ink : colors.muted,
-                  },
-                ]}
-              >
-                {destination}
-              </Text>
-            </Pressable>
+            />
           ))}
         </View>
-        {section === "Chats" ? (
-          <HeaderAction
-            label="Private Lists"
-            onPress={() => setListsOpen(true)}
-          >
-            <List size={21} color={colors.ink} />
-          </HeaderAction>
-        ) : null}
-        <HeaderAction
-          label={section === "Chats" ? "New conversation" : "Create community"}
-          onPress={() => setNewChat(true)}
+        <View
+          style={{
+            paddingHorizontal: tokens.layout.screenGutter,
+            flexDirection: "row",
+            justifyContent: "flex-end",
+          }}
         >
           {section === "Chats" ? (
-            <SquarePen size={21} color={colors.ink} />
-          ) : (
-            <Plus size={22} color={colors.ink} />
-          )}
-        </HeaderAction>
+            <HeaderAction
+              label="Private Lists"
+              onPress={() => setListsOpen(true)}
+            >
+              <List size={21} color={colors.ink} />
+            </HeaderAction>
+          ) : null}
+          <HeaderAction
+            label={
+              section === "Chats" ? "New conversation" : "Create community"
+            }
+            onPress={() => setNewChat(true)}
+          >
+            {section === "Chats" ? (
+              <SquarePen size={21} color={colors.ink} />
+            ) : (
+              <Plus size={22} color={colors.ink} />
+            )}
+          </HeaderAction>
+        </View>
+        <CommunicationHub
+          initialSection={section}
+          section={section}
+          onSectionChange={setSection}
+          conversationFilter={filter}
+          onConversationFilterChange={changeFilter}
+          activeList={selection}
+          onClearList={() => setSelection(null)}
+          searchOpen
+          query={queries[section]}
+          onQueryChange={(query, destination = section) =>
+            setQueries((previous) => ({ ...previous, [destination]: query }))
+          }
+          queries={queries}
+          onSearchOpenChange={() => {}}
+          newMenuOpen={newChat}
+          onNewMenuOpenChange={setNewChat}
+          createSpaceOpen={createSpace}
+          onCreateSpaceOpenChange={setCreateSpace}
+          createOrganizationOpen={createOrganization}
+          onCreateOrganizationOpenChange={setCreateOrganization}
+          openSquad={(id) =>
+            router.push({ pathname: "/squad/[id]", params: { id } })
+          }
+          findFriends={() => router.push("/find-friends")}
+          inviteFriends={() => setInviteOpen(true)}
+          createSquad={() => {
+            setName("");
+            setDescription("");
+            setSquadOpen(true);
+          }}
+        />
       </View>
-      <CommunicationHub
-        initialSection={section}
-        section={section}
-        onSectionChange={setSection}
-        conversationFilter={filter}
-        onConversationFilterChange={changeFilter}
-        activeList={selection}
-        onClearList={() => setSelection(null)}
-        searchOpen
-        query={queries[section]}
-        onQueryChange={(query, destination = section) =>
-          setQueries((previous) => ({ ...previous, [destination]: query }))
-        }
-        queries={queries}
-        onSearchOpenChange={() => {}}
-        newMenuOpen={newChat}
-        onNewMenuOpenChange={setNewChat}
-        createSpaceOpen={createSpace}
-        onCreateSpaceOpenChange={setCreateSpace}
-        createOrganizationOpen={createOrganization}
-        onCreateOrganizationOpenChange={setCreateOrganization}
-        openSquad={(id) =>
-          router.push({ pathname: "/squad/[id]", params: { id } })
-        }
-        findFriends={() => router.push("/find-friends")}
-        inviteFriends={() => setInviteOpen(true)}
-        createSquad={() => {
-          setName("");
-          setDescription("");
-          setSquadOpen(true);
-        }}
-      />
       <PrivateListsSheet
         visible={listsOpen}
         onClose={() => {

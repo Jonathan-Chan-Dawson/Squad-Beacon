@@ -476,7 +476,10 @@ test("far tiers group loose Beacons, retain every authorized member, and never r
   ];
   const grouped = nativeMapPresentations(input, camera, "atmosphere");
   assert.equal(grouped.length, 2);
-  assert.deepEqual(grouped.map(item => item.group.longitude).sort(), input.map(point => point.longitude).sort());
+  assert.deepEqual(
+    grouped.map((item) => item.group.longitude).sort(),
+    input.map((point) => point.longitude).sort(),
+  );
   const selected = nativeMapPresentations(input, camera, "atmosphere", {
     "beacon:a": { tier: -3 },
   });
@@ -504,5 +507,40 @@ test("far tiers group loose Beacons, retain every authorized member, and never r
     assert.equal(friends.visible.length, 0);
     assert.equal(presentationArtworkPoints(friends).length, 0);
     assert.equal(presentationOpensExplorer(friends), true);
+  }
+});
+
+test("selection uses total unique members across kinds and zooms", () => {
+  const beacon = {
+    id: "beacon:one",
+    kind: "beacon" as const,
+    latitude: 41,
+    longitude: -87,
+    category: "Social" as const,
+  };
+  const person = {
+    id: "person:one",
+    kind: "person" as const,
+    latitude: 41,
+    longitude: -87,
+  };
+  for (const mode of ["stack", "swarm", "atmosphere", "micro"] as const) {
+    for (const members of [
+      [beacon],
+      [person],
+      [beacon, beacon],
+      [beacon, person],
+    ]) {
+      const item = nativePresentation(
+        { id: "selection", latitude: 41, longitude: -87, members },
+        mode,
+        {},
+        new Set(),
+      );
+      assert.equal(
+        presentationOpensExplorer(item),
+        new Set(members.map((m) => m.id)).size > 1,
+      );
+    }
   }
 });

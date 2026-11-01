@@ -7,3 +7,5 @@ Onboarding and entry presentation
 - scenarios.ts and DeveloperLab.tsx: development-only coherent demo fixtures and preview controls. Demo resets never write hosted progress.
 
 Root navigation and runtime progress initialization share src/shared/accountReadiness.ts. A loaded, viewer-matched required profile permits entry regardless of optional survey status. Progress failures retain safe presentation fallbacks. See README.md for preview/testing commands and docs/ONBOARDING_2_VALIDATION.md for Phase 4B acceptance boundaries.
+
+- The Home welcome remains visible for eligible accounts until explicitly dismissed, including after navigation, reload or creating activity. Existing contextual tips are dismissed individually.

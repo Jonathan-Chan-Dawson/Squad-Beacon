@@ -1,5 +1,6 @@
+import { ThemedSwitch } from "@/src/shared/ThemedSwitch";
 import React from "react";
-import { Pressable, Switch, Text, View, type TextInput } from "react-native";
+import { Pressable, Text, View, type TextInput } from "react-native";
 import { ChevronRight } from "lucide-react-native";
 import { Button, Field, Txt, useTheme } from "@/src/shared/ui";
 import type { BeaconControlValues } from "../controls";
@@ -63,7 +64,7 @@ export function CreationSwitch({
   value: boolean;
   onChange: (value: boolean) => void;
 }) {
-  const { styles, colors } = useTheme();
+  const { styles } = useTheme();
   return (
     <View
       style={{
@@ -77,11 +78,10 @@ export function CreationSwitch({
         <Text style={[styles.body, { fontWeight: "600" }]}>{title}</Text>
         {detail ? <Txt muted>{detail}</Txt> : null}
       </View>
-      <Switch
+      <ThemedSwitch
         accessibilityLabel={title}
         value={value}
         onValueChange={onChange}
-        trackColor={{ true: colors.primary }}
       />
     </View>
   );

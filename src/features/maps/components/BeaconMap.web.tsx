@@ -122,7 +122,6 @@ export default function BeaconMap(props: MapProps) {
     tiles = useRef<Leaflet.TileLayer | null>(null),
     latest = useRef(props),
     fitted = useRef(false),
-    appliedFocusedTarget = useRef<string | null>(null),
     appliedTargetRevision = useRef<number | null>(null),
     programmaticMove = useRef(false),
     gestureActive = useRef(false),
@@ -894,7 +893,8 @@ export default function BeaconMap(props: MapProps) {
       )
         continue;
       if (
-        !point.stopNumber && point.activityId &&
+        !point.stopNumber &&
+        point.activityId &&
         !renderedSingletonIds.has(`beacon:${point.activityId}`)
       )
         continue;
@@ -920,15 +920,18 @@ export default function BeaconMap(props: MapProps) {
           () => {
             const node = document.createElement("button");
             node.type = "button";
-            node.textContent = point.stopNumber ? String(point.stopNumber) : point.publicBeaconId
-              ? categoryMarkerGlyphs[point.category ?? "Other"]
-              : "?";
+            node.textContent = point.stopNumber
+              ? String(point.stopNumber)
+              : point.publicBeaconId
+                ? categoryMarkerGlyphs[point.category ?? "Other"]
+                : "?";
             node.setAttribute(
               "aria-label",
               `${point.stopNumber ? `Plan stop ${point.stopNumber}` : point.publicBeaconId ? "Public Beacon" : "Suggestion"}: ${point.title}`,
             );
             node.style.cssText = `max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-height:44px;padding:5px 8px;border:1px dashed ${colors.green};border-radius:12px;background:${colors.white};color:${colors.green};font:11px system-ui;cursor:pointer;`;
-            if (point.stopNumber) node.style.cssText = `width:44px;height:44px;border:2px solid ${colors.green};border-radius:22px;background:${colors.white};color:${colors.green};font:bold 18px system-ui;cursor:pointer;`;
+            if (point.stopNumber)
+              node.style.cssText = `width:44px;height:44px;border:2px solid ${colors.green};border-radius:22px;background:${colors.white};color:${colors.green};font:bold 18px system-ui;cursor:pointer;`;
             if (point.publicBeaconId)
               node.style.cssText = `width:46px;height:46px;border:3px solid ${colors.green};border-radius:16px 16px 16px 5px;background:${colors.white};font-size:25px;cursor:pointer;box-shadow:0 3px 8px #172c2920;`;
             L.DomEvent.disableClickPropagation(node);
@@ -940,14 +943,23 @@ export default function BeaconMap(props: MapProps) {
               icon: L.divIcon({
                 html: node,
                 className: "beacon-marker",
-                iconSize: [point.stopNumber ? 44 : point.publicBeaconId ? 46 : 88, 46],
-                iconAnchor: [point.stopNumber ? 22 : point.publicBeaconId ? 23 : 44, 23],
+                iconSize: [
+                  point.stopNumber ? 44 : point.publicBeaconId ? 46 : 88,
+                  46,
+                ],
+                iconAnchor: [
+                  point.stopNumber ? 22 : point.publicBeaconId ? 23 : 44,
+                  23,
+                ],
               }),
             }).addTo(group);
           },
           () => {
-            const current = latest.current.contextPoints?.find(row => row.id === point.id);
-            if (!latest.current.onPick && current) latest.current.onContextPoint?.(current);
+            const current = latest.current.contextPoints?.find(
+              (row) => row.id === point.id,
+            );
+            if (!latest.current.onPick && current)
+              latest.current.onContextPoint?.(current);
           },
         );
       }
@@ -1019,19 +1031,6 @@ export default function BeaconMap(props: MapProps) {
       const cluster = presentation.group;
       const open = () => {
         if (onPick) return;
-        const targetZoom = Math.min(
-          MAP_MAX_ZOOM,
-          m.getZoom() + (m.getZoom() < 16 ? 0.5 : 0),
-        );
-        const target = adjustedMapCenter(
-          cluster.latitude,
-          cluster.longitude,
-          targetZoom,
-        );
-        if (target) {
-          programmaticMove.current = true;
-          m.flyTo(target, targetZoom, { duration: reducedMotion ? 0 : 0.3 });
-        }
         onCluster?.(
           cluster,
           m.latLngToContainerPoint([cluster.latitude, cluster.longitude]),
@@ -1358,35 +1357,6 @@ export default function BeaconMap(props: MapProps) {
         : null,
     );
   }, [ready, anchorLat, anchorLng, onAnchor, layoutVersion]);
-  const lat = focused?.latitude,
-    lng = focused?.longitude;
-  useEffect(() => {
-    if (onPick) return;
-    if (lat == null || lng == null) {
-      appliedFocusedTarget.current = null;
-      return;
-    }
-    const focusKey = `${lat},${lng}`;
-    if (appliedFocusedTarget.current === focusKey) return;
-    const currentMap = map.current;
-    if (ready && currentMap && hasUsableMapViewport(currentMap)) {
-      const center = adjustedMapCenter(lat, lng, 16);
-      if (center) {
-        programmaticMove.current = true;
-        if (reducedMotion) currentMap.setView(center, 16, { animate: false });
-        else currentMap.flyTo(center, 16, { duration: 0.5 });
-        appliedFocusedTarget.current = focusKey;
-      }
-    }
-  }, [
-    ready,
-    lat,
-    lng,
-    adjustedMapCenter,
-    layoutVersion,
-    reducedMotion,
-    onPick,
-  ]);
   useEffect(() => {
     if (!ready || !explorationTarget || onPick) return;
     if (appliedTargetRevision.current === explorationTarget.revision) return;

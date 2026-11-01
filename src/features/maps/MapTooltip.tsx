@@ -7,7 +7,10 @@ import { discoveryContextLabel } from "@/src/features/discovery/discoveryCardPre
 import { BeaconFeedCard } from "@/src/features/beacons/components/BeaconFeedCard";
 import { activityFeedCardProps } from "@/src/features/beacons/screens/activityFeedCard";
 import { readablePlanForActivity } from "@/src/features/beacons/screens/discoveryPlan";
-import { canReadBeaconActivity } from "@/src/features/beacons/beaconModules";
+import {
+  canReadBeaconActivity,
+  canUseBeaconModules,
+} from "@/src/features/beacons/beaconModules";
 import { useBeacon } from "@/src/shared/store";
 import { useNow } from "@/src/shared/useNow";
 import { useTheme } from "@/src/shared/ui";
@@ -23,6 +26,7 @@ export function MapTooltip({
   beaconId,
   onDetails,
   onOpenPeople,
+  onMessage,
   onClose,
 }: {
   onShowContext?: (filter: MapContextFilter) => void;
@@ -60,6 +64,7 @@ export function MapTooltip({
   const planContext = plan
     ? {
         title: plan.title,
+        stepIndex: activity.plan_step_index,
         onPress: () =>
           router.push({ pathname: "/plan/[id]", params: { id: plan.id } }),
       }
@@ -82,7 +87,7 @@ export function MapTooltip({
       });
     },
     onShare: async () => {
-      await shareBeaconInvitation(data,userId,activity);
+      await shareBeaconInvitation(data, userId, activity);
     },
   });
   const strictCapacityLabel =
@@ -110,6 +115,7 @@ export function MapTooltip({
     <View testID="map-tooltip-card">
       <BeaconFeedCard
         compact
+        mapPreview
         presentation="discovery"
         adaptiveDiscovery
         detailsLabel="See overview"
@@ -118,23 +124,36 @@ export function MapTooltip({
         }
         planContext={planContext}
         compactFooter={
-          <View style={{ gap: 4 }}>
-            {visibleReason ? (
-              <Text
-                style={{
-                  ...styles.muted,
-                  color: colors.textSecondary,
-                  fontSize: 12,
-                  lineHeight: 17,
-                }}
-              >
-                {visibleReason}
-              </Text>
-            ) : null}
-            <BeaconCommunityRow activityId={activity.id} compact />
-          </View>
+          visibleReason ||
+          communityAssociations.some(
+            (row) => row.activity_id === activity.id,
+          ) ? (
+            <View style={{ gap: 4 }}>
+              {visibleReason ? (
+                <Text
+                  numberOfLines={2}
+                  style={{
+                    ...styles.muted,
+                    color: colors.textSecondary,
+                    fontSize: 12,
+                    lineHeight: 17,
+                  }}
+                >
+                  {visibleReason}
+                </Text>
+              ) : null}
+              <BeaconCommunityRow activityId={activity.id} compact tooltip />
+            </View>
+          ) : null
         }
         {...feedProps}
+        onMap={undefined}
+        onChat={
+          canUseBeaconModules(data, activity, userId) &&
+          activity.enable_chat !== false
+            ? onMessage
+            : feedProps.onChat
+        }
         onOpenPeople={onOpenPeople}
       />
     </View>

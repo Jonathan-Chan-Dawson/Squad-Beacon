@@ -246,19 +246,50 @@ export default function CalendarScreen() {
           title="Today"
           onPress={() => selectDay(today)}
         />
-        <View style={[styles.row, { flexWrap: "wrap" }]}>
-          <Button
-            compact
-            secondary={!monthOpen}
-            title="Month"
-            onPress={() => setMonthOpen(true)}
-          />
-          <Button
-            compact
-            secondary={monthOpen}
-            title="Week"
-            onPress={() => setMonthOpen(false)}
-          />
+        <View
+          accessibilityLabel="Calendar view"
+          style={{
+            flexDirection: "row",
+            gap: tokens.space.xxs,
+            padding: tokens.space.xxs,
+            borderRadius: tokens.radius.button,
+            borderWidth: 1,
+            borderColor: colors.border,
+            backgroundColor: colors.surfaceRaised,
+          }}
+        >
+          {(["Month", "Week"] as const).map((label) => {
+            const selected = monthOpen === (label === "Month");
+            return (
+              <Pressable
+                key={label}
+                accessibilityRole="button"
+                accessibilityLabel={label}
+                accessibilityState={{ selected }}
+                aria-pressed={selected}
+                onPress={() => setMonthOpen(label === "Month")}
+                style={{
+                  minHeight: tokens.layout.minTapTarget,
+                  paddingHorizontal: tokens.space.sm,
+                  justifyContent: "center",
+                  borderRadius: tokens.radius.sm,
+                  backgroundColor: selected
+                    ? colors.surfaceSelected
+                    : "transparent",
+                }}
+              >
+                <Text
+                  style={{
+                    ...tokens.type.secondary,
+                    color: selected ? colors.primary : colors.textSecondary,
+                    fontWeight: selected ? "600" : "400",
+                  }}
+                >
+                  {label}
+                </Text>
+              </Pressable>
+            );
+          })}
         </View>
       </View>
       <View style={{ flexDirection: "row" }}>

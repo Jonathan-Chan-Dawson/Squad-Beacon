@@ -215,11 +215,13 @@ function CompactCommunityIdentity({
   hasRelatedCommunities,
   onOpen,
   onChanged,
+  tooltip = false,
 }: {
   summary: SocialDirectorySummary;
   hasRelatedCommunities: boolean;
   onOpen: () => void;
   onChanged?: () => void;
+  tooltip?: boolean;
 }) {
   const { styles, colors } = useTheme();
   const { current, run } = useCommunityMembership(summary, onChanged);
@@ -251,20 +253,21 @@ function CompactCommunityIdentity({
           flexDirection: "row",
           alignItems: "center",
           gap: 8,
-          minWidth: 136,
+          minWidth: tooltip ? 0 : 136,
           minHeight: 44,
         }}
       >
-        <CommunityAvatar type={current.entity_type} size={24} />
-        {isJoined ? (
+        <CommunityAvatar type={current.entity_type} size={tooltip ? 20 : 24} />
+        {isJoined || tooltip ? (
           <Text
+            numberOfLines={tooltip ? 1 : undefined}
             style={[
               styles.body,
               { flex: 1, flexShrink: 1, fontSize: 12, lineHeight: 17 },
             ]}
           >
             {current.name}
-            <Text style={styles.muted}> · Joined</Text>
+            {!tooltip ? <Text style={styles.muted}> · Joined</Text> : null}
           </Text>
         ) : (
           <View style={{ flex: 1, minWidth: 0 }}>
@@ -276,20 +279,35 @@ function CompactCommunityIdentity({
             </Text>
           </View>
         )}
-        {isJoined ? (
+        {isJoined && tooltip ? (
+          <Text style={{ ...styles.muted, fontSize: 11 }}>Joined</Text>
+        ) : null}
+        {isJoined && !tooltip ? (
           <View
             accessibilityElementsHidden
-            style={{ width: 24, height: 24, alignItems: "center", justifyContent: "center" }}
+            style={{
+              width: 24,
+              height: 24,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
           >
             <Check size={16} color={colors.green} accessible={false} />
           </View>
         ) : null}
-        <View
-          accessibilityElementsHidden
-          style={{ width: 24, height: 24, alignItems: "center", justifyContent: "center" }}
-        >
-          <ChevronRight size={16} color={colors.muted} accessible={false} />
-        </View>
+        {!tooltip ? (
+          <View
+            accessibilityElementsHidden
+            style={{
+              width: 24,
+              height: 24,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <ChevronRight size={16} color={colors.muted} accessible={false} />
+          </View>
+        ) : null}
       </Pressable>
       {title ? (
         <View
@@ -324,10 +342,12 @@ export function BeaconCommunityRow({
   activityId,
   associations,
   compact = false,
+  tooltip = false,
 }: {
   activityId: string;
   associations?: BeaconCommunityAssociation[];
   compact?: boolean;
+  tooltip?: boolean;
 }) {
   const inherited = useContext(Communities);
   const loaded = useBeaconCommunities(
@@ -353,6 +373,7 @@ export function BeaconCommunityRow({
         <CompactCommunityIdentity
           key={`${userId}:${viewerEpoch}:${primary.summary.entity_type}:${primary.summary.entity_id}`}
           summary={primary.summary}
+          tooltip={tooltip}
           hasRelatedCommunities={rows.length > 1}
           onOpen={() => openCommunityProfile(primary.summary)}
           onChanged={refresh}

@@ -1,5 +1,7 @@
 # Phase 4R interface refinement — 2026-10-28
 
+Historical screenshots referenced by this report were removed during repository cleanup.
+
 This report covers the Front-End Remodel 2 interface/integration pass. Phase 5 guest-sharing, auth, server, migrations and dependency changes were concurrent work by **SB Connections** and are not attributed to this pass. File ownership was coordinated; its additions were preserved.
 
 ## Delivered behavior
@@ -47,13 +49,13 @@ Before/after comparison images for composer and timing cover 320/375/390/430px i
 
 | Representative surface | Evidence |
 | --- | --- |
-| Composer, 320px light | [Before](screenshots/phase4r/before/composer-320-light.png) / [After](screenshots/phase4r/after/composer-320-light.png) |
-| Timing, 390px dark | [Before](screenshots/phase4r/before/timing-390-dark.png) / [After](screenshots/phase4r/after/timing-390-dark.png) |
-| Extra choices / enlarged text | [See more](screenshots/phase4r/after/more-activity-choices.png) / [125% text simulation](screenshots/phase4r/after/composer-larger-text.png) |
-| Map / Plan Focus | [Quiet area](screenshots/phase4r/after/quiet-map.png) / [Physical stops](screenshots/phase4r/after/plan-focus-physical.png) / [Zero physical stops](screenshots/phase4r/after/plan-focus.png) |
-| Inbox / Sonar | [Updates](screenshots/phase4r/after/inbox-updates.png) / [Review sharing](screenshots/phase4r/after/sonar-review.png) |
-| Recovery | [Confirmed Beacon, pending listing](screenshots/phase4r/after/public-listing-recovery.png) |
-| Existing main screens | [Chats](screenshots/phase4r/after/squads-dark.png), [Profile](screenshots/phase4r/after/profile-light.png), [Your Activity](screenshots/phase4r/after/your-activity-light.png), [Settings](screenshots/phase4r/after/settings-dark.png), [Help](screenshots/phase4r/after/help-light.png) |
+| Composer, 320px light | Before / After |
+| Timing, 390px dark | Before / After |
+| Extra choices / enlarged text | See more / 125% text simulation |
+| Map / Plan Focus | Quiet area / Physical stops / Zero physical stops |
+| Inbox / Sonar | Updates / Review sharing |
+| Recovery | Confirmed Beacon, pending listing |
+| Existing main screens | Chats, Profile, Your Activity, Settings, Help |
 
 The `before/` and `after/` folders contain the remaining size/theme captures. The screen tour covers Map, Beacons, Squads/Chats, Profile, Your Activity, Plans, Calendar, Create, Inbox, chat, people, Settings and Help. Existing effective interfaces were left in place.
 

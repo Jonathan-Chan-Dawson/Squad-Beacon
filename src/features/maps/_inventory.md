@@ -40,6 +40,10 @@ Maps feature
 
 - Community discovery: Map previews and Beacon Overview use BeaconCommunityRow, batched viewer-authorized associations and canonical profile routes. communityReturnState.ts retains viewer/Beacon sheet position; camera, filters and contextual selection remain Map-owned.
 
-- webConstellation.ts: Leaflet DOM adapter for the shared bloom geometry, progressive far/micro previews, exact accessible counts and expansion/explorer actions.
+- webConstellation.ts: Leaflet DOM adapter for the shared bloom geometry, progressive far/micro previews, exact accessible counts and direct singleton/explorer actions.
+
+- Map selection: singleton markers open their exact preview; all genuine multi-item groups open Nearby without changing the camera. Map-only card density uses Bookmark and Close headers, compact linked context, and counted anchored Tools menus; public previews stay anchored to coarse coordinates. Explicit navigation, search, Plan focus and Zoom to Fit retain camera control.
 
 - Plan Focus reuses contextFilters authorization, numbered physical stops and static paths; MapScreen isolates markers, fits on entry/explicit action and restores the prior camera/valid selection. Small clusters use MapNearbyPanel compact selection; quiet-map result feedback follows deliberate actions only.
+
+- Map Beacon cards place compact reaction and action controls above a full-size bottom action; ordinary 320px previews fit without scrolling while preserving the bounded fallback for larger content.

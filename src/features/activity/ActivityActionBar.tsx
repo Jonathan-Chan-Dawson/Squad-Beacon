@@ -38,18 +38,26 @@ export function ActivityActionBar({
           return (
             <Component
               key={label}
+              compact
               title={label}
               accessibilityLabel={accessibilityLabel ?? label}
               accessibilityState={{ selected }}
               aria-pressed={selected}
               icon={
                 <Icon
-                  size={18}
+                  size={tokens.iconSize.sm}
                   color={primary ? colors.onAccent : colors.accent}
                 />
               }
               onPress={onPress}
-              style={selected ? { borderColor: colors.accent } : undefined}
+              style={
+                selected
+                  ? {
+                      borderColor: colors.accent,
+                      backgroundColor: colors.surfaceSelected,
+                    }
+                  : undefined
+              }
             />
           );
         },

@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   discoveryCardMetadata,
+  mapBeaconTitle,
   discoveryContextLabel,
   shouldUseAdaptiveDiscoveryShell,
 } from "../src/features/discovery/discoveryCardPresentation";
@@ -104,5 +105,24 @@ test("friend-host context stays when the visible social metadata is about attend
       friendsLabel: "2 friends attending",
     }),
     null,
+  );
+});
+
+test("Map titles separate known Plan prefixes only with an authorized link", () => {
+  assert.deepEqual(mapBeaconTitle("Plan stop 1: Coffee together", true, 0), {
+    title: "Coffee together",
+    context: "Plan stop 1",
+  });
+  assert.deepEqual(mapBeaconTitle("Coffee together", true, 2), {
+    title: "Coffee together",
+    context: "Plan stop 3",
+  });
+  assert.deepEqual(mapBeaconTitle("Plan stop 1: Coffee together", false, 0), {
+    title: "Plan stop 1: Coffee together",
+    context: null,
+  });
+  assert.equal(
+    mapBeaconTitle("Planning our next adventure", true).title,
+    "Planning our next adventure",
   );
 });

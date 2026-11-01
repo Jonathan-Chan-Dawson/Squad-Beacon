@@ -1,5 +1,6 @@
+import { ThemedSwitch } from "@/src/shared/ThemedSwitch";
 import React, { useState } from "react";
-import { Pressable, Switch, Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import {
   ArrowUpRight,
   Check,
@@ -103,7 +104,7 @@ export function PlanningToggle({
   onChange: (value: boolean) => void;
   disabled?: boolean;
 }) {
-  const { styles, colors } = useTheme();
+  const { styles } = useTheme();
   return (
     <View
       style={{
@@ -119,13 +120,12 @@ export function PlanningToggle({
         </Text>
         {description && <Text style={styles.muted}>{description}</Text>}
       </View>
-      <Switch
+      <ThemedSwitch
         accessibilityLabel={title}
         hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
         value={value}
         onValueChange={onChange}
         disabled={disabled}
-        trackColor={{ true: colors.green, false: colors.line }}
       />
     </View>
   );

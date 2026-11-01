@@ -44,3 +44,9 @@ Tests should exercise product flows through public routes/actions and preserve e
 - guestSharing.test.ts, guestFoundation.database.test.ts, guestPlanning.database.test.ts and guestDatabase.ts: isolated guest server/security and complete ordered-history canonical RSVP/planning/Plan/Status/claiming integration. browser/guestInvitations.spec.ts, guestCanonical.spec.ts and guestPlanning.spec.ts cover browser-to-handler-to-database journeys. External Auth/email is substituted locally; hosted/native acceptance remains separate. Use playwright.guest.config.ts or test:guest scripts.
 
 - refinementSelection.test.ts, refinementTiming.test.ts, creationPublicListing.test.ts and browser/refinement.spec.ts: full filtered selection limits, timezone/DST, frozen public-listing continuation, quiet Map, direct Inbox, staged composer/timing, category shortcuts and responsive screenshots.
+
+- browser/activityConsistency.spec.ts: shared main-page widths and alignment at mobile/desktop sizes in both appearances, actual 75% Chrome page zoom, keyboard workspace tabs, bounded conversations and live personal-card RSVP confirmation/cancellation.
+
+- browser/unifiedTabs.spec.ts: keyboard tab selection, retained chat search, filter selection and responsive navigation screenshots.
+
+- beaconCardShortcuts.test.ts and browser/beaconShortcuts.spec.ts: viewer/module/location permissions, direct card actions, public privacy, map return and compact phone/desktop layouts.

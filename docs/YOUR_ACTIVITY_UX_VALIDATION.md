@@ -1,5 +1,7 @@
 # Your Activity UX — intermediate pass before Phase 4C
 
+Historical screenshots referenced by this report were removed during repository cleanup.
+
 Implemented October 27, 2026. This pass owns personal Your Activity and local Plan/Calendar interactions. The Beacons bottom tab remains the social homepage. Phase 4C owns the subsequent app-wide navigation audit.
 
 ## Retained behavior
@@ -33,12 +35,12 @@ Authorized history/search/pagination/memories, Beacon RSVP and host distinctions
 
 ## Screenshots
 
-- [Beacons, dark at 390px](screenshots/your-activity/dark-390-beacons.png)
-- [All Plans, light at 390px](screenshots/your-activity/light-plans-all.png)
-- [Calendar Month, light](screenshots/your-activity/light-calendar-month.png) and [Week, dark at 320px](screenshots/your-activity/dark-320-calendar.png)
-- [Plan workspace](screenshots/your-activity/plan-workspace-with-idea.png)
-- [Expanded Calendar itinerary](screenshots/your-activity/calendar-itinerary.png)
-- [Stop menu](screenshots/your-activity/plan-stop-menu.png) and [Schedule menu](screenshots/your-activity/calendar-schedule-menu.png)
+- Beacons, dark at 390px
+- All Plans, light at 390px
+- Calendar Month, light and Week, dark at 320px
+- Plan workspace
+- Expanded Calendar itinerary
+- Stop menu and Schedule menu
 
 The screenshot set also includes all three subtabs at 320/375/390/430px in both themes.
 
@@ -63,7 +65,7 @@ The screenshot set also includes all three subtabs at 320/375/390/430px in both 
 
 ## Validation
 
-Screenshots live in `docs/screenshots/your-activity/`. Final acceptance results are listed below.
+The historical screenshots were removed during repository cleanup. Final acceptance results are listed below.
 
 - `npm run typecheck`: passed.
 - `npm run lint`: passed; final changed-component lint also passed.

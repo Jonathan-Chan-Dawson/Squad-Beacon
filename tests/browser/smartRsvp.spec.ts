@@ -4,6 +4,31 @@ async function home(page: Page) {
   await page.getByRole("button", { name: /Explore the demo/ }).click();
   await page.getByRole("tab", { name: "Beacons", exact: true }).click();
   await expect(page.getByTestId("friends-right-now")).toBeAttached();
+  // Home now intentionally shows only two live previews. Keep this RSVP fixture
+  // in that preview without depending on demo discovery ranking or the clock.
+  await page.getByTestId("friends-right-now").evaluate(async (node) => {
+    let fiber = (node as any)[
+      Object.keys(node).find((key) => key.startsWith("__reactFiber"))!
+    ];
+    while (fiber && !fiber.memoizedProps?.value?.data?.is_demo)
+      fiber = fiber.return;
+    const store = fiber.memoizedProps.value;
+    const now = Date.now();
+    for (const activity of store.data.activities) {
+      if (activity.id === "a1") {
+        activity.starts_at = new Date(now - 60000).toISOString();
+        activity.ends_at = new Date(now + 3600000).toISOString();
+      } else if (
+        Date.parse(activity.starts_at) <= now &&
+        Date.parse(activity.ends_at) > now
+      ) {
+        activity.starts_at = new Date(now + 2 * 86400000).toISOString();
+        activity.ends_at = new Date(now + 2 * 86400000 + 3600000).toISOString();
+      }
+    }
+    await store.act("read_notices");
+  });
+  await expect(page.getByTestId("beacon-feed-card-a1")).toBeVisible();
 }
 // Test-only in-memory fixture: preserve real demo activity/people records and
 // seed an invitation that the fixed demo actor cannot receive through its UI.
@@ -74,10 +99,10 @@ for (const width of [320, 375, 430, 1024]) {
     ).toBeVisible();
     await expect(
       card.getByRole("button", { name: "I’m Out", exact: true }),
-    ).toBeVisible();
+    ).toHaveCount(0);
     await expect(
       card.getByRole("button", { name: "Maybe", exact: true }),
-    ).toBeVisible();
+    ).toHaveCount(0);
     await card.scrollIntoViewIfNeeded();
     const live = await card.getByText("Live", { exact: true }).boundingBox();
     const title = await card.getByRole("heading").boundingBox();
@@ -95,7 +120,13 @@ for (const width of [320, 375, 430, 1024]) {
     expect(moreBounds!.height).toBeGreaterThanOrEqual(44);
     expect(moreBounds!.y + moreBounds!.height).toBeLessThanOrEqual(title!.y);
     await card.screenshot({ path: `.expo/smart-rsvp/invited-${width}.png` });
-    await card.getByRole("button", { name: "I’m Out", exact: true }).click();
+    await card
+      .getByRole("button", { name: "More Beacon actions", exact: true })
+      .click();
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "Can’t Go", exact: true })
+      .click();
     await expect(
       card.getByRole("button", { name: "Can’t Go ✓", exact: true }),
     ).toBeVisible();
@@ -121,12 +152,14 @@ for (const width of [320, 375, 430, 1024]) {
     await card.screenshot({ path: `.expo/smart-rsvp/going-${width}.png` });
     await expect(card.getByTestId("beacon-comment-face-a1")).toHaveCSS(
       "border-top-width",
-      "1px",
+      "0px",
     );
-    await expect(card.getByTestId("beacon-open-a1-face")).toHaveCSS(
-      "border-top-width",
-      "1px",
-    );
+    await expect(
+      card.getByRole("button", {
+        name: "View A few rounds. Good company. details",
+        exact: true,
+      }),
+    ).toBeVisible();
     await card.getByRole("button", { name: "Going ✓", exact: true }).click();
     await choices
       .getByRole("button", { name: "Leave Beacon", exact: true })
@@ -175,7 +208,10 @@ test("ordinary discovery uses Join, Going and explicit Leave consistently in Ove
     card.getByRole("button", { name: "Going ✓", exact: true }),
   ).toBeVisible();
   await card
-    .getByRole("button", { name: "Open Beacon overview", exact: true })
+    .getByRole("button", {
+      name: "View A few rounds. Good company. details",
+      exact: true,
+    })
     .click();
   await expect(
     page.getByRole("button", { name: "Going ✓", exact: true }),
@@ -203,9 +239,6 @@ test("declined invitations leave unanswered responses and remain editable", asyn
   await home(page);
   await inviteDemoActor(page);
   await page.getByRole("button", { name: /^Notifications/ }).click();
-  await page
-    .getByRole("button", { name: "Responses & Invitations", exact: true })
-    .click();
   await page
     .getByRole("button", { name: "Open Beacon invitation", exact: true })
     .click();

@@ -1,5 +1,7 @@
 # SB Onboarding 2 — Phase 4B
 
+Historical screenshots referenced by this report were removed during repository cleanup.
+
 ## Behavior
 
 Before: a required profile with a pending survey was blocked by both root navigation and Phase 4A progress readiness. Invitations asked users to reopen the link after setup; verification and password recovery shared one ambiguous callback screen.
@@ -72,15 +74,15 @@ The earlier Phase 4A first-success journey was updated to dismiss the concurrent
 
 | Screen             | Light, 320px                                                                  | Dark, 390px                                                                  |
 | ------------------ | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| Sign in            | [Preview](screenshots/onboarding2/onboarding2-signin-light-320.png)           | [Preview](screenshots/onboarding2/onboarding2-signin-dark-390.png)           |
-| Create account     | [Preview](screenshots/onboarding2/onboarding2-signup-light-320.png)           | [Preview](screenshots/onboarding2/onboarding2-signup-dark-390.png)           |
-| Required profile   | [Preview](screenshots/onboarding2/onboarding2-required-profile-light-320.png) | [Preview](screenshots/onboarding2/onboarding2-required-profile-dark-390.png) |
-| First normal entry | [Preview](screenshots/onboarding2/onboarding2-first-entry-light-320.png)      | [Preview](screenshots/onboarding2/onboarding2-first-entry-dark-390.png)      |
-| Profile entry      | [Preview](screenshots/onboarding2/onboarding2-profile-entry-light-320.png)    | [Preview](screenshots/onboarding2/onboarding2-profile-entry-dark-390.png)    |
-| About you          | [Preview](screenshots/onboarding2/onboarding2-about-you-light-320.png)        | [Preview](screenshots/onboarding2/onboarding2-about-you-dark-390.png)        |
-| Interests          | [Preview](screenshots/onboarding2/onboarding2-interests-light-320.png)        | [Preview](screenshots/onboarding2/onboarding2-interests-dark-390.png)        |
-| Aspirations        | [Preview](screenshots/onboarding2/onboarding2-aspirations-light-320.png)      | [Preview](screenshots/onboarding2/onboarding2-aspirations-dark-390.png)      |
-| Completion         | [Preview](screenshots/onboarding2/onboarding2-completed-light-320.png)        | [Preview](screenshots/onboarding2/onboarding2-completed-dark-390.png)        |
+| Sign in            | Removed           | Removed           |
+| Create account     | Removed           | Removed           |
+| Required profile   | Removed | Removed |
+| First normal entry | Removed      | Removed      |
+| Profile entry      | Removed    | Removed    |
+| About you          | Removed        | Removed        |
+| Interests          | Removed        | Removed        |
+| Aspirations        | Removed      | Removed      |
+| Completion         | Removed        | Removed        |
 
 ## Phase 4C follow-up
 

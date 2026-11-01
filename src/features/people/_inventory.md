@@ -33,3 +33,7 @@ People feature
 - components/FriendFilterSelector.tsx and friendGroupFilters.ts: SocialSelector's filterFriends mode for invitations and Sonar; authorized group/list browsing narrows context-eligible accepted friends without selecting group audiences. Private List management stays inline.
 
 - ResponsesScreen owns Needs Action and ordinary notice Updates. Bell/Chats enter /responses directly; unread notice counts remain separate from action counts. FriendFilterSelector compact filters preserve complete eligible bulk sets and reject unions above the caller limit.
+
+- MessagingHubScreen bounds its Chats/Communities header and virtualized content to the shared Profile content-width token; scrolling and retained section state remain in CommunicationHub.
+
+- Chats/Communities and Friends category navigation share underlined tabs; Chats and Friends availability filters share compact chips.

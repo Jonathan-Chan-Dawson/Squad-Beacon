@@ -14,6 +14,7 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
+import { X } from "lucide-react-native";
 import { DialogPortal } from "./DialogPortal";
 import { useOverlayKeyboardFocus } from "./overlayFocus";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -141,6 +142,7 @@ export function ContextMenu({
   onDismiss,
   anchorRef,
   mode = "context",
+  anchoredOnly = false,
   children,
 }: {
   title: string;
@@ -149,6 +151,8 @@ export function ContextMenu({
   onDismiss?: () => void;
   anchorRef: React.RefObject<View | null>;
   mode?: "context" | "dropdown";
+  /** Keep compact tool menus as popovers even when their anchor disappears. */
+  anchoredOnly?: boolean;
   children: React.ReactNode;
 }) {
   const { width, height } = useWindowDimensions();
@@ -175,13 +179,19 @@ export function ContextMenu({
     callbacks.current = { onClose, onDismiss };
   }, [onClose, onDismiss]);
   const phoneSheet = mode === "context" && width < 768;
-  const sheet = phoneSheet || fallback;
+  const sheet = !anchoredOnly && (phoneSheet || fallback);
   const anchored = !sheet;
   const menuWidth = Math.min(
     mode === "dropdown" ? 280 : 340,
     width - insets.left - insets.right - 24,
   );
-  const maxHeight = Math.max(80, height - insets.top - insets.bottom - 24);
+  const maxHeight = Math.max(
+    80,
+    Math.min(
+      anchoredOnly ? 380 : Infinity,
+      height - insets.top - insets.bottom - 24,
+    ),
+  );
   const left = Math.max(
     insets.left + 12,
     Math.min(
@@ -203,8 +213,13 @@ export function ContextMenu({
   const topOverlay = useTopOverlay(id);
   useLayoutEffect(() => {
     if (!visible || phoneSheet) return;
+    const unavailableAnchor = () => {
+      if (anchoredOnly) {
+        setAnchor({ x: width / 2, y: height / 2, width: 0, height: 0 });
+      } else setFallback(true);
+    };
     if (!anchorRef.current) {
-      setFallback(true);
+      unavailableAnchor();
       return;
     }
     anchorRef.current.measureInWindow((x, y, w, h) => {
@@ -216,12 +231,12 @@ export function ContextMenu({
         x + w < 0 ||
         x > width
       ) {
-        setFallback(true);
+        unavailableAnchor();
         return;
       }
       setAnchor({ x, y, width: w, height: h });
     });
-  }, [visible, phoneSheet, anchorRef, width, height]);
+  }, [visible, phoneSheet, anchorRef, width, height, anchoredOnly]);
   const finishDismiss = useCallback(() => {
     if (!lifecycle.current.open) return;
     lifecycle.current.open = false;
@@ -398,18 +413,36 @@ export function ContextMenu({
             padding: 6,
           }}
         >
-          <Text
-            accessibilityRole="header"
-            numberOfLines={2}
-            style={{
-              color: colors.textSecondary,
-              fontSize: 12,
-              lineHeight: 18,
-              padding: 10,
-            }}
-          >
-            {title}
-          </Text>
+          <View style={{ flexDirection: "row", alignItems: "center" }}>
+            <Text
+              accessibilityRole="header"
+              numberOfLines={2}
+              style={{
+                flex: 1,
+                color: colors.textSecondary,
+                fontSize: 12,
+                lineHeight: 18,
+                padding: 10,
+              }}
+            >
+              {title}
+            </Text>
+            {anchoredOnly ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Close ${title}`}
+                onPress={onClose}
+                style={{
+                  width: 44,
+                  height: 44,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <X size={18} color={colors.textSecondary} />
+              </Pressable>
+            ) : null}
+          </View>
           <ScrollView
             keyboardShouldPersistTaps="handled"
             style={{ flexShrink: 1 }}

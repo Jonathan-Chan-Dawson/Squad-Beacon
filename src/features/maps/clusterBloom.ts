@@ -247,5 +247,7 @@ export function bloomGeometry(item: NativeMapPresentation) {
 export function bloomAccessibilityLabel(item: NativeMapPresentation) {
   const beacons = item.beacons.length,
     people = item.people.length;
-  return `Map cluster: ${beacons} beacons, ${people} people. ${people ? "Nearby shared friend locations; proximity does not indicate Beacon attendance. " : ""}${beacons > 5 || (!beacons && people >= 5) ? "Open searchable cluster explorer" : "Choose from nearby items"}`;
+  if (new Set(item.group.members.map(member => member.id)).size <= 1)
+    return beacons ? "Map Beacon. Open Beacon preview" : "Map person. Open person preview";
+  return `Map cluster: ${beacons} beacons, ${people} people. ${people ? "Nearby shared friend locations; proximity does not indicate Beacon attendance. " : ""}${beacons + people > 5 ? "Open searchable cluster explorer" : "Open nearby cluster explorer"}`;
 }

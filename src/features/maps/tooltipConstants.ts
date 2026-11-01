@@ -2,8 +2,8 @@
 export const mapTooltip = {
   width: 292,
   maxHeight: 336,
-  padding: 11,
-  gap: 6,
+  padding: 10,
+  gap: 2,
   radius: 18,
   titleSize: 16,
   detailSize: 12,

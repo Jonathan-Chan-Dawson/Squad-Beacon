@@ -5,7 +5,7 @@ Beacons feature
 - activityHistory.ts: typed, bounded activity history query/page summaries, privacy-aware demo selector and strict RPC page parser; shared store loader uses session epoch checks.
 - screens/CalendarScreen.tsx, calendarSelectors.ts: personal month/week agendas, existing weekly progress, authorized Plan schedules and date-only authoritative next Routine previews. Date/timezone handoffs reuse existing creation and Plan/Routine routes; no recurrence materialization.
 - hubSelectors.ts, activityToolEntry.ts: permission-gated confirmed activity, checklist totals and sanitized exact module links.
-- components/feed/HubFriends.tsx, SharedStatusControl.tsx, StatusPanel.tsx, statusActions.ts: compact independent friend targets/raised-hands reactions and the shared Beacons/Profile quick status editor, with existing services and visible partial cleanup. Legacy advanced status creation remains in CreateScreen.
+- components/feed/SharedStatusControl.tsx, StatusPanel.tsx, statusActions.ts: shared Beacons/Profile quick status editor, with existing services and visible partial cleanup. Legacy advanced status creation remains in CreateScreen.
 - createHandoff.ts: validated invitee/context/status-text handoff and serialized post-creation invitation retries; a partial invitation failure never recreates the Beacon.
 - screens/CreateScreen.tsx: creation launcher/editor, parameter-driven resets, drafts, validation, persistence and placement.
 - screens/ActivityDetailScreen.tsx: Beacon detail workspace, navigation, RSVP actions and permission-gated tools.
@@ -30,7 +30,6 @@ Beacons feature
 - creationDraftStorage.ts, draftSnapshot.ts: versioned account-owned local draft snapshots, size-safe native storage chunks, serialized commits, validation, and frozen canonical publication recovery. Publication is blocked when its initial checkpoint fails.
 - components/CreationControls.tsx, creationModules.ts: compact disclosure rows, real module switches/configuration, and explicit recommendations; People & Access separates visibility, eligible invitations, delivery effects, approval, capacity, and post-publication role management.
 - components/BeaconIdentity.tsx: read-only shared identity for published ActivityCard and creation review; draft review never fabricates published/RSVP state.
-- components/CreationDateField.tsx and .native.tsx: native date/time controls and timezone-aware browser date input, retaining calendar handoffs.
 
 - creationValidation.ts: supported HTTPS meeting-link validation for publication; unfinished templates remain exempt.
 
@@ -43,3 +42,5 @@ Beacons feature
 - Focused mobile polish: CreationPeople uses mutually exclusive inline visibility/community/joining panels; CreationInvitees hosts the existing SocialSelector in a full-screen modal with local gesture/sheet support. Saved draft pill styling is compact without changing storage or recovery.
 
 - components/ActivityCategoryChoices.tsx, components/BeaconTimingEditor.tsx and creationPublicListing.ts: compact category grid and optional activity ideas; staged creation/manage timing; recoverable opt-in public discovery after authoritative publication.
+
+- beaconCardShortcuts.ts and components/BeaconCardShortcuts.tsx: viewer-checked reactions/comments, one Chat/host-message or Memories shortcut, counted Tools and authorized Map actions in More across readable cards; public projections remain separate.

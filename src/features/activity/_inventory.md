@@ -7,3 +7,5 @@ Your Activity workspace
 Route compatibility and Phase 4C handoff: docs/YOUR_ACTIVITY_UX_VALIDATION.md.
 
 - ActivityActionBar.tsx: standard app-sized icon/label buttons that wrap naturally; no global button changes.
+
+- Main workspace headers, embedded Beacon actions and list frames share Profile's content-width token. Workspace tabs use shared underlined primary tabs; ActivityActionBar uses compact 44px-minimum controls.

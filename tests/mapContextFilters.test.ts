@@ -280,6 +280,21 @@ test("callouts reserve the control rail only where they overlap it", () => {
   assert.equal(away.width, mapTooltip.width);
 });
 
+test("short-screen previews use viewport space instead of clipping their actions", () => {
+  const layout = mapCalloutLayout(
+    { x: 46, y: 360 },
+    { width: 320, height: 520, top: 164, bottom: 24 },
+    244,
+    undefined,
+    16,
+    mapTooltip.width,
+  );
+  assert.ok(layout.maxHeight >= 244);
+  assert.ok(layout.top >= 164);
+  assert.ok(layout.top + 244 <= 496);
+  assert.equal(layout.attached, false);
+});
+
 test("Plan fits handle single, coincident and widely separated physical stops", () => {
   assert.equal(mapContextCameraKind([{latitude: 10, longitude: 20}]), "focus");
   assert.equal(mapContextCameraKind([{latitude: 10, longitude: 20}, {latitude: 10.00001, longitude: 20.00001}]), "focus");

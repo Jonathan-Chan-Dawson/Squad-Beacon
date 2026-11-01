@@ -37,3 +37,9 @@ Documentation guide
 
 - PHASE_4R_VALIDATION.md: dated interface/integration evidence and native/hosted limits. PHASE_4R_CATEGORY_FOLLOWUP.md: lightweight category mappings and a simpler future chooser/data-contract proposal.
 - THEME_REFINEMENT_2026-10-30.md: dated Beacons alignment and seven-family color refinement, design references, contrast/browser evidence and before/after screenshots.
+
+- ACTIVITY_UI_CONSISTENCY_2026-10-30.md: dated shared page-width, compact workspace/card/control changes, responsive browser screenshots and verification boundaries.
+
+- UNIFIED_TAB_NAVIGATION_2026-10-31.md: shared primary tabs, secondary chips, responsive screenshots and verification evidence.
+
+- FINAL_BEACON_CARD_REFINEMENT_2026-10-31.md: shared primary/shortcut/Tools hierarchy, compact Map context and social rows, screenshots and verification boundaries.

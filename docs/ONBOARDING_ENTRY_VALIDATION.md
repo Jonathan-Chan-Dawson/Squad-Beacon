@@ -1,5 +1,7 @@
 # Phase 4A — Onboarding and entry polish
 
+Historical screenshots referenced by this report were removed during repository cleanup.
+
 Validation checkpoint: October 26, 2026. This report describes this phase, not hosted deployment status.
 
 ## What changed
@@ -50,14 +52,14 @@ Before screenshots came from the existing pre-change web export, using an interc
 
 | Experience                 | Before                                                | After                                                                     |
 | -------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------- |
-| Empty Home, 390px dark     | [Before](screenshots/onboarding/before-home.png)      | [First entry](screenshots/onboarding/after-home-dark-390.png)             |
-| Returning Home, 390px dark | Same repeated sections above                          | [Compact invitation](screenshots/onboarding/after-returning-dark-390.png) |
-| Narrow Home, 320px light   | —                                                     | [First entry](screenshots/onboarding/after-home-light-320.png)            |
-| Empty Browse               | [Before](screenshots/onboarding/before-discovery.png) | [After](screenshots/onboarding/after-discovery.png)                       |
+| Empty Home, 390px dark     | Before      | First entry             |
+| Returning Home, 390px dark | Same repeated sections above                          | Compact invitation |
+| Narrow Home, 320px light   | —                                                     | First entry            |
+| Empty Browse               | Before | After                       |
 
 The screenshot review checked hierarchy, spacing, icon consistency, CTA prominence, readability, density, above-the-fold usefulness, both appearances and narrow composition. The returning card was reduced after review; the introduction's extra quip was removed to keep the primary action visible. Additional generated evidence lives under `test-results/onboarding-*.png`.
 
-Additional reviewed examples: [enlarged text and reduced motion](screenshots/onboarding/large-text-reduced-motion.png), [long copy](screenshots/onboarding/long-copy.png), and [simulated request failure](screenshots/onboarding/discovery-error.png). At enlarged text sizes the secondary actions wrap and the existing page remains scrollable.
+Additional reviewed examples: enlarged text and reduced motion, long copy, and simulated request failure. At enlarged text sizes the secondary actions wrap and the existing page remains scrollable.
 
 For reproduction, use the commands in README.md. The static development export's browser harness keeps Expo hot-reload sockets connected without updates; normal Expo development uses its real Metro server. Production builds compile out the lab dependency/control markers.
 

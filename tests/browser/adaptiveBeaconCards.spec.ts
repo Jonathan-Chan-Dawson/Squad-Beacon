@@ -12,7 +12,9 @@ async function openBrowse(page: Page, appearance: "Light" | "Dark") {
   await page.getByRole("button", { name: /Explore the demo/ }).click();
   await setAppearance(page, appearance);
   await page.getByRole("tab", { name: "Beacons", exact: true }).last().click();
-  await page.getByRole("button", { name: "Explore all →", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Explore all →", exact: true })
+    .click();
   await expect(page.getByTestId("browse-beacons-screen")).toBeVisible();
 }
 
@@ -38,10 +40,12 @@ test("Browse public card opens a scoped safe preview without joining", async ({
   await expect(card.getByTestId("discovery-going-count")).toContainText(
     /\bspots? left\b/i,
   );
-  await expect(card.getByRole("button", { name: /View attendees/ })).toHaveCount(
-    0,
-  );
-  await card.screenshot({ path: "test-results/adaptive-browse-public-card-320-light.png" });
+  await expect(
+    card.getByRole("button", { name: /View attendees/ }),
+  ).toHaveCount(0);
+  await card.screenshot({
+    path: "test-results/adaptive-browse-public-card-320-light.png",
+  });
 
   await card
     .getByRole("button", {
@@ -56,7 +60,9 @@ test("Browse public card opens a scoped safe preview without joining", async ({
   await expect(preview).not.toContainText("Hosted by");
   await expect(preview).not.toContainText("Plan stop");
   await expect(page).toHaveURL(/\/browse-beacons/);
-  await dialog.screenshot({ path: "test-results/adaptive-browse-public-preview-320-light.png" });
+  await dialog.screenshot({
+    path: "test-results/adaptive-browse-public-preview-320-light.png",
+  });
   await dialog.getByRole("button", { name: "Close", exact: true }).click();
   await expect(card).toBeVisible();
 });
@@ -88,12 +94,16 @@ test("Browse attendee preview opens authorized People tab and restores Browse", 
   await expect(page).toHaveURL(/\/browse-beacons/);
 });
 
-test("Browse readable card links only its authorized Plan", async ({ page }) => {
+test("Browse readable card links only its authorized Plan", async ({
+  page,
+}) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.emulateMedia({ colorScheme: "dark" });
   await openBrowse(page, "Dark");
 
-  await page.getByTestId("browse-beacons-search").fill("Plan stop 1: Coffee together");
+  await page
+    .getByTestId("browse-beacons-search")
+    .fill("Plan stop 1: Coffee together");
   const card = page.getByTestId("discovery-beacon-card-map-plan-coffee");
   await expect(card).toContainText("Plan stop 1: Coffee together");
   await expect(card.getByTestId("discovery-hosting-status")).toContainText(
@@ -157,11 +167,13 @@ test("Map readable card keeps the selected marker and camera when details open",
     preview.getByRole("button", { name: "Close map preview", exact: true }),
   ).toBeVisible();
   await expect(page.getByTestId("map-control-rail")).toHaveCount(0);
-  await preview.screenshot({ path: "test-results/adaptive-map-readable-card-390-light.png" });
+  await preview.screenshot({
+    path: "test-results/adaptive-map-readable-card-390-light.png",
+  });
   const camera = await page.locator(".leaflet-map-pane").getAttribute("style");
   await preview
     .getByRole("button", {
-      name: "See overview",
+      name: "Open Pickup basketball details",
       exact: true,
     })
     .click();
@@ -201,7 +213,7 @@ test("Map attendee preview opens authorized People tab and restores selection", 
     .click();
 
   const preview = page.getByTestId("map-tooltip-card");
-  await expect(preview).toContainText("Plan stop 1: Coffee together");
+  await expect(preview).toContainText("Coffee together");
   const attendees = preview.getByRole("button", { name: /View attendees/ });
   await expect(attendees).toBeVisible();
   const camera = await page.locator(".leaflet-map-pane").getAttribute("style");
@@ -218,7 +230,7 @@ test("Map attendee preview opens authorized People tab and restores selection", 
   ).toBeVisible();
 
   await page.getByRole("button", { name: "Back", exact: true }).click();
-  await expect(preview).toContainText("Plan stop 1: Coffee together");
+  await expect(preview).toContainText("Coffee together");
   await expect(page.locator(".leaflet-map-pane")).toHaveAttribute(
     "style",
     camera!,
@@ -249,9 +261,9 @@ test("Map basic readable card shows neither Plan nor community context", async (
   const preview = page.getByTestId("map-tooltip-card");
   await expect(preview).toContainText("Lakeside lunchtime yoga");
   await expect(preview.getByTestId("beacon-community-row")).toHaveCount(0);
-  await expect(
-    preview.getByRole("button", { name: /Open Plan/ }),
-  ).toHaveCount(0);
+  await expect(preview.getByRole("button", { name: /Open Plan/ })).toHaveCount(
+    0,
+  );
   await preview.screenshot({
     path: "test-results/adaptive-map-basic-no-plan-community-390-light.png",
   });

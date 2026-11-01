@@ -54,11 +54,11 @@ export function PlanChoice({
       >
         <Icon size={18} color={c.accent} />
       </View>
-      <View style={{ flex: 1, gap: 3 }}>
+      <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
         <Text
           style={{
             color: c.textPrimary,
-            ...tokens.type.secondary,
+            ...tokens.type.body,
             fontWeight: "600",
           }}
         >

@@ -25,7 +25,6 @@ test("empty is not new: reliable first-entry evidence and loaded progress are re
   const present = (
     keys: OnboardingKey[],
     status: "ready" | "loading" | "error" = "ready",
-    firstSession = false,
   ) =>
     homePresentation(
       data,
@@ -35,18 +34,15 @@ test("empty is not new: reliable first-entry evidence and loaded progress are re
       status,
       false,
       null,
-      firstSession,
     ).kind;
   assert.equal(present([]), "compact");
   assert.equal(present(["entry.eligible.v1"], "loading"), "compact");
   assert.equal(present(["entry.eligible.v1"], "error"), "compact");
-  assert.equal(present(["entry.eligible.v1"]), "compact");
-  assert.equal(present(["entry.eligible.v1"], "ready", true), "welcome");
+  assert.equal(present(["entry.eligible.v1"]), "welcome");
   assert.equal(
-    present(["entry.eligible.v1", "welcome.seen.v1"], "ready", true),
+    present(["entry.eligible.v1", "welcome.seen.v1"], "ready"),
     "welcome",
   );
-  assert.equal(present(["entry.eligible.v1", "welcome.seen.v1"]), "compact");
   assert.equal(
     present(["entry.eligible.v1", "welcome.dismissed.v1"]),
     "compact",
@@ -106,7 +102,7 @@ test("all ten scenarios have valid profiles and no orphaned fixture relationship
       assert.ok(data.planning_threads.some((t) => t.id === p.thread_id));
   }
 });
-test("pending requests remain prominent; friends and populated accounts suppress introduction", () => {
+test("pending requests remain prominent while an undismissed welcome stays available", () => {
   for (const name of [
     "friends",
     "responses",
@@ -123,7 +119,7 @@ test("pending requests remain prominent; friends and populated accounts suppress
       false,
       null,
     );
-    assert.notEqual(home.kind, "welcome");
+    assert.equal(home.kind, "welcome");
     if (name === "invitation" || name === "responses")
       assert.ok(home.pending > 0, name);
   }

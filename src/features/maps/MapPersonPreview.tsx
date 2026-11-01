@@ -21,6 +21,7 @@ import { ActivityBadge } from "@/src/features/beacons/ActivityBadge";
 import { beaconPreviewWhen } from "./discoveryRanking";
 import {
   MapTooltipShell,
+  MapTooltipHeader,
   MapTooltipClose,
   MapTooltipButton,
 } from "./MapTooltipShell";
@@ -41,7 +42,7 @@ export function MapPersonPreview({
   const now = useNow();
   const selection = selectPersonPreview(data, personId, userId, now);
   // Solo statuses use the existing activity storage, but are not linked Beacon cards.
-  const current=currentActivity(data,personId,userId,now);
+  const current = currentActivity(data, personId, userId, now);
   const legacyLinkedBeacon = selectPersonPreview(
     {
       ...data,
@@ -53,11 +54,18 @@ export function MapPersonPreview({
     userId,
     now,
   ).beacon;
-  const linkedBeacon=(data.is_demo||data.capabilities?.living_activity)?(current?.type==="beacon"?current.activity:undefined):legacyLinkedBeacon;
-  const solo = current?.type==="activity_note"?current.activity:
-    linkedBeacon && Date.parse(linkedBeacon.starts_at) <= now
-      ? undefined
-      : visibleSoloActivity(data, personId, userId, now);
+  const linkedBeacon =
+    data.is_demo || data.capabilities?.living_activity
+      ? current?.type === "beacon"
+        ? current.activity
+        : undefined
+      : legacyLinkedBeacon;
+  const solo =
+    current?.type === "activity_note"
+      ? current.activity
+      : linkedBeacon && Date.parse(linkedBeacon.starts_at) <= now
+        ? undefined
+        : visibleSoloActivity(data, personId, userId, now);
   if (!selection.canViewFullProfile || !selection.profile || !userId)
     return null;
   const profile = selection.profile;
@@ -101,75 +109,82 @@ export function MapPersonPreview({
     : null;
   return (
     <MapTooltipShell testID="map-person-preview">
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-        <View
-          style={{
-            padding: 2,
-            borderRadius: 24,
-            borderWidth: 1,
-            borderColor:
-              selection.availability === "unknown"
-                ? colors.line
-                : availabilityToken.color,
-          }}
-        >
-          <ProfileAvatar profile={profile} size={mapTooltip.avatarSize} />
+      <MapTooltipHeader
+        controls={
+          <MapTooltipClose label="Close person preview" onClose={onClose} />
+        }
+      >
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
           <View
-            testID={
-              selection.availability !== "unknown"
-                ? `avatar-status-${selection.availability}`
-                : undefined
-            }
-            pointerEvents="none"
             style={{
-              position: "absolute",
-              right: -2,
-              bottom: -2,
-              borderRadius: 8,
-              backgroundColor: colors.white,
+              padding: 2,
+              borderRadius: 24,
+              borderWidth: 1,
+              borderColor:
+                selection.availability === "unknown"
+                  ? colors.line
+                  : availabilityToken.color,
             }}
           >
-            <StatusIcon size={13} color={availabilityToken.color} />
-          </View>
-        </View>
-        <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
-          <Text
-            accessibilityRole="header"
-            numberOfLines={solo ? 2 : 1}
-            style={[
-              styles.h2,
-              { fontSize: mapTooltip.titleSize, textAlign: "left" },
-            ]}
-          >
-            {profile.name}
-            {solo ? " · Solo Activity" : ""}
-          </Text>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 5 }}>
-            <Text
-              numberOfLines={1}
-              style={[styles.muted, { flexShrink: 1, fontSize: 12 }]}
+            <ProfileAvatar profile={profile} size={mapTooltip.avatarSize} />
+            <View
+              testID={
+                selection.availability !== "unknown"
+                  ? `avatar-status-${selection.availability}`
+                  : undefined
+              }
+              pointerEvents="none"
+              style={{
+                position: "absolute",
+                right: -2,
+                bottom: -2,
+                borderRadius: 8,
+                backgroundColor: colors.white,
+              }}
             >
-              @{profile.username}
+              <StatusIcon size={13} color={availabilityToken.color} />
+            </View>
+          </View>
+          <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
+            <Text
+              accessibilityRole="header"
+              numberOfLines={solo ? 2 : 1}
+              style={[
+                styles.h2,
+                { fontSize: mapTooltip.titleSize, textAlign: "left" },
+              ]}
+            >
+              {profile.name}
+              {solo ? " · Solo Activity" : ""}
             </Text>
-            {selection.canMessage && (
+            <View
+              style={{ flexDirection: "row", alignItems: "center", gap: 5 }}
+            >
               <Text
-                style={[
-                  styles.label,
-                  {
-                    fontSize: 10,
-                    borderRadius: 7,
-                    paddingHorizontal: 5,
-                    backgroundColor: colors.line,
-                  },
-                ]}
+                numberOfLines={1}
+                style={[styles.muted, { flexShrink: 1, fontSize: 12 }]}
               >
-                Friend
+                @{profile.username}
               </Text>
-            )}
+              {selection.canMessage && (
+                <Text
+                  style={[
+                    styles.label,
+                    {
+                      fontSize: 10,
+                      borderRadius: 7,
+                      paddingHorizontal: 5,
+                      backgroundColor: colors.line,
+                    },
+                  ]}
+                >
+                  Friend
+                </Text>
+              )}
+            </View>
           </View>
         </View>
-        <MapTooltipClose label="Close person preview" onClose={onClose} />
-      </View>
+      </MapTooltipHeader>
       <View
         style={{
           flexDirection: "row",
@@ -236,7 +251,7 @@ export function MapPersonPreview({
             </Text>
           </View>
           {!!solo.description?.trim() && (
-            <Text numberOfLines={3} style={[styles.body, { fontSize: 12 }]}>
+            <Text numberOfLines={2} style={[styles.body, { fontSize: 12 }]}>
               {solo.description}
             </Text>
           )}
@@ -249,7 +264,9 @@ export function MapPersonPreview({
               ? "just now"
               : `${Math.floor((now - Date.parse(solo.starts_at)) / 60000)}m ago`}
           </Text>
-          {solo.solo_purpose!=="activity_note"&&<StatusReactionPicker activityId={solo.id} />}
+          {solo.solo_purpose !== "activity_note" && (
+            <StatusReactionPicker activityId={solo.id} />
+          )}
         </View>
       )}
       {linkedBeacon && (

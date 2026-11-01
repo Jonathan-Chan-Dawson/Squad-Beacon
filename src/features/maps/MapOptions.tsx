@@ -1,5 +1,6 @@
+import { ThemedSwitch } from "@/src/shared/ThemedSwitch";
 import React, { useState } from "react";
-import { Platform, Pressable, Switch, Text, View } from "react-native";
+import { Platform, Pressable, Text, View } from "react-native";
 import { Button, Sheet, useTheme } from "@/src/shared/ui";
 import { ActivityBadge } from "@/src/features/beacons/ActivityBadge";
 import type { MapStyle } from "./components/BeaconMap";
@@ -110,11 +111,10 @@ export function MapOptions({
         }}
       >
         <Text style={styles.body}>{pulseCopy.liveUpdates}</Text>
-        <Switch
+        <ThemedSwitch
           accessibilityLabel={pulseCopy.liveUpdates}
           value={liveUpdates}
           onValueChange={onLiveUpdates}
-          trackColor={{ true: colors.green }}
         />
       </View>
       <View
@@ -126,11 +126,10 @@ export function MapOptions({
         }}
       >
         <Text style={styles.body}>Show Weather</Text>
-        <Switch
+        <ThemedSwitch
           accessibilityLabel="Show Weather"
           value={showWeather}
           onValueChange={onShowWeather}
-          trackColor={{ true: colors.green }}
         />
       </View>
       {friendsApplicable ? (
@@ -143,11 +142,10 @@ export function MapOptions({
           }}
         >
           <Text style={styles.body}>Show friends on map</Text>
-          <Switch
+          <ThemedSwitch
             accessibilityLabel="Show friends on map"
             value={showFriends}
             onValueChange={onShowFriends}
-            trackColor={{ true: colors.green }}
           />
         </View>
       ) : null}

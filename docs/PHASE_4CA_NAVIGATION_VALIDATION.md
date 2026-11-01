@@ -1,5 +1,7 @@
 # Phase 4C-A — navigation reliability
 
+Historical screenshots referenced by this report were removed during repository cleanup.
+
 Audit date: October 27, 2026. This is a dated implementation/validation record, not a deployment or device-acceptance claim.
 
 ## Repairs and route contracts
@@ -104,11 +106,11 @@ Both exports used Expo CLI with `--platform web --max-workers 2 --output-dir <is
 
 Reviewed all four Beacon screenshots for visible Back/Chat/menu controls, wrapping, tab selection and footer access, plus the restored Squad Ping link capture:
 
-- [Light, 320px](screenshots/phase4ca/light-320-beacon-overview.png)
-- [Dark, 320px](screenshots/phase4ca/dark-320-beacon-overview.png)
-- [Light, 390px](screenshots/phase4ca/light-390-beacon-overview.png)
-- [Dark, 390px](screenshots/phase4ca/dark-390-beacon-overview.png)
-- [Restored Squad Ping handoff](screenshots/phase4ca/squad-ping-handoff.png)
+- Light, 320px
+- Dark, 320px
+- Light, 390px
+- Dark, 390px
+- Restored Squad Ping handoff
 
 The 320px cases use reduced motion; 390px cases use normal motion. Browser tests exercise keyboard selection, Escape, focus containment and return. They do not establish native software-keyboard, hardware Back, screen-reader, gesture or physical-device acceptance.
 

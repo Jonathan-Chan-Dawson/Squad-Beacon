@@ -7,7 +7,7 @@ import {
 } from "./activityToolEntry";
 export const cardToolLabels: Partial<Record<BeaconToolId, string>> = {
   checklist: "Checklist",
-  journal: "Journal",
+  journal: "Sketchboard",
   focus: "Focus timer",
   experiences: "Memories",
   scoreboard: "Scoreboard",
@@ -40,8 +40,11 @@ export function beaconEngagement(
   const tools = (Object.keys(cardToolLabels) as BeaconToolId[]).filter(
     (tool) =>
       (tool !== "music" || !!activity.music_url) &&
-      resolveActivityToolEntry(data, activity, viewer, "tools", tool).tool ===
-        tool,
+      (tool === "experiences"
+        ? resolveActivityToolEntry(data, activity, viewer, "tools", tool)
+            .tab === "Memories"
+        : resolveActivityToolEntry(data, activity, viewer, "tools", tool)
+            .tool === tool),
   );
   const uniqueReactions = [
     ...new Map(reactions.map((row) => [row.user_id, row])).values(),
@@ -51,8 +54,7 @@ export function beaconEngagement(
       emoji,
       count: uniqueReactions.filter((row) => row.emoji === emoji).length,
     }))
-    .sort((a, b) => b.count - a.count || a.emoji.localeCompare(b.emoji))
-    .slice(0, 3);
+    .sort((a, b) => b.count - a.count || a.emoji.localeCompare(b.emoji));
   return {
     activity,
     canReact:
@@ -60,7 +62,8 @@ export function beaconEngagement(
       activity.status !== "cancelled",
     canReadComments: isBeaconModuleEnabled(activity, "comments"),
     canChat: isBeaconModuleEnabled(activity, "chat"),
-    reactionGroups,
+    reactionGroups: reactionGroups.slice(0, 3),
+    allReactionGroups: reactionGroups,
     reactionCount: new Set(reactions.map((row) => row.user_id)).size,
     commentCount: new Set(comments.map((row) => row.id)).size,
     selectedEmoji: reactions.find((row) => row.user_id === viewer)?.emoji,

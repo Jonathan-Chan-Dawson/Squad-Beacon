@@ -3,15 +3,14 @@ import {
   ParticipationButtons,
   ParticipationActions,
 } from "../useBeaconParticipation";
+import { beaconCardShortcuts } from "../beaconCardShortcuts";
 import { cardSocialPreview } from "../cardSocialPreview";
 import { useBeacon } from "@/src/shared/store";
 import { usePreferences } from "@/src/shared/preferences";
 import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
 import { useFocusEffect } from "expo-router";
-import {
-  BeaconCardEngagement,
-  BeaconToolMenuRows,
-} from "./BeaconCardEngagement";
+import { BeaconToolMenuRows } from "./BeaconCardEngagement";
+import { BeaconCardShortcuts } from "./BeaconCardShortcuts";
 import { ActionRow, ContextMenu, MenuGroup } from "@/src/shared/ContextMenu";
 import { cardSecondaryMetadata, compactCountdown } from "../cardPresentation";
 import React, { useCallback, useEffect, useRef, useState } from "react";
@@ -30,7 +29,6 @@ import {
   Clock3,
   Flag,
   MapPin,
-  MessageCircle,
   Monitor,
   MoreHorizontal,
   Share2,
@@ -90,6 +88,8 @@ export interface BeaconFeedCardProps {
   presentation?: "personal-preview" | "home" | "discovery";
   /** Opt into the shared compact shell on Browse and Map discovery surfaces. */
   adaptiveDiscovery?: boolean;
+  /** Opt-in Map preview density and anchored actions; no change to other card surfaces. */
+  mapPreview?: boolean;
   /** Accessible controls owned by the containing surface, such as Map close. */
   headerAccessory?: React.ReactNode;
   decorationEmoji?: string | null;
@@ -99,7 +99,11 @@ export interface BeaconFeedCardProps {
   /** Emphasize a confirmed personal Beacon on the home hub. */
   featured?: boolean;
   planRelation?: string | null;
-  planContext?: { title: string; onPress: () => void };
+  planContext?: {
+    title: string;
+    onPress: () => void;
+    stepIndex?: number | null;
+  };
   compactFooter?: React.ReactNode;
   activityId: string;
   title: string;
@@ -306,6 +310,7 @@ function SwipeReveal({
 export function BeaconFeedCard({
   presentation,
   adaptiveDiscovery = false,
+  mapPreview = false,
   headerAccessory,
   decorationEmoji,
   animationVisible = true,
@@ -355,6 +360,15 @@ export function BeaconFeedCard({
   const { showAvatars } = usePreferences();
   const participation = useBeaconParticipation(activityId);
   const socialPreview = cardSocialPreview(socialData, socialViewer, activityId);
+  const canMap = beaconCardShortcuts(
+    socialData,
+    socialViewer,
+    activityId,
+  )?.canMap;
+  const latestMap = useRef({ data: socialData, viewer: socialViewer });
+  useEffect(() => {
+    latestMap.current = { data: socialData, viewer: socialViewer };
+  }, [socialData, socialViewer]);
   const [screenFocused, setScreenFocused] = useState(true);
   useFocusEffect(
     useCallback(() => {
@@ -597,6 +611,7 @@ export function BeaconFeedCard({
     adaptiveDiscovery,
   ) ? (
     <DiscoveryBeaconCard
+      mapPreview={mapPreview}
       activityId={activityId}
       title={title}
       category={category}
@@ -609,9 +624,7 @@ export function BeaconFeedCard({
       goingCount={socialPreview?.capacity.count ?? goingCount}
       capacity={socialPreview?.capacity ?? null}
       friendsGoing={socialPreview?.friendCount}
-      onOpenPeople={
-        socialPreview?.rosterAllowed ? onOpenPeople : undefined
-      }
+      onOpenPeople={socialPreview?.rosterAllowed ? onOpenPeople : undefined}
       hosted={isHost}
       planContext={planContext}
       headerAccessory={headerAccessory}
@@ -621,14 +634,32 @@ export function BeaconFeedCard({
         ) : undefined
       }
       context={compactFooter}
-      metadataAccessory={
-        <BeaconCardEngagement activityId={activityId} mode="reactions" />
+      shortcutActions={
+        <BeaconCardShortcuts
+          activityId={activityId}
+          section="social"
+          labeledSocial={mapPreview}
+        />
+      }
+      actionShortcuts={
+        <BeaconCardShortcuts
+          activityId={activityId}
+          section="actions"
+          onChat={onChat}
+          menuOwner={
+            mapPreview
+              ? { anchorRef: menuAnchor, onOpen: () => setMenuVisible(true) }
+              : undefined
+          }
+        />
       }
       primaryAction={
         <ParticipationButtons
           controller={participation}
           onOpen={onOpen}
           hostingLabel={isHost ? "Hosting management" : undefined}
+          primaryOnly
+          prominent
           stretch
           showMaybe={false}
         />
@@ -636,15 +667,34 @@ export function BeaconFeedCard({
       onDetails={onOpen}
       detailsLabel={detailsLabel}
       menu={
-        <View ref={menuAnchor} collapsable={false}>
+        mapPreview ? (
           <HomeAction
-            label="More Beacon actions"
+            label={saved ? "Unsave Beacon" : "Save Beacon"}
+            selected={saved}
             plain
             disabled={busyAction !== null}
-            icon={<MoreHorizontal size={18} color={colors.textSecondary} />}
-            onPress={() => setMenuVisible(true)}
+            icon={
+              <Bookmark
+                size={19}
+                color={saved ? colors.accent : colors.textSecondary}
+                fill={saved ? colors.accent : "none"}
+              />
+            }
+            onPress={() =>
+              void runAction("save", onSave, "Could not update saved Beacons.")
+            }
           />
-        </View>
+        ) : (
+          <View ref={menuAnchor} collapsable={false}>
+            <HomeAction
+              label="More Beacon actions"
+              plain
+              disabled={busyAction !== null}
+              icon={<MoreHorizontal size={20} color={colors.textSecondary} />}
+              onPress={() => setMenuVisible(true)}
+            />
+          </View>
+        )
       }
       feedback={
         <>
@@ -666,13 +716,14 @@ export function BeaconFeedCard({
       testID={`beacon-feed-card-${activityId}`}
       style={{
         padding: editorial ? 12 : compact ? tokens.space.sm : tokens.space.md,
-        gap: editorial ? 8 : compact ? tokens.space.sm : tokens.space.md,
+        gap: editorial || compact ? 6 : 10,
         borderWidth: 1,
         borderBottomWidth: 1,
         borderBottomColor: colors.border,
         borderLeftWidth: editorial ? 1 : 4,
         borderLeftColor: editorial ? colors.border : categoryToken.color,
-        borderRadius: editorial ? 14 : tokens.radius.card,
+        borderRadius:
+          editorial || compact ? tokens.radius.md : tokens.radius.card,
         backgroundColor: colors.surface,
       }}
     >
@@ -686,14 +737,18 @@ export function BeaconFeedCard({
               accessibilityRole="button"
               accessibilityLabel={`Open ${title}`}
               onPress={onOpen}
-              style={{ width: 64, gap: 5, minHeight: 80 }}
+              style={{
+                width: compact ? 44 : 64,
+                gap: tokens.space.xxs,
+                minHeight: compact ? 64 : 80,
+              }}
             >
               <View
                 testID="beacon-category-artwork"
                 style={{
-                  width: 64,
-                  height: 68,
-                  borderRadius: 12,
+                  width: compact ? 44 : 64,
+                  height: compact ? 44 : 68,
+                  borderRadius: tokens.radius.sm,
                   overflow: "hidden",
                   backgroundColor: categoryToken.tint,
                   justifyContent: "center",
@@ -729,7 +784,7 @@ export function BeaconFeedCard({
                 <BeaconIcon
                   emoji={decorationEmoji}
                   category={category}
-                  size={38}
+                  size={compact ? 28 : 38}
                 />
               </View>
               <Text
@@ -843,10 +898,6 @@ export function BeaconFeedCard({
                     gap: 2,
                   }}
                 >
-                  <BeaconCardEngagement
-                    activityId={activityId}
-                    mode="reactions"
-                  />
                   <View ref={menuAnchor} collapsable={false}>
                     <HomeAction
                       label="More Beacon actions"
@@ -872,9 +923,7 @@ export function BeaconFeedCard({
                   accessibilityRole="header"
                   style={{
                     color: colors.textPrimary,
-                    fontSize: 17,
-                    lineHeight: 23,
-                    fontWeight: "500",
+                    ...tokens.type.headline,
                   }}
                 >
                   {title}
@@ -950,10 +999,10 @@ export function BeaconFeedCard({
               {socialPreview?.host ? (
                 <Text
                   testID="discovery-host"
+                  numberOfLines={compact ? 1 : undefined}
                   style={{
                     color: colors.textSecondary,
-                    fontSize: 11,
-                    lineHeight: 16,
+                    ...tokens.type.caption,
                   }}
                 >
                   {socialPreview.host.id === socialViewer
@@ -965,8 +1014,7 @@ export function BeaconFeedCard({
                 testID="discovery-going-count"
                 style={{
                   color: colors.textSecondary,
-                  fontSize: 11,
-                  lineHeight: 16,
+                  ...tokens.type.caption,
                 }}
               >
                 {socialPreview?.capacity.count ?? goingCount} going
@@ -975,17 +1023,6 @@ export function BeaconFeedCard({
                   : ""}
               </Text>
             </View>
-            {participation.state?.invitationPair &&
-            participation.state.allowed.includes("maybe") ? (
-              <HomeAction
-                title="Maybe"
-                plain
-                disabled={participation.operation.busy}
-                onPress={() => {
-                  void participation.perform("maybe");
-                }}
-              />
-            ) : null}
           </View>
           {socialPreview?.capacity.limit != null ? (
             <View style={{ gap: 5 }}>
@@ -1030,6 +1067,11 @@ export function BeaconFeedCard({
               ) : null}
             </View>
           ) : null}
+          <BeaconCardShortcuts
+            activityId={activityId}
+            section="social"
+            labeledSocial={mapPreview}
+          />
           <View
             testID="discovery-card-actions"
             style={{
@@ -1039,27 +1081,23 @@ export function BeaconFeedCard({
               gap: 6,
             }}
           >
-            <View style={{ flexGrow: 1, flexBasis: 132, minWidth: 0 }}>
+            <View style={{ flex: 1, minWidth: 0 }}>
               <ParticipationButtons
                 controller={participation}
                 onOpen={onOpen}
                 stretch
+                prominent
+                primaryOnly
                 showMaybe={false}
               />
             </View>
-            <BeaconCardEngagement
+            <BeaconCardShortcuts
               activityId={activityId}
-              mode="comments"
-              outlined
-            />
-            <HomeAction
-              label="Open Beacon overview"
-              testID={`beacon-open-${activityId}`}
-              outlined
-              icon={<ChevronRight size={20} color={colors.accent} />}
-              onPress={onOpen}
+              section="actions"
+              onChat={onChat}
             />
           </View>
+
           {participation.feedback}
           {compactFooter}
         </>
@@ -1128,8 +1166,7 @@ export function BeaconFeedCard({
                   maxFontSizeMultiplier={tokens.type.denseMaxMultiplier}
                   style={{
                     color: colors.textPrimary,
-                    ...tokens.type.titleSmall,
-                    fontWeight: tokens.type.weight.bold,
+                    ...tokens.type.headline,
                   }}
                 >
                   {title}
@@ -1161,10 +1198,13 @@ export function BeaconFeedCard({
             style={{
               flexDirection: "row",
               alignItems: "center",
-              gap: tokens.space.sm,
+              gap: 4,
+              flexWrap: "wrap",
             }}
           >
-            <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+            <View
+              style={{ flexGrow: 1, flexBasis: "100%", minWidth: 0, gap: 2 }}
+            >
               <Text
                 numberOfLines={1}
                 style={{ color: colors.textSecondary, ...tokens.type.caption }}
@@ -1194,8 +1234,23 @@ export function BeaconFeedCard({
                   .join(" · ")}
               </Text>
             </View>
-            <ParticipationButtons controller={participation} onOpen={onOpen} />
+            <View style={{ flex: 1, minWidth: 0 }}>
+              <ParticipationButtons
+                controller={participation}
+                onOpen={onOpen}
+                prominent
+                stretch
+                showMaybe={false}
+                primaryOnly
+              />
+            </View>
+            <BeaconCardShortcuts
+              activityId={activityId}
+              section="actions"
+              onChat={onChat}
+            />
           </View>
+
           {planRelation ? (
             <Text
               numberOfLines={1}
@@ -1258,8 +1313,7 @@ export function BeaconFeedCard({
                   maxFontSizeMultiplier={tokens.type.denseMaxMultiplier}
                   style={{
                     color: colors.textPrimary,
-                    ...tokens.type.titleSmall,
-                    fontWeight: tokens.type.weight.bold,
+                    ...tokens.type.headline,
                   }}
                 >
                   {title}
@@ -1495,40 +1549,49 @@ export function BeaconFeedCard({
             </Text>
           ) : null}
 
-          <ParticipationButtons
-            controller={participation}
-            onOpen={onOpen}
-            stretch
+          <BeaconCardShortcuts
+            activityId={activityId}
+            section="social"
+            labeledSocial={mapPreview}
           />
+          <View
+            style={{
+              flexDirection: "row",
+              flexWrap: "wrap",
+              alignItems: "center",
+              gap: 6,
+            }}
+          >
+            <View style={{ flex: 1, minWidth: 120 }}>
+              <ParticipationButtons
+                controller={participation}
+                onOpen={onOpen}
+                prominent
+                stretch
+                showMaybe={false}
+                primaryOnly
+              />
+            </View>
+            <BeaconCardShortcuts
+              activityId={activityId}
+              section="actions"
+              onChat={onChat}
+            />
+          </View>
           {participation.feedback}
 
-          {onMap || onChat || saved ? (
-            <View style={{ flexDirection: "row", gap: tokens.space.sm }}>
-              {onMap ? (
-                <IconButton label={`View ${title} on map`} onPress={onMap}>
-                  <MapPin size={19} color={categoryToken.color} />
-                </IconButton>
-              ) : null}
-              {onChat ? (
-                <IconButton label={`Open ${title} chat`} onPress={onChat}>
-                  <MessageCircle size={19} color={categoryToken.color} />
-                </IconButton>
-              ) : null}
-              {saved ? (
-                <Text
-                  accessibilityLabel="Saved Beacon"
-                  style={{
-                    marginLeft: "auto",
-                    alignSelf: "center",
-                    color: colors.accent,
-                    ...tokens.type.caption,
-                    fontWeight: tokens.type.weight.semibold,
-                  }}
-                >
-                  Saved
-                </Text>
-              ) : null}
-            </View>
+          {saved ? (
+            <Text
+              accessibilityLabel="Saved Beacon"
+              style={{
+                alignSelf: "flex-end",
+                color: colors.accent,
+                ...tokens.type.caption,
+                fontWeight: tokens.type.weight.semibold,
+              }}
+            >
+              Saved
+            </Text>
           ) : null}
 
           {actionError ? (
@@ -1591,12 +1654,17 @@ export function BeaconFeedCard({
         card
       )}
       <ContextMenu
-        title={title}
+        title={mapPreview ? "Beacon tools & actions" : title}
+        mode={mapPreview ? "dropdown" : "context"}
+        anchoredOnly={mapPreview}
         visible={menuVisible}
         anchorRef={menuAnchor}
         onClose={() => setMenuVisible(false)}
         onDismiss={menuDismissed}
       >
+        {mapPreview ? (
+          <BeaconToolMenuRows activityId={activityId} afterMenu={afterMenu} />
+        ) : null}
         {participation.state?.allowed.length ? (
           <MenuGroup title="Participation">
             {participation.state.choices ? (
@@ -1615,41 +1683,43 @@ export function BeaconFeedCard({
             />
           </MenuGroup>
         ) : null}
-        {compact && (onMap || onChat) ? (
-          <MenuGroup title="Activity">
-            {onMap ? (
-              <ActionRow
-                label="View on Map"
-                icon={<MapPin size={18} color={colors.textSecondary} />}
-                onPress={() => afterMenu(onMap)}
-              />
-            ) : null}
-            {onChat ? (
-              <ActionRow
-                label="Open Chat"
-                icon={<MessageCircle size={18} color={colors.textSecondary} />}
-                onPress={() => afterMenu(onChat)}
-              />
-            ) : null}
-          </MenuGroup>
-        ) : null}
-        <BeaconToolMenuRows activityId={activityId} afterMenu={afterMenu} />
-        <MenuGroup title="Save & Share">
-          <ActionRow
-            label={saved ? "Unsave Beacon" : "Save Beacon"}
-            icon={<Bookmark size={18} color={colors.textSecondary} />}
-            disabled={busyAction !== null}
-            onPress={() =>
-              afterMenu(
-                () =>
-                  void runAction(
-                    "save",
-                    onSave,
-                    "Could not update saved Beacons.",
-                  ),
-              )
-            }
-          />
+        <MenuGroup title={mapPreview ? "Beacon actions" : "Save & Share"}>
+          {!mapPreview && onMap && canMap ? (
+            <ActionRow
+              label="View on Map"
+              icon={<MapPin size={18} color={colors.textSecondary} />}
+              onPress={() =>
+                afterMenu(() => {
+                  if (
+                    latestMap.current.viewer === socialViewer &&
+                    beaconCardShortcuts(
+                      latestMap.current.data,
+                      latestMap.current.viewer,
+                      activityId,
+                    )?.canMap
+                  )
+                    onMap();
+                })
+              }
+            />
+          ) : null}
+          {!mapPreview ? (
+            <ActionRow
+              label={saved ? "Unsave Beacon" : "Save Beacon"}
+              icon={<Bookmark size={18} color={colors.textSecondary} />}
+              disabled={busyAction !== null}
+              onPress={() =>
+                afterMenu(
+                  () =>
+                    void runAction(
+                      "save",
+                      onSave,
+                      "Could not update saved Beacons.",
+                    ),
+                )
+              }
+            />
+          ) : null}
           <ActionRow
             label="Share Beacon"
             icon={<Share2 size={18} color={colors.textSecondary} />}

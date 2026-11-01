@@ -23,7 +23,7 @@ import { MapBeaconRsvp } from "./MapBeaconRsvp";
 import { MapPersonPreview } from "./MapPersonPreview";
 import { ReactionPicker } from "@/src/features/beacons/components/feed/ReactionPicker";
 import { physicalDirectionsUrl } from "./directions";
-import { MoreHorizontal, MessagesSquare, MessageCircle, Smile } from "lucide-react-native";
+import { Info, X, MessagesSquare, MessageCircle, Smile } from "lucide-react-native";
 import {
   BeaconToolContent,
   BeaconPanelTabs,
@@ -419,12 +419,13 @@ export function MapPanel({
           {activity.title}
         </Text>
         <IconButton
-          label={Platform.OS !== "web" ? "More options" : "Beacon menu"}
+          label="Beacon info & actions"
           selected={menuOpen}
           onPress={() => setMenuOpen((open) => !open)}
         >
-          <MoreHorizontal color={colors.ink} size={20} />
+          <Info color={colors.ink} size={20} />
         </IconButton>
+        <IconButton label="Close Beacon panel" onPress={onClose}><X color={colors.ink} size={20} /></IconButton>
       </View>
       {menuOpen && (
         <View style={{ paddingHorizontal: 12, gap: 4 }}>

@@ -1,10 +1,10 @@
+import { ThemedSwitch } from "@/src/shared/ThemedSwitch";
 import React, { useRef, useState } from "react";
 import { router } from "expo-router";
 import {
   Platform,
   Pressable,
   ScrollView,
-  Switch,
   Text,
   useWindowDimensions,
   View,
@@ -118,7 +118,7 @@ function CurrentBeaconStatusSetting({
             Share one Beacon you are hosting, co-hosting, or attending.
           </Text>
         </View>
-        <Switch
+        <ThemedSwitch
           accessibilityLabel="Show My Current Beacon"
           value={show}
           disabled={disabled}
@@ -1401,7 +1401,7 @@ export function StatusPanel({
                   <Text style={{ flex: 1, color: colors.textPrimary }}>
                     Pause Status Sharing
                   </Text>
-                  <Switch
+                  <ThemedSwitch
                     accessibilityLabel="Pause Status Sharing"
                     value={!sharing}
                     disabled={saving}
@@ -1419,7 +1419,7 @@ export function StatusPanel({
                   <Text style={{ flex: 1, color: colors.textPrimary }}>
                     Hide Note
                   </Text>
-                  <Switch
+                  <ThemedSwitch
                     accessibilityLabel="Hide Note"
                     value={noteHidden}
                     disabled={saving}

@@ -63,8 +63,6 @@ import {
   personalHubPreview,
 } from "@/src/features/beacons/hubSelectors";
 
-const PAGE_GUTTER = 16;
-
 export default function ActivitiesScreen() {
   const { colors: designColors, tokens } = useDesignTheme();
   const {
@@ -91,7 +89,6 @@ export default function ActivitiesScreen() {
     progress.status,
     loading,
     storeError || simulatedError,
-    progress.firstEntrySession,
   );
   const hasPersonal =
     personalHubPreview(confirmedHubActivities(data, userId), now).length > 0 ||
@@ -427,7 +424,7 @@ export default function ActivitiesScreen() {
         style={{
           color: designColors.textPrimary,
           ...tokens.type.titleSmall,
-          fontWeight: "500",
+          fontWeight: "600",
         }}
       >
         {title}
@@ -477,7 +474,11 @@ export default function ActivitiesScreen() {
           }}
         >
           <View
+            testID="beacons-header-column"
             style={{
+              width: "100%",
+              maxWidth: tokens.layout.contentMaxWidth,
+              alignSelf: "center",
               minHeight: 56,
               flexDirection: "row",
               alignItems: "center",
@@ -491,9 +492,7 @@ export default function ActivitiesScreen() {
               style={{
                 flex: 1,
                 color: designColors.textPrimary,
-                fontSize: 22,
-                lineHeight: 28,
-                fontWeight: "500",
+                ...tokens.type.title,
               }}
             >
               Beacons
@@ -517,6 +516,7 @@ export default function ActivitiesScreen() {
       </View>
 
       <ScrollView
+        testID="beacons-home-scroll"
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -525,8 +525,11 @@ export default function ActivitiesScreen() {
         }
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{
-          padding: PAGE_GUTTER,
-          gap: 16,
+          width: "100%",
+          maxWidth: tokens.layout.contentMaxWidth,
+          alignSelf: "center",
+          padding: tokens.layout.screenGutter,
+          gap: tokens.space.md,
           paddingBottom:
             tokens.layout.tabBarHeight +
             insets.bottom +
@@ -559,8 +562,7 @@ export default function ActivitiesScreen() {
         ) : null}
 
         <SharedStatusControl compact />
-        {!hasPersonal &&
-        (home.kind === "welcome" || home.kind === "compact") ? (
+        {home.kind === "welcome" || (!hasPersonal && home.kind === "compact") ? (
           <HomeInvitation
             welcome={home.kind === "welcome"}
             friends={home.friends}

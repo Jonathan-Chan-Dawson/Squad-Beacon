@@ -1,3 +1,4 @@
+import { NavigationFilterChip } from "@/src/shared/NavigationTabs";
 import { SemanticEmpty } from "@/src/features/onboarding/OnboardingUI";
 import { OrganizationDirectory } from "@/src/features/organizations/OrganizationDirectory";
 import {
@@ -122,7 +123,7 @@ export function CommunicationHub({
   onCreateOrganizationOpenChange: (open: boolean) => void;
 }) {
   const { data, userId, act, refresh, loading, error } = useBeacon();
-  const { colors, semanticColors, styles, tokens } = useTheme();
+  const { colors, styles, tokens } = useTheme();
   const insets = useSafeAreaInsets();
   const now = useNow();
   const section: Section =
@@ -611,51 +612,13 @@ export function CommunicationHub({
               contentContainerStyle={{ gap: 6 }}
             >
               {CHAT_FILTERS.map((filter) => (
-                <Pressable
+                <NavigationFilterChip
                   key={filter}
-                  accessibilityRole="button"
-                  accessibilityLabel={filter}
-                  aria-pressed={conversationFilter === filter}
-                  accessibilityState={{
-                    selected: conversationFilter === filter,
-                  }}
+                  label={filter}
+                  testID={`chat-filter-visual-${filter}`}
+                  selected={conversationFilter === filter}
                   onPress={() => onConversationFilterChange(filter)}
-                  style={{
-                    minHeight: 44,
-                    minWidth: 44,
-                    justifyContent: "center",
-                    alignItems: "center",
-                  }}
-                >
-                  <View
-                    testID={`chat-filter-visual-${filter}`}
-                    style={{
-                      minHeight: 32,
-                      paddingVertical: 5,
-                      paddingHorizontal: 12,
-                      justifyContent: "center",
-                      borderRadius: 16,
-                      backgroundColor:
-                        conversationFilter === filter
-                          ? semanticColors.accent
-                          : colors.white,
-                    }}
-                  >
-                    <Text
-                      style={[
-                        styles.label,
-                        {
-                          color:
-                            conversationFilter === filter
-                              ? semanticColors.onAccent
-                              : colors.muted,
-                        },
-                      ]}
-                    >
-                      {filter}
-                    </Text>
-                  </View>
-                </Pressable>
+                />
               ))}
             </ScrollView>
             {activeList ? (

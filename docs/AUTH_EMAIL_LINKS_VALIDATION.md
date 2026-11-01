@@ -1,5 +1,7 @@
 # Reliable Account Email Links — 2026-10-29
 
+Historical screenshots referenced by this report were removed during repository cleanup.
+
 The auth-only release is live at https://squad-beacon.vercel.app. The public origin, hosted Site URL and callback allowlist are configured. A live recovery request was accepted and the owner confirmed email arrival. The owner explicitly chose to retain Supabase's default sender; custom token-hash templates are prepared but intentionally unapplied. This does not establish full production readiness or different-browser recovery acceptance. Canonical setup and domain-change instructions live in [README.md](../README.md#account-email-configuration).
 
 ## Delivered
@@ -18,7 +20,7 @@ The auth-only release is live at https://squad-beacon.vercel.app. The public ori
 - Initial focused browser run: 8 passed using intercepted Supabase requests. The expanded run also passed a simulated HTTPS preview-host test: signup/resend still target the configured public origin. Confirmed no request on page load, one exchange through provider remount, fresh-browser required setup, recovery separation, invalid/expired links and resend throttling.
 - Development and production Expo web exports succeeded and include `/auth/confirm` and `/auth/callback` HTML.
 - Broader browser regression: 38 passed, 1 failed. All 23 existing account-entry journeys and all 9 email-link journeys passed. The failing Phase 4A demo scenario expects Home's `View invitations & responses` button; concurrent changes in `ActivitiesScreen.tsx` remove that button. The email work does not modify that screen. Six other Phase 4A journeys passed, including dismissal, account progress/failure, confirmed success and phone compositions. Failure evidence is in `test-results/auth-email`.
-- Final email-link/layout run after the heading refinement: 13 passed (9 functional journeys and 4 layout cases). The layout cases cover 320px/390px in light/dark, keyboard focus, at least 44px button height, no horizontal overflow and reduced motion. Screenshots are under `docs/screenshots/auth-email/`; the small-screen heading was shortened after visual review. Evidence is in `test-results/auth-email-final`.
+- Final email-link/layout run after the heading refinement: 13 passed (9 functional journeys and 4 layout cases). The layout cases cover 320px/390px in light/dark, keyboard focus, at least 44px button height, no horizontal overflow and reduced motion. The screenshots were removed during repository cleanup; the small-screen heading was shortened after visual review. Evidence is in `test-results/auth-email-final`.
 - `npm run typecheck` and `npm run lint` passed. The first slow lint invocation was interrupted; the final complete lint run passed with no warnings. Both final Expo exports succeeded.
 - The actual release was separately prepared from production commit `30498385` plus only the ten auth/config/template files in release commit `c2186c085ab3ba06fdfdbb533c6a15f66e9ee8b2`. Its own typecheck and production export passed, followed by all 36 browser checks (23 account-entry journeys, 9 email-link journeys and 4 layout checks). Evidence is in `test-results/auth-email-release` and `test-results/auth-email-release-account`. The initial standalone typecheck needed Expo's generated web declaration file; including that existing generated declaration resolved the CSS import declaration error.
 - Browser fixtures do not send real email or validate delivery, hosted template settings, redirect allowlists, or SMTP. Legacy PKCE verification across browsers still requires the original verifier; new token-hash email templates avoid that requirement.
@@ -37,7 +39,7 @@ Native builds must embed the configured public origin. Installed-app opening req
 
 ## Screenshots
 
-![Confirmation at 320px, light](screenshots/auth-email/confirm-light-320.png)
-![Confirmation at 390px, dark](screenshots/auth-email/confirm-dark-390.png)
-![Hosted Site URL and callback allowlist](screenshots/auth-email/hosted-url-settings.jpg)
-![Accepted live recovery request, recipient omitted](screenshots/auth-email/hosted-recovery-request.jpg)
+Screenshot removed: Confirmation at 320px, light.
+Screenshot removed: Confirmation at 390px, dark.
+Screenshot removed: Hosted Site URL and callback allowlist.
+Screenshot removed: Accepted live recovery request, recipient omitted.

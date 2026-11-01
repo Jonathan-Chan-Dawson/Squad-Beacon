@@ -30,7 +30,6 @@ export function homePresentation(
   status: ProgressStatus,
   loading: boolean,
   error: unknown,
-  firstEntrySession = false,
 ) {
   const available = !!viewer && data.viewer_id === viewer;
   const state = contentState({ error, loading, available, count: 0 });
@@ -38,25 +37,17 @@ export function homePresentation(
   const friends = available && friendIds(data, viewer!).length > 0;
   if (state === "error" || state === "loading" || state === "unavailable")
     return { kind: state, pending, friends } as const;
+  const eligible =
+    status === "ready" &&
+    progress.has("entry.eligible.v1") &&
+    !progress.has("welcome.dismissed.v1");
+  if (eligible) return { kind: "welcome", pending, friends } as const;
   const commitments = personalHubPreview(
     confirmedHubActivities(data, viewer),
     now,
   );
-  const existing =
-    friends ||
-    pending > 0 ||
-    data.activities.some((a) => a.owner_id === viewer) ||
-    data.plans.some((p) => p.owner_id === viewer) ||
-    data.squad_members.some((m) => m.user_id === viewer);
-  if (commitments.length)
-    return { kind: "populated", pending, friends } as const;
-  const eligible =
-    status === "ready" &&
-    firstEntrySession &&
-    progress.has("entry.eligible.v1") &&
-    !progress.has("welcome.dismissed.v1");
   return {
-    kind: eligible && !existing ? "welcome" : "compact",
+    kind: commitments.length ? "populated" : "compact",
     pending,
     friends,
   } as const;

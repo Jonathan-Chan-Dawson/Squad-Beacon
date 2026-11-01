@@ -1,6 +1,6 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect } from "react";
 import { Pressable, Text, View } from "react-native";
-import { router, useFocusEffect, useIsFocused } from "expo-router";
+import { router } from "expo-router";
 import { Info, X } from "lucide-react-native";
 import { EmptyState, useDesignTheme } from "@/src/shared/design-system";
 import { useBeacon } from "@/src/shared/store";
@@ -53,24 +53,9 @@ export function HomeInvitation({
   welcome: boolean;
   friends: boolean;
 }) {
-  const { mark, status, retry, consumeWelcome } = useOnboarding();
+  const { mark, status, retry } = useOnboarding();
   const { colors, tokens } = useDesignTheme();
-  const focused = useIsFocused();
-  // Keep this visit's introduction stable while persisting that it was seen.
-  const [intro, setIntro] = useState(welcome);
-  const [previousWelcome, setPreviousWelcome] = useState(welcome);
-  if (previousWelcome !== welcome) {
-    setPreviousWelcome(welcome);
-    if (welcome) setIntro(true);
-    else if (!focused) setIntro(false);
-  }
-  useEffect(() => {
-    if (intro && focused) {
-      void mark("welcome.seen.v1");
-      consumeWelcome();
-    }
-  }, [intro, focused, mark, consumeWelcome]);
-  useFocusEffect(React.useCallback(() => () => setIntro(false), []));
+  const intro = welcome;
   return (
     <View
       testID={intro ? "onboarding-welcome" : "onboarding-returning"}
@@ -85,10 +70,7 @@ export function HomeInvitation({
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Dismiss welcome"
-          onPress={() => {
-            setIntro(false);
-            void mark("welcome.dismissed.v1");
-          }}
+          onPress={() => void mark("welcome.dismissed.v1")}
           style={{
             position: "absolute",
             right: 4,

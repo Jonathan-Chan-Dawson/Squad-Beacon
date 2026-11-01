@@ -1,5 +1,6 @@
+import { ThemedSwitch } from "@/src/shared/ThemedSwitch";
 import React from "react";
-import { Switch, Text, View } from "react-native";
+import { Text, View } from "react-native";
 import { usePreferences } from "@/src/shared/preferences";
 import { useTheme } from "@/src/shared/ui";
 
@@ -8,7 +9,7 @@ export function AvatarToggle({
 }: {
   description?: boolean;
 }) {
-  const { styles, colors } = useTheme();
+  const { styles } = useTheme();
 
   const { showAvatars, setShowAvatars, ready, error } = usePreferences();
   return (
@@ -22,12 +23,11 @@ export function AvatarToggle({
             </Text>
           )}
         </View>
-        <Switch
+        <ThemedSwitch
           accessibilityLabel="Show avatars"
           disabled={!ready}
           value={showAvatars}
           onValueChange={setShowAvatars}
-          trackColor={{ false: "#B8C3BC", true: colors.green }}
         />
       </View>
       {!!error && (

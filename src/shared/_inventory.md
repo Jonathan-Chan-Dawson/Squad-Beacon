@@ -19,3 +19,5 @@ Feature-specific business rules belong under src/features/; keep only true cross
 - SocialChoiceRow.tsx: shared accessible selection/browse rows and category rail for people, creation audiences and community association.
 
 - dateTime.ts and DurationControl.tsx: timezone-aware local date/time conversion and shared hours/minutes presets/validation. components/DateField(.native).tsx supplies labeled platform controls.
+
+- NavigationTabs.tsx: theme-aware underlined primary tabs and compact filter chips, with focus and reduced-motion support.

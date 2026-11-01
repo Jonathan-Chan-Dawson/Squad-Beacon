@@ -42,10 +42,7 @@ export function discoveryContextLabel(
   if (visibleLabels.includes(normalized)) return null;
 
   if (normalized === "starts soon" && evidence.timingLabel?.trim()) return null;
-  if (
-    normalized === "spots available" &&
-    evidence.strictCapacityLabel?.trim()
-  )
+  if (normalized === "spots available" && evidence.strictCapacityLabel?.trim())
     return null;
   if (
     evidence.communityLabel?.trim() &&
@@ -86,7 +83,9 @@ export function discoveryCardMetadata({
       else {
         const remaining = Math.max(0, normalizedLimit - count);
         if (remaining > 0)
-          pieces.push(`${remaining} ${remaining === 1 ? "spot" : "spots"} left`);
+          pieces.push(
+            `${remaining} ${remaining === 1 ? "spot" : "spots"} left`,
+          );
       }
     } else if (normalizedLimit > 0) {
       pieces.push(`Suggested ${normalizedLimit}`);
@@ -99,4 +98,24 @@ export function discoveryCardMetadata({
   if (friends > 0)
     pieces.push(`${friends} ${friends === 1 ? "friend" : "friends"}`);
   return pieces.join(" · ");
+}
+
+/** Only an authorized linked Plan supplies context; never rewrite stored titles. */
+export function mapBeaconTitle(
+  title: string,
+  linkedPlan: boolean,
+  stepIndex?: number | null,
+) {
+  if (!linkedPlan) return { title, context: null };
+  const prefix = /^Plan stop\s+(\d+)\s*:\s*(.+)$/i.exec(title.trim());
+  const index =
+    Number.isInteger(stepIndex) && stepIndex! >= 0
+      ? stepIndex! + 1
+      : prefix
+        ? Number(prefix[1])
+        : null;
+  return {
+    title: prefix?.[2] || title,
+    context: index ? `Plan stop ${index}` : "Linked Plan",
+  };
 }

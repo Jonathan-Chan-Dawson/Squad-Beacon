@@ -1,9 +1,10 @@
 import { ActivityFrame } from "@/src/features/activity/ActivityFrame";
+import { ActivityActionBar } from "@/src/features/activity/ActivityActionBar";
 import { LivingPlansScreen } from "./LivingPlansScreen";
 import { livingPlansEnabled } from "./livingPlans";
 import React, { useMemo, useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
-import { Repeat2 } from "lucide-react-native";
+import { Plus, Repeat2, Sparkles } from "lucide-react-native";
 import { PanResponder, Pressable, Text, View } from "react-native";
 import { useBeacon } from "@/src/shared/store";
 import {
@@ -21,7 +22,6 @@ import {
   Button,
   Chips,
   Field,
-  IconButton,
   Sheet,
   Txt,
   useTheme,
@@ -108,7 +108,7 @@ export default function PlansScreen() {
 }
 
 function PlanBuilderScreen() {
-  const { styles, colors } = useTheme();
+  const { styles } = useTheme();
   const { data, userId, act } = useBeacon();
   const params = useLocalSearchParams<{
     squadId?: string;
@@ -448,11 +448,6 @@ function PlanBuilderScreen() {
       title="Beacon Plans"
       eyebrow="A set of beacons, on your schedule"
       create={false}
-      headerAction={
-        <IconButton label="Routines" onPress={() => router.push("/routines")}>
-          <Repeat2 size={20} color={colors.ink} />
-        </IconButton>
-      }
     >
       <Txt muted>
         Keep a multi day itinerary together. Each step becomes a scheduled
@@ -471,14 +466,30 @@ function PlanBuilderScreen() {
           changed by squad admins.
         </Txt>
       )}
-      <Button title="Create a plan" onPress={() => openPlanBuilder()} />
-      {templates.length > 0 && (
-        <Button
-          title="My Plan Templates →"
-          secondary
-          onPress={() => setShowTemplates(true)}
-        />
-      )}
+      <ActivityActionBar
+        items={[
+          {
+            label: "Create a plan",
+            icon: Plus,
+            primary: true,
+            onPress: () => openPlanBuilder(),
+          },
+          ...(templates.length > 0
+            ? [
+                {
+                  label: "My Plan Templates",
+                  icon: Sparkles,
+                  onPress: () => setShowTemplates(true),
+                },
+              ]
+            : []),
+          {
+            label: "Routines",
+            icon: Repeat2,
+            onPress: () => router.push("/routines"),
+          },
+        ]}
+      />
       {plans.length === 0 ? (
         <Txt muted>
           No Beacon Plans here yet. Make one from a few scheduled beacons or

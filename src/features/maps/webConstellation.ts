@@ -12,7 +12,6 @@ import {
 import { bloomGeometry, bloomAccessibilityLabel } from "./clusterBloom";
 import type { ClusterPoint } from "./cluster";
 import {
-  nativePetalOffset,
   presentationOpensExplorer,
   type NativeMapPresentation,
 } from "./nativeMapPresentation";
@@ -67,7 +66,6 @@ export function webConstellation(
   shadow.style.cssText = `position:absolute;left:${geometry.shadowLeft}px;top:${geometry.shadowTop}px;width:${geometry.shadowSize}px;height:${geometry.shadowSize}px;border-radius:50%;background:radial-gradient(circle,rgba(0,0,0,${shadowOpacity}) 0%,rgba(0,0,0,${shadowOpacity * 0.5}) 55%,rgba(0,0,0,0) 100%);pointer-events:none;`;
   node.append(shadow);
   const items: HTMLElement[] = [];
-  const dotArtwork = new Map<HTMLElement, Node[]>();
   const primary = explorer
     ? geometry.primary
     : presentation.beacons.length
@@ -109,7 +107,6 @@ export function webConstellation(
       geometry.friendsOnly &&
       (presentation.scale === "far" || presentation.scale === "micro")
     ) {
-      dotArtwork.set(item, Array.from(item.childNodes));
       item.replaceChildren();
       item.style.borderRadius = "50%";
       item.style.background = options.ink;
@@ -118,7 +115,6 @@ export function webConstellation(
     items.push(item);
     node.append(item);
   });
-  const satelliteNodes: HTMLElement[] = [];
   geometry.satellites.forEach((point, index) => {
     const dot = document.createElement("span"),
       offset = geometry.satelliteOffsets[index],
@@ -132,7 +128,6 @@ export function webConstellation(
       dot.style.background = options.ownership;
       dot.style.borderColor = options.surface;
     }
-    satelliteNodes.push(dot);
     node.append(dot);
   });
   const badge = (text: string, side: "left" | "right", label: string) => {
@@ -232,10 +227,9 @@ export function webConstellation(
     clusterBadge.style.boxSizing = "border-box";
     clusterBadge.onclick = (event) => {
       event.stopPropagation();
-      if (expanded || geometry.countBadge?.activation === "friends")
-        options.open("Friends");
-      else if (geometry.countBadge?.activation === "cluster") options.open();
-      else expand();
+      options.open(
+        geometry.countBadge?.activation === "friends" ? "Friends" : undefined,
+      );
     };
     node.append(clusterBadge);
     restoreCount();
@@ -286,82 +280,6 @@ export function webConstellation(
     }
     node.append(count);
   }
-  let expanded = false;
-  const collapse = () => {
-    expanded = false;
-    delete node.dataset.expanded;
-    shadow.style.display = "";
-    restoreCount();
-    satelliteNodes.forEach((node) => (node.style.display = ""));
-    items.forEach((item, index) => {
-      const offset = geometry.offsets[index] ?? { x: 0, y: 0 };
-      item.style.display = index < geometry.primary.length ? "flex" : "none";
-      item.style.left = `${center - 16 + offset.x}px`;
-      item.style.top = `${center - 16 + offset.y}px`;
-      item.style.width = "32px";
-      item.style.height = "32px";
-      item.style.transform = `scale(${markerSize / 32})`;
-      item.style.justifyContent = "flex-start";
-      if (dotArtwork.has(item)) {
-        item.replaceChildren();
-        item.style.borderRadius = "50%";
-        item.style.background = options.ink;
-        item.style.opacity = presentation.scale === "micro" ? ".35" : ".6";
-      }
-      if (geometry.fullBeacon) {
-        item.style.left = `${center - 29}px`;
-        item.style.top = `${center - 20}px`;
-        item.style.width = "58px";
-        item.style.height = "56px";
-        item.style.transform = "none";
-      }
-    });
-  };
-  const expand = () => {
-    expanded = true;
-    node.dataset.expanded = "true";
-    shadow.style.display = "none";
-    if (clusterBadge) {
-      if (presentation.people.length) {
-        const width = clusterCountWidth(presentation.people.length, 0);
-        clusterBadge.style.display = "block";
-        clusterBadge.style.width = `${width}px`;
-        clusterBadge.style.height = "20px";
-        clusterBadge.style.font = "700 10px/18px system-ui";
-        clusterBadge.style.left = `${center - width / 2}px`;
-        clusterBadge.style.top = `${center + 96}px`;
-        renderCount(
-          clusterBadge,
-          clusterCountParts(presentation.people.length, 0),
-          10,
-        );
-        clusterBadge.setAttribute(
-          "aria-label",
-          `Explore ${presentation.people.length} nearby friends`,
-        );
-      } else clusterBadge.style.display = "none";
-    }
-    satelliteNodes.forEach((node) => (node.style.display = "none"));
-    if (node.parentElement) node.parentElement.style.zIndex = "1000";
-    items.forEach((item, index) => {
-      item.style.display = "flex";
-      if (dotArtwork.has(item)) {
-        item.replaceChildren(...dotArtwork.get(item)!);
-        item.style.background = "transparent";
-        item.style.opacity = "1";
-        item.style.borderRadius = "0";
-      }
-      const offset = nativePetalOffset(index, true);
-      item.style.left = `${center - 32 + offset.x}px`;
-      item.style.top = `${center - 26 + offset.y}px`;
-      item.style.width = "64px";
-      item.style.height = "52px";
-      item.style.transform = "none";
-      item.style.justifyContent = "center";
-      if (!options.reducedMotion)
-        item.style.transition = "left 160ms ease,top 160ms ease";
-    });
-  };
   node.addEventListener(
     "click",
     (event) => {
@@ -372,29 +290,26 @@ export function webConstellation(
       )
         return;
       if (explorer) {
-        event.stopPropagation();
-        options.open(geometry.friendsOnly ? "Friends" : undefined);
-      } else if (!expanded) {
         event.preventDefault();
         event.stopImmediatePropagation();
-        expand();
+        event.stopPropagation();
+        options.open(geometry.friendsOnly ? "Friends" : undefined);
+      } else if (!(event.target as HTMLElement).closest("[data-member-id]")) {
+        event.stopPropagation();
+        items[0]?.click();
       }
     },
     true,
   );
   node.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && expanded) {
-      event.preventDefault();
-      event.stopPropagation();
-      collapse();
-    } else if (
+    if (
+      explorer &&
       (event.key === "Enter" || event.key === " ") &&
       event.target === node
     ) {
       event.preventDefault();
       event.stopPropagation();
-      if (explorer) options.open(geometry.friendsOnly ? "Friends" : undefined);
-      else expand();
+      options.open(geometry.friendsOnly ? "Friends" : undefined);
     }
   });
   return { node, size };

@@ -102,6 +102,7 @@ const makeStyles = (colors: SemanticColors, tokens: DesignTokens) =>
       paddingTop: tokens.space.sm,
       gap: tokens.space.md,
       width: "100%",
+      maxWidth: tokens.layout.contentMaxWidth,
       alignSelf: "center",
     },
     row: { flexDirection: "row", alignItems: "center", gap: tokens.space.sm },
