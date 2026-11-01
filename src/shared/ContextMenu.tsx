@@ -445,7 +445,15 @@ export function ContextMenu({
           </View>
           <ScrollView
             keyboardShouldPersistTaps="handled"
-            style={{ flexShrink: 1 }}
+            style={{
+              flexShrink: 1,
+              ...(Platform.OS === "web"
+                ? {
+                    scrollbarWidth: "thin",
+                    scrollbarColor: `${colors.border} transparent`,
+                  }
+                : {}),
+            }}
           >
             {children}
           </ScrollView>

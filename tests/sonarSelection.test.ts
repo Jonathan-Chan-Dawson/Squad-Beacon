@@ -7,6 +7,28 @@ import { sonarSelectionRequest } from "../src/features/profile/sonarSelection";
 import { selectableSocialGroups } from "../src/features/people/socialSelection";
 import { MAX_LOCATION_SHARE_MS } from "../src/features/maps/sessionHelpers";
 
+test("Sonar accepts more than 50 friends for start, save and extension", () => {
+  const data = makeDemo();
+  const now = Date.now();
+  const profile = data.profiles.find((row) => row.id !== DEMO_ID)!;
+  const selected = Array.from({ length: 100 }, (_, index) => `sonar-friend-${index}`);
+  data.locations = [];
+  for (const id of selected) {
+    data.profiles.push({ ...profile, id });
+    data.friendships.push({ id: `friendship-${id}`, sender_id: DEMO_ID, recipient_id: id, status: "accepted" });
+  }
+  const start = sonarSelectionRequest(data, DEMO_ID, selected, "15 minutes", "", "start", null, now);
+  assert.deepEqual(start.recipients, selected);
+  data.locations.push({ id: "large-session", owner_id: DEMO_ID, expires_at: start.expires_at, latitude: null, longitude: null, updated_at: null });
+  for (const operation of ["save", "extend"] as const) {
+    const result = sonarSelectionRequest(data, DEMO_ID, selected, "15 minutes", "", operation, "large-session", now);
+    assert.deepEqual(result.recipients, selected);
+    assert.equal(Date.parse(result.expires_at), now + (operation === "save" ? 15 : 30) * 60000);
+  }
+  data.blocks.push({ blocker_id: DEMO_ID, blocked_id: selected[99] });
+  assert.throws(() => sonarSelectionRequest(data, DEMO_ID, selected, "15 minutes", "", "save", "large-session", now), /Review/);
+});
+
 test("favorites, private lists and selected-only always intersect current accepted friendship", () => {
   const data = makeDemo();
   const [first, second] = [...selectListPeople(data, DEMO_ID)];

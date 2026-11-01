@@ -440,7 +440,6 @@ function ProfileSonarControl({
               disabled={
                 busy ||
                 !picked.length ||
-                selected.length > 50 ||
                 picked.length !== selected.length ||
                 (step === "review" && !session &&
                   duration === "Until activity ends" &&
@@ -457,7 +456,6 @@ function ProfileSonarControl({
                 disabled={
                   busy ||
                   !picked.length ||
-                  selected.length > 50 ||
                   picked.length !== selected.length ||
                   atLimit ||
                   (duration === "Until activity ends" &&
@@ -510,7 +508,6 @@ function ProfileSonarControl({
               )
             }
             disabled={busy}
-            maxSelected={50}
             selectionLabel="Share location with"
           />
           {picked.length !== selected.length && (

@@ -21,3 +21,5 @@ Feature-specific business rules belong under src/features/; keep only true cross
 - dateTime.ts and DurationControl.tsx: timezone-aware local date/time conversion and shared hours/minutes presets/validation. components/DateField(.native).tsx supplies labeled platform controls.
 
 - NavigationTabs.tsx: theme-aware underlined primary tabs and compact filter chips, with focus and reduced-motion support.
+
+- Explicitly centered Sheet and Dialog surfaces use short reduced-motion-aware fades; non-centered sheets retain their existing spring presentation. Long centered/anchored web menus retain thin theme-colored scrollbars.

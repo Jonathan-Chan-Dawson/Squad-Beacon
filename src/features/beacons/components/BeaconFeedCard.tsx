@@ -645,6 +645,7 @@ export function BeaconFeedCard({
         <BeaconCardShortcuts
           activityId={activityId}
           section="actions"
+          mapPreview={mapPreview}
           onChat={onChat}
           menuOwner={
             mapPreview

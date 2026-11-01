@@ -556,6 +556,9 @@ export function Sheet({
   const { semanticColors: colors, resolvedAppearance, tokens } = useTheme();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
+  const reducedMotion = useReducedMotion();
+  const [fadeProgress] = useState(() => new Animated.Value(centered ? 0 : 1));
+  const fadeClosing = React.useRef(false);
   const sheetRef = React.useRef<BottomSheetModal>(null);
   const hasPresentedRef = React.useRef(false);
   const hasOpenedRef = React.useRef(false);
@@ -640,7 +643,7 @@ export function Sheet({
         () => "",
       );
       return (
-        <View
+        <Animated.View
           ref={dialogRef}
           accessible={Platform.OS === "web"}
           role="dialog"
@@ -653,15 +656,18 @@ export function Sheet({
           testID="shared-sheet-dialog"
           tabIndex={-1}
           pointerEvents="box-none"
-          style={StyleSheet.absoluteFill}
+          style={[
+            StyleSheet.absoluteFill,
+            centered ? { opacity: fadeProgress } : null,
+          ]}
         >
           {content}
-        </View>
+        </Animated.View>
       );
     }
     SheetDialogContainer.displayName = "SheetDialogContainer";
     return SheetDialogContainer;
-  }, [sheetId]);
+  }, [sheetId, centered, fadeProgress]);
   const releaseWebScrollLock = useCallback(() => {
     if (!scrollLockRef.current) return;
     scrollLockRef.current = false;
@@ -677,8 +683,20 @@ export function Sheet({
       return;
     }
     dismissRequestedRef.current = false;
-    sheetRef.current?.dismiss();
-  }, []);
+    if (!centered) {
+      sheetRef.current?.dismiss();
+      return;
+    }
+    if (fadeClosing.current) return;
+    fadeClosing.current = true;
+    Animated.timing(fadeProgress, {
+      toValue: 0,
+      duration: reducedMotion ? 0 : 120,
+      useNativeDriver: Platform.OS !== "web",
+    }).start(({ finished }) => {
+      if (finished) sheetRef.current?.dismiss();
+    });
+  }, [centered, fadeProgress, reducedMotion]);
   const renderBackdrop = useCallback(
     (props: BottomSheetBackdropProps) => (
       <View style={StyleSheet.absoluteFill}>
@@ -755,12 +773,16 @@ export function Sheet({
           scrollLockRef.current = true;
         }
       }
+      if (centered && !hasPresentedRef.current) {
+        fadeClosing.current = false;
+        fadeProgress.setValue(reducedMotion ? 1 : 0);
+      }
       hasPresentedRef.current = true;
       sheetRef.current?.present();
     } else if (hasPresentedRef.current) {
       requestDismiss();
     }
-  }, [requestDismiss, sheetId, visible]);
+  }, [requestDismiss, sheetId, visible, centered, fadeProgress, reducedMotion]);
 
   useOverlayKeyboardFocus(
     dialogRef,
@@ -771,10 +793,11 @@ export function Sheet({
 
   React.useEffect(
     () => () => {
+      fadeProgress.stopAnimation();
       releaseWebScrollLock();
       releaseActiveSheet();
     },
-    [releaseActiveSheet, releaseWebScrollLock],
+    [releaseActiveSheet, releaseWebScrollLock, fadeProgress],
   );
 
   React.useEffect(() => {
@@ -819,7 +842,7 @@ export function Sheet({
           : 0
       }
       overrideReduceMotion={
-        centeredNative ? ReduceMotion.Always : ReduceMotion.System
+        centered ? ReduceMotion.Always : ReduceMotion.System
       }
       animationConfigs={animationConfigs}
       backdropComponent={renderBackdrop}
@@ -846,11 +869,19 @@ export function Sheet({
       }}
       onChange={(index) => {
         if (index < 0) return;
+        const firstOpen = !hasOpenedRef.current;
         hasOpenedRef.current = true;
         if (dismissRequestedRef.current) {
           dismissRequestedRef.current = false;
-          sheetRef.current?.dismiss();
+          requestDismiss();
           return;
+        }
+        if (firstOpen && centered) {
+          Animated.timing(fadeProgress, {
+            toValue: 1,
+            duration: reducedMotion ? 0 : 180,
+            useNativeDriver: Platform.OS !== "web",
+          }).start();
         }
         if (hasFocusedRef.current) return;
         hasFocusedRef.current = true;
@@ -858,6 +889,7 @@ export function Sheet({
       }}
       onDismiss={() => {
         hasPresentedRef.current = false;
+        fadeClosing.current = false;
         hasOpenedRef.current = false;
         dismissRequestedRef.current = false;
         hasFocusedRef.current = false;
@@ -879,6 +911,17 @@ export function Sheet({
         {...(scrollable
           ? {
               keyboardShouldPersistTaps: "handled" as const,
+              style: centered
+                ? {
+                    flexShrink: 1,
+                    ...(Platform.OS === "web"
+                      ? {
+                          scrollbarWidth: "thin",
+                          scrollbarColor: `${colors.border} transparent`,
+                        }
+                      : {}),
+                  }
+                : undefined,
               nestedScrollEnabled: true,
               enableFooterMarginAdjustment: !!footer,
               stickyHeaderIndices: [0],

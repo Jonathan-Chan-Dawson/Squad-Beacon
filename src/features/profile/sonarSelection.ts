@@ -23,12 +23,11 @@ export function sonarSelectionRequest(
   const eligible = selectListPeople(data, viewer);
   if (
     !selected.length ||
-    selected.length > 50 ||
     new Set(selected).size !== selected.length ||
     selected.some((id) => !eligible.has(id))
   )
     throw new Error(
-      "Review your selection: choose 1–50 currently accepted friends and remove unavailable people.",
+      "Review your selection: choose at least one currently accepted friend and remove unavailable people.",
     );
   const active = activeSonarSession(data.locations, viewer, now);
   if (

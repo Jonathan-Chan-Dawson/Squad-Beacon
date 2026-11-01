@@ -736,6 +736,7 @@ export default function BrowseBeaconsScreen() {
         <SectionList<BrowseDiscoveryEntry>
           ref={scrollRef}
           testID="browse-beacons-scroll"
+          showsVerticalScrollIndicator={false}
           style={{ flex: 1 }}
           contentContainerStyle={{
             width: "100%",

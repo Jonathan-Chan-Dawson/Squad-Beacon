@@ -18,12 +18,14 @@ export function BeaconCardShortcuts({
   section = "all",
   menuOwner,
   labeledSocial = true,
+  mapPreview = false,
 }: {
   activityId: string;
   onChat?: () => void;
   section?: "all" | "social" | "actions";
   menuOwner?: BeaconToolsMenuOwner;
   labeledSocial?: boolean;
+  mapPreview?: boolean;
 }) {
   const { data, userId } = useBeacon();
   const { colors } = useDesignTheme();
@@ -33,8 +35,9 @@ export function BeaconCardShortcuts({
   }, [data, userId]);
   const current = beaconCardShortcuts(data, userId, activityId);
   if (!current) return null;
-  const chat = onChat ? current.chat : null;
-  const memories = !chat && current.engagement?.tools.includes("experiences");
+  const chat = !mapPreview && onChat ? current.chat : null;
+  const memories =
+    !mapPreview && !chat && current.engagement?.tools.includes("experiences");
   if (
     section === "social" &&
     !current.engagement?.canReact &&

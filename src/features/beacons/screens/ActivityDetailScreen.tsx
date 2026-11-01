@@ -684,6 +684,7 @@ export default function ActivityDetail() {
     options.push("Activity");
   if (canAccess && isBeaconModuleEnabled(activity, "experiences"))
     options.push("Memories");
+  if (canAccess && (chatEnabled || hasChatHistory)) options.push("Chat");
   const requestedTab =
     selectedTab.activityId === activity.id ? selectedTab.tab : "Overview";
   const visibleTab =
@@ -2264,7 +2265,7 @@ function SlidingTabBar({
               opacity: pressed ? 0.72 : 1,
             })}
           >
-            <Icon size={16} color={selected ? colors.green : colors.muted} />
+            {width / options.length >= 68 ? <Icon size={16} color={selected ? colors.green : colors.muted} /> : null}
             <Text
               style={{
                 color: selected ? colors.ink : colors.muted,

@@ -45,3 +45,5 @@ Documentation guide
 - FINAL_BEACON_CARD_REFINEMENT_2026-10-31.md: shared primary/shortcut/Tools hierarchy, compact Map context and social rows, screenshots and verification boundaries.
 
 - CARD_CONTEXT_SOCIAL_CHAT_POLISH_2026-10-31.md: linked-context sizing, shared social rows, tab-aligned list utilities, compact chat creation and responsive evidence.
+
+- BEACON_MAP_UI_HOTFIXES_2026-10-31.md: compact context, inline Tools counts, Map social actions, dedicated Details Chat access, centered fade motion, scrollbar polish and verification evidence.

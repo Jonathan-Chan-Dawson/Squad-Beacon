@@ -398,7 +398,7 @@ export function BeaconToolsButton({
   menuOwner?: BeaconToolsMenuOwner;
 }) {
   const { data, userId } = useBeacon();
-  const { colors, tokens } = useDesignTheme();
+  const { colors } = useDesignTheme();
   const preview = beaconEngagement(data, userId, activityId);
   const anchor = useRef<View>(null);
   const identity = `${userId}:${activityId}`;
@@ -422,11 +422,11 @@ export function BeaconToolsButton({
           }}
           onPress={menuOwner?.onOpen ?? (() => setOpen(identity))}
           style={{
-            width: count ? 68 : 44,
+            width: count ? 76 : 44,
             minWidth: 44,
             minHeight: 44,
             flexDirection: "row",
-            gap: 3,
+            gap: 4,
             alignItems: "center",
             justifyContent: "center",
             borderRadius: 12,
@@ -445,32 +445,17 @@ export function BeaconToolsButton({
             </Text>
           ) : null}
           {count ? (
-            <View
+            <Text
               accessible={false}
               style={{
-                position: "absolute",
-                top: -4,
-                right: -3,
-                minWidth: 16,
-                height: 16,
-                paddingHorizontal: 3,
-                borderRadius: tokens.radius.circle,
-                backgroundColor: colors.accent,
-                alignItems: "center",
-                justifyContent: "center",
+                color: colors.textSecondary,
+                fontSize: 11,
+                lineHeight: 16,
+                marginLeft: 4,
               }}
             >
-              <Text
-                style={{
-                  color: colors.onAccent,
-                  fontSize: 10,
-                  lineHeight: 14,
-                  fontWeight: "600",
-                }}
-              >
-                {count}
-              </Text>
-            </View>
+              {count}
+            </Text>
           ) : null}
         </Pressable>
       </View>

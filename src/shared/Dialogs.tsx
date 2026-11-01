@@ -107,7 +107,7 @@ export function Dialog({
     if (!presented) return;
     const animation = Animated.timing(progress, {
       toValue: visible ? 1 : 0,
-      duration: reducedMotion ? 0 : visible ? 140 : 100,
+      duration: reducedMotion ? 0 : visible ? 180 : 120,
       useNativeDriver: Platform.OS !== "web",
     });
     animation.start(({ finished }) => {
@@ -175,14 +175,6 @@ export function Dialog({
             borderColor: colors.border,
             padding: tokens.space.md,
             gap: tokens.space.md,
-            transform: [
-              {
-                scale: progress.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [reducedMotion ? 1 : 0.97, 1],
-                }),
-              },
-            ],
           }}
         >
           <Text
@@ -197,7 +189,15 @@ export function Dialog({
             {title}
           </Text>
           <ScrollView
-            style={{ flexShrink: 1 }}
+            style={{
+              flexShrink: 1,
+              ...(Platform.OS === "web"
+                ? {
+                    scrollbarWidth: "thin",
+                    scrollbarColor: `${colors.border} transparent`,
+                  }
+                : {}),
+            }}
             contentContainerStyle={{ gap: tokens.space.md }}
             keyboardShouldPersistTaps="handled"
           >

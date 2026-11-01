@@ -10,5 +10,6 @@ Profile feature
 - settings/ThemePicker.tsx: surface, primary and complementary-highlight previews; Essential Dark/Light shortcuts share one family and preserve saved family/appearance preferences.
 
 - sonarSelection.ts and components/ProfileSonarCard.tsx: individual-recipient review, expiry-preserving Save people, explicit extension, and the shared filtered people picker. app/location.tsx (including legacy Map links) opens this canonical control; device/session logic stays here.
+- Sonar has no recipient-count cap; selections still require currently accepted friends and explicit review.
 
 - ProfileSonarCard stages Choose People then Review Sharing before the existing permission/start sequence. ProfileScreen consumes section=aspirations and positions the About content.

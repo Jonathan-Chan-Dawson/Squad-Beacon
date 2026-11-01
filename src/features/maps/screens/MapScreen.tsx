@@ -3023,6 +3023,7 @@ export default function MapScreen() {
           }}
         >
           <ScrollView
+            showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
             style={{ maxHeight: mapTooltip.maxHeight }}
             contentContainerStyle={{ paddingBottom: 0 }}
@@ -3077,6 +3078,7 @@ export default function MapScreen() {
           }}
         >
           <ScrollView
+            showsVerticalScrollIndicator={false}
             keyboardShouldPersistTaps="handled"
             style={{ flexShrink: 1, maxHeight: mapTooltip.maxHeight }}
             contentContainerStyle={{ paddingBottom: 0 }}

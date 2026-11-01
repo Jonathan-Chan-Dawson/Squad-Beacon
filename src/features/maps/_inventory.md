@@ -34,7 +34,7 @@ Maps feature
 
 - components/BeaconLocationPreview.native.tsx: shared noninteractive, permission-gated physical-location mini map used by native detail and Overview; caller controls Map focus.
 
-- nativeMapPresentation.ts: shared zoom modes, selected-marker protection, ranked Beacon grouping, neighbor-aware count placement and rendering budget; friend positions never feed Beacon density.
+- nativeMapPresentation.ts: shared zoom modes, selected-marker protection, ranked Beacon grouping, neighbor-aware count placement and rendering budget; friend positions never feed Beacon density. Grouping uses tighter 32/40/52/64px screen-space distances across tiers with fractional-zoom compensation; mixed friend/Beacon attachment uses 32px (28px in Friends emphasis).
 - clusterLayout.ts, clusterBloom.ts: shared petal geometry, compact shadows, adaptive close-zoom friends and unified total-count badges; far/micro modes omit friend satellite rings.
 - components/LivingMapMarkers.native.tsx: original-artwork native blooms, shared shadow/count styling and accessible expanded touch targets.
 

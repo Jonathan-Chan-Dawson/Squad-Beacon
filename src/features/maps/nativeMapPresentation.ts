@@ -21,6 +21,15 @@ export const NATIVE_STACK_LIMIT = 7;
 export const NATIVE_EXPLORER_THRESHOLD = 6;
 export const NATIVE_DENSITY_MINIMUM = 6;
 const BUFFER = 0.35;
+// Screen-space distances: allow artwork to touch before combining it. Both
+// renderers use this policy; the petal artwork itself is unchanged.
+const GROUP_RADIUS: Record<NativeMapMode, number> = {
+  stack: 32,
+  swarm: 40,
+  atmosphere: 52,
+  micro: 64,
+};
+const MIXED_RADIUS = 32;
 
 /** Only committed camera changes change the tier; retain it inside the buffer. */
 export function nativeMapMode(
@@ -401,27 +410,31 @@ export function nativeMapPresentations(
   const beacons = ordinary.filter((point) => point.kind === "beacon");
   const people = ordinary.filter((point) => point.kind === "person");
   let pressured = false;
+  // Supercluster evaluates integer zooms. Compensate for fractional zoom so
+  // markers do not merge at nearly twice the intended visual distance.
+  const zoomScale = 2 ** (viewport.zoom - Math.floor(viewport.zoom));
   const build = (radius: number) => {
-    const groups = clusterMapPoints(beacons, viewport, radius).flatMap(
-      (group) => {
-        if (group.members.length < 2 || group.members.length > 3)
-          return [group];
-        const separated = group.members.every((point, index) =>
-          group.members.slice(index + 1).every((other) => {
-            const offset = nativePointOffset(point, other, viewport.zoom);
-            return Math.hypot(offset.x, offset.y) >= 48;
-          }),
-        );
-        return separated
-          ? group.members.map((point) => ({
-              id: `map-group:${point.id}`,
-              latitude: point.latitude,
-              longitude: point.longitude,
-              members: [point],
-            }))
-          : [group];
-      },
-    );
+    const groups = clusterMapPoints(
+      beacons,
+      viewport,
+      radius / zoomScale,
+    ).flatMap((group) => {
+      if (group.members.length < 2 || group.members.length > 3) return [group];
+      const separated = group.members.every((point, index) =>
+        group.members.slice(index + 1).every((other) => {
+          const offset = nativePointOffset(point, other, viewport.zoom);
+          return Math.hypot(offset.x, offset.y) >= GROUP_RADIUS.stack;
+        }),
+      );
+      return separated
+        ? group.members.map((point) => ({
+            id: `map-group:${point.id}`,
+            latitude: point.latitude,
+            longitude: point.longitude,
+            members: [point],
+          }))
+        : [group];
+    });
     const remaining: ClusterPoint[] = [];
     // Grid lookup bounds the collision search, even with thousands of authorized friends.
     const cell = 96,
@@ -447,7 +460,7 @@ export function nativeMapPresentations(
     for (const person of eligiblePeople) {
       const p = screen(person);
       let nearest: MapPointGroup | undefined,
-        distance = friendsProminent ? 42 : 48;
+        distance = friendsProminent ? MIXED_RADIUS - 4 : MIXED_RADIUS;
       for (let x = -1; x <= 1; x++)
         for (let y = -1; y <= 1; y++)
           for (const group of buckets.get(
@@ -466,7 +479,7 @@ export function nativeMapPresentations(
       if (nearest) nearest.members.push(person);
       else remaining.push(person);
     }
-    groups.push(...clusterMapPoints(remaining, viewport, radius));
+    groups.push(...clusterMapPoints(remaining, viewport, radius / zoomScale));
     const requested = pressured && mode === "stack" ? "swarm" : mode;
     const result = groups.map((group) =>
       nativePresentation(
@@ -494,14 +507,7 @@ export function nativeMapPresentations(
       );
     return avoidNeighborArtwork(result, viewport);
   };
-  let radius =
-    mode === "stack"
-      ? 48
-      : mode === "swarm"
-        ? 80
-        : mode === "atmosphere"
-          ? 120
-          : 160;
+  let radius = GROUP_RADIUS[mode];
   let result = build(radius);
   while (
     result.reduce((sum, item) => sum + item.featureCost, 0) > budget &&

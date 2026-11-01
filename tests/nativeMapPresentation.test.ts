@@ -544,3 +544,102 @@ test("selection uses total unique members across kinds and zooms", () => {
     }
   }
 });
+
+test("markers can touch before grouping at integer and fractional zooms in every tier", () => {
+  for (const [mode, radius, zooms] of [
+    ["stack", 32, [16, 16.75, 17, 17.95, 19]],
+    ["swarm", 40, [12, 12.75, 14, 15.95]],
+    ["atmosphere", 52, [9, 9.75, 10.5, 11.95]],
+    ["micro", 64, [3, 5.75, 8.95]],
+  ] as const) {
+    for (const zoom of zooms) {
+      const camera = {
+        ...viewport,
+        centerLatitude: 0,
+        centerLongitude: 0,
+        zoom,
+      };
+      const point = (
+        kind: "beacon" | "person",
+        id: string,
+        x: number,
+      ): ClusterPoint => ({
+        id: `${kind}:${id}`,
+        kind,
+        latitude: 0,
+        longitude: (x * 360) / (256 * 2 ** zoom),
+        category: "Social",
+      });
+      // Their visible faces may touch, but a modest gap between centers no
+      // longer pulls a person into a Beacon's satellite group.
+      for (const prominent of [false, true]) {
+        const touching = [point("beacon", "a", 0), point("person", "a", 36)];
+        const original = structuredClone(touching);
+        assert.equal(
+          nativeMapPresentations(
+            touching,
+            camera,
+            mode,
+            {},
+            new Set(),
+            150,
+            prominent,
+          ).length,
+          2,
+          `${mode}@${zoom} mixed touching`,
+        );
+        assert.deepEqual(touching, original);
+        assert.equal(
+          nativeMapPresentations(
+            [point("beacon", "a", 0), point("person", "a", 24)],
+            camera,
+            mode,
+            {},
+            new Set(),
+            150,
+            prominent,
+          ).length,
+          1,
+          `${mode}@${zoom} mixed overlapping`,
+        );
+      }
+      assert.equal(
+        nativeMapPresentations(
+          [point("beacon", "a", 0), point("beacon", "b", 36)],
+          camera,
+          mode,
+        ).length,
+        2,
+        `${mode}@${zoom} Beacon pair`,
+      );
+      assert.equal(
+        nativeMapPresentations(
+          [point("person", "a", 0), point("person", "b", radius + 5)],
+          camera,
+          mode,
+        ).length,
+        2,
+        `${mode}@${zoom} people outside radius`,
+      );
+      assert.equal(
+        nativeMapPresentations(
+          [point("person", "a", 0), point("person", "b", radius - 5)],
+          camera,
+          mode,
+        ).length,
+        1,
+        `${mode}@${zoom} people inside radius`,
+      );
+      const dense = Array.from({ length: 6 }, (_, i) =>
+        point("beacon", String(i), i * 2),
+      );
+      const result = nativeMapPresentations(dense, camera, mode);
+      assert.equal(result.length, 1, `${mode}@${zoom} true dense cluster`);
+      assert.equal(result[0].group.members.length, 6);
+      assert.deepEqual(
+        nativeMapPresentations([...dense].reverse(), camera, mode),
+        result,
+      );
+    }
+  }
+});

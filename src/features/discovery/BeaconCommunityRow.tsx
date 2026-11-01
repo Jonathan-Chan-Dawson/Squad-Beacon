@@ -1,7 +1,6 @@
 import { openCommunityProfile } from "@/src/features/social/communityNavigation";
 import React, { createContext, useContext, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import { Check, ChevronRight } from "lucide-react-native";
 import { useBeacon } from "@/src/shared/store";
 import { Action, Button, Sheet, useTheme } from "@/src/shared/ui";
 import { CommunityAvatar } from "@/src/features/people/components/CommunityAvatar";
@@ -223,7 +222,7 @@ function CompactCommunityIdentity({
   onChanged?: () => void;
   tooltip?: boolean;
 }) {
-  const { styles, colors } = useTheme();
+  const { styles } = useTheme();
   const { current, run } = useCommunityMembership(summary, onChanged);
   const presentation = compactCommunityMembershipPresentation(current);
   const title = presentation.actionTitle;
@@ -257,56 +256,21 @@ function CompactCommunityIdentity({
           minHeight: 44,
         }}
       >
-        <CommunityAvatar type={current.entity_type} size={tooltip ? 20 : 24} />
-        {isJoined || tooltip ? (
-          <Text
-            numberOfLines={tooltip ? 1 : undefined}
-            style={[
-              styles.body,
-              { flex: 1, flexShrink: 1, fontSize: 12, lineHeight: 17 },
-            ]}
-          >
-            {current.name}
-            {!tooltip ? <Text style={styles.muted}> · Joined</Text> : null}
-          </Text>
-        ) : (
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={{ ...styles.body, fontSize: 12, lineHeight: 17 }}>
-              {current.name}
-            </Text>
-            <Text style={{ ...styles.muted, fontSize: 12, lineHeight: 17 }}>
-              {typeLabel}
-            </Text>
-          </View>
-        )}
-        {isJoined && tooltip ? (
+        <CommunityAvatar type={current.entity_type} size={20} />
+        <Text
+          numberOfLines={tooltip ? 1 : 2}
+          style={{
+            ...styles.body,
+            flex: 1,
+            minWidth: 0,
+            fontSize: 12,
+            lineHeight: 17,
+          }}
+        >
+          {current.name}
+        </Text>
+        {isJoined ? (
           <Text style={{ ...styles.muted, fontSize: 11 }}>Joined</Text>
-        ) : null}
-        {isJoined && !tooltip ? (
-          <View
-            accessibilityElementsHidden
-            style={{
-              width: 24,
-              height: 24,
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <Check size={16} color={colors.green} accessible={false} />
-          </View>
-        ) : null}
-        {!tooltip ? (
-          <View
-            accessibilityElementsHidden
-            style={{
-              width: 24,
-              height: 24,
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <ChevronRight size={16} color={colors.muted} accessible={false} />
-          </View>
         ) : null}
       </Pressable>
       {title ? (

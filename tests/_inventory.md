@@ -1,5 +1,7 @@
 Test map
 
+- sonarSelection.test.ts and sonarRecipients.database.test.ts: uncapped Sonar recipients, start/save/extension, request replay, accepted-friend/block checks and sharing expiry through the ordered migrations.
+
 - browser/authEmailLinks.spec.ts: canonical signup/reset/resend destinations, explicit confirmation with no prefetch exchange, cross-browser token-hash entry, recovery and expired-link handling. Uses playwright.auth.config.ts and the separate auth-email preview.
 - browser/authConfirmationLayout.spec.ts: 320px/390px light/dark confirmation screenshots, focus, tap targets, horizontal fit and reduced-motion checks without consuming a token.
 
@@ -50,3 +52,5 @@ Tests should exercise product flows through public routes/actions and preserve e
 - browser/unifiedTabs.spec.ts: keyboard tab selection, retained chat search, filter selection and responsive navigation screenshots.
 
 - beaconCardShortcuts.test.ts and browser/beaconShortcuts.spec.ts: viewer/module/location permissions, direct card actions, public privacy, map return and compact phone/desktop layouts.
+
+- browser/beaconFilterMotion.spec.ts: actual Map/Browse centered Filters fade frames, reduced motion, stable position, Reset/Show actions and Escape dismissal.

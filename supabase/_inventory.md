@@ -23,6 +23,8 @@ Supabase database and functions
 
 No remote deployment is performed by local source changes.
 
+- 20261101042355_sonar_unlimited_people.sql: removes Sonar's recipient-count ceiling while retaining accepted-friend validation, sharing expiry, owner scope and replay. Source-only pending hosted rollout.
+
 - 202610140003_messaging_hub.sql: additive private DM read markers, canonical group read boundaries, and owner-validated private-list rename/protected deletion; source-only pending hosted rollout.
 
 - 202610130001_status_emoji.sql through 202610130004_atomic_creation_invites.sql: local redesign extensions for finite persisted status emoji, atomic status mutation/history, bounded private-ledger Routine calendar projection and transactional selected invitations. Security-definer entry points keep empty search paths and scoped execute grants. Hosted deployment is pending target/authorization setup; no credentials or project link were available locally during audit.

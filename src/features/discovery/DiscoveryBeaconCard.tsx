@@ -1,9 +1,7 @@
 import React from "react";
 import { Pressable, Text, View } from "react-native";
 import {
-  ArrowRight,
   CalendarDays,
-  ChevronRight,
   Clock3,
   MapPin,
   Link2,
@@ -99,8 +97,8 @@ export function DiscoveryBeaconCard({
     flexShrink: 0,
     backgroundColor: colors.surfaceRaised,
     borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 2,
+    paddingHorizontal: 8,
+    paddingVertical: 0,
   };
   const categoryToken = tokens.categories[category] ?? tokens.categories.Other;
   const metadata = discoveryCardMetadata({
@@ -556,14 +554,6 @@ export function DiscoveryBeaconCard({
         {metadataAccessory}
       </View>
 
-      <View
-        style={{
-          height: 1,
-          marginVertical: 2,
-          backgroundColor: colors.border,
-        }}
-      />
-
       {planContext || context || communityContext ? (
         <View testID="beacon-linked-context" style={contextBlockStyle}>
           {planContext?.title.trim() ? (
@@ -602,16 +592,6 @@ export function DiscoveryBeaconCard({
                 <Text style={{ fontWeight: "600" }}>Plan</Text>
                 {` · ${planContext.title.trim()}`}
               </Text>
-              <View
-                style={{
-                  width: 24,
-                  height: 24,
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <ChevronRight size={16} color={colors.textSecondary} />
-              </View>
             </Pressable>
           ) : null}
 
@@ -655,7 +635,6 @@ export function DiscoveryBeaconCard({
             >
               Open Beacon
             </Text>
-            <ArrowRight size={17} color={colors.onAccent} />
           </Pressable>
           {actionShortcuts}
         </View>
