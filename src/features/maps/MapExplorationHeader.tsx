@@ -1,16 +1,19 @@
-import React, { useEffect, useState } from "react";
+import { focusOverlay } from "@/src/shared/overlayFocus";
+import React, { useRef, useState } from "react";
 import {
-  Animated,
-  Easing,
+  Modal,
+  Platform,
   Pressable,
   ScrollView,
   Text,
   TextInput,
   View,
-  type LayoutChangeEvent,
+  useWindowDimensions,
 } from "react-native";
-import { useReducedMotion } from "react-native-reanimated";
 import {
+  Check,
+  ChevronDown,
+  Dices,
   MapPinned,
   Search,
   SlidersHorizontal,
@@ -18,52 +21,23 @@ import {
   Zap,
 } from "lucide-react-native";
 import { GlassBar } from "@/src/shared/design-system";
-import { MotionPressable } from "@/src/shared/MotionPressable";
 import { useTheme } from "@/src/shared/ui";
+import type { Category } from "@/src/shared/types";
+import type { ExplorationFilters } from "@/src/shared/exploration";
+import {
+  BEACON_CATEGORIES,
+  selectedBeaconCategories,
+  wantsHappeningNow,
+} from "@/src/shared/explorationFilters";
+import { MapControlPopover } from "./MapControlPopover";
 
-export type MapQuickFilter = "All" | "Friends" | "Squads" | "Public" | "Now";
+export type MapQuickFilter = "All" | "Friends" | "Now";
 export type ActiveMapFilterChip = { key: string; label: string };
-
-function QuickChip({
-  label,
-  selected,
-  onPress,
-  onLayout,
-}: {
-  label: MapQuickFilter;
-  selected: boolean;
-  onPress: () => void;
-  onLayout: (event: LayoutChangeEvent) => void;
-}) {
-  const { colors } = useTheme();
-  return (
-    <MotionPressable
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityState={{ selected }}
-      onPress={onPress}
-      onLayout={onLayout}
-      style={{
-        minHeight: 38,
-        flexShrink: 0,
-        justifyContent: "center",
-        paddingHorizontal: 13,
-        borderRadius: 20,
-        zIndex: 1,
-      }}
-    >
-      <Text
-        style={{
-          color: selected ? colors.onPrimary : colors.ink,
-          fontSize: 13,
-          fontWeight: "700",
-        }}
-      >
-        {label}
-      </Text>
-    </MotionPressable>
-  );
-}
+export type DiscoveryMenu = "friends" | "interests" | null;
+export type FriendScopeChoice = {
+  id: NonNullable<ExplorationFilters["friendScope"]>;
+  label: string;
+};
 
 export function MapExplorationHeader({
   areaLabel,
@@ -72,7 +46,18 @@ export function MapExplorationHeader({
   onQueryChange,
   onQuerySubmit,
   onQuickFilter,
-  selectedQuickFilter,
+  filters,
+  friendLabel,
+  friendChoices,
+  onFriendScopeChange,
+  onCategoriesChange,
+  onPersonalizedChange,
+  hasProfileInterests,
+  menu,
+  onMenuChange,
+  onSurprise,
+  surpriseDisabled,
+  surpriseBusy,
   onOpenFilters,
   activeFilterCount,
   activeChips,
@@ -80,7 +65,6 @@ export function MapExplorationHeader({
   onClearContexts,
   onSearchFocus,
   onExploreArea,
-  nowSelected,
   sharingIndicator,
   loading,
   calm = false,
@@ -89,316 +73,527 @@ export function MapExplorationHeader({
   areaLabel?: string;
   onBackNearMe?: () => void;
   query: string;
-  onQueryChange: (value: string) => void;
-  onQuerySubmit: (value: string) => void;
-  onQuickFilter: (filter: MapQuickFilter) => void;
-  selectedQuickFilter: MapQuickFilter | null;
-  onOpenFilters: () => void;
+  onQueryChange(value: string): void;
+  onQuerySubmit(value: string): void;
+  onQuickFilter(filter: MapQuickFilter): void;
+  filters: ExplorationFilters;
+  friendLabel: string;
+  friendChoices: FriendScopeChoice[];
+  onFriendScopeChange(scope: ExplorationFilters["friendScope"]): void;
+  onCategoriesChange(categories: Category[]): void;
+  onPersonalizedChange(value: boolean): void;
+  hasProfileInterests: boolean;
+  menu: DiscoveryMenu;
+  onMenuChange(value: DiscoveryMenu): void;
+  onSurprise(eventTime: number): void;
+  surpriseDisabled?: string;
+  surpriseBusy?: boolean;
+  onOpenFilters(): void;
   activeFilterCount: number;
   activeChips: ActiveMapFilterChip[];
-  onRemoveChip: (key: string) => void;
+  onRemoveChip(key: string): void;
   onClearContexts?: () => void;
-  onSearchFocus: () => void;
-  onExploreArea: () => void;
-  nowSelected: boolean;
+  onSearchFocus(): void;
+  onExploreArea(): void;
   sharingIndicator?: React.ReactNode;
   loading?: boolean;
   calm?: boolean;
-  onHeightChange: (height: number) => void;
+  onHeightChange(height: number): void;
 }) {
   const { colors } = useTheme();
-  const reducedMotion = useReducedMotion();
-  const [railLayouts, setRailLayouts] = useState<
-    Partial<Record<MapQuickFilter, { x: number; width: number }>>
-  >({});
-  const [indicatorX] = useState(() => new Animated.Value(0));
-  const [indicatorWidth] = useState(() => new Animated.Value(0));
-  const [shimmerProgress] = useState(() => new Animated.Value(0));
-  const [railWidth, setRailWidth] = useState(0);
-  const quickFilters: MapQuickFilter[] = ["All", "Friends", "Squads", "Public"];
-
-  useEffect(() => {
-    if (!selectedQuickFilter) return;
-    const layout = railLayouts[selectedQuickFilter];
-    if (!layout) return;
-    if (reducedMotion) {
-      indicatorX.setValue(layout.x);
-      indicatorWidth.setValue(layout.width);
+  const size = useWindowDimensions();
+  const friendsAnchor = useRef<View>(null),
+    interestsAnchor = useRef<View>(null);
+  const menuContent = useRef<View>(null);
+  const [anchor, setAnchor] = useState({ x: 16, y: 100 });
+  const categories = selectedBeaconCategories(filters);
+  const nowSelected = wantsHappeningNow(filters);
+  const forMe = hasProfileInterests && filters.personalizedRanking !== false;
+  function closeMenu() {
+    const ref = menu === "friends" ? friendsAnchor : interestsAnchor;
+    onMenuChange(null);
+    requestAnimationFrame(() => {
+      if (Platform.OS === "web") {
+        const trigger = ref.current as unknown as HTMLElement | null;
+        trigger?.focus({ preventScroll: true });
+        trigger?.scrollIntoView({
+          block: "nearest",
+          inline: "nearest",
+          behavior: "instant",
+        });
+      }
+    });
+  }
+  function openMenu(next: Exclude<DiscoveryMenu, null>) {
+    if (next === menu) {
+      closeMenu();
       return;
     }
-    Animated.parallel([
-      Animated.spring(indicatorX, {
-        toValue: layout.x,
-        damping: 22,
-        stiffness: 220,
-        mass: 0.7,
-        useNativeDriver: false,
-      }),
-      Animated.spring(indicatorWidth, {
-        toValue: layout.width,
-        damping: 22,
-        stiffness: 220,
-        mass: 0.7,
-        useNativeDriver: false,
-      }),
-    ]).start();
-  }, [
-    indicatorWidth,
-    indicatorX,
-    railLayouts,
-    reducedMotion,
-    selectedQuickFilter,
-  ]);
-
-  useEffect(() => {
-    if (!loading || reducedMotion || railWidth === 0) {
-      shimmerProgress.stopAnimation();
-      shimmerProgress.setValue(0);
-      return;
-    }
-    const animation = Animated.loop(
-      Animated.timing(shimmerProgress, {
-        toValue: 1,
-        duration: 1250,
-        easing: Easing.linear,
-        useNativeDriver: true,
-      }),
-    );
-    animation.start();
-    return () => animation.stop();
-  }, [loading, railWidth, reducedMotion, shimmerProgress]);
-
+    const ref = next === "friends" ? friendsAnchor : interestsAnchor;
+    ref.current?.measureInWindow((x, y, width, height) => {
+      setAnchor({ x: x + width, y: y + height + 6 });
+      onMenuChange(next);
+    });
+  }
+  const chipStyle = (selected: boolean) => ({
+    minHeight: 44,
+    flexShrink: 0 as const,
+    borderRadius: 22,
+    paddingHorizontal: 12,
+    justifyContent: "center" as const,
+    backgroundColor: selected ? colors.primaryContainer + "EB" : colors.surface + "DF",
+    borderWidth: 1,
+    borderColor: selected ? colors.primary : colors.outline,
+  });
+  const iconStyle = (selected: boolean) => ({
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 1,
+    borderColor: selected ? colors.primary : colors.outline,
+    backgroundColor: selected ? colors.primaryContainer + "EB" : colors.surface + "DF",
+    alignItems: "center" as const,
+    justifyContent: "center" as const,
+    flexShrink: 0 as const,
+  });
+  const tooltip = (title: string) =>
+    Platform.OS === "web"
+      ? {
+          ref: (node: View | null) =>
+            (node as unknown as HTMLElement | null)?.setAttribute(
+              "title",
+              title,
+            ),
+        }
+      : {};
+  const menuWidth = Math.min(288, size.width - 32);
+  const menuHeight = Math.min(430, Math.max(180, size.height - anchor.y - 20));
   return (
     <View
       testID="map-exploration-header"
       pointerEvents="box-none"
       onLayout={(event) => onHeightChange(event.nativeEvent.layout.height)}
-      style={{ width: "100%", gap: 6, paddingHorizontal: 16 }}
+      style={{
+        width: "100%",
+        gap: 2,
+        paddingHorizontal: size.width < 360 ? 8 : 16,
+      }}
     >
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 7 }}>
-        <GlassBar
-          style={{
-            height: 48,
-            flex: 1,
-            flexDirection: "row",
-            alignItems: "center",
-            gap: 9,
-            paddingLeft: 14,
-            paddingRight: 2,
-            borderRadius: 24,
-          }}
-        >
-          <Search size={18} color={colors.green} />
-          <TextInput
-            accessibilityLabel="Search places, Beacons, people and communities"
-            placeholder="Search Beacons, people, places..."
-            placeholderTextColor={colors.muted}
-            value={query}
-            onChangeText={onQueryChange}
-            onFocus={onSearchFocus}
-            onSubmitEditing={({ nativeEvent }) =>
-              onQuerySubmit(nativeEvent.text)
-            }
-            returnKeyType="search"
-            style={
-              {
-                flex: 1,
-                minWidth: 0,
-                height: 46,
-                color: colors.ink,
-                fontSize: 14,
-                paddingVertical: 8,
-                outlineStyle: "none",
-              } as never
-            }
-          />
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Explore area"
-            onPress={onExploreArea}
-            style={{
-              minWidth: 44,
-              minHeight: 44,
-              justifyContent: "center",
-              alignItems: "center",
-              borderLeftWidth: 1,
-              borderLeftColor: colors.line,
-            }}
-          >
-            <MapPinned size={18} color={colors.green} />
-          </Pressable>
-        </GlassBar>
-      </View>
-
-      <View
+      <GlassBar
         style={{
+          height: 48,
           flexDirection: "row",
           alignItems: "center",
-          gap: 12,
-          opacity: calm ? 0.65 : 1,
-          transform: reducedMotion ? [] : [{ scaleY: calm ? 0.92 : 1 }],
+          gap: 9,
+          paddingLeft: 14,
+          paddingRight: 2,
+          borderRadius: 24,
         }}
       >
-        <View
-          onLayout={(event) => setRailWidth(event.nativeEvent.layout.width)}
+        <Search size={18} color={colors.primary} />
+        <TextInput
+          accessibilityLabel="Search places, Beacons, people and communities"
+          placeholder="Search Beacons, people, places..."
+          placeholderTextColor={colors.muted}
+          value={query}
+          onChangeText={onQueryChange}
+          onFocus={onSearchFocus}
+          onSubmitEditing={({ nativeEvent }) => onQuerySubmit(nativeEvent.text)}
+          returnKeyType="search"
           style={{
             flex: 1,
             minWidth: 0,
-            height: 48,
-            position: "relative",
-            overflow: "hidden",
+            height: 46,
+            color: colors.ink,
+            fontSize: 14,
+            paddingVertical: 8,
           }}
-        >
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={{ flex: 1, minWidth: 0, height: 48, overflow: "hidden" }}
-            contentContainerStyle={{
-              alignItems: "center",
-              gap: 3,
-              minHeight: 44,
-              paddingHorizontal: 2,
-            }}
-          >
-            <View
-              pointerEvents="none"
-              style={{
-                position: "absolute",
-                top: 1,
-                bottom: 1,
-                left: 0,
-                right: 0,
-              }}
-            >
-              {selectedQuickFilter ? (
-                <Animated.View
-                  style={{
-                    position: "absolute",
-                    top: 3,
-                    left: indicatorX,
-                    width: indicatorWidth,
-                    height: 38,
-                    borderRadius: 20,
-                    backgroundColor: colors.green,
-                  }}
-                />
-              ) : null}
-            </View>
-            {quickFilters.map((label) => (
-              <QuickChip
-                key={label}
-                label={label}
-                selected={selectedQuickFilter === label}
-                onPress={() => onQuickFilter(label)}
-                onLayout={(event) => {
-                  const { x, width } = event.nativeEvent.layout;
-                  setRailLayouts((current) => ({
-                    ...current,
-                    [label]: { x, width },
-                  }));
-                }}
-              />
-            ))}
-          </ScrollView>
-          {loading ? (
-            <Animated.View
-              pointerEvents="none"
-              style={{
-                position: "absolute",
-                left: 0,
-                top: 5,
-                bottom: 5,
-                width: 54,
-                borderRadius: 16,
-                backgroundColor: colors.white,
-                opacity: reducedMotion ? 0.1 : 0.17,
-                transform: [
-                  {
-                    translateX: shimmerProgress.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: [-64, railWidth + 16],
-                    }),
-                  },
-                ],
-              }}
-            />
-          ) : null}
-        </View>
+        />
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Now"
-          accessibilityState={{ selected: nowSelected }}
-          aria-selected={nowSelected}
-          onPress={() => onQuickFilter("Now")}
+          accessibilityLabel="Explore area"
+          onPress={onExploreArea}
           style={{
+            minWidth: 44,
             minHeight: 44,
-            flexDirection: "row",
-            alignItems: "center",
-            gap: 4,
-            paddingHorizontal: 10,
-            borderRadius: 22,
-            backgroundColor: nowSelected
-              ? colors.green + "35"
-              : colors.white + "ED",
-            borderWidth: 1,
-            borderColor: nowSelected ? colors.green : colors.line,
-          }}
-        >
-          <Zap size={14} color={colors.green} />
-          <Text style={{ color: colors.ink, fontSize: 12, fontWeight: "700" }}>
-            Now
-          </Text>
-        </Pressable>
-        <Pressable
-          testID="map-filter-toggle"
-          accessibilityRole="button"
-          accessibilityLabel={
-            activeFilterCount
-              ? `Filters, ${activeFilterCount} active`
-              : "Filters"
-          }
-          onPress={onOpenFilters}
-          style={{
-            minHeight: 44,
-            minWidth: 48,
-            flexDirection: "row",
             alignItems: "center",
             justifyContent: "center",
-            gap: 5,
-            paddingHorizontal: 10,
-            borderRadius: 21,
-            backgroundColor: colors.white + "ED",
-            borderColor: colors.line,
-            borderWidth: 1,
+            borderLeftWidth: 1,
+            borderLeftColor: colors.outline,
           }}
         >
-          <SlidersHorizontal size={15} color={colors.green} />
-          <Text style={{ color: colors.ink, fontSize: 12, fontWeight: "700" }}>
-            Filters
-          </Text>
-          {activeFilterCount ? (
-            <View
-              accessibilityLabel={`${activeFilterCount} active filters`}
+          <MapPinned size={18} color={colors.primary} />
+        </Pressable>
+      </GlassBar>
+      <View
+        testID="map-discovery-controls"
+        accessibilityState={{ busy: loading }}
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 6,
+          opacity: calm ? 0.65 : 1,
+        }}
+      >
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={{ flex: 1, minWidth: 0 }}
+          contentContainerStyle={{
+            gap: 4,
+            alignItems: "center",
+            minHeight: 44,
+          }}
+          onScrollBeginDrag={() => onMenuChange(null)}
+        >
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="All"
+            accessibilityHint="Clear Friends and category restrictions; retain time and advanced filters"
+            accessibilityState={{
+              selected: !filters.friendScope && !categories.length,
+            }}
+            aria-pressed={!filters.friendScope && !categories.length}
+            onPress={() => onQuickFilter("All")}
+            style={chipStyle(!filters.friendScope && !categories.length)}
+          >
+            <Text
               style={{
-                minWidth: 18,
-                height: 18,
-                paddingHorizontal: 4,
-                borderRadius: 9,
-                alignItems: "center",
+                color:
+                  !filters.friendScope && !categories.length
+                    ? colors.primary
+                    : colors.ink,
+                fontWeight: "700",
+                fontSize: 13,
+              }}
+            >
+              All
+            </Text>
+          </Pressable>
+          <View
+            style={{
+              flexDirection: "row",
+              borderRadius: 22,
+              overflow: "hidden",
+              backgroundColor: filters.friendScope
+                ? colors.primaryContainer
+                : colors.surface + "DF",
+              borderWidth: 1,
+              borderColor: filters.friendScope
+                ? colors.primary
+                : colors.outline,
+            }}
+          >
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={
+                friendLabel ? `Friends, ${friendLabel}` : "Friends"
+              }
+              accessibilityState={{ selected: !!filters.friendScope }}
+              aria-pressed={!!filters.friendScope}
+              onPress={() => onQuickFilter("Friends")}
+              style={{
+                minHeight: 44,
+                paddingLeft: 12,
+                paddingRight: 3,
                 justifyContent: "center",
-                backgroundColor: colors.green,
               }}
             >
               <Text
-                style={{ color: colors.onPrimary, fontSize: 10, fontWeight: "800" }}
+                style={{
+                  color: filters.friendScope ? colors.primary : colors.ink,
+                  fontWeight: "700",
+                  fontSize: 13,
+                }}
               >
-                {activeFilterCount}
+                Friends
               </Text>
-            </View>
-          ) : null}
-        </Pressable>
+            </Pressable>
+            <Pressable
+              ref={friendsAnchor}
+              accessibilityRole="button"
+              accessibilityLabel="Choose Friends filter"
+              accessibilityState={{ expanded: menu === "friends" }}
+              onPress={() => openMenu("friends")}
+              style={{
+                width: 44,
+                height: 44,
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+            >
+              <ChevronDown
+                size={15}
+                color={filters.friendScope ? colors.primary : colors.ink}
+              />
+            </Pressable>
+          </View>
+          <Pressable
+            ref={interestsAnchor}
+            accessibilityRole="button"
+            accessibilityLabel={`Interests${categories.length ? `, ${categories.length} categories` : ""}, For Me ranking ${forMe ? "on" : "off"}`}
+            accessibilityState={{
+              expanded: menu === "interests",
+              selected: !!categories.length,
+            }}
+            aria-expanded={menu === "interests"}
+            onPress={() => openMenu("interests")}
+            style={{
+              ...chipStyle(!!categories.length),
+              paddingHorizontal: 6,
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 3,
+            }}
+          >
+            <Text
+              style={{
+                color: categories.length ? colors.primary : colors.ink,
+                fontWeight: "700",
+                fontSize: 13,
+              }}
+            >
+              Interests
+            </Text>
+            {!!categories.length && (
+              <Text
+                style={{
+                  color: colors.primary,
+                  fontSize: 10,
+                  fontWeight: "700",
+                }}
+              >
+                {categories.length}
+              </Text>
+            )}
+            <ChevronDown
+              size={12}
+              color={categories.length ? colors.primary : colors.ink}
+            />
+          </Pressable>
+        </ScrollView>
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 8,
+            paddingRight: 5,
+            flexShrink: 0,
+          }}
+        >
+          <Pressable
+            {...tooltip(surpriseDisabled ?? "Surprise Me")}
+            testID="map-surprise"
+            accessibilityRole="button"
+            accessibilityLabel="Surprise Me"
+            accessibilityHint={
+              surpriseDisabled ?? "Discover a matching Beacon in this area"
+            }
+            accessibilityState={{
+              disabled: !!surpriseDisabled || !!surpriseBusy,
+              busy: !!surpriseBusy,
+            }}
+            disabled={!!surpriseDisabled || !!surpriseBusy}
+            onPress={() => onSurprise(Date.now())}
+            style={{
+              ...iconStyle(false),
+              opacity: surpriseDisabled || surpriseBusy ? 0.5 : 1,
+            }}
+          >
+            <Dices size={19} color={colors.success} />
+          </Pressable>
+          <Pressable
+            {...tooltip("Happening now")}
+            testID="map-now"
+            accessibilityRole="button"
+            accessibilityLabel="Happening now"
+            accessibilityState={{ selected: nowSelected }}
+            aria-pressed={nowSelected}
+            onPress={() => onQuickFilter("Now")}
+            style={iconStyle(nowSelected)}
+          >
+            <Zap
+              size={18}
+              color={nowSelected ? colors.primary : colors.ink}
+              fill={nowSelected ? colors.primary : "none"}
+            />
+          </Pressable>
+          <Pressable
+            testID="map-filter-toggle"
+            accessibilityRole="button"
+            accessibilityLabel={
+              activeFilterCount
+                ? `Filters, ${activeFilterCount} active`
+                : "Filters"
+            }
+            onPress={onOpenFilters}
+            style={{
+              ...iconStyle(false),
+            }}
+          >
+            <SlidersHorizontal size={15} color={colors.primary} />
+            {!!activeFilterCount && (
+              <View
+                style={{
+                  position: "absolute",
+                  top: -2,
+                  right: -6,
+                  borderRadius: 9,
+                  minWidth: 22,
+                  paddingHorizontal: 4,
+                  height: 20,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  backgroundColor: colors.primary,
+                }}
+              >
+                <Text style={{ color: colors.onPrimary, fontSize: 10 }}>
+                  {activeFilterCount}
+                </Text>
+              </View>
+            )}
+          </Pressable>
+        </View>
       </View>
-
+      {menu && (
+        <Modal
+          transparent
+          visible
+          accessibilityLabel={
+            menu === "friends" ? "Friends filters" : "Interests filters"
+          }
+          onShow={() =>
+            focusOverlay(
+              menuContent,
+              menu === "friends" ? "All Friends" : BEACON_CATEGORIES[0],
+            )
+          }
+          animationType="none"
+          onRequestClose={closeMenu}
+        >
+          <View style={{ flex: 1 }} accessibilityViewIsModal>
+            <Pressable
+              testID="map-discovery-menu-backdrop"
+              accessibilityLabel="Dismiss discovery menu"
+              onPress={closeMenu}
+              style={{ position: "absolute", inset: 0 }}
+            />
+            <View
+              ref={menuContent}
+              accessibilityRole="none"
+              style={{ position: "absolute", inset: 0 }}
+              pointerEvents="box-none"
+            >
+              <MapControlPopover
+                title={menu === "friends" ? "Friends" : "Interests"}
+                onClose={closeMenu}
+                width={menuWidth}
+                maxHeight={menuHeight}
+                top={Math.min(anchor.y, size.height - menuHeight - 12)}
+                right={Math.max(
+                  16,
+                  Math.min(size.width - menuWidth - 16, size.width - anchor.x),
+                )}
+              >
+                {menu === "friends" ? (
+                  friendChoices.map((choice) => (
+                    <Pressable
+                      key={choice.id}
+                      accessibilityRole="radio"
+                      accessibilityLabel={choice.label}
+                      accessibilityState={{
+                        checked: filters.friendScope === choice.id,
+                      }}
+                      aria-checked={filters.friendScope === choice.id}
+                      onPress={() => {
+                        onFriendScopeChange(choice.id);
+                        closeMenu();
+                      }}
+                      style={{
+                        minHeight: 44,
+                        flexDirection: "row",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        paddingHorizontal: 8,
+                      }}
+                    >
+                      <Text style={{ color: colors.ink }}>{choice.label}</Text>
+                      {filters.friendScope === choice.id && (
+                        <Check size={17} color={colors.primary} />
+                      )}
+                    </Pressable>
+                  ))
+                ) : (
+                  <>
+                    {BEACON_CATEGORIES.map((category) => (
+                      <Pressable
+                        key={category}
+                        accessibilityRole="checkbox"
+                        accessibilityLabel={category}
+                        accessibilityState={{
+                          checked: categories.includes(category),
+                        }}
+                        aria-checked={categories.includes(category)}
+                        onPress={() =>
+                          onCategoriesChange(
+                            categories.includes(category)
+                              ? categories.filter((c) => c !== category)
+                              : [...categories, category],
+                          )
+                        }
+                        style={{
+                          minHeight: 44,
+                          flexDirection: "row",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          paddingHorizontal: 8,
+                        }}
+                      >
+                        <Text style={{ color: colors.ink }}>{category}</Text>
+                        {categories.includes(category) && (
+                          <Check size={17} color={colors.primary} />
+                        )}
+                      </Pressable>
+                    ))}
+                    <Pressable
+                      accessibilityRole="checkbox"
+                      accessibilityLabel="For Me"
+                      accessibilityState={{
+                        checked: forMe,
+                        disabled: !hasProfileInterests,
+                      }}
+                      aria-checked={forMe}
+                      disabled={!hasProfileInterests}
+                      onPress={() => onPersonalizedChange(!forMe)}
+                      style={{
+                        minHeight: 44,
+                        flexDirection: "row",
+                        alignItems: "center",
+                        paddingHorizontal: 8,
+                        opacity: hasProfileInterests ? 1 : 0.55,
+                      }}
+                    >
+                      <Text style={{ color: colors.ink, flex: 1 }}>For Me</Text>
+                      {forMe && <Check size={17} color={colors.primary} />}
+                    </Pressable>
+                    <Text
+                      style={{
+                        color: colors.muted,
+                        fontSize: 12,
+                        paddingHorizontal: 8,
+                      }}
+                    >
+                      {hasProfileInterests
+                        ? "Prioritize your interests while keeping other eligible Beacons."
+                        : "Add profile interests to enable For Me. You can still browse categories."}
+                    </Text>
+                  </>
+                )}
+              </MapControlPopover>
+            </View>
+          </View>
+        </Modal>
+      )}
       {[false, true].map((contextRail) =>
         activeChips.some(
           (chip) => chip.key.startsWith("context:") === contextRail,

@@ -9,10 +9,20 @@ function longitudeSpan(west: number, east: number) {
 
 /** Returns the largest center/scale change as a fraction of the old viewport. */
 export function viewportChangeRatio(previous: MapViewport, next: MapViewport) {
-  const height = Math.max(0.000001, Math.abs(previous.bounds.north - previous.bounds.south));
-  const width = Math.max(0.000001, longitudeSpan(previous.bounds.west, previous.bounds.east));
-  const latitudeMovement = Math.abs(next.center.latitude - previous.center.latitude) / height;
-  const longitudeMovement = Math.abs(((next.center.longitude - previous.center.longitude + 540) % 360) - 180) / width;
+  const height = Math.max(
+    0.000001,
+    Math.abs(previous.bounds.north - previous.bounds.south),
+  );
+  const width = Math.max(
+    0.000001,
+    longitudeSpan(previous.bounds.west, previous.bounds.east),
+  );
+  const latitudeMovement =
+    Math.abs(next.center.latitude - previous.center.latitude) / height;
+  const longitudeMovement =
+    Math.abs(
+      ((next.center.longitude - previous.center.longitude + 540) % 360) - 180,
+    ) / width;
   const nextHeight = Math.abs(next.bounds.north - next.bounds.south);
   const nextWidth = longitudeSpan(next.bounds.west, next.bounds.east);
   const scaleChange = Math.max(
@@ -43,7 +53,8 @@ export function includeSelectedActivity<T extends { id: string }>(
   visible: readonly T[],
   selected: T | null | undefined,
 ): readonly T[] {
-  if (!selected || visible.some((activity) => activity.id === selected.id)) return visible;
+  if (!selected || visible.some((activity) => activity.id === selected.id))
+    return visible;
   return [...visible, selected];
 }
 
@@ -52,7 +63,10 @@ export function mapAdvancedFilterCount(
   filters: ExplorationFilters,
   categories: readonly Category[],
 ) {
-  const withoutLegacyCategory = { ...filters, category: "All categories" as const };
-  return explorationFilterCount(withoutLegacyCategory) + categories.length;
+  const withoutLegacyCategory = {
+    ...filters,
+    categories: [...categories],
+    category: "All categories" as const,
+  };
+  return explorationFilterCount(withoutLegacyCategory);
 }
-

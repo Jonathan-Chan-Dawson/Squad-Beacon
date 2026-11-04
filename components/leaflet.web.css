@@ -688,15 +688,15 @@ svg.leaflet-image-layer.leaflet-interactive path {
 }
 .map-now-halo {
   transform-origin: center;
-  animation: map-now-pulse 2s ease-out infinite;
+  animation: map-now-pulse var(--beacon-pulse-duration, 2000ms) ease-out infinite;
 }
 @keyframes map-now-pulse {
   0% {
-    transform: scale(0.66);
-    opacity: 0.7;
+    transform: scale(1);
+    opacity: 0.24;
   }
   100% {
-    transform: scale(1.45);
+    transform: scale(var(--beacon-pulse-scale, 1.45));
     opacity: 0;
   }
 }
@@ -708,6 +708,11 @@ svg.leaflet-image-layer.leaflet-interactive path {
   .map-now-halo {
     animation: none;
     opacity: 0.24;
-    transform: scale(1);
+    transform: scale(1.15);
   }
+}
+
+.beacon-map-moving .map-now-halo {
+  animation: none;
+  opacity: 0;
 }

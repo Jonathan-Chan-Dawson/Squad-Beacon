@@ -14,7 +14,10 @@ import {
   nativePetalOffset,
 } from "../src/features/maps/nativeMapPresentation";
 import type { ClusterPoint } from "../src/features/maps/cluster";
-import { bloomGeometry } from "../src/features/maps/clusterBloom";
+import {
+  bloomGeometry,
+  petalBookmarkVisible,
+} from "../src/features/maps/clusterBloom";
 import { nativePresentation } from "../src/features/maps/nativeMapPresentation";
 
 test("badge totals, satellite collapse, and micro Friends mode are independent of preview overflow", () => {
@@ -549,4 +552,46 @@ test("satellite thresholds switch the entire friend set to a total, not just ove
         assert.equal(geometry.countBadge?.text, `👥 ${people} · ✦ ${beacons}`);
       }
     }
+});
+
+test("saved petal decorations yield to crowded artwork without changing the cluster footprint", () => {
+  const base = {
+    id: "readability",
+    latitude: 41.88,
+    longitude: -87.64,
+    members: [
+      {
+        id: "beacon:one",
+        kind: "beacon" as const,
+        latitude: 41.88,
+        longitude: -87.64,
+      },
+    ],
+  };
+  const geometry = bloomGeometry(
+    nativePresentation(base, "stack", {}, new Set()),
+  );
+  const before = structuredClone(geometry);
+  assert.equal(petalBookmarkVisible(geometry, 0), true);
+  assert.equal(petalBookmarkVisible({ ...geometry, markerSize: 18 }, 0), false);
+  // A neighboring category face or friend satellite occupies the Bookmark corner.
+  const corner = {
+    x: geometry.offsets[0].x + geometry.markerSize * 0.4,
+    y: geometry.offsets[0].y - geometry.markerSize * 0.35,
+  };
+  assert.equal(
+    petalBookmarkVisible(
+      { ...geometry, offsets: [...geometry.offsets, corner] },
+      0,
+    ),
+    false,
+  );
+  assert.equal(
+    petalBookmarkVisible(
+      { ...geometry, satelliteOffsets: [corner], satelliteSize: 10 },
+      0,
+    ),
+    false,
+  );
+  assert.deepEqual(geometry, before);
 });

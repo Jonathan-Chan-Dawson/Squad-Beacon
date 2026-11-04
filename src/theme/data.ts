@@ -208,13 +208,13 @@ const availabilityColors: Record<
     available: "#176B4A",
     endingSoon: "#765000",
     unavailable: "#9D3F48",
-    unknown: "#536273",
+    unknown: "#505965",
   },
   dark: {
     available: "#8EE0B3",
     endingSoon: "#F2D16E",
     unavailable: "#FF9B9C",
-    unknown: "#B1C5BA",
+    unknown: "#AAB2BD",
   },
 };
 

@@ -1,3 +1,8 @@
+import { prepareDiscoveryFriends } from "@/src/features/maps/discoveryFriends";
+import {
+  selectedBeaconCategories,
+  wantsHappeningNow,
+} from "@/src/shared/explorationFilters";
 import type { Activity, Data } from "@/src/shared/types";
 import { browseBeacons } from "@/src/shared/browsing";
 import {
@@ -23,7 +28,7 @@ export function discoveryActivities(
 ) {
   if (!userId || data.viewer_id !== userId) return [] as Activity[];
   if (
-    (filters.time === "Now" && period === "Upcoming") ||
+    (wantsHappeningNow(filters) && period === "Upcoming") ||
     (filters.time === "Upcoming" && period === "Active")
   )
     return [];
@@ -31,9 +36,8 @@ export function discoveryActivities(
     canViewBeaconMeetingDetails(data, place.activity_id, userId),
   );
   const safeData = { ...data, places };
-  const categories =
-    filters.categories ??
-    (filters.category === "All categories" ? [] : [filters.category]);
+  const categories = selectedBeaconCategories(filters);
+  const friends = prepareDiscoveryFriends(data, userId, filters.friendScope);
   return browseBeacons(
     safeData,
     userId,
@@ -62,6 +66,7 @@ export function discoveryActivities(
     .filter((activity) =>
       matchesBeaconFilters(safeData, activity, userId, filters, now, {
         includeBaseFilters: false,
+        friends,
         query,
       }),
     )

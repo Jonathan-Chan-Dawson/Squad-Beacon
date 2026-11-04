@@ -1,4 +1,10 @@
-import React, { useMemo, useState } from "react";
+import {
+  BEACON_CATEGORIES,
+  resetDiscoveryFilters,
+  wantsHappeningNow,
+} from "@/src/shared/explorationFilters";
+import type { FriendScopeChoice } from "./MapExplorationHeader";
+import React, { useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import {
   BookOpen,
@@ -28,14 +34,7 @@ export type MapAudienceChoice = {
   kind: "List" | "Squad" | "Organization" | "Network";
 };
 
-const categories: Category[] = [
-  "Fitness",
-  "Study",
-  "Gaming",
-  "Creative",
-  "Social",
-  "Other",
-];
+const categories = BEACON_CATEGORIES;
 const whens = ["Any", "Today", "Tonight", "Tomorrow", "Weekend"] as const;
 const joins = ["Any", "Open", "Needs People", "I'm In"] as const;
 const moreJoins = ["Request Approval", "Invited", "Spots Available"] as const;
@@ -68,6 +67,7 @@ function RowChoice({
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ selected }}
+      aria-selected={selected}
       onPress={onPress}
       style={{
         minHeight: 46,
@@ -195,6 +195,11 @@ export function AdvancedMapFilters({
   resultCount,
   selectedCategories,
   onCategoriesChange,
+  friendChoices = [
+    { id: "friends", label: "All Friends" },
+    { id: "favorites", label: "Starred Friends" },
+  ],
+  hasProfileInterests = false,
 }: {
   visible: boolean;
   onClose: () => void;
@@ -205,6 +210,8 @@ export function AdvancedMapFilters({
   resultCount: number;
   selectedCategories: Category[];
   onCategoriesChange: (categories: Category[]) => void;
+  friendChoices?: FriendScopeChoice[];
+  hasProfileInterests?: boolean;
 }) {
   const { colors, styles } = useTheme();
   const { categories: categoryTokens } = useDesignTheme();
@@ -230,19 +237,6 @@ export function AdvancedMapFilters({
   function patch(values: Partial<ExplorationFilters>) {
     onChange({ ...filters, ...values });
   }
-  function reset() {
-    onChange({
-      audience: "Everyone",
-      category: "All categories",
-      time: "All",
-      planId: null,
-      when: "Any",
-      join: "Any",
-      format: "Any",
-      starredOnly: false,
-    });
-    onCategoriesChange([]);
-  }
   function toggleCategory(category: Category) {
     uiHaptics.light();
     onCategoriesChange(
@@ -250,9 +244,6 @@ export function AdvancedMapFilters({
         ? selectedCategories.filter((value) => value !== category)
         : [...selectedCategories, category],
     );
-    // The shared model remains scalar for older consumers; the multi-select lives in this screen session.
-    if (filters.category !== "All categories")
-      patch({ category: "All categories" });
   }
 
   const currentWhen = filters.when ?? "Any";
@@ -267,6 +258,31 @@ export function AdvancedMapFilters({
           : (audiences.find((choice) => choice.id === filters.audience)
               ?.label ?? "Selected group");
 
+  const footerActions = useRef({ onClose, onChange });
+  useLayoutEffect(() => {
+    footerActions.current = { onClose, onChange };
+  }, [onClose, onChange]);
+  // A stable footer slot preserves its press responder during unrelated Map refreshes.
+  const footer = useMemo(
+    () => (
+      <View style={{ flexDirection: "row", gap: 8 }}>
+        <SecondaryButton
+          title={`Reset${activeCount ? ` · ${activeCount}` : ""}`}
+          accessibilityLabel="Reset filters"
+          onPress={() =>
+            footerActions.current.onChange(resetDiscoveryFilters())
+          }
+        />
+        <View style={{ flex: 1 }}>
+          <Button
+            title={`Show ${resultCount} Beacons`}
+            onPress={() => footerActions.current.onClose()}
+          />
+        </View>
+      </View>
+    ),
+    [activeCount, resultCount],
+  );
   return (
     <Sheet
       title="Filters"
@@ -274,36 +290,30 @@ export function AdvancedMapFilters({
       visible={visible}
       onClose={onClose}
       maxHeightPercent={72}
-      footer={
-        <View style={{ flexDirection: "row", gap: 8 }}>
-          <SecondaryButton
-            title={`Reset${activeCount ? ` · ${activeCount}` : ""}`}
-            accessibilityLabel="Reset filters"
-            onPress={reset}
-          />
-          <View style={{ flex: 1 }}>
-            <Button title={`Show ${resultCount} Beacons`} onPress={onClose} />
-          </View>
-        </View>
-      }
+      footer={footer}
     >
       <View testID="advanced-map-filters" style={{ gap: 14, paddingBottom: 8 }}>
         <ChoiceSection title="When" icon={CalendarDays}>
+          <RowChoice
+            label="Happening now"
+            selected={wantsHappeningNow(filters)}
+            onPress={() => patch({ happeningNow: !wantsHappeningNow(filters) })}
+          />
+          {wantsHappeningNow(filters) &&
+          (filters.time === "Upcoming" ||
+            (filters.when && filters.when !== "Any")) ? (
+            <Text style={styles.muted}>
+              Happening now and your date restrictions both apply. Remove a time
+              filter to broaden results.
+            </Text>
+          ) : null}
           <View accessibilityRole="radiogroup" accessibilityLabel="When">
             {whens.map((when) => (
               <FilterRadio
                 key={when}
                 label={when}
                 selected={currentWhen === when}
-                onPress={() =>
-                  patch({
-                    when,
-                    time:
-                      when === "Any" || filters.time === "Now"
-                        ? "All"
-                        : filters.time,
-                  })
-                }
+                onPress={() => patch({ when })}
               />
             ))}
           </View>
@@ -375,6 +385,23 @@ export function AdvancedMapFilters({
           </View>
         </ChoiceSection>
 
+        <RowChoice
+          label="For Me ranking"
+          description={
+            hasProfileInterests
+              ? "Prioritize your interests without excluding other Beacons"
+              : "Add profile interests to enable personalized ranking"
+          }
+          selected={
+            hasProfileInterests && filters.personalizedRanking !== false
+          }
+          onPress={() => {
+            if (hasProfileInterests)
+              patch({
+                personalizedRanking: filters.personalizedRanking === false,
+              });
+          }}
+        />
         <ChoiceSection title="Join" icon={UserRoundCheck}>
           <View accessibilityRole="radiogroup" accessibilityLabel="Join">
             {joins.map((join) => (
@@ -428,11 +455,20 @@ export function AdvancedMapFilters({
                 icon={Users}
               />
               <RowChoice
-                label="Friends"
-                selected={filters.audience === "Friends"}
-                onPress={() => patch({ audience: "Friends" })}
+                label="No Friends restriction"
+                selected={!filters.friendScope}
+                onPress={() => patch({ friendScope: null })}
                 icon={Users}
               />
+              {friendChoices.map((choice) => (
+                <RowChoice
+                  key={choice.id}
+                  label={choice.label}
+                  selected={filters.friendScope === choice.id}
+                  onPress={() => patch({ friendScope: choice.id })}
+                  icon={Users}
+                />
+              ))}
               <RowChoice
                 label="Public"
                 selected={filters.audience === "Public"}
@@ -457,8 +493,16 @@ export function AdvancedMapFilters({
               {visibleAudiences.map((choice) => (
                 <RowChoice
                   key={`${choice.kind}:${choice.id}`}
-                  label={choice.label}
-                  description={choice.kind}
+                  label={
+                    choice.kind === "List"
+                      ? `Audience: ${choice.label}`
+                      : choice.label
+                  }
+                  description={
+                    choice.kind === "List"
+                      ? "Beacon audience · List"
+                      : choice.kind
+                  }
                   selected={filters.audience === choice.id}
                   onPress={() =>
                     patch({

@@ -1,21 +1,26 @@
 import { useSyncExternalStore } from "react";
+import type { PeopleListSelection } from "@/src/features/people/privateLists";
 
-export type FriendsFilter = "All" | "Available" | "In a Beacon" | "Favorites";
+export type FriendsFilter = "All" | "Available" | "In a Beacon";
 export type FriendsBrowseState = {
   query: string;
   filter: FriendsFilter;
-  listId: string | null;
+  scope: PeopleListSelection;
 };
-const empty: FriendsBrowseState = { query: "", filter: "All", listId: null };
+const empty: FriendsBrowseState = {
+  query: "",
+  filter: "All",
+  scope: "friends",
+};
 const sessions = new Map<
   string,
-  { state: FriendsBrowseState; offset: number }
+  { state: FriendsBrowseState; offset: number; scopeInitialized: boolean }
 >();
 const listeners = new Set<() => void>();
 function session(viewer: string) {
   let value = sessions.get(viewer);
   if (!value) {
-    value = { state: empty, offset: 0 };
+    value = { state: empty, offset: 0, scopeInitialized: false };
     sessions.set(viewer, value);
   }
   return value;
@@ -29,9 +34,29 @@ export function updateFriendsBrowseState(
 ) {
   if (!viewer) return;
   const value = session(viewer);
+  if (patch.scope !== undefined) value.scopeInitialized = true;
   value.state = { ...value.state, ...patch };
   value.offset = 0;
   listeners.forEach((listener) => listener());
+}
+/** Called only after the current account's snapshot is ready. Explicit choices win. */
+export function initializeFriendsScope(
+  viewer: string | null,
+  hasFavorites: boolean,
+  ownedListIds: readonly string[],
+) {
+  if (!viewer) return;
+  const value = session(viewer);
+  if (!value.scopeInitialized) {
+    updateFriendsBrowseState(viewer, {
+      scope: hasFavorites ? "favorites" : "friends",
+    });
+  } else if (
+    value.state.scope.startsWith("custom:") &&
+    !ownedListIds.includes(value.state.scope.slice(7))
+  ) {
+    updateFriendsBrowseState(viewer, { scope: "friends" });
+  }
 }
 export function friendsScrollOffset(viewer: string | null) {
   return viewer ? session(viewer).offset : 0;

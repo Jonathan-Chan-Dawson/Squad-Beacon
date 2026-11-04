@@ -10,12 +10,24 @@ import type { SafeFriendNowRow } from "./components/feed/FriendsNow";
 import { matchesSearch } from "@/src/shared/search";
 import { statusNoteText, visibleStatusAttachment } from "./statusAttachments";
 import { visibleCurrentBeacon } from "./currentStatusBeacon";
+import {
+  selectListPeople,
+  type PeopleListSelection,
+} from "@/src/features/people/privateLists";
 
 export type SocialFriend = SafeFriendNowRow & {
+  currentActivityTitle?: string;
   attachment?: ReturnType<typeof visibleStatusAttachment>;
   currentBeacon?: ReturnType<typeof visibleCurrentBeacon>;
   note?: ReturnType<typeof visibleSoloActivity>;
-  beacon?: { id: string; title: string; label: string; category: Category; emoji?: string | null; goingCount: number };
+  beacon?: {
+    id: string;
+    title: string;
+    label: string;
+    category: Category;
+    emoji?: string | null;
+    goingCount: number;
+  };
   ping?: { id: string; title: string };
 };
 
@@ -36,7 +48,8 @@ export function socialFriends(
             .filter(
               (item) =>
                 item.owner_id === id &&
-                item.mode === "solo" && item.solo_purpose !== "activity_note" &&
+                item.mode === "solo" &&
+                item.solo_purpose !== "activity_note" &&
                 item.status === "scheduled" &&
                 Date.parse(item.starts_at) > now &&
                 Date.parse(item.ends_at) > Date.parse(item.starts_at) &&
@@ -62,8 +75,14 @@ export function socialFriends(
               canReadBeaconActivity(data, item, viewer),
           )
         : undefined;
-      const sharedCurrent=currentActivity(data,id,viewer,now);
-      const activity=(data.is_demo||data.capabilities?.living_activity)?(sharedCurrent?.type==="beacon"?sharedCurrent.activity:undefined):legacyActivity;
+      const sharedCurrent = currentActivity(data, id, viewer, now);
+      const presence = data.presence?.find((row) => row.owner_id === id);
+      const activity =
+        data.is_demo || data.capabilities?.living_activity
+          ? sharedCurrent?.type === "beacon"
+            ? sharedCurrent.activity
+            : undefined
+          : legacyActivity;
       const attendance =
         activity &&
         data.beacon_attendance.find(
@@ -85,10 +104,24 @@ export function socialFriends(
           name: preview.profile?.name ?? "Friend",
           profile: preview.profile,
           availability: preview.availability,
-          statusText: currentActivity(data,id,viewer,now)?.activity.title || statusNoteText(note),
+          statusText: statusNoteText(note),
+          currentActivityTitle:
+            sharedCurrent?.type === "activity_note"
+              ? sharedCurrent.activity.title
+              : undefined,
           attachment: visibleStatusAttachment(data, note, viewer, now),
-          currentBeacon: (()=>{const current=currentActivity(data,id,viewer,now);return current?.type==="beacon"?{activity:current.activity,role:current.role??"going"}:visibleCurrentBeacon(data,note,viewer,now);})(),
-          until: note?.ends_at,
+          currentBeacon:
+            sharedCurrent?.type === "beacon"
+              ? {
+                  activity: sharedCurrent.activity,
+                  role: sharedCurrent.role ?? "going",
+                }
+              : data.is_demo || data.capabilities?.living_activity
+                ? null
+                : visibleCurrentBeacon(data, note, viewer, now),
+          until: presence
+            ? (presence.availability_until ?? undefined)
+            : note?.ends_at,
           starred: preview.starred,
           hasFreshSharedLocation: false,
           note,
@@ -160,27 +193,36 @@ export function filterSocialFriends(
   friends: SocialFriend[],
   data: Data,
   viewer: string | null,
-  options: { query: string; filter: string; listId: string | null },
+  options: {
+    query: string;
+    filter: string;
+    listId?: string | null;
+    scope?: PeopleListSelection;
+  },
 ) {
   if (!viewer || data.viewer_id !== viewer) return [];
   const { query, filter, listId } = options;
-  const members =
-    listId &&
-    data.lists.some((list) => list.id === listId && list.owner_id === viewer)
-      ? new Set(
-          data.list_members
-            .filter((member) => member.list_id === listId)
-            .map((member) => member.user_id),
-        )
-      : null;
+  const scopedIds = selectListPeople(
+    data,
+    viewer,
+    options.scope ?? (listId ? `custom:${listId}` : "friends"),
+  );
   return friends.filter(
     (friend) =>
-      matchesSearch(query, friend.name, friend.note?.title ?? "") &&
+      scopedIds.has(friend.id) &&
+      matchesSearch(
+        query,
+        friend.name,
+        friend.statusText,
+        friend.currentActivityTitle ?? "",
+        friend.currentBeacon?.activity.title ?? friend.beacon?.title ?? "",
+        friend.ping?.title ?? "",
+      ) &&
       (filter === "All" ||
         (filter === "Available" &&
           ["available", "ending-soon"].includes(friend.availability)) ||
-        (filter === "In a Beacon" && !!friend.beacon) ||
-        (filter === "Favorites" && friend.starred)) &&
-      (!listId || !!members?.has(friend.id)),
+        (filter === "In a Beacon" &&
+          !!(friend.currentBeacon || friend.beacon)) ||
+        (filter === "Favorites" && friend.starred)),
   );
 }

@@ -9,7 +9,11 @@ import {
   friendGroupUsesCount,
   CLUSTER_SHADOW_OPACITY,
 } from "./clusterLayout";
-import { bloomGeometry, bloomAccessibilityLabel } from "./clusterBloom";
+import {
+  bloomGeometry,
+  bloomAccessibilityLabel,
+  petalBookmarkVisible,
+} from "./clusterBloom";
 import type { ClusterPoint } from "./cluster";
 import {
   presentationOpensExplorer,
@@ -112,6 +116,15 @@ export function webConstellation(
       item.style.background = options.ink;
       item.style.opacity = presentation.scale === "micro" ? ".35" : ".6";
     }
+    // Identity decorations never enlarge or obscure the established cluster footprint.
+    if (markerSize < 24)
+      item
+        .querySelectorAll(
+          '[data-testid="beacon-ownership-star"], [data-testid="beacon-friend-rim"]',
+        )
+        .forEach((decoration) => decoration.remove());
+    if (!petalBookmarkVisible(geometry, index))
+      item.querySelector('[data-testid="beacon-saved-bookmark"]')?.remove();
     items.push(item);
     node.append(item);
   });

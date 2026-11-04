@@ -1,5 +1,9 @@
 import {
-  markerIdentity,
+  EMPTY_MARKER_STATE,
+  markerStateLabel,
+  BEACON_PULSE_DURATION,
+  BEACON_PULSE_SCALE,
+  type BeaconMarkerState,
   ownsMapBeacon,
   mapIdentityColors,
   friendLocationLabel,
@@ -11,6 +15,7 @@ import {
 import { useNow } from "@/src/shared/useNow";
 import { CLUSTER_PREVIEW_LIMIT } from "../mapClusterPolicy";
 import React, { useEffect, useRef, useState } from "react";
+import { Bookmark } from "lucide-react-native";
 import { Image, Text, View } from "react-native";
 import { Circle as MapCircle, Marker } from "react-native-maps";
 import Animated, {
@@ -22,6 +27,8 @@ import Animated, {
   withRepeat,
   withSpring,
   withTiming,
+  Easing,
+  interpolateColor,
 } from "react-native-reanimated";
 import { ActivityBadge } from "@/src/features/beacons/ActivityBadge";
 import { MiniAvatar } from "@/src/features/people/MiniAvatar";
@@ -77,6 +84,8 @@ function MarkerContent({
   const reducedMotion = useReducedMotion();
   const scale = useSharedValue(selected ? 1.25 : 1);
   useEffect(() => {
+    const target = selected ? 1.25 : 1;
+    if (scale.value === target) return;
     scale.value = reducedMotion
       ? selected
         ? 1.25
@@ -91,32 +100,68 @@ function MarkerContent({
   return <Animated.View style={animatedStyle}>{children}</Animated.View>;
 }
 
+/** Screen-sized native overlay; only the animation driver changes per frame. */
 export function NowBeaconHalo({
   coordinate,
   color,
+  zoom,
+  selected = false,
+  paused = false,
 }: {
   coordinate: { latitude: number; longitude: number };
   color: string;
+  zoom: number;
+  selected?: boolean;
+  paused?: boolean;
 }) {
   const reducedMotion = useReducedMotion();
   const progress = useSharedValue(0);
+  const metersPerPixel =
+    (156543.03392 * Math.cos((coordinate.latitude * Math.PI) / 180)) /
+    2 ** zoom;
+  const radius =
+    (markerVisualSize("beacon") / 2) * (selected ? 1.25 : 1) * metersPerPixel;
   useEffect(() => {
     cancelAnimation(progress);
-    progress.value = reducedMotion
-      ? 0
-      : withRepeat(withTiming(1, { duration: 1000 }), -1, true);
+    progress.value = 0;
+    if (!reducedMotion && !paused)
+      progress.value = withRepeat(
+        withTiming(1, {
+          duration: BEACON_PULSE_DURATION,
+          easing: Easing.out(Easing.quad),
+        }),
+        -1,
+        false,
+      );
     return () => cancelAnimation(progress);
-  }, [progress, reducedMotion]);
+  }, [progress, reducedMotion, paused]);
+  const transparent = rgba(color, 0);
+  const stroke = rgba(color, 0.24);
+  const fill = rgba(color, 0.035);
   const animatedProps = useAnimatedProps(() => ({
-    radius: reducedMotion ? 42 : interpolate(progress.value, [0, 1], [30, 88]),
+    radius:
+      radius *
+      (reducedMotion
+        ? 1.15
+        : interpolate(progress.value, [0, 1], [1, BEACON_PULSE_SCALE])),
+    strokeColor: paused
+      ? transparent
+      : reducedMotion
+        ? stroke
+        : interpolateColor(progress.value, [0, 1], [stroke, transparent]),
+    fillColor: paused
+      ? transparent
+      : reducedMotion
+        ? fill
+        : interpolateColor(progress.value, [0, 1], [fill, transparent]),
   }));
   return (
     <AnimatedMapCircle
       center={coordinate}
-      radius={reducedMotion ? 42 : 30}
-      fillColor={rgba(color, 0.035)}
-      strokeColor={rgba(color, 0.26)}
-      strokeWidth={2}
+      radius={radius}
+      fillColor={fill}
+      strokeColor={stroke}
+      strokeWidth={1.5}
       animatedProps={animatedProps}
       zIndex={1}
     />
@@ -194,114 +239,105 @@ export function FriendMapAvatar({
 }
 
 /** Original Beacon artwork shared by singleton pins and native constellation stacks. */
-export function BeaconMarkerArtwork({ id, category, categoryColor, selected = false, dimmed = false, streetTime }: {
-  id: string; category: Category; categoryColor: string; selected?: boolean; dimmed?: boolean; streetTime?: string;
+export function BeaconMarkerArtwork({
+  category,
+  categoryColor,
+  selected = false,
+  dimmed = false,
+  streetTime,
+  markerState = EMPTY_MARKER_STATE,
+  showSaved = true,
+}: {
+  id: string;
+  category: Category;
+  categoryColor: string;
+  selected?: boolean;
+  dimmed?: boolean;
+  streetTime?: string;
+  markerState?: BeaconMarkerState;
+  showSaved?: boolean;
 }) {
-  const { data, userId } = useBeacon();
-  const { colors, resolvedAppearance } = useTheme();
-  const activity = data.activities.find((row) => row.id === id);
-  const identity = activity ? markerIdentity(data, activity, userId) : null;
-  const owned = !!activity && ownsMapBeacon(data, activity, userId);
+  const { colors } = useTheme();
+  const owned = markerState.owned;
   const visualSize = markerVisualSize("beacon");
   return (
-      <MarkerContent selected={selected} dimmed={dimmed}>
+    <MarkerContent selected={selected} dimmed={dimmed}>
+      <View
+        style={{
+          width: 58,
+          height: streetTime ? 70 : 56,
+          alignItems: "center",
+        }}
+      >
         <View
           style={{
-            width: 58,
-            height: streetTime ? 70 : 56,
+            width: visualSize,
+            height: visualSize,
+            borderRadius: visualSize / 2,
+            borderWidth: 3,
+            borderColor: categoryColor,
+            backgroundColor: colors.surface,
             alignItems: "center",
+            justifyContent: "center",
+            elevation: 5,
+            shadowColor: "#182A32",
+            shadowOpacity: 0.22,
+            shadowRadius: 5,
+            shadowOffset: { width: 0, height: 3 },
           }}
         >
+          {markerState.friendHosted && (
+            <View
+              pointerEvents="none"
+              accessible={false}
+              style={{
+                position: "absolute",
+                inset: 1,
+                borderWidth: 2.5,
+                borderColor: colors.success,
+                opacity: 0.95,
+                borderRadius: visualSize / 2,
+              }}
+            />
+          )}
+          <ActivityBadge category={category} size={26} />
+          {showSaved && markerState.saved && !owned && <SavedBookmark />}
+          {owned && <OwnershipStar />}
+        </View>
+        <View
+          style={{
+            position: "absolute",
+            top: 34,
+            width: 12,
+            height: 12,
+            backgroundColor: categoryColor,
+            borderRadius: 2,
+            transform: [{ rotate: "45deg" }],
+            zIndex: -1,
+          }}
+        />
+        {streetTime ? (
           <View
             style={{
-              width: visualSize,
-              height: visualSize,
-              borderRadius: visualSize / 2,
-              borderWidth: 3,
-              borderColor: categoryColor,
+              marginTop: 5,
+              paddingHorizontal: 7,
+              paddingVertical: 2,
+              borderRadius: 9,
               backgroundColor: "#FFFFFF",
-              alignItems: "center",
-              justifyContent: "center",
-              elevation: 5,
-              shadowColor: "#182A32",
-              shadowOpacity: 0.22,
-              shadowRadius: 5,
-              shadowOffset: { width: 0, height: 3 },
+              borderWidth: 1,
+              borderColor: categoryColor,
             }}
           >
-            {owned && !selected && <View pointerEvents="none" style={{ position: "absolute", top: 0, left: 0, right: 0, bottom: 0, borderWidth: 1.5, borderColor: mapIdentityColors.ownership, borderRadius: visualSize / 2 }} />}
-            <ActivityBadge category={category} size={26} />
-            {identity && (
-              <View
-                style={{
-                  position: "absolute",
-                  ...(owned ? { left: -7 } : { right: -7 }),
-                  bottom: -4,
-                  width: 21,
-                  height: 21,
-                  borderRadius: identity.kind === "community" ? 6 : 11,
-                  borderWidth: 2,
-                  borderColor: colors.white,
-                  backgroundColor:
-                    identity.glyph === "♥"
-                      ? resolvedAppearance === "dark"
-                        ? "#3D2430"
-                        : "#FFF0F5"
-                      : colors.ink,
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <Text
-                  style={{
-                    color:
-                      identity.glyph === "♥"
-                        ? mapIdentityColors.heart[resolvedAppearance]
-                        : colors.white,
-                    fontSize: 12,
-                    fontWeight: "700",
-                  }}
-                >
-                  {identity.glyph}
-                </Text>
-              </View>
-            )}
-            {owned && <OwnershipStar />}
-          </View>
-          <View
-            style={{
-              position: "absolute",
-              top: 34,
-              width: 12,
-              height: 12,
-              backgroundColor: categoryColor,
-              borderRadius: 2,
-              transform: [{ rotate: "45deg" }],
-              zIndex: -1,
-            }}
-          />
-          {streetTime ? (
-            <View
-              style={{
-                marginTop: 5,
-                paddingHorizontal: 7,
-                paddingVertical: 2,
-                borderRadius: 9,
-                backgroundColor: "#FFFFFF",
-                borderWidth: 1,
-                borderColor: categoryColor,
-              }}
+            <Text
+              numberOfLines={1}
+              style={{ color: "#203038", fontSize: 10, fontWeight: "700" }}
             >
-              <Text
-                numberOfLines={1}
-                style={{ color: "#203038", fontSize: 10, fontWeight: "700" }}
-              >
-                {streetTime}
-              </Text>
-            </View>
-          ) : null}
-        </View>
-      </MarkerContent>
+              {streetTime}
+            </Text>
+          </View>
+        ) : null}
+      </View>
+    </MarkerContent>
   );
 }
 
@@ -318,6 +354,7 @@ function BeaconMapPinComponent({
   onPress,
   disabled = false,
   dot = false,
+  markerState,
 }: {
   id: string;
   title: string;
@@ -331,13 +368,11 @@ function BeaconMapPinComponent({
   onPress: (id: string) => void;
   disabled?: boolean;
   dot?: boolean;
+  markerState: BeaconMarkerState;
 }) {
-  const { data, userId } = useBeacon();
-  const activity = data.activities.find((row) => row.id === id);
-  const identity = activity ? markerIdentity(data, activity, userId) : null;
-  const owned = !!activity && ownsMapBeacon(data, activity, userId);
+  const stateLabel = markerStateLabel(markerState);
   const tracking = useMarkerTracking(
-    `${owned}:${identity?.label}:${id}:${categoryColor}:${selected}:${dimmed}:${streetTime ?? ""}:${appearanceKey}:${dot}`,
+    `${JSON.stringify(markerState)}:${id}:${categoryColor}:${selected}:${dimmed}:${streetTime ?? ""}:${appearanceKey}:${dot}`,
   );
   if (dot)
     return (
@@ -345,7 +380,7 @@ function BeaconMapPinComponent({
         coordinate={coordinate}
         anchor={{ x: 0.5, y: 0.5 }}
         tracksViewChanges={tracking}
-        accessibilityLabel={`Map: ${title}${owned ? ", Your Beacon" : ""}${identity ? `, ${identity.label}` : ""}`}
+        accessibilityLabel={`Map: ${title}${stateLabel ? `, ${stateLabel}` : ""}`}
         onPress={(event) => {
           event.stopPropagation();
           if (!disabled) onPress(id);
@@ -378,14 +413,21 @@ function BeaconMapPinComponent({
       coordinate={coordinate}
       anchor={{ x: 0.5, y: streetTime ? 0.82 : 0.92 }}
       tracksViewChanges={tracking}
-      accessibilityLabel={`Map: ${title}${owned ? ", Your Beacon" : ""}${identity ? `, ${identity.label}` : ""}`}
+      accessibilityLabel={`Map: ${title}${stateLabel ? `, ${stateLabel}` : ""}`}
       onPress={(event) => {
         event.stopPropagation();
         if (!disabled) onPress(id);
       }}
     >
-      <BeaconMarkerArtwork id={id} category={category} categoryColor={categoryColor}
-        selected={selected} dimmed={dimmed} streetTime={streetTime} />
+      <BeaconMarkerArtwork
+        id={id}
+        category={category}
+        categoryColor={categoryColor}
+        selected={selected}
+        dimmed={dimmed}
+        streetTime={streetTime}
+        markerState={markerState}
+      />
     </Marker>
   );
 }
@@ -393,6 +435,7 @@ function BeaconMapPinComponent({
 export const BeaconMapPin = React.memo(
   BeaconMapPinComponent,
   (left, right) =>
+    JSON.stringify(left.markerState) === JSON.stringify(right.markerState) &&
     left.id === right.id &&
     left.title === right.title &&
     left.coordinate.latitude === right.coordinate.latitude &&
@@ -749,7 +792,10 @@ export function OwnershipStar({ small = false }: { small?: boolean }) {
   return (
     <View
       testID="beacon-ownership-star"
-      accessibilityLabel="Your Beacon"
+      pointerEvents="none"
+      accessible={false}
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
       style={{
         position: "absolute",
         right: small ? -2 : -6,
@@ -765,6 +811,38 @@ export function OwnershipStar({ small = false }: { small?: boolean }) {
       }}
     >
       <Text style={{ color: "#FFFFFF", fontSize: small ? 8 : 10 }}>★</Text>
+    </View>
+  );
+}
+
+export function SavedBookmark({ small = false }: { small?: boolean }) {
+  const { colors } = useTheme();
+  return (
+    <View
+      testID="beacon-saved-bookmark"
+      pointerEvents="none"
+      accessible={false}
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+      style={{
+        position: "absolute",
+        right: small ? -2 : -5,
+        top: small ? -1 : -2,
+        width: small ? 12 : 16,
+        height: small ? 12 : 16,
+        borderRadius: 4,
+        backgroundColor: colors.surface,
+        borderWidth: 1,
+        borderColor: colors.outline,
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <Bookmark
+        size={small ? 8 : 11}
+        color={colors.textPrimary}
+        fill={colors.textPrimary}
+      />
     </View>
   );
 }

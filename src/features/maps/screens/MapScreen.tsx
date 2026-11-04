@@ -1,3 +1,19 @@
+import { SurprisePreviewActions } from "../SurprisePreviewActions";
+import {
+  selectedBeaconCategories,
+  clearQuickDiscoveryFilters,
+  resetDiscoveryFilters,
+  wantsHappeningNow,
+} from "@/src/shared/explorationFilters";
+import {
+  prepareDiscoveryFriends,
+  discoveryFriendScopeLabel,
+} from "../discoveryFriends";
+import {
+  surpriseCandidates,
+  SurpriseCycle,
+  type SurpriseCandidate,
+} from "../surpriseDiscovery";
 import { BeaconCommunitiesProvider } from "@/src/features/discovery/BeaconCommunityRow";
 import { useBeaconCommunities } from "@/src/features/discovery/useBeaconCommunities";
 import { finishCreationLocationPick } from "@/src/features/beacons/socialPlanningSession";
@@ -72,7 +88,14 @@ import {
   canUseBeaconModules,
 } from "@/src/features/beacons/beaconModules";
 import { creationHandoffParams } from "@/src/features/beacons/createHandoff";
-import { Button, Field, IconButton, Sheet, Txt, useTheme } from "@/src/shared/ui";
+import {
+  Button,
+  Field,
+  IconButton,
+  Sheet,
+  Txt,
+  useTheme,
+} from "@/src/shared/ui";
 import { usePreferences } from "@/src/shared/preferences";
 import { friendIds, locationIsFresh } from "@/src/shared/domain";
 import { canViewProfile } from "@/src/features/profile/privacy";
@@ -101,6 +124,7 @@ import {
   MapExplorationHeader,
   type ActiveMapFilterChip,
   type MapQuickFilter,
+  type DiscoveryMenu,
 } from "@/src/features/maps/MapExplorationHeader";
 import {
   AdvancedMapFilters,
@@ -170,15 +194,15 @@ import {
   type MapContextFilter,
 } from "../contextFilters";
 
-const defaultFilters = {
-  audience: "Everyone" as const,
-  category: "All categories" as const,
-  time: "All" as const,
-  planId: null,
-  when: "Any" as const,
-  join: "Any" as const,
-  format: "Any" as const,
-  starredOnly: false,
+type SurpriseSession = {
+  contextKey: string;
+  viewerEpoch: number;
+  area: MapViewport;
+  origin: MapViewport;
+  picked: SurpriseCandidate;
+  pending: boolean;
+  revision: number;
+  canReturn: boolean;
 };
 
 function MapControl({
@@ -281,14 +305,30 @@ export default function MapScreen() {
   const [dismissedFeedback, setDismissedFeedback] = useState(0);
   const [feedbackResult, setFeedbackResult] = useState(0);
   const resolvedFeedback = useRef(0);
-  const [dismissedMapError, setDismissedMapError] = useState<string | null>(null);
+  const [dismissedMapError, setDismissedMapError] = useState<string | null>(
+    null,
+  );
   const nearMeArea = useRef<ExplorationArea | null>(null);
   useEffect(() => {
     if (exploration.area?.kind === "near-me" && exploration.area.coordinate)
       nearMeArea.current = exploration.area;
   }, [exploration.area]);
-  const { data, userId, viewerEpoch, demo, loading, act, searchDirectory, refresh } = useBeacon();
-  useFocusEffect(useCallback(() => { void refresh(); }, [refresh]));
+  const {
+    data,
+    userId,
+    viewerEpoch,
+    demo,
+    loading,
+    act,
+    searchDirectory,
+    refresh,
+    getViewerEpoch,
+  } = useBeacon();
+  useFocusEffect(
+    useCallback(() => {
+      void refresh();
+    }, [refresh]),
+  );
 
   const params = useLocalSearchParams<{
     beacon?: string;
@@ -314,6 +354,9 @@ export default function MapScreen() {
   const [mapSize, setMapSize] = useState({ width, height });
   const now = useNow();
   const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
+  const [quickMenu, setQuickMenu] = useState<DiscoveryMenu>(null);
+  const [lastFriendScope, setLastFriendScope] =
+    useState<NonNullable<typeof exploration.filters.friendScope>>("friends");
   const [discoveryViewer, setDiscoveryViewer] = useState<string | null>(null);
   const discoveryActive = !!userId && discoveryViewer === userId;
   const discoveryRestore = useRef<{
@@ -329,7 +372,13 @@ export default function MapScreen() {
     selectionChanged: boolean;
   } | null>(null);
   const viewerKey = `${userId}:${viewerEpoch}:${demo}`;
-  const previousPlanState = useRef<{ viewerKey: string; camera: MapViewport | null; selected: string | null; person: string | null; detail: MapBeaconFeature | null } | null>(null);
+  const previousPlanState = useRef<{
+    viewerKey: string;
+    camera: MapViewport | null;
+    selected: string | null;
+    person: string | null;
+    detail: MapBeaconFeature | null;
+  } | null>(null);
   const previousContextCamera = useRef<MapViewport | null>(null);
   const [contextState, setContextState] = useState<{
     viewerId: string | null;
@@ -346,8 +395,13 @@ export default function MapScreen() {
         : [],
     [contextState, data, userId, viewerKey, discoveryActive],
   );
-  const planFocus = [...contextViews].reverse().find(view => view.key.startsWith("context:plan:"));
-  const displayedContexts = useMemo(() => planFocus ? [planFocus] : contextViews, [planFocus, contextViews]);
+  const planFocus = [...contextViews]
+    .reverse()
+    .find((view) => view.key.startsWith("context:plan:"));
+  const displayedContexts = useMemo(
+    () => (planFocus ? [planFocus] : contextViews),
+    [planFocus, contextViews],
+  );
   const contextPoints = useMemo(
     () => [
       ...new Map(
@@ -382,6 +436,7 @@ export default function MapScreen() {
     setCompassSheetOpen(false);
     setMapControlSettingsOpen(false);
     setWeatherOpen(false);
+    setQuickMenu(null);
   }, []);
   const onSheetMapHeight = useCallback(
     (height: number) => {
@@ -411,8 +466,12 @@ export default function MapScreen() {
       ).length,
     [data, userId],
   );
-  const [clusterSelectionId, setClusterSelectionId] = useState<string | null>(null);
-  const [clusterSection, setClusterSection] = useState<"Beacons" | "Friends">("Beacons");
+  const [clusterSelectionId, setClusterSelectionId] = useState<string | null>(
+    null,
+  );
+  const [clusterSection, setClusterSection] = useState<"Beacons" | "Friends">(
+    "Beacons",
+  );
   const [clusterActivityIds, setClusterActivityIds] = useState<string[] | null>(
     null,
   );
@@ -530,16 +589,78 @@ export default function MapScreen() {
   const [controlCommand, setControlCommand] = useState<
     MapControlCommand | undefined
   >();
-  const [selectedCategories, setCategoriesValue] = useState<Category[]>(() =>
-    exploration.filters.category === "All categories"
-      ? []
-      : [exploration.filters.category],
+  const [surprise, setSurprise] = useState<SurpriseSession | null>(null);
+  const surpriseRef = useRef<SurpriseSession | null>(null);
+  const surpriseRevision = useRef(0);
+  const [surpriseCycle] = useState(() => new SurpriseCycle());
+  const [surpriseMessage, setSurpriseMessage] = useState("");
+  const surpriseContextKey = JSON.stringify([
+    viewerKey,
+    exploration.filters,
+    exploration.query,
+    exploration.area,
+  ]);
+  function updateSurprise(next: SurpriseSession | null) {
+    surpriseRef.current = next;
+    setSurprise(next);
+  }
+  function cancelSurprise() {
+    const previous = surpriseRef.current;
+    updateSurprise(null);
+    if (previous?.pending) {
+      setSelected((id) => (id === previous.picked.id ? null : id));
+      setPublicSelection((id) => (id === previous.picked.id ? null : id));
+    }
+  }
+  const selectedCategories = useMemo(
+    () => selectedBeaconCategories(exploration.filters),
+    [exploration.filters],
   );
-  const setSelectedCategories = useCallback((categories: Category[]) => {
-    if (discoveryRestore.current)
-      discoveryRestore.current.categoriesChanged = true;
-    setCategoriesValue(categories);
-  }, []);
+  const setSelectedCategories = useCallback(
+    (categories: Category[]) => {
+      if (discoveryRestore.current)
+        discoveryRestore.current.categoriesChanged = true;
+      exploration.setFilters({
+        ...exploration.filters,
+        categories,
+        category: "All categories",
+      });
+    },
+    [exploration],
+  );
+  const discoveryFriends = useMemo(
+    () =>
+      prepareDiscoveryFriends(data, userId, exploration.filters.friendScope),
+    [data, userId, exploration.filters.friendScope],
+  );
+  const friendChoices = useMemo(
+    () =>
+      userId && data.viewer_id === userId
+        ? [
+            { id: "friends" as const, label: "All Friends" },
+            { id: "favorites" as const, label: "Starred Friends" },
+            ...data.lists
+              .filter((list) => list.owner_id === userId)
+              .map((list) => ({
+                id: `custom:${list.id}` as const,
+                label: list.name,
+              })),
+          ]
+        : [],
+    [data, userId],
+  );
+  const friendLabel = discoveryFriendScopeLabel(
+    data,
+    userId,
+    exploration.filters.friendScope,
+  );
+  const profileInterests =
+    data.viewer_id === userId
+      ? (data.profiles.find((p) => p.id === userId)?.interests ?? [])
+      : [];
+  const personalizedRanking =
+    exploration.filters.personalizedRanking !== false &&
+    profileInterests.length > 0;
   const [recentSearchState, setRecentSearchState] = useState(() => ({
     viewerId: userId,
     queries: getRecentMapSearchQueries(userId),
@@ -547,7 +668,9 @@ export default function MapScreen() {
   const [offline, setOffline] = useState(false);
   const [pickMode, setPickMode] = useState(false);
   const [pickingDraft, setPickingDraft] = useState(false);
-  const pickRestore = useRef<{ viewer: string | null; query: string } | null>(null);
+  const pickRestore = useRef<{ viewer: string | null; query: string } | null>(
+    null,
+  );
   const [locationPickError, setLocationPickError] = useState("");
   const creationLocationContext = useRef<Record<string, string>>({});
   const [pickedMapPoint, setPickedMapPoint] = useState<{
@@ -765,11 +888,7 @@ export default function MapScreen() {
     const selectedSquad = data.squads.find(
       (row) => row.id === exploration.filters.audience,
     );
-    const categories = selectedCategories.length
-      ? selectedCategories
-      : exploration.filters.category === "All categories"
-        ? []
-        : [exploration.filters.category];
+    const categories = selectedCategories;
     return data.activities
       .filter((activity) => canReadBeaconActivity(data, activity, userId))
       .filter((activity) => withinMapBeaconWindow(activity, now))
@@ -795,6 +914,7 @@ export default function MapScreen() {
           now,
           {
             query: exploration.query,
+            friends: discoveryFriends,
           },
         ),
       )
@@ -815,6 +935,7 @@ export default function MapScreen() {
     userId,
     discoveryActive,
     discoveryIds,
+    discoveryFriends,
   ]);
 
   const availabilityActivities = useMemo(
@@ -1036,6 +1157,13 @@ export default function MapScreen() {
         )
           return false;
         const isSelectedPerson = selectedPersonLocation?.id === location.id;
+        if (
+          exploration.filters.friendScope &&
+          location.owner_id !== userId &&
+          !isSelectedPerson &&
+          !discoveryFriends.people.has(location.owner_id)
+        )
+          return false;
         const audience = exploration.filters.audience;
         const accessibleSquadIds = data.squads
           .filter((squad) => canOpenSquadProfile(data, squad.id, userId))
@@ -1068,6 +1196,8 @@ export default function MapScreen() {
     [
       data,
       exploration.filters.audience,
+      exploration.filters.friendScope,
+      discoveryFriends,
       friends,
       now,
       selectedPersonLocation?.id,
@@ -1082,13 +1212,19 @@ export default function MapScreen() {
   const query = exploration.query.trim();
   const publicDiscovery = usePublicBeacons(
     query,
-    exploration.area?.coordinate ?? viewport?.center,
+    surprise?.contextKey === surpriseContextKey
+      ? surprise.area.center
+      : (exploration.area?.coordinate ?? viewport?.center),
   );
   const [publicSelection, setPublicSelection] = useState<string | null>(null);
-  const beaconCommunities = useBeaconCommunities([...activities.map((row) => row.id), ...publicDiscovery.rows.map((row) => row.activity_id), ...(selected ? [selected] : [])]);
+  const beaconCommunities = useBeaconCommunities([
+    ...activities.map((row) => row.id),
+    ...publicDiscovery.rows.map((row) => row.activity_id),
+    ...(selected ? [selected] : []),
+  ]);
   const rankedPublic = rankPublicBeaconSummaries(
     publicDiscovery.rows,
-    data.profiles.find((row) => row.id === userId)?.interests ?? [],
+    personalizedRanking ? profileInterests : [],
     exploration.area?.label ?? null,
     now,
     beaconCommunities.rows,
@@ -1104,7 +1240,177 @@ export default function MapScreen() {
     !!contextViews.length,
     viewport,
     now,
+    { data, viewerId: userId, now, friends: discoveryFriends },
   );
+  const surpriseArea =
+    surprise?.contextKey === surpriseContextKey ? surprise.area : viewport;
+  const surprisePublic = publicMapBeacons(
+    rankedPublic,
+    exploration.filters,
+    selectedCategories,
+    normalActivities
+      .filter((a) =>
+        safePlaces.some((p) => p.activity_id === a.id && validPhysicalPlace(p)),
+      )
+      .map((a) => a.id),
+    !!contextViews.length,
+    surpriseArea,
+    now,
+    { data, viewerId: userId, now, friends: discoveryFriends },
+  );
+  const surprisePool = surpriseCandidates(
+    data,
+    userId,
+    normalActivities,
+    surprisePublic,
+    exploration.filters,
+    surpriseArea,
+    now,
+  );
+  const surprisePoolKey = JSON.stringify(surprisePool);
+  useEffect(() => {
+    if (!surprise) return;
+    const invalid =
+      surprise.contextKey !== surpriseContextKey ||
+      surprise.viewerEpoch !== viewerEpoch ||
+      !!planFocus ||
+      !snapshotReady;
+    const candidate = surprisePool.find(
+      (c) => c.id === surprise.picked.id && c.kind === surprise.picked.kind,
+    );
+    const removed =
+      !candidate ||
+      JSON.stringify(candidate.coordinate) !==
+        JSON.stringify(surprise.picked.coordinate);
+    if (!invalid && !removed && controlCommand?.revision === surprise.revision)
+      return;
+    const frame = requestAnimationFrame(() => cancelSurprise());
+    return () => cancelAnimationFrame(frame);
+    // Candidate identity and command tokens drive invalidation, not unrelated snapshot object changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    surpriseContextKey,
+    surprisePoolKey,
+    viewerEpoch,
+    planFocus,
+    snapshotReady,
+    controlCommand?.revision,
+    surprise,
+  ]);
+
+  function pickSurprise(eventTime: number) {
+    if (
+      surpriseRef.current?.pending ||
+      planFocus ||
+      pickMode ||
+      !snapshotReady ||
+      !viewport
+    )
+      return;
+    const old =
+      surpriseRef.current?.contextKey === surpriseContextKey
+        ? surpriseRef.current
+        : null;
+    const area = old?.area ?? viewport;
+    const fresh = surpriseCandidates(
+      data,
+      userId,
+      normalActivities,
+      surprisePublic,
+      exploration.filters,
+      area,
+      eventTime,
+    );
+    const picked = surpriseCycle.pick(
+      JSON.stringify([surpriseContextKey, area.bounds]),
+      fresh,
+    );
+    if (!picked) {
+      setSurpriseMessage(
+        "Nothing to surprise you with yet. Try broader filters.",
+      );
+      return;
+    }
+    setSurpriseMessage("");
+    const revision = Math.max(
+      (controlCommand?.revision ?? 0) + 1,
+      surpriseRevision.current + 1,
+    );
+    surpriseRevision.current = revision;
+    const session = {
+      contextKey: surpriseContextKey,
+      viewerEpoch,
+      area,
+      origin: old?.canReturn ? old.origin : viewport,
+      picked,
+      pending: true,
+      revision,
+      canReturn: true,
+    };
+    // Selection protects the real marker immediately; its preview waits for camera settlement.
+    if (picked.kind === "activity") chooseBeacon(picked.id, true);
+    else choosePublicBeacon(picked.id, true);
+    updateSurprise(session);
+    if (discoveryRestore.current) discoveryRestore.current.cameraChanged = true;
+    setControlCommand({
+      kind: "focus",
+      coordinates: [picked.coordinate],
+      zoom: picked.zoom,
+      animate: true,
+      durationMs: 450,
+      notifySettled: true,
+      revision,
+    });
+  }
+  function onSurpriseSettled(revision: number, eventTime: number) {
+    const pending = surpriseRef.current;
+    if (
+      !pending?.pending ||
+      pending.revision !== revision ||
+      pending.contextKey !== surpriseContextKey ||
+      pending.viewerEpoch !== getViewerEpoch()
+    )
+      return;
+    const fresh = surpriseCandidates(
+      data,
+      userId,
+      normalActivities,
+      surprisePublic,
+      exploration.filters,
+      pending.area,
+      eventTime,
+    ).find((c) => c.id === pending.picked.id && c.kind === pending.picked.kind);
+    if (
+      !fresh ||
+      JSON.stringify(fresh.coordinate) !==
+        JSON.stringify(pending.picked.coordinate) ||
+      controlCommand?.revision !== revision
+    ) {
+      cancelSurprise();
+      setSurpriseMessage("That Beacon is no longer available. Try again.");
+      return;
+    }
+    updateSurprise({ ...pending, pending: false });
+  }
+  function backFromSurprise() {
+    const current = surpriseRef.current;
+    if (
+      !current?.canReturn ||
+      current.pending ||
+      current.contextKey !== surpriseContextKey
+    )
+      return;
+    setSelected(null);
+    setPublicSelection(null);
+    updateSurprise(null);
+    setControlCommand((previous) => ({
+      kind: "restore",
+      camera: current.origin,
+      animate: true,
+      durationMs: 450,
+      revision: (previous?.revision ?? 0) + 1,
+    }));
+  }
   const hasVisibleBeacons = visibleActivities.some((activity) =>
     safePlaces.some(
       (place) => place.activity_id === activity.id && validPhysicalPlace(place),
@@ -1127,16 +1433,41 @@ export default function MapScreen() {
       ),
   );
   useEffect(() => {
-    if (loading || !publicDiscovery.ready || feedbackAction <= resolvedFeedback.current) return;
+    if (
+      loading ||
+      !publicDiscovery.ready ||
+      feedbackAction <= resolvedFeedback.current
+    )
+      return;
     const timer = setTimeout(() => {
       resolvedFeedback.current = feedbackAction;
-      setFeedbackResult(!hasVisibleBeacons && !publicMapRows.length && !hasVisiblePeople ? feedbackAction : 0);
+      setFeedbackResult(
+        !hasVisibleBeacons && !publicMapRows.length ? feedbackAction : 0,
+      );
     }, 250);
     return () => clearTimeout(timer);
-  }, [feedbackAction, loading, publicDiscovery.ready, hasVisibleBeacons, publicMapRows.length, hasVisiblePeople]);
-  if (feedbackResult > dismissedFeedback && (hasVisibleBeacons || publicMapRows.length || hasVisiblePeople)) setDismissedFeedback(feedbackResult);
+  }, [
+    feedbackAction,
+    loading,
+    publicDiscovery.ready,
+    hasVisibleBeacons,
+    publicMapRows.length,
+    hasVisiblePeople,
+  ]);
+  if (
+    feedbackResult > dismissedFeedback &&
+    (hasVisibleBeacons || publicMapRows.length)
+  )
+    setDismissedFeedback(feedbackResult);
 
-  const publicPoints = publicMapRows.map((row) => ({
+  const publicPoints = [
+    ...publicMapRows,
+    ...(selectedPublic &&
+    !publicMapRows.some((r) => r.activity_id === selectedPublic.activity_id) &&
+    Date.parse(selectedPublic.ends_at) > now
+      ? [selectedPublic]
+      : []),
+  ].map((row) => ({
     id: `public:${row.activity_id}`,
     publicBeaconId: row.activity_id,
     category: row.category,
@@ -1147,17 +1478,34 @@ export default function MapScreen() {
   }));
   useEffect(() => {
     if (!clusterActivityIds || !clusterPersonIds) return;
-    const beacons = clusterActivityIds.filter(id => activities.some(row => row.id === id) || publicDiscovery.rows.some(row => row.activity_id === id));
-    const people = clusterPersonIds.filter(id => mapLocations.some(row => row.owner_id === id));
-    if (beacons.length === clusterActivityIds.length && people.length === clusterPersonIds.length) return;
+    const beacons = clusterActivityIds.filter(
+      (id) =>
+        activities.some((row) => row.id === id) ||
+        publicDiscovery.rows.some((row) => row.activity_id === id),
+    );
+    const people = clusterPersonIds.filter((id) =>
+      mapLocations.some((row) => row.owner_id === id),
+    );
+    if (
+      beacons.length === clusterActivityIds.length &&
+      people.length === clusterPersonIds.length
+    )
+      return;
     const frame = requestAnimationFrame(() => {
       setClusterActivityIds(beacons.length || people.length ? beacons : null);
       setClusterPersonIds(beacons.length || people.length ? people : null);
     });
     return () => cancelAnimationFrame(frame);
-  }, [activities, publicDiscovery.rows, mapLocations, clusterActivityIds, clusterPersonIds]);
+  }, [
+    activities,
+    publicDiscovery.rows,
+    mapLocations,
+    clusterActivityIds,
+    clusterPersonIds,
+  ]);
 
-  function choosePublicBeacon(id: string) {
+  function choosePublicBeacon(id: string, fromSurprise = false) {
+    if (!fromSurprise) cancelSurprise();
     if (discoveryRestore.current) {
       discoveryRestore.current.selectionChanged = true;
     }
@@ -1172,7 +1520,6 @@ export default function MapScreen() {
     setContextPoint(null);
     setPublicSelection(id);
     setPlaceSearchOpen(false);
-
   }
 
   const searchActivityResults = userId
@@ -1182,7 +1529,10 @@ export default function MapScreen() {
         query,
         now,
         exploration.area?.coordinate ?? viewport?.center,
-      ).slice(0, 5)
+        personalizedRanking,
+      )
+        .filter((a) => safeActivities.some((row) => row.id === a.id))
+        .slice(0, 5)
     : [];
   const searchPeopleResults: Profile[] =
     snapshotReady && userId
@@ -1268,6 +1618,7 @@ export default function MapScreen() {
         visibleActivityIds,
         showAvatars ? mapLocations.map((location) => location.owner_id) : [],
         now,
+        personalizedRanking,
       )
     : {};
   for (const row of publicMapRows)
@@ -1348,15 +1699,7 @@ export default function MapScreen() {
         : null,
     [baseExplorationTarget, exploration.areaRevision, targetRevision],
   );
-  const activeCategories = useMemo(
-    () =>
-      selectedCategories.length
-        ? selectedCategories
-        : exploration.filters.category === "All categories"
-          ? []
-          : [exploration.filters.category],
-    [exploration.filters.category, selectedCategories],
-  );
+  const activeCategories = selectedCategories;
   const activeFilterCount = mapAdvancedFilterCount(
     exploration.filters,
     activeCategories,
@@ -1375,7 +1718,11 @@ export default function MapScreen() {
               (option) => option.id === exploration.filters.audience,
             )?.label ?? "Group");
     if (audienceLabel) chips.push({ key: "audience", label: audienceLabel });
-    if (exploration.filters.time !== "All")
+    if (exploration.filters.friendScope)
+      chips.push({ key: "friends", label: friendLabel });
+    if (wantsHappeningNow(exploration.filters))
+      chips.push({ key: "now", label: "Happening now" });
+    if (exploration.filters.time === "Upcoming")
       chips.push({ key: "time", label: exploration.filters.time });
     if (exploration.filters.when && exploration.filters.when !== "Any")
       chips.push({ key: "when", label: exploration.filters.when });
@@ -1408,16 +1755,8 @@ export default function MapScreen() {
     mapAudiences,
     planFilterOptions,
     contextViews,
+    friendLabel,
   ]);
-
-  const selectedQuickFilter: MapQuickFilter | null =
-    exploration.filters.audience === "Friends"
-      ? "Friends"
-      : exploration.filters.audience === "Squads"
-        ? "Squads"
-        : exploration.filters.audience === "Public"
-          ? "Public"
-          : "All";
 
   const activeSonar = activeSonarSession(data.locations, userId, now);
   const recentQueries =
@@ -1498,7 +1837,8 @@ export default function MapScreen() {
     setRecentSearchState({ viewerId: userId, queries: next });
   }
 
-  function chooseBeacon(id: string) {
+  function chooseBeacon(id: string, fromSurprise = false) {
+    if (!fromSurprise) cancelSurprise();
     if (discoveryRestore.current) {
       discoveryRestore.current.selectionChanged = true;
     }
@@ -1527,6 +1867,7 @@ export default function MapScreen() {
   }
 
   function choosePerson(id: string) {
+    cancelSurprise();
     if (discoveryRestore.current) {
       discoveryRestore.current.selectionChanged = true;
     }
@@ -1551,7 +1892,8 @@ export default function MapScreen() {
   }
 
   const startPickingLocation = useCallback(() => {
-    if (!pickRestore.current) pickRestore.current = { viewer: userId, query: exploration.query };
+    if (!pickRestore.current)
+      pickRestore.current = { viewer: userId, query: exploration.query };
     creationLocationContext.current = {};
     setLocationPickError("");
     setPickingDraft(false);
@@ -1575,21 +1917,32 @@ export default function MapScreen() {
 
   function cancelPicking() {
     const context = creationLocationContext.current;
-    const returnParams = finishCreationLocationPick(userId, context.planSession);
+    const returnParams = finishCreationLocationPick(
+      userId,
+      context.planSession,
+    );
     finishPicking();
-    if (returnParams) router.dismissTo({ pathname: "/create", params: returnParams });
+    if (returnParams)
+      router.dismissTo({ pathname: "/create", params: returnParams });
   }
 
   useEffect(() => {
     if (!pickMode) return;
-    const back = BackHandler.addEventListener("hardwareBackPress", () => { cancelPicking(); return true; });
+    const back = BackHandler.addEventListener("hardwareBackPress", () => {
+      cancelPicking();
+      return true;
+    });
     const escape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") { event.preventDefault(); cancelPicking(); }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        cancelPicking();
+      }
     };
     if (Platform.OS === "web") document.addEventListener("keydown", escape);
     return () => {
       back.remove();
-      if (Platform.OS === "web") document.removeEventListener("keydown", escape);
+      if (Platform.OS === "web")
+        document.removeEventListener("keydown", escape);
     };
   });
   useEffect(() => {
@@ -1615,10 +1968,11 @@ export default function MapScreen() {
         setPickedMapPoint({
           latitude: Number(context.latitude),
           longitude: Number(context.longitude),
-          label: context.placeLabel || (Platform.OS !== "web" ? "Pinned location" : "Pinned map location"),
+          label:
+            context.placeLabel ||
+            (Platform.OS !== "web" ? "Pinned location" : "Pinned map location"),
         });
-      } else if (context.locationPicker === "editor")
-        setPickedMapPoint(null);
+      } else if (context.locationPicker === "editor") setPickedMapPoint(null);
       router.setParams({
         pickLocation: undefined,
         locationPicker: undefined,
@@ -1673,7 +2027,11 @@ export default function MapScreen() {
       Keyboard.dismiss();
       setPickedMapPoint({ ...place.coordinate, label: place.label });
       setPlaceSearchOpen(false);
-      setControlCommand(previous => ({ kind: "focus", coordinates: [place.coordinate], revision: (previous?.revision ?? 0) + 1 }));
+      setControlCommand((previous) => ({
+        kind: "focus",
+        coordinates: [place.coordinate],
+        revision: (previous?.revision ?? 0) + 1,
+      }));
       return;
     }
     if (discoveryRestore.current) discoveryRestore.current.cameraChanged = true;
@@ -1722,6 +2080,10 @@ export default function MapScreen() {
 
   function handleViewportChange(next: MapViewport, userMoved = true) {
     setViewport(next);
+    if (userMoved) {
+      cancelSurprise();
+      surpriseCycle.reset();
+    }
     // Placement follows a geographic point, never the camera center.
     if (pickMode) return;
     if (discoveryActive && userMoved && discoveryRestore.current)
@@ -1731,8 +2093,9 @@ export default function MapScreen() {
   }
 
   function resetFilters() {
-    exploration.setFilters(defaultFilters);
-    setSelectedCategories([]);
+    if (discoveryRestore.current && selectedCategories.length)
+      discoveryRestore.current.categoriesChanged = true;
+    exploration.setFilters(resetDiscoveryFilters());
   }
 
   const focusContext = useCallback(
@@ -1740,7 +2103,14 @@ export default function MapScreen() {
       const view = resolveMapContext(data, userId, filter);
       if (!view) return;
       if (!contextViews.length) previousContextCamera.current = viewport;
-      if (filter.kind === "plan" && !planFocus) previousPlanState.current = { viewerKey, camera: viewport, selected, person, detail: detailTab };
+      if (filter.kind === "plan" && !planFocus)
+        previousPlanState.current = {
+          viewerKey,
+          camera: viewport,
+          selected,
+          person,
+          detail: detailTab,
+        };
       clearRouteSelection();
       setSelected(null);
       setPerson(null);
@@ -1752,7 +2122,11 @@ export default function MapScreen() {
         viewerKey,
         filters: [
           ...(current.viewerKey === viewerKey
-            ? current.filters.filter((item) => mapContextKey(item) !== view.key && (filter.kind !== "plan" || item.kind !== "plan"))
+            ? current.filters.filter(
+                (item) =>
+                  mapContextKey(item) !== view.key &&
+                  (filter.kind !== "plan" || item.kind !== "plan"),
+              )
             : []),
           filter,
         ],
@@ -1768,7 +2142,11 @@ export default function MapScreen() {
       data,
       userId,
       contextViews.length,
-      planFocus, viewerKey, selected, person, detailTab,
+      planFocus,
+      viewerKey,
+      selected,
+      person,
+      detailTab,
       viewport,
       clearRouteSelection,
       setSelected,
@@ -1816,7 +2194,7 @@ export default function MapScreen() {
           (exploration.filters.category === "All categories"
             ? []
             : [exploration.filters.category]);
-        setCategoriesValue(categories);
+        setSelectedCategories(categories);
         setSelected(null);
         setPerson(null);
         setSquadPreviewId(null);
@@ -1866,6 +2244,7 @@ export default function MapScreen() {
     userId,
     viewport,
     selectedCategories,
+    setSelectedCategories,
     selected,
     person,
     squadPreviewId,
@@ -1881,7 +2260,8 @@ export default function MapScreen() {
   function clearDiscovery() {
     const original = discoveryRestore.current;
     if (original?.viewerId === userId) {
-      if (!original.categoriesChanged) setCategoriesValue(original.categories);
+      if (!original.categoriesChanged)
+        setSelectedCategories(original.categories);
       if (!original.selectionChanged) {
         setSelected(original.selected);
         setPerson(original.person);
@@ -1904,11 +2284,27 @@ export default function MapScreen() {
     if (planFocus && (!key || key === planFocus.key)) {
       const saved = previousPlanState.current;
       if (saved?.viewerKey === viewerKey) {
-        if (saved.camera) setControlCommand(previous => ({ kind: "restore", camera: saved.camera!, revision: (previous?.revision ?? 0) + 1 }));
-        const valid = saved.selected && data.activities.some(activity => activity.id === saved.selected && canReadBeaconActivity(data, activity, userId!));
+        if (saved.camera)
+          setControlCommand((previous) => ({
+            kind: "restore",
+            camera: saved.camera!,
+            revision: (previous?.revision ?? 0) + 1,
+          }));
+        const valid =
+          saved.selected &&
+          data.activities.some(
+            (activity) =>
+              activity.id === saved.selected &&
+              canReadBeaconActivity(data, activity, userId!),
+          );
         setSelected(valid ? saved.selected : null);
         setDetailTab(valid ? saved.detail : null);
-        setPerson(saved.person && mapLocations.some(row => row.owner_id === saved.person) ? saved.person : null);
+        setPerson(
+          saved.person &&
+            mapLocations.some((row) => row.owner_id === saved.person)
+            ? saved.person
+            : null,
+        );
       }
       previousPlanState.current = null;
       if (!remaining.length) previousContextCamera.current = null;
@@ -1923,7 +2319,8 @@ export default function MapScreen() {
       previousContextCamera.current = null;
     }
     if (
-      !(planFocus && (!key || key === planFocus.key)) && selected &&
+      !(planFocus && (!key || key === planFocus.key)) &&
+      selected &&
       !normalActivities.some((activity) => activity.id === selected) &&
       !remaining.some((view) =>
         view.activities.some((activity) => activity.id === selected),
@@ -1953,14 +2350,11 @@ export default function MapScreen() {
       const category = key.slice("category:".length) as Category;
       const next = activeCategories.filter((value) => value !== category);
       setSelectedCategories(next);
-      if (!next.length)
-        exploration.setFilters({
-          ...exploration.filters,
-          category: "All categories",
-        });
       return;
     }
     const changes: Record<string, unknown> = {
+      friendScope: key === "friends" ? null : exploration.filters.friendScope,
+      happeningNow: key === "now" ? false : exploration.filters.happeningNow,
       audience: key === "audience" ? "Everyone" : exploration.filters.audience,
       time: key === "time" ? "All" : exploration.filters.time,
       when: key === "when" ? "Any" : exploration.filters.when,
@@ -1979,30 +2373,32 @@ export default function MapScreen() {
   function chooseQuickFilter(filter: MapQuickFilter) {
     closePopovers();
     if (filter === "All") {
-      resetFilters();
+      if (exploration.filters.friendScope)
+        setLastFriendScope(exploration.filters.friendScope);
+      if (discoveryRestore.current && selectedCategories.length)
+        discoveryRestore.current.categoriesChanged = true;
+      exploration.setFilters(clearQuickDiscoveryFilters(exploration.filters));
       return;
     }
     if (filter === "Now") {
       exploration.setFilters({
         ...exploration.filters,
-        time: exploration.filters.time === "Now" ? "All" : "Now",
-        when: "Any",
+        happeningNow: !wantsHappeningNow(exploration.filters),
       });
       return;
     }
-    const audience =
-      filter === "Friends"
-        ? "Friends"
-        : filter === "Public"
-          ? "Public"
-          : "Squads";
-    exploration.setFilters({
-      ...exploration.filters,
-      audience:
-        exploration.filters.audience === audience ? "Everyone" : audience,
-      time:
-        exploration.filters.time === "Now" ? "All" : exploration.filters.time,
-    });
+    if (exploration.filters.friendScope) {
+      setLastFriendScope(exploration.filters.friendScope);
+      exploration.setFilters({ ...exploration.filters, friendScope: null });
+    } else
+      exploration.setFilters({
+        ...exploration.filters,
+        friendScope: friendChoices.some(
+          (choice) => choice.id === lastFriendScope,
+        )
+          ? lastFriendScope
+          : "friends",
+      });
   }
 
   async function handleUseMyLocation() {
@@ -2128,18 +2524,41 @@ export default function MapScreen() {
     if (!pickedMapPoint || !isValidCoordinate(pickedMapPoint)) return;
     const context = creationLocationContext.current;
     if (context.locationPicker === "editor") {
-      const returnParams = finishCreationLocationPick(userId, context.planSession, pickedMapPoint);
-      if (!returnParams) { setLocationPickError("This editor is no longer available. Cancel and reopen your Beacon draft."); return; }
+      const returnParams = finishCreationLocationPick(
+        userId,
+        context.planSession,
+        pickedMapPoint,
+      );
+      if (!returnParams) {
+        setLocationPickError(
+          "This editor is no longer available. Cancel and reopen your Beacon draft.",
+        );
+        return;
+      }
       finishPicking();
       router.dismissTo({ pathname: "/create", params: returnParams });
     }
   }
 
   function createAtPickedLocation(kind: "beacon" | "ping") {
-    if (!pickedMapPoint || !isValidCoordinate(pickedMapPoint) || pickRestore.current?.viewer !== userId) return;
-    const location = { fromMap: "yes", latitude: String(pickedMapPoint.latitude), longitude: String(pickedMapPoint.longitude), placeLabel: pickedMapPoint.label };
+    if (
+      !pickedMapPoint ||
+      !isValidCoordinate(pickedMapPoint) ||
+      pickRestore.current?.viewer !== userId
+    )
+      return;
+    const location = {
+      fromMap: "yes",
+      latitude: String(pickedMapPoint.latitude),
+      longitude: String(pickedMapPoint.longitude),
+      placeLabel: pickedMapPoint.label,
+    };
     finishPicking();
-    if (kind === "ping") router.push({ pathname: "/planning/create", params: { ...location, kind: "ping", sessionId: randomUUID() } });
+    if (kind === "ping")
+      router.push({
+        pathname: "/planning/create",
+        params: { ...location, kind: "ping", sessionId: randomUUID() },
+      });
     else router.push({ pathname: "/create", params: location });
   }
 
@@ -2320,294 +2739,248 @@ export default function MapScreen() {
   );
 
   return (
-    <BeaconCommunitiesProvider rows={beaconCommunities.rows} onRefresh={beaconCommunities.refresh}>
-    <KeyboardAvoidingView
-      testID="full-map-screen"
-      onLayout={(event) => {
-        const { width: nextWidth, height: nextHeight } =
-          event.nativeEvent.layout;
-        setMapSize((current) =>
-          current.width === nextWidth && current.height === nextHeight
-            ? current
-            : { width: nextWidth, height: nextHeight },
-        );
-      }}
-      style={{ flex: 1, backgroundColor: colors.bg }}
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+    <BeaconCommunitiesProvider
+      rows={beaconCommunities.rows}
+      onRefresh={beaconCommunities.refresh}
     >
-      {preferencesReady ? (
-        <BeaconMap
-          friendsProminent={exploration.filters.audience === "Friends"}
-          fullScreen
-          contextPoints={planFocus ? contextPoints : [...contextPoints, ...publicPoints]}
-          contextPaths={contextPaths}
-          onContextPoint={(point) => {
-            if (pickMode) return;
-            if (point.publicBeaconId) {
-              choosePublicBeacon(point.publicBeaconId);
-              return;
+      <KeyboardAvoidingView
+        testID="full-map-screen"
+        onLayout={(event) => {
+          const { width: nextWidth, height: nextHeight } =
+            event.nativeEvent.layout;
+          setMapSize((current) =>
+            current.width === nextWidth && current.height === nextHeight
+              ? current
+              : { width: nextWidth, height: nextHeight },
+          );
+        }}
+        style={{ flex: 1, backgroundColor: colors.bg }}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+      >
+        {preferencesReady ? (
+          <BeaconMap
+            friendsProminent={
+              !!exploration.filters.friendScope ||
+              exploration.filters.audience === "Friends"
             }
-            if (point.activityId) chooseBeacon(point.activityId);
-            else if (point.threadId)
-              router.push({
-                pathname: "/council/[id]",
-                params: { id: point.threadId },
+            fullScreen
+            contextPoints={
+              planFocus ? contextPoints : [...contextPoints, ...publicPoints]
+            }
+            contextPaths={contextPaths}
+            onContextPoint={(point) => {
+              if (pickMode) return;
+              if (point.publicBeaconId) {
+                choosePublicBeacon(point.publicBeaconId);
+                return;
+              }
+              if (point.activityId) chooseBeacon(point.activityId);
+              else if (point.threadId)
+                router.push({
+                  pathname: "/council/[id]",
+                  params: { id: point.threadId },
+                });
+            }}
+            calm={calm}
+            pulseSummaries={
+              !planFocus && mapPreferences.liveUpdates ? pulse.summaries : []
+            }
+            pulsePlaces={planFocus ? [] : knownPulsePlaces}
+            pulsePopToken={pulsePopToken}
+            pulsePopPlaceKey={pulsePopPlaceKey}
+            onPlace={choosePulsePlace}
+            onGestureChange={(active) => {
+              gestureChanged(active);
+              if (active) {
+                cancelSurprise();
+                surpriseCycle.reset();
+              }
+            }}
+            onLongPress={(touch) => {
+              if (
+                pickMode ||
+                !isValidCoordinate(touch.coordinate) ||
+                !Number.isFinite(touch.point.x) ||
+                !Number.isFinite(touch.point.y)
+              )
+                return;
+              choosePulsePlace(
+                areaPulsePlace(
+                  touch.coordinate.latitude,
+                  touch.coordinate.longitude,
+                ),
+              );
+              setContextPoint({ ...touch.point, ...touch.coordinate });
+              uiHaptics.light();
+            }}
+            hideControls
+            viewportInsets={{
+              top: insets.top + headerHeight + (planFocus ? 136 : 16),
+              right: 68,
+              bottom: mapBottomClearance,
+              left: 12,
+            }}
+            previewHeight={
+              !pickMode && (person || (selected && !detailTab))
+                ? mapTooltip.maxHeight
+                : undefined
+            }
+            focused={focusedCoordinate}
+            anchorCoordinate={
+              pickMode
+                ? pickedMapPoint
+                : selectedPublic
+                  ? {
+                      latitude: selectedPublic.coarse_lat!,
+                      longitude: selectedPublic.coarse_lng!,
+                    }
+                  : clusterActivityIds
+                    ? clusterCenter
+                    : focusedCoordinate
+            }
+            onAnchor={setMapAnchor}
+            activities={
+              planFocus
+                ? []
+                : focusedBeacon &&
+                    !activities.some((activity) => activity.id === selected)
+                  ? [...activities, focusedBeacon]
+                  : activities
+            }
+            availabilityActivities={
+              discoveryActive || planFocus ? [] : availabilityActivities
+            }
+            places={safePlaces}
+            locations={planFocus ? [] : mapLocations}
+            profiles={data.profiles}
+            clusterPriorities={clusterPriorities}
+            areaName={
+              exploration.area?.kind === "place"
+                ? exploration.area.label
+                : undefined
+            }
+            selectedActivityId={selected}
+            onPick={
+              pickMode
+                ? (latitude, longitude) => {
+                    if (!isValidCoordinate({ latitude, longitude })) return;
+                    setLocationPickError("");
+                    setPickedMapPoint({
+                      latitude,
+                      longitude,
+                      label: "Pinned location",
+                    });
+                  }
+                : undefined
+            }
+            selected={pickMode ? pickedMapPoint : contextPoint}
+            selectionIsTemporary={pickMode || !!contextPoint}
+            onActivity={(id) => chooseBeacon(id)}
+            onPerson={choosePerson}
+            clusterPersonCount={countClusterPeople}
+            onCluster={(nextCluster, anchor, section) => {
+              if (pickMode) return;
+              setMapAnchor(anchor ?? null);
+              setClusterSelectionId(nextCluster.id);
+              setClusterCenter({
+                latitude: nextCluster.latitude,
+                longitude: nextCluster.longitude,
               });
-          }}
-          calm={calm}
-          pulseSummaries={!planFocus && mapPreferences.liveUpdates ? pulse.summaries : []}
-          pulsePlaces={planFocus ? [] : knownPulsePlaces}
-          pulsePopToken={pulsePopToken}
-          pulsePopPlaceKey={pulsePopPlaceKey}
-          onPlace={choosePulsePlace}
-          onGestureChange={gestureChanged}
-          onLongPress={(touch) => {
-            if (
-              pickMode ||
-              !isValidCoordinate(touch.coordinate) ||
-              !Number.isFinite(touch.point.x) ||
-              !Number.isFinite(touch.point.y)
-            )
-              return;
-            choosePulsePlace(
-              areaPulsePlace(
-                touch.coordinate.latitude,
-                touch.coordinate.longitude,
-              ),
-            );
-            setContextPoint({ ...touch.point, ...touch.coordinate });
-            uiHaptics.light();
-          }}
-          hideControls
-          viewportInsets={{
-            top: insets.top + headerHeight + (planFocus ? 136 : 16),
-            right: 68,
-            bottom: mapBottomClearance,
-            left: 12,
-          }}
-          previewHeight={
-            !pickMode && (person || (selected && !detailTab))
-              ? mapTooltip.maxHeight
-              : undefined
-          }
-          focused={focusedCoordinate}
-          anchorCoordinate={
-            pickMode ? pickedMapPoint : selectedPublic ? { latitude: selectedPublic.coarse_lat!, longitude: selectedPublic.coarse_lng! } : clusterActivityIds ? clusterCenter : focusedCoordinate
-          }
-          onAnchor={setMapAnchor}
-          activities={planFocus ? [] :
-            focusedBeacon &&
-            !activities.some((activity) => activity.id === selected)
-              ? [...activities, focusedBeacon]
-              : activities
-          }
-          availabilityActivities={discoveryActive || planFocus ? [] : availabilityActivities}
-          places={safePlaces}
-          locations={planFocus ? [] : mapLocations}
-          profiles={data.profiles}
-          clusterPriorities={clusterPriorities}
-          areaName={
-            exploration.area?.kind === "place"
-              ? exploration.area.label
-              : undefined
-          }
-          selectedActivityId={selected}
-          onPick={pickMode ? (latitude, longitude) => {
-            if (!isValidCoordinate({ latitude, longitude })) return;
-            setLocationPickError("");
-            setPickedMapPoint({ latitude, longitude, label: "Pinned location" });
-          } : undefined}
-          selected={pickMode ? pickedMapPoint : contextPoint}
-          selectionIsTemporary={pickMode || !!contextPoint}
-          onActivity={(id) => chooseBeacon(id)}
-          onPerson={choosePerson}
-          clusterPersonCount={countClusterPeople}
-          onCluster={(nextCluster, anchor, section) => {
-            if (pickMode) return;
-            setMapAnchor(anchor ?? null);
-            setClusterSelectionId(nextCluster.id);
-            setClusterCenter({
-              latitude: nextCluster.latitude,
-              longitude: nextCluster.longitude,
-            });
-            setClusterCoordinates(
-              nextCluster.members.map((row) => ({
-                latitude: row.latitude,
-                longitude: row.longitude,
-              })),
-            );
-            uiHaptics.light();
-            clearRouteSelection();
-            setDetailTab(null);
-            setPublicSelection(null);
-            setPulsePlace(null);
-            setContextPoint(null);
-            setSelected(null);
-            setPerson(null);
-            const memberIds = nextCluster.members
-              .filter((member) => member.kind === "beacon")
-              .map((member) => member.id.slice("beacon:".length))
-              .filter(
-                (id) =>
-                  activities.some((activity) => activity.id === id) ||
-                  focusedBeacon?.id === id ||
-                  publicMapRows.some((row) => row.activity_id === id),
+              setClusterCoordinates(
+                nextCluster.members.map((row) => ({
+                  latitude: row.latitude,
+                  longitude: row.longitude,
+                })),
               );
-            const peopleIds = nextCluster.members
-              .filter((member) => member.kind === "person")
-              .map((member) => member.id.slice("person:".length))
-              .filter(
-                (id) =>
-                  mapLocations.some((location) => location.owner_id === id) &&
-                  !!data.profiles.find(
-                    (profile) =>
-                      profile.id === id &&
-                      userId &&
-                      canViewProfile(data, profile, userId),
-                  ),
-              );
-            if (memberIds.length || peopleIds.length) {
-              setClusterSection(section ?? (memberIds.length ? "Beacons" : "Friends"));
-              setClusterActivityIds(memberIds);
-              setClusterPersonIds(peopleIds);
-            } else {
+              uiHaptics.light();
+              clearRouteSelection();
+              setDetailTab(null);
+              setPublicSelection(null);
+              setPulsePlace(null);
+              setContextPoint(null);
+              setSelected(null);
+              setPerson(null);
+              const memberIds = nextCluster.members
+                .filter((member) => member.kind === "beacon")
+                .map((member) => member.id.slice("beacon:".length))
+                .filter(
+                  (id) =>
+                    activities.some((activity) => activity.id === id) ||
+                    focusedBeacon?.id === id ||
+                    publicMapRows.some((row) => row.activity_id === id),
+                );
+              const peopleIds = nextCluster.members
+                .filter((member) => member.kind === "person")
+                .map((member) => member.id.slice("person:".length))
+                .filter(
+                  (id) =>
+                    mapLocations.some((location) => location.owner_id === id) &&
+                    !!data.profiles.find(
+                      (profile) =>
+                        profile.id === id &&
+                        userId &&
+                        canViewProfile(data, profile, userId),
+                    ),
+                );
+              if (memberIds.length || peopleIds.length) {
+                setClusterSection(
+                  section ?? (memberIds.length ? "Beacons" : "Friends"),
+                );
+                setClusterActivityIds(memberIds);
+                setClusterPersonIds(peopleIds);
+              } else {
+                setClusterActivityIds(null);
+                setClusterPersonIds(null);
+              }
+            }}
+            onMapTap={() => {
+              if (pickMode) return;
+              if (contextPoint) {
+                dismissLocationMenu();
+                return;
+              }
+              setPublicSelection(null);
+              setPulsePlace(null);
+              setContextPoint(null);
+              setPlaceSearchOpen(false);
+              setCompassSheetOpen(false);
+              clearRouteSelection();
+              setSelected(null);
+              setPerson(null);
               setClusterActivityIds(null);
               setClusterPersonIds(null);
+              router.setParams({ beacon: undefined, person: undefined });
+            }}
+            explorationTarget={activeAreaTarget}
+            controlCommand={controlCommand}
+            mapStyle={mapStyle}
+            onRecenter={
+              activeAreaTarget
+                ? () => setTargetRevision((revision) => revision + 1)
+                : undefined
             }
+            onBearingChange={setBearing}
+            onViewportChange={handleViewportChange}
+            onCameraCommandSettled={onSurpriseSettled}
+          />
+        ) : null}
+
+        <SocialDirectorySummaryPreview
+          summary={selectedDirectory}
+          visible={!!selectedDirectory}
+          onClose={() => setDirectorySelection(null)}
+          onAction={async () => {
+            if (!selectedDirectory || !userId) return false;
+            await performDirectoryAction(selectedDirectory, data, userId, act);
+            setDirectorySelection(null);
           }}
-          onMapTap={() => {
-            if (pickMode) return;
-            if (contextPoint) {
-              dismissLocationMenu();
-              return;
-            }
-            setPublicSelection(null);
-            setPulsePlace(null);
-            setContextPoint(null);
-            setPlaceSearchOpen(false);
-            setCompassSheetOpen(false);
-            clearRouteSelection();
-            setSelected(null);
-            setPerson(null);
-            setClusterActivityIds(null);
-            setClusterPersonIds(null);
-            router.setParams({ beacon: undefined, person: undefined });
-          }}
-          explorationTarget={activeAreaTarget}
-          controlCommand={controlCommand}
-          mapStyle={mapStyle}
-          onRecenter={
-            activeAreaTarget
-              ? () => setTargetRevision((revision) => revision + 1)
-              : undefined
-          }
-          onBearingChange={setBearing}
-          onViewportChange={handleViewportChange}
         />
-      ) : null}
 
-      <SocialDirectorySummaryPreview
-        summary={selectedDirectory}
-        visible={!!selectedDirectory}
-        onClose={() => setDirectorySelection(null)}
-        onAction={async () => {
-          if (!selectedDirectory || !userId) return false;
-          await performDirectoryAction(selectedDirectory, data, userId, act);
-          setDirectorySelection(null);
-        }}
-      />
-
-      <View
-        pointerEvents="box-none"
-        style={{
-          position: "absolute",
-          top: headerTop,
-          left: Math.max(
-            0,
-            (mapSize.width - tokens.layout.contentMaxWidth) / 2,
-          ),
-          right: Math.max(
-            0,
-            (mapSize.width - tokens.layout.contentMaxWidth) / 2,
-          ),
-          zIndex: 20,
-          elevation: 20,
-        }}
-      >
-        {pickMode ? (activeSearchVisible ? <View style={{ padding: 12, gap: 8, backgroundColor: colors.white, borderRadius: 16 }}>
-          <Field label="Search location" placeholder="City, address or place" value={exploration.query} onChangeText={exploration.setQuery} autoFocus />
-          <Button compact secondary title="Back to pin" onPress={() => { Keyboard.dismiss(); setPlaceSearchOpen(false); }} />
-        </View> : null) : <MapExplorationHeader
-          areaLabel={
-            exploration.area?.kind === "place"
-              ? exploration.area.label
-              : undefined
-          }
-          onBackNearMe={() => {
-            if (discoveryRestore.current)
-              discoveryRestore.current.cameraChanged = true;
-            setPublicSelection(null);
-            setPulsePlace(null);
-            setSelected(null);
-            setPerson(null);
-            if (nearMeArea.current) {
-              exploration.setArea(nearMeArea.current);
-              setTargetRevision((value) => value + 1);
-            } else {
-              setCompassSheetOpen(true);
-              void handleUseMyLocation();
-            }
-          }}
-          query={exploration.query}
-          onQueryChange={exploration.setQuery}
-          onQuerySubmit={searchSubmit}
-          calm={calm}
-          onQuickFilter={(value) => { setFeedbackAction((n) => n + 1); chooseQuickFilter(value); }}
-          selectedQuickFilter={selectedQuickFilter}
-          nowSelected={exploration.filters.time === "Now"}
-          onExploreArea={() => {
-            closePopovers();
-            setPlaceSearchOpen(false);
-            setPlaceSearchOpen(true);
-          }}
-          onOpenFilters={() => {
-            closePopovers();
-            setAdvancedFiltersOpen(true);
-          }}
-          activeFilterCount={activeFilterCount}
-          activeChips={activeChips}
-          onRemoveChip={removeActiveChip}
-          onClearContexts={
-            contextViews.length >= 3 ? () => clearContexts() : undefined
-          }
-          onSearchFocus={() => {
-            closePopovers();
-            setPlaceSearchOpen(true);
-          }}
-          loading={loading}
-          sharingIndicator={shareIndicator}
-          onHeightChange={setHeaderHeight}
-        />}
-      </View>
-
-      {planFocus && !pickMode && !activeSearchVisible ? (
-        <View testID="map-plan-focus" style={[styles.card, { position: "absolute", top: headerTop + headerHeight + 8, left: 12, right: 80, zIndex: 12, padding: 10, gap: 4 }]}>
-          <View style={styles.row}>
-            <View style={{ flex: 1 }}><Text style={styles.body} numberOfLines={1}>{planFocus.label}</Text><Text style={styles.muted}>{planFocus.points.length ? `${planFocus.points.length} visible physical stops` : "No visible physical stops"}</Text></View>
-            <IconButton label="Exit Plan Focus" onPress={() => clearContexts(planFocus.key)}><X size={20} color={colors.ink} /></IconButton>
-          </View>
-          <View style={[styles.row, { justifyContent: "flex-start" }]}>
-            <Button title="Fit Plan" secondary compact disabled={!planFocus.points.length} onPress={() => setControlCommand(previous => ({ kind: mapContextCameraKind(planFocus.points), coordinates: planFocus.points, revision: (previous?.revision ?? 0) + 1 }))} />
-            <Button title="View Plan" secondary compact onPress={() => router.push({ pathname: "/plan/[id]", params: { id: planFocus.key.slice("context:plan:".length) } })} />
-          </View>
-        </View>
-      ) : null}
-
-      {activeSearchVisible ? (
         <View
+          pointerEvents="box-none"
           style={{
             position: "absolute",
-            top: headerTop + headerHeight,
+            top: headerTop,
             left: Math.max(
               0,
               (mapSize.width - tokens.layout.contentMaxWidth) / 2,
@@ -2616,817 +2989,1440 @@ export default function MapScreen() {
               0,
               (mapSize.width - tokens.layout.contentMaxWidth) / 2,
             ),
-            zIndex: 13,
-            paddingTop: (publicDiscovery.error && publicDiscovery.error !== dismissedMapError) || (feedbackResult > dismissedFeedback && !hasVisibleBeacons && !publicMapRows.length && !hasVisiblePeople && publicDiscovery.ready) ? 48 : 0,
-            paddingHorizontal: tokens.layout.screenGutter,
+            zIndex: 20,
+            elevation: 20,
           }}
         >
-          {pickMode ? <ScrollView keyboardShouldPersistTaps="handled" style={{ maxHeight: Math.max(120, mapSize.height - headerTop - headerHeight - 140), backgroundColor: colors.white, borderRadius: 16 }} contentContainerStyle={{ padding: 12 }}><WorldwidePlaceSearch query={exploration.query} onChoose={exploreWorldPlace} /></ScrollView> : <MapSearchOverlay
-            visible
-            maxHeight={Math.max(
-              120,
-              Math.min(
-                430,
+          {pickMode ? (
+            activeSearchVisible ? (
+              <View
+                style={{
+                  padding: 12,
+                  gap: 8,
+                  backgroundColor: colors.white,
+                  borderRadius: 16,
+                }}
+              >
+                <Field
+                  label="Search location"
+                  placeholder="City, address or place"
+                  value={exploration.query}
+                  onChangeText={exploration.setQuery}
+                  autoFocus
+                />
+                <Button
+                  compact
+                  secondary
+                  title="Back to pin"
+                  onPress={() => {
+                    Keyboard.dismiss();
+                    setPlaceSearchOpen(false);
+                  }}
+                />
+              </View>
+            ) : null
+          ) : (
+            <MapExplorationHeader
+              areaLabel={
+                exploration.area?.kind === "place"
+                  ? exploration.area.label
+                  : undefined
+              }
+              onBackNearMe={() => {
+                if (discoveryRestore.current)
+                  discoveryRestore.current.cameraChanged = true;
+                setPublicSelection(null);
+                setPulsePlace(null);
+                setSelected(null);
+                setPerson(null);
+                if (nearMeArea.current) {
+                  exploration.setArea(nearMeArea.current);
+                  setTargetRevision((value) => value + 1);
+                } else {
+                  setCompassSheetOpen(true);
+                  void handleUseMyLocation();
+                }
+              }}
+              query={exploration.query}
+              onQueryChange={exploration.setQuery}
+              onQuerySubmit={searchSubmit}
+              calm={calm}
+              onQuickFilter={(value) => {
+                setFeedbackAction((n) => n + 1);
+                chooseQuickFilter(value);
+              }}
+              filters={exploration.filters}
+              friendLabel={friendLabel}
+              friendChoices={friendChoices}
+              hasProfileInterests={profileInterests.length > 0}
+              menu={quickMenu}
+              onMenuChange={(next) => {
+                closePopovers();
+                setQuickMenu(next);
+              }}
+              onFriendScopeChange={(scope) => {
+                if (scope) setLastFriendScope(scope);
+                setFeedbackAction((n) => n + 1);
+                exploration.setFilters({
+                  ...exploration.filters,
+                  friendScope: scope,
+                });
+              }}
+              onCategoriesChange={(next) => {
+                setFeedbackAction((n) => n + 1);
+                setSelectedCategories(next);
+              }}
+              onPersonalizedChange={(value) =>
+                exploration.setFilters({
+                  ...exploration.filters,
+                  personalizedRanking: value,
+                })
+              }
+              onSurprise={pickSurprise}
+              surpriseBusy={!!surprise?.pending}
+              surpriseDisabled={
+                planFocus
+                  ? "Exit Plan Focus to use Surprise Me"
+                  : !snapshotReady || !viewport
+                    ? "Map is loading"
+                    : undefined
+              }
+              onExploreArea={() => {
+                closePopovers();
+                setPlaceSearchOpen(false);
+                setPlaceSearchOpen(true);
+              }}
+              onOpenFilters={() => {
+                closePopovers();
+                setAdvancedFiltersOpen(true);
+              }}
+              activeFilterCount={activeFilterCount}
+              activeChips={activeChips}
+              onRemoveChip={removeActiveChip}
+              onClearContexts={
+                contextViews.length >= 3 ? () => clearContexts() : undefined
+              }
+              onSearchFocus={() => {
+                closePopovers();
+                setPlaceSearchOpen(true);
+              }}
+              loading={loading}
+              sharingIndicator={shareIndicator}
+              onHeightChange={setHeaderHeight}
+            />
+          )}
+        </View>
+
+        {planFocus && !pickMode && !activeSearchVisible ? (
+          <View
+            testID="map-plan-focus"
+            style={[
+              styles.card,
+              {
+                position: "absolute",
+                top: headerTop + headerHeight + 8,
+                left: 12,
+                right: 80,
+                zIndex: 12,
+                padding: 10,
+                gap: 4,
+              },
+            ]}
+          >
+            <Text style={styles.muted}>Plan Focus shows all stops</Text>
+            <Text style={styles.muted}>
+              Exit Plan Focus to use Surprise Me.
+            </Text>
+            <View style={styles.row}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.body} numberOfLines={1}>
+                  {planFocus.label}
+                </Text>
+                <Text style={styles.muted}>
+                  {planFocus.points.length
+                    ? `${planFocus.points.length} visible physical stops`
+                    : "No visible physical stops"}
+                </Text>
+              </View>
+              <IconButton
+                label="Exit Plan Focus"
+                onPress={() => clearContexts(planFocus.key)}
+              >
+                <X size={20} color={colors.ink} />
+              </IconButton>
+            </View>
+            <View style={[styles.row, { justifyContent: "flex-start" }]}>
+              <Button
+                title="Fit Plan"
+                secondary
+                compact
+                disabled={!planFocus.points.length}
+                onPress={() =>
+                  setControlCommand((previous) => ({
+                    kind: mapContextCameraKind(planFocus.points),
+                    coordinates: planFocus.points,
+                    revision: (previous?.revision ?? 0) + 1,
+                  }))
+                }
+              />
+              <Button
+                title="View Plan"
+                secondary
+                compact
+                onPress={() =>
+                  router.push({
+                    pathname: "/plan/[id]",
+                    params: { id: planFocus.key.slice("context:plan:".length) },
+                  })
+                }
+              />
+            </View>
+          </View>
+        ) : null}
+
+        {activeSearchVisible ? (
+          <View
+            style={{
+              position: "absolute",
+              top: headerTop + headerHeight,
+              left: Math.max(
+                0,
+                (mapSize.width - tokens.layout.contentMaxWidth) / 2,
+              ),
+              right: Math.max(
+                0,
+                (mapSize.width - tokens.layout.contentMaxWidth) / 2,
+              ),
+              zIndex: 13,
+              paddingTop:
+                (publicDiscovery.error &&
+                  publicDiscovery.error !== dismissedMapError) ||
+                (feedbackResult > dismissedFeedback &&
+                  !hasVisibleBeacons &&
+                  !publicMapRows.length &&
+                  publicDiscovery.ready)
+                  ? 48
+                  : 0,
+              paddingHorizontal: tokens.layout.screenGutter,
+            }}
+          >
+            {pickMode ? (
+              <ScrollView
+                keyboardShouldPersistTaps="handled"
+                style={{
+                  maxHeight: Math.max(
+                    120,
+                    mapSize.height - headerTop - headerHeight - 140,
+                  ),
+                  backgroundColor: colors.white,
+                  borderRadius: 16,
+                }}
+                contentContainerStyle={{ padding: 12 }}
+              >
+                <WorldwidePlaceSearch
+                  query={exploration.query}
+                  onChoose={exploreWorldPlace}
+                />
+              </ScrollView>
+            ) : (
+              <MapSearchOverlay
+                visible
+                maxHeight={Math.max(
+                  120,
+                  Math.min(
+                    430,
+                    mapSize.height -
+                      headerTop -
+                      headerHeight -
+                      mapBottomClearance -
+                      16,
+                  ),
+                )}
+                query={exploration.query}
+                beacons={searchActivityResults}
+                publicBeacons={rankedPublic
+                  .filter(
+                    (row) =>
+                      !searchActivityResults.some(
+                        (activity) => activity.id === row.activity_id,
+                      ),
+                  )
+                  .slice(0, 5)}
+                onSelectPublicBeacon={(row) =>
+                  choosePublicBeacon(row.activity_id)
+                }
+                people={discoveryActive ? [] : searchPeopleResults}
+                places={searchPlaceResults}
+                recentQueries={recentQueries}
+                onSelectBeacon={(activity) => {
+                  rememberSearch(exploration.query);
+                  exploration.setQuery("");
+                  setPlaceSearchOpen(false);
+                  chooseBeacon(activity.id);
+                }}
+                onSelectPerson={(profile) => {
+                  rememberSearch(exploration.query);
+                  exploration.setQuery("");
+                  setPlaceSearchOpen(false);
+                  choosePerson(profile.id);
+                }}
+                onSelectPlace={(place) => {
+                  rememberSearch(exploration.query);
+                  exploreSavedPlace(place);
+                }}
+                onSelectRecent={chooseRecent}
+                summaries={mapPreferences.liveUpdates ? pulse.summaries : []}
+                pulsePlaces={pulse.demoPlaces
+                  .filter(
+                    (place) => !!query && matchesSearch(query, place.name),
+                  )
+                  .slice(0, 6)}
+                onSelectPulsePlace={(place) => {
+                  exploration.setQuery("");
+                  exploration.setArea({
+                    kind: "place",
+                    label: place.name,
+                    coordinate: { latitude: place.lat, longitude: place.lng },
+                    zoom: 16,
+                    source: "demo",
+                  });
+                  choosePulsePlace(place);
+                }}
+                communities={directoryRows.map((row) => ({
+                  id: row.entity_id,
+                  name: row.name,
+                  kind: communityKind[row.entity_type],
+                  description: row.description,
+                }))}
+                discoveryMessage={
+                  publicDiscovery.error ??
+                  (directoryResult?.snapshot === data
+                    ? directoryResult.error
+                    : undefined)
+                }
+                personReason={(profile) =>
+                  userId ? personDiscoveryReason(data, profile, userId) : ""
+                }
+                onSelectCommunity={(id, kind) => {
+                  setPlaceSearchOpen(false);
+                  const row = directoryRows.find(
+                    (item) =>
+                      item.entity_id === id &&
+                      communityKind[item.entity_type] === kind,
+                  );
+                  if (!row) return;
+                  openCommunity(row);
+                }}
+                onChooseWorldPlace={exploreWorldPlace}
+                onStartPickingLocation={startPickingLocation}
+              />
+            )}
+          </View>
+        ) : null}
+
+        {snapshotReady &&
+        !loading &&
+        !selected &&
+        !person &&
+        !selectedPublic &&
+        !pulsePlace &&
+        !panel &&
+        !pickMode &&
+        !optionsOpen &&
+        !compassSheetOpen &&
+        !contextViews.length &&
+        !calm &&
+        ((publicDiscovery.error &&
+          publicDiscovery.error !== dismissedMapError) ||
+          (feedbackResult > dismissedFeedback &&
+            !hasVisibleBeacons &&
+            !publicMapRows.length &&
+            publicDiscovery.ready)) ? (
+          <View
+            testID="map-result-status"
+            accessibilityLiveRegion="polite"
+            style={{
+              position: "absolute",
+              top: headerTop + headerHeight,
+              left: 12,
+              right: 12,
+              flexDirection: "row",
+              flexWrap: "wrap",
+              alignItems: "center",
+              backgroundColor: colors.white,
+              paddingLeft: 12,
+              borderBottomWidth: 1,
+              borderColor: colors.line,
+              zIndex: 14,
+            }}
+          >
+            <Text numberOfLines={2} style={[styles.muted, { flex: 1 }]}>
+              {publicDiscovery.error
+                ? "Couldn't refresh results."
+                : "No Beacons match these filters."}
+            </Text>
+            {!publicDiscovery.error && (
+              <Button
+                compact
+                secondary
+                title="Broaden"
+                accessibilityLabel="Clear Friends and category filters"
+                onPress={() => chooseQuickFilter("All")}
+              />
+            )}
+            {publicDiscovery.error ? (
+              <Button
+                compact
+                secondary
+                title="Retry"
+                onPress={() => {
+                  setDismissedMapError(null);
+                  publicDiscovery.refresh();
+                }}
+              />
+            ) : null}
+            <IconButton
+              label="Dismiss map message"
+              onPress={() => {
+                setDismissedFeedback(feedbackAction);
+                setDismissedMapError(publicDiscovery.error ?? null);
+              }}
+            >
+              <X size={18} color={colors.ink} />
+            </IconButton>
+            {wantsHappeningNow(exploration.filters) &&
+              (exploration.filters.time === "Upcoming" ||
+                (exploration.filters.when &&
+                  exploration.filters.when !== "Any")) && (
+                <View style={{ width: "100%", paddingBottom: 6 }}>
+                  <Text style={styles.muted}>
+                    Happening now also requires{" "}
+                    {exploration.filters.time === "Upcoming"
+                      ? "Upcoming"
+                      : exploration.filters.when}
+                    .
+                  </Text>
+                  <Button
+                    compact
+                    secondary
+                    title="Remove Happening now"
+                    onPress={() => removeActiveChip("now")}
+                  />
+                </View>
+              )}
+          </View>
+        ) : null}
+        {!pickMode && surpriseMessage ? (
+          <View
+            testID="map-surprise-message"
+            accessibilityLiveRegion="polite"
+            style={[
+              styles.card,
+              {
+                position: "absolute",
+                top: headerTop + headerHeight + 8,
+                left: 16,
+                right: 16,
+                padding: 10,
+                gap: 5,
+                zIndex: 22,
+              },
+            ]}
+          >
+            <Text style={styles.body}>{surpriseMessage}</Text>
+            <View style={styles.row}>
+              <Button
+                compact
+                secondary
+                title="Broaden filters"
+                onPress={() => {
+                  setSurpriseMessage("");
+                  setAdvancedFiltersOpen(true);
+                }}
+              />
+              <IconButton
+                label="Dismiss Surprise message"
+                onPress={() => setSurpriseMessage("")}
+              >
+                <X size={18} color={colors.ink} />
+              </IconButton>
+            </View>
+          </View>
+        ) : null}
+        {createdNotice ? (
+          <View
+            accessibilityLiveRegion="polite"
+            style={{
+              position: "absolute",
+              top: headerTop + headerHeight + 8,
+              alignSelf: "center",
+              paddingHorizontal: 14,
+              paddingVertical: 9,
+              borderRadius: 18,
+              backgroundColor: colors.ink,
+              zIndex: 20,
+            }}
+          >
+            <Text style={{ color: colors.white, fontWeight: "700" }}>
+              Beacon created
+            </Text>
+          </View>
+        ) : null}
+
+        <MyBeaconsSheet
+          visible={myBeaconsOpen}
+          onClose={() => setMyBeaconsOpen(false)}
+          hosting={myBeacons.hosting}
+          joined={myBeacons.joined}
+          places={safePlaces}
+          now={now}
+          onSelect={selectMyBeacon}
+        />
+        {(compassSheetOpen || mapControlSettingsOpen || weatherOpen) &&
+          !pickMode &&
+          !pickedMapPoint && (
+            <Pressable
+              testID="map-toolbar-dismiss-area"
+              accessibilityRole="button"
+              accessibilityLabel="Dismiss map controls by tapping the map"
+              onPress={closePopovers}
+              style={{
+                position: "absolute",
+                top: 0,
+                bottom: 0,
+                left: 0,
+                right: 0,
+                zIndex: detailTab ? 31 : 20,
+              }}
+            />
+          )}
+        {!pickMode &&
+        !pickedMapPoint &&
+        !activeSearchVisible &&
+        controlsVisible &&
+        !beaconPreviewOpen ? (
+          <View
+            testID="map-control-rail"
+            pointerEvents="box-none"
+            style={{
+              position: "absolute",
+              top: controlsTop,
+              right: Math.max(insets.right + 12, 16),
+              height: availableControlHeight,
+              alignItems: "flex-end",
+              gap: 10,
+              zIndex: detailTab ? 32 : 21,
+            }}
+          >
+            <View style={{ flexDirection: "row", gap: 6 }}>
+              {Platform.OS !== "web" &&
+                Math.abs(((bearing + 540) % 360) - 180) > 3 && (
+                  <MapControl
+                    label="Reset map north"
+                    onPress={() =>
+                      setControlCommand((previous) => ({
+                        kind: "north",
+                        revision: (previous?.revision ?? 0) + 1,
+                      }))
+                    }
+                  >
+                    <View style={{ transform: [{ rotate: `${-bearing}deg` }] }}>
+                      <Compass size={17} color={colors.green} />
+                    </View>
+                  </MapControl>
+                )}
+              <MapControl
+                label="Navigation"
+                expanded={compassSheetOpen}
+                selected={compassSheetOpen}
+                onPress={() => {
+                  const next = !compassSheetOpen;
+                  closePopovers();
+                  setCompassSheetOpen(next);
+                  setPlaceSearchOpen(false);
+                }}
+              >
+                <Navigation size={19} color={colors.green} />
+              </MapControl>
+            </View>
+            {displayControlVisible && (
+              <MapControl
+                label="Map Display"
+                expanded={mapControlSettingsOpen}
+                selected={mapControlSettingsOpen}
+                onPress={() => {
+                  const next = !mapControlSettingsOpen;
+                  closePopovers();
+                  setMapControlSettingsOpen(next);
+                }}
+              >
+                <Layers size={19} color={colors.green} />
+              </MapControl>
+            )}
+            {weatherControlVisible && (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Weather"
+                onLayout={(event) =>
+                  setWeatherButtonWidth(event.nativeEvent.layout.width)
+                }
+                accessibilityHint={
+                  weather.value
+                    ? `${Math.round(weather.value.temperature)} degrees Fahrenheit, ${condition?.label}`
+                    : "Weather for the viewed map area"
+                }
+                accessibilityState={{ expanded: weatherOpen }}
+                aria-expanded={weatherOpen}
+                onPress={() => {
+                  const next = !weatherOpen;
+                  closePopovers();
+                  setWeatherOpen(next);
+                }}
+                style={{
+                  minHeight: 44,
+                  paddingHorizontal: 10,
+                  minWidth: 102,
+                  borderRadius: 22,
+                  backgroundColor: colors.white,
+                  borderWidth: 1,
+                  borderColor: weatherOpen ? colors.green : colors.line,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 5,
+                }}
+              >
+                <WeatherIcon size={16} color={colors.green} />
+                <Text
+                  numberOfLines={1}
+                  style={{ color: colors.ink, fontSize: 12 }}
+                >
+                  {weather.value
+                    ? `Weather ${Math.round(weather.value.temperature)}°`
+                    : weather.loading
+                      ? "Weather…"
+                      : "Weather"}
+                </Text>
+              </Pressable>
+            )}
+            {(compassSheetOpen || mapControlSettingsOpen || weatherOpen) && (
+              <MapControlPopover
+                title={
+                  compassSheetOpen
+                    ? "Navigation"
+                    : weatherOpen
+                      ? "Weather"
+                      : "Map Display"
+                }
+                onClose={closePopovers}
+                width={Math.min(
+                  236,
+                  mapSize.width -
+                    Math.max(insets.right + 12, 16) -
+                    (weatherOpen ? weatherButtonWidth + 8 : 52) -
+                    insets.left -
+                    12,
+                )}
+                right={weatherOpen ? weatherButtonWidth + 8 : 52}
+                top={Math.max(
+                  0,
+                  Math.min(
+                    compassSheetOpen ? 0 : weatherOpen ? 108 : 54,
+                    availableControlHeight - (compassSheetOpen ? 250 : 210),
+                  ),
+                )}
+                maxHeight={availableControlHeight}
+              >
+                {compassSheetOpen ? (
+                  renderCompassActions()
+                ) : weatherOpen ? (
+                  <>
+                    <Text style={styles.label}>Viewed map area</Text>
+                    {weather.value ? (
+                      <>
+                        <Text style={styles.h2}>
+                          {Math.round(weather.value.temperature)}°F ·{" "}
+                          {condition?.label}
+                        </Text>
+                        <Text style={styles.body}>
+                          Feels like {Math.round(weather.value.feelsLike)}°F
+                        </Text>
+                        <Text style={styles.muted}>
+                          Humidity {Math.round(weather.value.humidity)}% · Wind{" "}
+                          {Math.round(weather.value.wind)} mph
+                        </Text>
+                      </>
+                    ) : (
+                      <Text
+                        accessibilityLiveRegion="polite"
+                        style={styles.muted}
+                      >
+                        {weather.loading
+                          ? "Loading current weather…"
+                          : "Weather is unavailable. Try again shortly."}
+                      </Text>
+                    )}
+                    {!weather.value && !weather.loading && (
+                      <Button
+                        title="Retry Weather"
+                        compact
+                        secondary
+                        onPress={weather.retry}
+                      />
+                    )}
+                    <Pressable
+                      accessibilityRole="link"
+                      accessibilityLabel="Weather data by Open-Meteo"
+                      onPress={() =>
+                        void Linking.openURL("https://open-meteo.com/")
+                      }
+                      style={{ minHeight: 44, justifyContent: "center" }}
+                    >
+                      <Text style={styles.muted}>
+                        Weather data by Open-Meteo
+                      </Text>
+                    </Pressable>
+                  </>
+                ) : (
+                  <>
+                    <MapStyleControls
+                      style={mapStyle}
+                      onStyle={(value) => {
+                        setMapStyle(value);
+                        updateMapPreference({ style: value });
+                      }}
+                    />
+                    <Button
+                      title="More Map Settings"
+                      compact
+                      secondary
+                      onPress={() => {
+                        closePopovers();
+                        setOptionsOpen(true);
+                      }}
+                    />
+                  </>
+                )}
+              </MapControlPopover>
+            )}
+            {offline && <Text style={styles.label}>Offline</Text>}
+          </View>
+        ) : null}
+
+        {!pickMode &&
+        !activeSearchVisible &&
+        !beaconPreviewOpen &&
+        !selected &&
+        !person &&
+        !selectedPublic &&
+        !pulsePlace &&
+        !optionsOpen &&
+        !myBeaconsOpen &&
+        !advancedFiltersOpen &&
+        !selectedDirectory &&
+        !detailTab &&
+        !contextPoint &&
+        !clusterActivityIds &&
+        !clusterPersonIds &&
+        !addUpdate &&
+        !mapControlSettingsOpen &&
+        !weatherOpen &&
+        !compassSheetOpen ? (
+          <View
+            pointerEvents="box-none"
+            style={{
+              position: "absolute",
+              right: Math.max(insets.right + 12, 16),
+              bottom: insets.bottom + tokens.layout.tabBarHeight + 6,
+              zIndex: 21,
+            }}
+          >
+            <MapControl
+              label="Place: choose a location to create"
+              onPress={startPickingLocation}
+            >
+              <MapPinPlus size={21} color={colors.green} />
+            </MapControl>
+          </View>
+        ) : null}
+        {pickMode && !activeSearchVisible && !pickedMapPoint ? (
+          <View
+            testID="map-place-instructions"
+            style={{
+              position: "absolute",
+              top: headerTop + 8,
+              alignSelf: "center",
+              maxWidth: mapSize.width - 24,
+              padding: 8,
+              gap: 8,
+              flexDirection: "row",
+              alignItems: "center",
+              borderRadius: 16,
+              backgroundColor: colors.white,
+              borderWidth: 1,
+              borderColor: colors.line,
+              zIndex: 22,
+            }}
+          >
+            <Text style={[styles.muted, { flexShrink: 1 }]}>
+              Tap the map to place a pin
+            </Text>
+            <IconButton
+              label="Search for a location"
+              onPress={() => {
+                exploration.setQuery("");
+                setPlaceSearchOpen(true);
+              }}
+            >
+              <Search size={18} color={colors.green} />
+            </IconButton>
+            <Button compact secondary title="Cancel" onPress={cancelPicking} />
+          </View>
+        ) : null}
+        {pickMode && !activeSearchVisible && pickedMapPoint && mapAnchor ? (
+          <MapCallout
+            testID="map-place-confirmation"
+            compact
+            maxWidth={260}
+            anchor={mapAnchor}
+            bounds={{
+              ...mapSize,
+              top: headerTop + 8,
+              bottom: insets.bottom + tokens.layout.tabBarHeight + 12,
+            }}
+          >
+            <View
+              style={{
+                padding: 8,
+                gap: 4,
+                borderRadius: 14,
+                borderWidth: 1,
+                borderColor: colors.line,
+                backgroundColor: colors.white,
+              }}
+            >
+              <View
+                style={{ flexDirection: "row", alignItems: "center", gap: 4 }}
+              >
+                <MapPin size={15} color={colors.green} />
+                <Text
+                  numberOfLines={1}
+                  style={[styles.label, { flex: 1, fontSize: 12 }]}
+                >
+                  {pickedMapPoint.label}
+                </Text>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Search for a location"
+                  hitSlop={2}
+                  onPress={() => {
+                    exploration.setQuery("");
+                    setPlaceSearchOpen(true);
+                  }}
+                  style={{
+                    width: 40,
+                    height: 40,
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <Search size={16} color={colors.green} />
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Cancel location placement"
+                  hitSlop={2}
+                  onPress={cancelPicking}
+                  style={{
+                    width: 40,
+                    height: 40,
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <X size={18} color={colors.ink} />
+                </Pressable>
+              </View>
+              {!!locationPickError && (
+                <Text accessibilityRole="alert" style={styles.error}>
+                  {locationPickError}
+                </Text>
+              )}
+              <View style={{ flexDirection: "row", gap: 8 }}>
+                {pickingDraft ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={confirmPickedLocation}
+                    style={{
+                      flex: 1,
+                      minHeight: 44,
+                      justifyContent: "center",
+                      alignItems: "center",
+                      borderRadius: 10,
+                      backgroundColor: "#AFE8C3",
+                    }}
+                  >
+                    <Text
+                      style={{
+                        color: "#12382C",
+                        fontSize: 12,
+                        fontWeight: "700",
+                      }}
+                    >
+                      Use This Location
+                    </Text>
+                  </Pressable>
+                ) : (
+                  <>
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => createAtPickedLocation("beacon")}
+                      style={{
+                        flex: 1,
+                        minHeight: 44,
+                        flexDirection: "row",
+                        gap: 4,
+                        justifyContent: "center",
+                        alignItems: "center",
+                        borderRadius: 10,
+                        backgroundColor: "#AFE8C3",
+                      }}
+                    >
+                      <CalendarDays
+                        size={15}
+                        color="#12382C"
+                        accessible={false}
+                      />
+                      <Text
+                        numberOfLines={1}
+                        style={{
+                          flexShrink: 1,
+                          color: "#12382C",
+                          fontSize: 12,
+                          fontWeight: "700",
+                        }}
+                      >
+                        Create Beacon
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => createAtPickedLocation("ping")}
+                      style={{
+                        flex: 1,
+                        minHeight: 44,
+                        flexDirection: "row",
+                        gap: 4,
+                        justifyContent: "center",
+                        alignItems: "center",
+                        borderRadius: 10,
+                        backgroundColor: colors.bg,
+                        borderWidth: 1,
+                        borderColor: colors.line,
+                      }}
+                    >
+                      <MessageCircle
+                        size={15}
+                        color={colors.ink}
+                        accessible={false}
+                      />
+                      <Text
+                        numberOfLines={1}
+                        style={{
+                          flexShrink: 1,
+                          color: colors.ink,
+                          fontSize: 12,
+                          fontWeight: "700",
+                        }}
+                      >
+                        Create Ping
+                      </Text>
+                    </Pressable>
+                  </>
+                )}
+              </View>
+            </View>
+          </MapCallout>
+        ) : null}
+
+        {!pickMode &&
+          !surprise?.pending &&
+          selectedPublic &&
+          !person &&
+          !selected && (
+            <MapCallout
+              testID="map-public-callout"
+              onDismiss={() => setPublicSelection(null)}
+              compact
+              maxWidth={mapTooltip.width}
+              anchor={mapAnchor}
+              bounds={{
+                ...mapSize,
+                top: headerTop + headerHeight + 12,
+                bottom: 24,
+              }}
+            >
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+                style={{ maxHeight: mapTooltip.maxHeight }}
+                contentContainerStyle={{ paddingBottom: 0 }}
+              >
+                <PublicBeaconPreview
+                  key={selectedPublic.activity_id}
+                  summary={selectedPublic}
+                  adaptiveDiscovery
+                  compact
+                  hideClose
+                  mapPreview
+                  headerAccessory={
+                    <MapTooltipClose
+                      label="Close map preview"
+                      onClose={() => setPublicSelection(null)}
+                    />
+                  }
+                  onClose={() => setPublicSelection(null)}
+                  onJoined={(id) => {
+                    setPublicSelection(null);
+                    router.setParams({ beacon: id });
+                  }}
+                />
+                {!publicMapRows.some(
+                  (row) => row.activity_id === selectedPublic.activity_id,
+                ) && (
+                  <Text style={styles.muted}>
+                    Selected Beacon is outside the current filters.
+                  </Text>
+                )}
+                <SurprisePreviewActions
+                  visible={
+                    !!surprise &&
+                    !surprise.pending &&
+                    surprise.contextKey === surpriseContextKey &&
+                    surprise.picked.kind === "public" &&
+                    surprise.picked.id === selectedPublic.activity_id
+                  }
+                  selectionId={`public-${selectedPublic.activity_id}`}
+                  canTryAnother={surprisePool.length > 1}
+                  canReturn={surprise?.canReturn === true}
+                  onTryAnother={pickSurprise}
+                  onBack={backFromSurprise}
+                />
+              </ScrollView>
+            </MapCallout>
+          )}
+        {!pickMode &&
+        !surprise?.pending &&
+        (person || (selected && !detailTab)) ? (
+          <MapCallout
+            testID="map-tooltip"
+            key={person ?? selected}
+            compact
+            onDismiss={() => {
+              clearRouteSelection();
+              setPerson(null);
+              setSelected(null);
+              setPublicSelection(null);
+              setDetailTab(null);
+            }}
+            maxWidth={mapTooltip.width}
+            anchor={mapAnchor}
+            bounds={{
+              ...mapSize,
+              top: headerTop + headerHeight + 12,
+              bottom: 24,
+              ...(person
+                ? {
+                    exclusionRight: mapTooltip.controlRailWidth,
+                    exclusionBottom:
+                      headerTop + headerHeight + mapTooltip.controlRailHeight,
+                  }
+                : {}),
+            }}
+          >
+            <ScrollView
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+              style={{ flexShrink: 1, maxHeight: mapTooltip.maxHeight }}
+              contentContainerStyle={{ paddingBottom: 0 }}
+            >
+              {person ? (
+                <MapPersonPreview
+                  personId={person}
+                  onBeacon={chooseBeacon}
+                  onClose={() => {
+                    clearRouteSelection();
+                    setPerson(null);
+                  }}
+                />
+              ) : (
+                <>
+                  <MapTooltip
+                    onShowContext={focusContext}
+                    beaconId={selected}
+                    personId={null}
+                    pinned={!!focusedPlace}
+                    onDetails={() => selected && openActivityDetails(selected)}
+                    onOpenPeople={() =>
+                      selected && openActivityPeopleDetails(selected)
+                    }
+                    onPerson={choosePerson}
+                    onFeature={(feature) =>
+                      selected && openActivityDetails(selected, feature)
+                    }
+                    onMessage={() =>
+                      selected && openActivityDetails(selected, "chat")
+                    }
+                    onClose={() => {
+                      clearRouteSelection();
+                      setSelected(null);
+                      setDetailTab(null);
+                    }}
+                  />
+                  {selected &&
+                    !safeActivities.some((a) => a.id === selected) && (
+                      <Text style={styles.muted}>
+                        Selected Beacon is outside the current filters.
+                      </Text>
+                    )}
+                  <SurprisePreviewActions
+                    visible={
+                      !!surprise &&
+                      !surprise.pending &&
+                      surprise.contextKey === surpriseContextKey &&
+                      surprise.picked.kind === "activity" &&
+                      surprise.picked.id === selected
+                    }
+                    selectionId={`activity-${selected}`}
+                    canTryAnother={surprisePool.length > 1}
+                    canReturn={surprise?.canReturn === true}
+                    onTryAnother={pickSurprise}
+                    onBack={backFromSurprise}
+                  />
+                </>
+              )}
+            </ScrollView>
+          </MapCallout>
+        ) : null}
+        {!pickMode && clusterActivityIds && clusterPersonIds ? (
+          <MapCallout
+            anchor={mapAnchor}
+            testID="map-cluster-callout"
+            onDismiss={() => {
+              setClusterActivityIds(null);
+              setClusterPersonIds(null);
+            }}
+            compact
+            maxWidth={mapTooltip.width}
+            bounds={{
+              ...mapSize,
+              top: headerTop + headerHeight + 12,
+              bottom: 24,
+            }}
+          >
+            <MapNearbyPanel
+              compact={clusterActivityIds.length + clusterPersonIds.length <= 5}
+              key={clusterSelectionId}
+              initialSection={clusterSection}
+              beaconIds={clusterActivityIds}
+              personIds={clusterPersonIds.filter((id) =>
+                mapLocations.some((row) => row.owner_id === id),
+              )}
+              publicBeacons={publicDiscovery.rows.filter((row) =>
+                clusterActivityIds.includes(row.activity_id),
+              )}
+              onPublicBeacon={choosePublicBeacon}
+              onBeacon={chooseBeacon}
+              onPerson={choosePerson}
+              onClose={() => {
+                setClusterActivityIds(null);
+                setClusterPersonIds(null);
+              }}
+              onFit={() => {
+                if (discoveryRestore.current)
+                  discoveryRestore.current.cameraChanged = true;
+                setControlCommand((previous) => ({
+                  kind: "fit",
+                  coordinates: clusterCoordinates,
+                  revision: (previous?.revision ?? 0) + 1,
+                }));
+              }}
+            />
+          </MapCallout>
+        ) : null}
+        {!pickMode && selected && detailTab ? (
+          <BeaconOverviewSheet
+            onMapSpaceChange={onSheetMapHeight}
+            key={selected}
+            onShowContext={focusContext}
+            beaconId={selected}
+            onFocusLocation={(id) => {
+              setDetailTab(null);
+              selectMyBeacon(id);
+            }}
+            initialTab={detailTab}
+            onBeacon={(id) => openActivityDetails(id)}
+            onClose={() => setDetailTab(null)}
+          />
+        ) : null}
+
+        {!pickMode && pulsePlace && !contextPoint ? (
+          <View
+            testID="map-place-preview-slot"
+            style={{
+              position: "absolute",
+              left: Math.max(
+                tokens.layout.screenGutter,
+                (mapSize.width - tokens.layout.contentMaxWidth) / 2,
+              ),
+              right: Math.max(
+                tokens.layout.screenGutter,
+                (mapSize.width - tokens.layout.contentMaxWidth) / 2,
+              ),
+              bottom: mapBottomClearance + 8,
+              maxHeight: Math.max(
+                120,
                 mapSize.height -
                   headerTop -
                   headerHeight -
                   mapBottomClearance -
-                  16,
+                  24,
               ),
-            )}
-            query={exploration.query}
-            beacons={searchActivityResults}
-            publicBeacons={rankedPublic
-              .filter(
-                (row) =>
-                  !searchActivityResults.some(
-                    (activity) => activity.id === row.activity_id,
-                  ),
-              )
-              .slice(0, 5)}
-            onSelectPublicBeacon={(row) => choosePublicBeacon(row.activity_id)}
-            people={discoveryActive ? [] : searchPeopleResults}
-            places={searchPlaceResults}
-            recentQueries={recentQueries}
-            onSelectBeacon={(activity) => {
-              rememberSearch(exploration.query);
-              exploration.setQuery("");
-              setPlaceSearchOpen(false);
-              chooseBeacon(activity.id);
+              zIndex: 22,
+              elevation: 22,
             }}
-            onSelectPerson={(profile) => {
-              rememberSearch(exploration.query);
-              exploration.setQuery("");
-              setPlaceSearchOpen(false);
-              choosePerson(profile.id);
+          >
+            <ScrollView keyboardShouldPersistTaps="handled">
+              <PulsePlacePreview
+                scopeKey={pulseScopeKey}
+                place={pulsePlace}
+                summary={placeSummary}
+                onClose={() => setPulsePlace(null)}
+                onAdd={openAddUpdate}
+                onConfirm={pulse.confirm}
+                confirmedUntil={pulse.confirmedUntil(pulsePlace.placeKey)}
+                lastAnswers={pulse.lastAnswers(pulsePlace.placeKey)}
+                onCreateBeacon={createAtPulsePlace}
+                onDirections={directionsAtPulsePlace}
+                onPing={() =>
+                  router.push({
+                    pathname: "/councils",
+                    params: {
+                      newPing: "yes",
+                      placeLabel: pulsePlace.name,
+                      pingSeed: String(Date.now()),
+                    },
+                  })
+                }
+                onNearby={() => {
+                  setPulsePlace(null);
+                  resetFilters();
+                  exploration.setQuery("");
+                  setPlaceSearchOpen(true);
+                }}
+                onReportNote={pulse.reportNote}
+                happeningHere={
+                  happeningHereRows.length ? happeningHereRows : undefined
+                }
+              />
+            </ScrollView>
+          </View>
+        ) : null}
+        {!pickMode && contextPoint && pulsePlace ? (
+          <MapContextMenu
+            point={contextPoint}
+            bounds={{
+              ...mapSize,
+              top: headerTop + headerHeight + 8,
+              bottom: mapBottomClearance + 8,
             }}
-            onSelectPlace={(place) => {
-              rememberSearch(exploration.query);
-              exploreSavedPlace(place);
-            }}
-            onSelectRecent={chooseRecent}
-            summaries={mapPreferences.liveUpdates ? pulse.summaries : []}
-            pulsePlaces={pulse.demoPlaces
-              .filter((place) => !!query && matchesSearch(query, place.name))
-              .slice(0, 6)}
-            onSelectPulsePlace={(place) => {
-              exploration.setQuery("");
-              exploration.setArea({
-                kind: "place",
-                label: place.name,
-                coordinate: { latitude: place.lat, longitude: place.lng },
-                zoom: 16,
-                source: "demo",
-              });
-              choosePulsePlace(place);
-            }}
-            communities={directoryRows.map((row) => ({
-              id: row.entity_id,
-              name: row.name,
-              kind: communityKind[row.entity_type],
-              description: row.description,
-            }))}
-            discoveryMessage={
-              publicDiscovery.error ??
-              (directoryResult?.snapshot === data
-                ? directoryResult.error
-                : undefined)
-            }
-            personReason={(profile) =>
-              userId ? personDiscoveryReason(data, profile, userId) : ""
-            }
-            onSelectCommunity={(id, kind) => {
-              setPlaceSearchOpen(false);
-              const row = directoryRows.find(
-                (item) =>
-                  item.entity_id === id &&
-                  communityKind[item.entity_type] === kind,
-              );
-              if (!row) return;
-              openCommunity(row);
-            }}
-            onChooseWorldPlace={exploreWorldPlace}
-            onStartPickingLocation={startPickingLocation}
-          />}
-        </View>
-      ) : null}
-
-      {snapshotReady && !loading && !selected && !person && !selectedPublic && !pulsePlace && !panel && !pickMode && !optionsOpen && !compassSheetOpen && !contextViews.length && !calm &&
-        ((publicDiscovery.error && publicDiscovery.error !== dismissedMapError) || (feedbackResult > dismissedFeedback && !hasVisibleBeacons && !publicMapRows.length && !hasVisiblePeople && publicDiscovery.ready)) ? (
-        <View testID="map-result-status" accessibilityLiveRegion="polite" style={{ position: "absolute", top: headerTop + headerHeight, left: 12, right: activeSearchVisible ? 12 : 80, flexDirection: "row", alignItems: "center", backgroundColor: colors.white, paddingLeft: 12, borderBottomWidth: 1, borderColor: colors.line, zIndex: 14 }}>
-          <Text numberOfLines={2} style={[styles.muted, { flex: 1 }]}>{publicDiscovery.error ? "Couldn't refresh results." : "No matches for these filters."}</Text>
-          {publicDiscovery.error ? <Button compact secondary title="Retry" onPress={() => { setDismissedMapError(null); publicDiscovery.refresh(); }} /> : null}
-          <IconButton label="Dismiss map message" onPress={() => { setDismissedFeedback(feedbackAction); setDismissedMapError(publicDiscovery.error ?? null); }}><X size={18} color={colors.ink} /></IconButton>
-        </View>
-      ) : null}
-      {createdNotice ? (
-        <View
-          accessibilityLiveRegion="polite"
-          style={{
-            position: "absolute",
-            top: headerTop + headerHeight + 8,
-            alignSelf: "center",
-            paddingHorizontal: 14,
-            paddingVertical: 9,
-            borderRadius: 18,
-            backgroundColor: colors.ink,
-            zIndex: 20,
+            onUpdate={() => openAddUpdate()}
+            onCreate={createAtPulsePlace}
+            onClose={dismissLocationMenu}
+            onDirections={directionsAtPulsePlace}
+          />
+        ) : null}
+        <AddLiveUpdateSheet
+          visible={addUpdate && !!pulsePlace}
+          place={pulsePlace}
+          scopeKey={pulseScopeKey}
+          initialAnswers={initialAnswers}
+          onClose={() => setAddUpdate(false)}
+          onPost={pulse.post}
+          onPosted={() => {
+            setPulsePopPlaceKey(pulsePlace?.placeKey);
+            setPulsePopToken((value) => value + 1);
           }}
-        >
-          <Text style={{ color: colors.white, fontWeight: "700" }}>
-            Beacon created
-          </Text>
-        </View>
-      ) : null}
-
-      <MyBeaconsSheet
-        visible={myBeaconsOpen}
-        onClose={() => setMyBeaconsOpen(false)}
-        hosting={myBeacons.hosting}
-        joined={myBeacons.joined}
-        places={safePlaces}
-        now={now}
-        onSelect={selectMyBeacon}
-      />
-      {(compassSheetOpen || mapControlSettingsOpen || weatherOpen) &&
-        !pickMode &&
-        !pickedMapPoint && (
-          <Pressable
-            testID="map-toolbar-dismiss-area"
-            accessibilityRole="button"
-            accessibilityLabel="Dismiss map controls by tapping the map"
-            onPress={closePopovers}
+        />
+        <MapOptions
+          visible={optionsOpen}
+          onClose={() => setOptionsOpen(false)}
+          liveUpdates={mapPreferences.liveUpdates}
+          onLiveUpdates={(value) => updateMapPreference({ liveUpdates: value })}
+          showWeather={mapPreferences.showWeather}
+          onShowWeather={(value) => updateMapPreference({ showWeather: value })}
+          showFriends={mapPreferences.showFriends}
+          friendsApplicable={showAvatars && friends.length > 0}
+          onShowFriends={(value) => updateMapPreference({ showFriends: value })}
+          onFit={() => {
+            if (discoveryRestore.current)
+              discoveryRestore.current.cameraChanged = true;
+            setOptionsOpen(false);
+            setControlCommand((previous) => ({
+              kind: "fit",
+              revision: (previous?.revision ?? 0) + 1,
+            }));
+          }}
+          onExplore={() => {
+            setOptionsOpen(false);
+            setPlaceSearchOpen(true);
+          }}
+        />
+        {mapPreferences.liveUpdates && pulse.error && pulsePlace ? (
+          <View
+            accessibilityRole="alert"
             style={{
               position: "absolute",
-              top: 0,
-              bottom: 0,
-              left: 0,
-              right: 0,
-              zIndex: detailTab ? 31 : 20,
+              top: headerTop + headerHeight + 10,
+              left: 12,
+              right: 68,
+              zIndex: 23,
+              padding: 12,
+              borderRadius: 14,
+              backgroundColor: colors.white,
             }}
-          />
-        )}
-      {!pickMode &&
-      !pickedMapPoint &&
-      !activeSearchVisible &&
-      controlsVisible && !beaconPreviewOpen ? (
-        <View
-          testID="map-control-rail"
-          pointerEvents="box-none"
-          style={{
-            position: "absolute",
-            top: controlsTop,
-            right: Math.max(insets.right + 12, 16),
-            height: availableControlHeight,
-            alignItems: "flex-end",
-            gap: 10,
-            zIndex: detailTab ? 32 : 21,
-          }}
-        >
-          <View style={{ flexDirection: "row", gap: 6 }}>
-            {Platform.OS !== "web" &&
-              Math.abs(((bearing + 540) % 360) - 180) > 3 && (
-                <MapControl
-                  label="Reset map north"
-                  onPress={() =>
-                    setControlCommand((previous) => ({
-                      kind: "north",
-                      revision: (previous?.revision ?? 0) + 1,
-                    }))
-                  }
-                >
-                  <View style={{ transform: [{ rotate: `${-bearing}deg` }] }}>
-                    <Compass size={17} color={colors.green} />
-                  </View>
-                </MapControl>
-              )}
-            <MapControl
-              label="Navigation"
-              expanded={compassSheetOpen}
-              selected={compassSheetOpen}
-              onPress={() => {
-                const next = !compassSheetOpen;
-                closePopovers();
-                setCompassSheetOpen(next);
-                setPlaceSearchOpen(false);
-              }}
-            >
-              <Navigation size={19} color={colors.green} />
-            </MapControl>
+          >
+            <Text style={styles.muted}>{pulseCopy.unavailable}</Text>
+            <Button
+              title={pulseCopy.retry}
+              compact
+              secondary
+              onPress={pulse.refresh}
+            />
           </View>
-          {displayControlVisible && (
-            <MapControl
-              label="Map Display"
-              expanded={mapControlSettingsOpen}
-              selected={mapControlSettingsOpen}
-              onPress={() => {
-                const next = !mapControlSettingsOpen;
-                closePopovers();
-                setMapControlSettingsOpen(next);
-              }}
-            >
-              <Layers size={19} color={colors.green} />
-            </MapControl>
-          )}
-          {weatherControlVisible && (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Weather"
-              onLayout={(event) =>
-                setWeatherButtonWidth(event.nativeEvent.layout.width)
-              }
-              accessibilityHint={
-                weather.value
-                  ? `${Math.round(weather.value.temperature)} degrees Fahrenheit, ${condition?.label}`
-                  : "Weather for the viewed map area"
-              }
-              accessibilityState={{ expanded: weatherOpen }}
-              aria-expanded={weatherOpen}
-              onPress={() => {
-                const next = !weatherOpen;
-                closePopovers();
-                setWeatherOpen(next);
-              }}
-              style={{
-                minHeight: 44,
-                paddingHorizontal: 10,
-                minWidth: 102,
-                borderRadius: 22,
-                backgroundColor: colors.white,
-                borderWidth: 1,
-                borderColor: weatherOpen ? colors.green : colors.line,
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 5,
-              }}
-            >
-              <WeatherIcon size={16} color={colors.green} />
-              <Text
-                numberOfLines={1}
-                style={{ color: colors.ink, fontSize: 12 }}
-              >
-                {weather.value
-                  ? `Weather ${Math.round(weather.value.temperature)}°`
-                  : weather.loading
-                    ? "Weather…"
-                    : "Weather"}
-              </Text>
-            </Pressable>
-          )}
-          {(compassSheetOpen || mapControlSettingsOpen || weatherOpen) && (
-            <MapControlPopover
-              title={
-                compassSheetOpen
-                  ? "Navigation"
-                  : weatherOpen
-                    ? "Weather"
-                    : "Map Display"
-              }
-              onClose={closePopovers}
-              width={Math.min(
-                236,
-                mapSize.width -
-                  Math.max(insets.right + 12, 16) -
-                  (weatherOpen ? weatherButtonWidth + 8 : 52) -
-                  insets.left -
-                  12,
-              )}
-              right={weatherOpen ? weatherButtonWidth + 8 : 52}
-              top={Math.max(
-                0,
-                Math.min(
-                  compassSheetOpen ? 0 : weatherOpen ? 108 : 54,
-                  availableControlHeight - (compassSheetOpen ? 250 : 210),
-                ),
-              )}
-              maxHeight={availableControlHeight}
-            >
-              {compassSheetOpen ? (
-                renderCompassActions()
-              ) : weatherOpen ? (
-                <>
-                  <Text style={styles.label}>Viewed map area</Text>
-                  {weather.value ? (
+        ) : null}
+        {mapPreferenceError ? (
+          <View
+            style={{
+              position: "absolute",
+              top: headerTop + headerHeight + 12,
+              left: 12,
+              right: 68,
+              zIndex: 21,
+              padding: 10,
+              backgroundColor: colors.white,
+              borderRadius: 12,
+            }}
+          >
+            <Text style={styles.muted}>{mapPreferenceError}</Text>
+            <Button
+              title="Dismiss"
+              compact
+              secondary
+              onPress={() => setMapPreferenceError("")}
+            />
+          </View>
+        ) : null}
+        {spacePreviewId ? (
+          <SpaceProfilePreview
+            spaceId={spacePreviewId}
+            visible
+            onClose={() => setSpacePreviewId(null)}
+          />
+        ) : null}
+        <AdvancedMapFilters
+          visible={advancedFiltersOpen}
+          onClose={() => setAdvancedFiltersOpen(false)}
+          filters={exploration.filters}
+          onChange={(value) => {
+            if (
+              discoveryRestore.current &&
+              JSON.stringify(selectedBeaconCategories(value)) !==
+                JSON.stringify(selectedCategories)
+            )
+              discoveryRestore.current.categoriesChanged = true;
+            setFeedbackAction((n) => n + 1);
+            exploration.setFilters(value);
+          }}
+          audiences={mapAudiences}
+          planOptions={planFilterOptions}
+          resultCount={visibleActivities.length}
+          selectedCategories={activeCategories}
+          onCategoriesChange={setSelectedCategories}
+          friendChoices={friendChoices}
+          hasProfileInterests={profileInterests.length > 0}
+        />
+
+        {squadPreviewId ? (
+          <SquadProfilePreview
+            squadId={squadPreviewId}
+            visible
+            onClose={() => setSquadPreviewId(null)}
+          />
+        ) : null}
+        {organizationPreviewId
+          ? (() => {
+              const organization = data.organizations.find(
+                (row) => row.id === organizationPreviewId,
+              );
+              const authorized =
+                !!organization &&
+                !!userId &&
+                data.viewer_id === userId &&
+                !!activeOrganizationRole(
+                  organization,
+                  data.organization_members,
+                  userId,
+                ) &&
+                !data.organization_bans.some(
+                  (ban) =>
+                    ban.organization_id === organization.id &&
+                    ban.user_id === userId,
+                ) &&
+                !data.blocks.some(
+                  (block) =>
+                    (block.blocker_id === organization.owner_id &&
+                      block.blocked_id === userId) ||
+                    (block.blocker_id === userId &&
+                      block.blocked_id === organization.owner_id),
+                );
+              return (
+                <Sheet
+                  title={
+                    authorized ? organization!.name : "Organization unavailable"
+                  }
+                  visible
+                  onClose={() => setOrganizationPreviewId(null)}
+                >
+                  {authorized ? (
                     <>
-                      <Text style={styles.h2}>
-                        {Math.round(weather.value.temperature)}°F ·{" "}
-                        {condition?.label}
-                      </Text>
-                      <Text style={styles.body}>
-                        Feels like {Math.round(weather.value.feelsLike)}°F
-                      </Text>
-                      <Text style={styles.muted}>
-                        Humidity {Math.round(weather.value.humidity)}% · Wind{" "}
-                        {Math.round(weather.value.wind)} mph
-                      </Text>
+                      <Text style={styles.h2}>{organization!.name}</Text>
+                      <Txt muted>
+                        {organization!.description || "A shared organization."}
+                      </Txt>
+                      <Button
+                        title="View organization"
+                        onPress={() => {
+                          const id = organization!.id;
+                          setOrganizationPreviewId(null);
+                          setTimeout(
+                            () =>
+                              router.push({
+                                pathname: "/organization/[id]",
+                                params: { id },
+                              }),
+                            320,
+                          );
+                        }}
+                      />
                     </>
                   ) : (
-                    <Text accessibilityLiveRegion="polite" style={styles.muted}>
-                      {weather.loading
-                        ? "Loading current weather…"
-                        : "Weather is unavailable. Try again shortly."}
-                    </Text>
+                    <Txt muted>This organization is unavailable.</Txt>
                   )}
-                  {!weather.value && !weather.loading && (
-                    <Button
-                      title="Retry Weather"
-                      compact
-                      secondary
-                      onPress={weather.retry}
-                    />
-                  )}
-                  <Pressable
-                    accessibilityRole="link"
-                    accessibilityLabel="Weather data by Open-Meteo"
-                    onPress={() =>
-                      void Linking.openURL("https://open-meteo.com/")
-                    }
-                    style={{ minHeight: 44, justifyContent: "center" }}
-                  >
-                    <Text style={styles.muted}>Weather data by Open-Meteo</Text>
-                  </Pressable>
-                </>
-              ) : (
-                <>
-                  <MapStyleControls
-                    style={mapStyle}
-                    onStyle={(value) => {
-                      setMapStyle(value);
-                      updateMapPreference({ style: value });
-                    }}
-                  />
-                  <Button
-                    title="More Map Settings"
-                    compact
-                    secondary
-                    onPress={() => {
-                      closePopovers();
-                      setOptionsOpen(true);
-                    }}
-                  />
-                </>
-              )}
-            </MapControlPopover>
-          )}
-          {offline && <Text style={styles.label}>Offline</Text>}
-        </View>
-      ) : null}
-
-      {!pickMode && !activeSearchVisible && !beaconPreviewOpen && !selected && !person && !selectedPublic && !pulsePlace && !optionsOpen && !myBeaconsOpen && !advancedFiltersOpen && !selectedDirectory && !detailTab && !contextPoint && !clusterActivityIds && !clusterPersonIds && !addUpdate && !mapControlSettingsOpen && !weatherOpen && !compassSheetOpen ? (
-        <View pointerEvents="box-none" style={{ position: "absolute", right: Math.max(insets.right + 12, 16), bottom: insets.bottom + tokens.layout.tabBarHeight + 16, zIndex: 21 }}>
-          <MapControl label="Place: choose a location to create" onPress={startPickingLocation}>
-            <MapPinPlus size={21} color={colors.green} />
-          </MapControl>
-        </View>
-      ) : null}
-      {pickMode && !activeSearchVisible && !pickedMapPoint ? (
-        <View testID="map-place-instructions" style={{ position: "absolute", top: headerTop + 8, alignSelf: "center", maxWidth: mapSize.width - 24, padding: 8, gap: 8, flexDirection: "row", alignItems: "center", borderRadius: 16, backgroundColor: colors.white, borderWidth: 1, borderColor: colors.line, zIndex: 22 }}>
-          <Text style={[styles.muted, { flexShrink: 1 }]}>Tap the map to place a pin</Text>
-          <IconButton label="Search for a location" onPress={() => { exploration.setQuery(""); setPlaceSearchOpen(true); }}><Search size={18} color={colors.green} /></IconButton>
-          <Button compact secondary title="Cancel" onPress={cancelPicking} />
-        </View>
-      ) : null}
-      {pickMode && !activeSearchVisible && pickedMapPoint && mapAnchor ? (
-        <MapCallout testID="map-place-confirmation" compact maxWidth={260} anchor={mapAnchor}
-          bounds={{ ...mapSize, top: headerTop + 8, bottom: insets.bottom + tokens.layout.tabBarHeight + 12 }}>
-          <View style={{ padding: 8, gap: 4, borderRadius: 14, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.white }}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-              <MapPin size={15} color={colors.green} />
-              <Text numberOfLines={1} style={[styles.label, { flex: 1, fontSize: 12 }]}>{pickedMapPoint.label}</Text>
-              <Pressable accessibilityRole="button" accessibilityLabel="Search for a location" hitSlop={2} onPress={() => { exploration.setQuery(""); setPlaceSearchOpen(true); }} style={{ width: 40, height: 40, alignItems: "center", justifyContent: "center" }}><Search size={16} color={colors.green} /></Pressable>
-              <Pressable accessibilityRole="button" accessibilityLabel="Cancel location placement" hitSlop={2} onPress={cancelPicking} style={{ width: 40, height: 40, alignItems: "center", justifyContent: "center" }}><X size={18} color={colors.ink} /></Pressable>
-            </View>
-            {!!locationPickError && <Text accessibilityRole="alert" style={styles.error}>{locationPickError}</Text>}
-            <View style={{ flexDirection: "row", gap: 8 }}>
-              {pickingDraft ? (
-                <Pressable accessibilityRole="button" onPress={confirmPickedLocation} style={{ flex: 1, minHeight: 44, justifyContent: "center", alignItems: "center", borderRadius: 10, backgroundColor: "#AFE8C3" }}><Text style={{ color: "#12382C", fontSize: 12, fontWeight: "700" }}>Use This Location</Text></Pressable>
-              ) : <>
-                <Pressable accessibilityRole="button" onPress={() => createAtPickedLocation("beacon")} style={{ flex: 1, minHeight: 44, flexDirection: "row", gap: 4, justifyContent: "center", alignItems: "center", borderRadius: 10, backgroundColor: "#AFE8C3" }}><CalendarDays size={15} color="#12382C" accessible={false} /><Text numberOfLines={1} style={{ flexShrink: 1, color: "#12382C", fontSize: 12, fontWeight: "700" }}>Create Beacon</Text></Pressable>
-                <Pressable accessibilityRole="button" onPress={() => createAtPickedLocation("ping")} style={{ flex: 1, minHeight: 44, flexDirection: "row", gap: 4, justifyContent: "center", alignItems: "center", borderRadius: 10, backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.line }}><MessageCircle size={15} color={colors.ink} accessible={false} /><Text numberOfLines={1} style={{ flexShrink: 1, color: colors.ink, fontSize: 12, fontWeight: "700" }}>Create Ping</Text></Pressable>
-              </>}
-            </View>
-          </View>
-        </MapCallout>
-      ) : null}
-
-      {!pickMode && selectedPublic && !person && !selected && (
-        <MapCallout
-          testID="map-public-callout"
-          onDismiss={() => setPublicSelection(null)}
-          compact
-          maxWidth={mapTooltip.width}
-          anchor={mapAnchor}
-          bounds={{
-            ...mapSize,
-            top: headerTop + headerHeight + 12,
-            bottom: 24,
-          }}
-        >
-          <ScrollView
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-            style={{ maxHeight: mapTooltip.maxHeight }}
-            contentContainerStyle={{ paddingBottom: 0 }}
-          >
-            <PublicBeaconPreview
-              key={selectedPublic.activity_id}
-              summary={selectedPublic}
-              adaptiveDiscovery
-              compact
-              hideClose
-              mapPreview
-              headerAccessory={
-                <MapTooltipClose
-                  label="Close map preview"
-                  onClose={() => setPublicSelection(null)}
-                />
-              }
-              onClose={() => setPublicSelection(null)}
-              onJoined={(id) => {
-                setPublicSelection(null);
-                router.setParams({ beacon: id });
-              }}
-            />
-          </ScrollView>
-        </MapCallout>
-      )}
-      {!pickMode && (person || (selected && !detailTab)) ? (
-        <MapCallout
-          testID="map-tooltip"
-          key={person ?? selected}
-          compact
-          onDismiss={() => {
-            clearRouteSelection();
-            setPerson(null);
-            setSelected(null);
-            setPublicSelection(null);
-            setDetailTab(null);
-          }}
-          maxWidth={mapTooltip.width}
-          anchor={mapAnchor}
-          bounds={{
-            ...mapSize,
-            top: headerTop + headerHeight + 12,
-            bottom: 24,
-            ...(person
-              ? {
-                  exclusionRight: mapTooltip.controlRailWidth,
-                  exclusionBottom:
-                    headerTop + headerHeight + mapTooltip.controlRailHeight,
-                }
-              : {}),
-          }}
-        >
-          <ScrollView
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-            style={{ flexShrink: 1, maxHeight: mapTooltip.maxHeight }}
-            contentContainerStyle={{ paddingBottom: 0 }}
-          >
-            {person ? (
-              <MapPersonPreview
-                personId={person}
-                onBeacon={chooseBeacon}
-                onClose={() => {
-                  clearRouteSelection();
-                  setPerson(null);
-                }}
-              />
-            ) : (
-              <MapTooltip
-                onShowContext={focusContext}
-                beaconId={selected}
-                personId={null}
-                pinned={!!focusedPlace}
-                onDetails={() => selected && openActivityDetails(selected)}
-                onOpenPeople={() => selected && openActivityPeopleDetails(selected)}
-                onPerson={choosePerson}
-                onFeature={(feature) =>
-                  selected && openActivityDetails(selected, feature)
-                }
-                onMessage={() =>
-                  selected && openActivityDetails(selected, "chat")
-                }
-                onClose={() => {
-                  clearRouteSelection();
-                  setSelected(null);
-                  setDetailTab(null);
-                }}
-              />
-            )}
-          </ScrollView>
-        </MapCallout>
-      ) : null}
-      {!pickMode && clusterActivityIds && clusterPersonIds ? (
-        <MapCallout
-          anchor={mapAnchor}
-          testID="map-cluster-callout"
-          onDismiss={() => { setClusterActivityIds(null); setClusterPersonIds(null); }}
-          compact
-          maxWidth={mapTooltip.width}
-          bounds={{
-            ...mapSize,
-            top: headerTop + headerHeight + 12,
-            bottom: 24,
-          }}
-        >
-          <MapNearbyPanel
-            compact={clusterActivityIds.length + clusterPersonIds.length <= 5}
-            key={clusterSelectionId}
-            initialSection={clusterSection}
-            beaconIds={clusterActivityIds}
-            personIds={clusterPersonIds.filter((id) =>
-              mapLocations.some((row) => row.owner_id === id),
-            )}
-            publicBeacons={publicDiscovery.rows.filter((row) =>
-              clusterActivityIds.includes(row.activity_id),
-            )}
-            onPublicBeacon={choosePublicBeacon}
-            onBeacon={chooseBeacon}
-            onPerson={choosePerson}
-            onClose={() => {
-              setClusterActivityIds(null);
-              setClusterPersonIds(null);
-            }}
-            onFit={() => {
-              if (discoveryRestore.current)
-                discoveryRestore.current.cameraChanged = true;
-              setControlCommand((previous) => ({
-                kind: "fit",
-                coordinates: clusterCoordinates,
-                revision: (previous?.revision ?? 0) + 1,
-              }));
-            }}
-          />
-        </MapCallout>
-      ) : null}
-      {!pickMode && selected && detailTab ? (
-        <BeaconOverviewSheet
-          onMapSpaceChange={onSheetMapHeight}
-          key={selected}
-          onShowContext={focusContext}
-          beaconId={selected}
-          onFocusLocation={(id) => { setDetailTab(null); selectMyBeacon(id); }}
-          initialTab={detailTab}
-          onBeacon={(id) => openActivityDetails(id)}
-          onClose={() => setDetailTab(null)}
-        />
-      ) : null}
-
-      {!pickMode && pulsePlace && !contextPoint ? (
-        <View
-          testID="map-place-preview-slot"
-          style={{
-            position: "absolute",
-            left: Math.max(
-              tokens.layout.screenGutter,
-              (mapSize.width - tokens.layout.contentMaxWidth) / 2,
-            ),
-            right: Math.max(
-              tokens.layout.screenGutter,
-              (mapSize.width - tokens.layout.contentMaxWidth) / 2,
-            ),
-            bottom: mapBottomClearance + 8,
-            maxHeight: Math.max(
-              120,
-              mapSize.height -
-                headerTop -
-                headerHeight -
-                mapBottomClearance -
-                24,
-            ),
-            zIndex: 22,
-            elevation: 22,
-          }}
-        >
-          <ScrollView keyboardShouldPersistTaps="handled">
-            <PulsePlacePreview
-              scopeKey={pulseScopeKey}
-              place={pulsePlace}
-              summary={placeSummary}
-              onClose={() => setPulsePlace(null)}
-              onAdd={openAddUpdate}
-              onConfirm={pulse.confirm}
-              confirmedUntil={pulse.confirmedUntil(pulsePlace.placeKey)}
-              lastAnswers={pulse.lastAnswers(pulsePlace.placeKey)}
-              onCreateBeacon={createAtPulsePlace}
-              onDirections={directionsAtPulsePlace}
-              onPing={() =>
-                router.push({
-                  pathname: "/councils",
-                  params: {
-                    newPing: "yes",
-                    placeLabel: pulsePlace.name,
-                    pingSeed: String(Date.now()),
-                  },
-                })
-              }
-              onNearby={() => {
-                setPulsePlace(null);
-                resetFilters();
-                exploration.setQuery("");
-                setPlaceSearchOpen(true);
-              }}
-              onReportNote={pulse.reportNote}
-              happeningHere={
-                happeningHereRows.length ? happeningHereRows : undefined
-              }
-            />
-          </ScrollView>
-        </View>
-      ) : null}
-      {!pickMode && contextPoint && pulsePlace ? (
-        <MapContextMenu
-          point={contextPoint}
-          bounds={{
-            ...mapSize,
-            top: headerTop + headerHeight + 8,
-            bottom: mapBottomClearance + 8,
-          }}
-          onUpdate={() => openAddUpdate()}
-          onCreate={createAtPulsePlace}
-          onClose={dismissLocationMenu}
-          onDirections={directionsAtPulsePlace}
-        />
-      ) : null}
-      <AddLiveUpdateSheet
-        visible={addUpdate && !!pulsePlace}
-        place={pulsePlace}
-        scopeKey={pulseScopeKey}
-        initialAnswers={initialAnswers}
-        onClose={() => setAddUpdate(false)}
-        onPost={pulse.post}
-        onPosted={() => {
-          setPulsePopPlaceKey(pulsePlace?.placeKey);
-          setPulsePopToken((value) => value + 1);
-        }}
-      />
-      <MapOptions
-        visible={optionsOpen}
-        onClose={() => setOptionsOpen(false)}
-        liveUpdates={mapPreferences.liveUpdates}
-        onLiveUpdates={(value) => updateMapPreference({ liveUpdates: value })}
-        showWeather={mapPreferences.showWeather}
-        onShowWeather={(value) => updateMapPreference({ showWeather: value })}
-        showFriends={mapPreferences.showFriends}
-        friendsApplicable={showAvatars && friends.length > 0}
-        onShowFriends={(value) => updateMapPreference({ showFriends: value })}
-        onFit={() => {
-          if (discoveryRestore.current)
-            discoveryRestore.current.cameraChanged = true;
-          setOptionsOpen(false);
-          setControlCommand((previous) => ({
-            kind: "fit",
-            revision: (previous?.revision ?? 0) + 1,
-          }));
-        }}
-        onExplore={() => {
-          setOptionsOpen(false);
-          setPlaceSearchOpen(true);
-        }}
-      />
-      {mapPreferences.liveUpdates && pulse.error && pulsePlace ? (
-        <View
-          accessibilityRole="alert"
-          style={{
-            position: "absolute",
-            top: headerTop + headerHeight + 10,
-            left: 12,
-            right: 68,
-            zIndex: 23,
-            padding: 12,
-            borderRadius: 14,
-            backgroundColor: colors.white,
-          }}
-        >
-          <Text style={styles.muted}>{pulseCopy.unavailable}</Text>
-          <Button
-            title={pulseCopy.retry}
-            compact
-            secondary
-            onPress={pulse.refresh}
-          />
-        </View>
-      ) : null}
-      {mapPreferenceError ? (
-        <View
-          style={{
-            position: "absolute",
-            top: headerTop + headerHeight + 12,
-            left: 12,
-            right: 68,
-            zIndex: 21,
-            padding: 10,
-            backgroundColor: colors.white,
-            borderRadius: 12,
-          }}
-        >
-          <Text style={styles.muted}>{mapPreferenceError}</Text>
-          <Button
-            title="Dismiss"
-            compact
-            secondary
-            onPress={() => setMapPreferenceError("")}
-          />
-        </View>
-      ) : null}
-      {spacePreviewId ? (
-        <SpaceProfilePreview
-          spaceId={spacePreviewId}
-          visible
-          onClose={() => setSpacePreviewId(null)}
-        />
-      ) : null}
-      <AdvancedMapFilters
-        visible={advancedFiltersOpen}
-        onClose={() => setAdvancedFiltersOpen(false)}
-        filters={exploration.filters}
-        onChange={(value) => { setFeedbackAction((n) => n + 1); exploration.setFilters(value); }}
-        audiences={mapAudiences}
-        planOptions={planFilterOptions}
-        resultCount={visibleActivities.length}
-        selectedCategories={activeCategories}
-        onCategoriesChange={(categories) => {
-          setSelectedCategories(categories);
-          if (exploration.filters.category !== "All categories")
-            exploration.setFilters({
-              ...exploration.filters,
-              category: "All categories",
-            });
-        }}
-      />
-
-      {squadPreviewId ? (
-        <SquadProfilePreview
-          squadId={squadPreviewId}
-          visible
-          onClose={() => setSquadPreviewId(null)}
-        />
-      ) : null}
-      {organizationPreviewId
-        ? (() => {
-            const organization = data.organizations.find(
-              (row) => row.id === organizationPreviewId,
-            );
-            const authorized =
-              !!organization &&
-              !!userId &&
-              data.viewer_id === userId &&
-              !!activeOrganizationRole(
-                organization,
-                data.organization_members,
-                userId,
-              ) &&
-              !data.organization_bans.some(
-                (ban) =>
-                  ban.organization_id === organization.id &&
-                  ban.user_id === userId,
-              ) &&
-              !data.blocks.some(
-                (block) =>
-                  (block.blocker_id === organization.owner_id &&
-                    block.blocked_id === userId) ||
-                  (block.blocker_id === userId &&
-                    block.blocked_id === organization.owner_id),
+                </Sheet>
               );
-            return (
-              <Sheet
-                title={
-                  authorized ? organization!.name : "Organization unavailable"
-                }
-                visible
-                onClose={() => setOrganizationPreviewId(null)}
-              >
-                {authorized ? (
-                  <>
-                    <Text style={styles.h2}>{organization!.name}</Text>
-                    <Txt muted>
-                      {organization!.description || "A shared organization."}
-                    </Txt>
-                    <Button
-                      title="View organization"
-                      onPress={() => {
-                        const id = organization!.id;
-                        setOrganizationPreviewId(null);
-                        setTimeout(
-                          () =>
-                            router.push({
-                              pathname: "/organization/[id]",
-                              params: { id },
-                            }),
-                          320,
-                        );
-                      }}
-                    />
-                  </>
-                ) : (
-                  <Txt muted>This organization is unavailable.</Txt>
-                )}
-              </Sheet>
-            );
-          })()
-        : null}
-    </KeyboardAvoidingView>
+            })()
+          : null}
+      </KeyboardAvoidingView>
     </BeaconCommunitiesProvider>
   );
 }

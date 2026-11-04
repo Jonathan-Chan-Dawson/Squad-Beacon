@@ -75,6 +75,19 @@ test("Beacon decoration uses an existing custom icon, then category, then a safe
 
 test("availability stays busy independently of visible attendance; revoked content is removed", () => {
   const data = fixture();
+  data.presence = [
+    {
+      owner_id: "jordan",
+      availability: "busy",
+      availability_until: new Date(now + 3600000).toISOString(),
+      sharing: true,
+      show_current_beacon: true,
+      current_beacon_id: "beacon",
+      current_activity: null,
+      current_audience: "friends",
+      current_audience_id: null,
+    },
+  ];
   data.beacon_attendance = [
     {
       activity_id: "beacon",
@@ -292,4 +305,109 @@ test("selection and unfinished publication attempt survive navigation and isolat
   assert.equal(planningSelection("test-owner").length, 2);
   completePlanningDraft("test-owner", token);
   assert.deepEqual(planningSelection("test-owner"), []);
+});
+
+test("scope counts do not inherit directory query or availability filters", () => {
+  const data = fixture();
+  data.favorites = [{ owner_id: DEMO_ID, kind: "friend", target_id: "jordan" }];
+  const friends = socialFriends(data, DEMO_ID, now);
+  const scope = filterSocialFriends(friends, data, DEMO_ID, {
+    scope: "favorites",
+    query: "",
+    filter: "All",
+  });
+  assert.deepEqual(
+    scope.map((row) => row.id),
+    ["jordan"],
+  );
+  assert.equal(
+    filterSocialFriends(friends, data, DEMO_ID, {
+      scope: "favorites",
+      query: "missing",
+      filter: "Available",
+    }).length,
+    0,
+  );
+  assert.deepEqual(
+    filterSocialFriends(friends, data, DEMO_ID, {
+      scope: "custom:deleted",
+      query: "",
+      filter: "All",
+    }),
+    [],
+  );
+});
+
+test("genuine notes stay independent of shared current Beacon and availability", () => {
+  const data = fixture();
+  data.presence = [
+    {
+      owner_id: "jordan",
+      availability: "available",
+      availability_until: new Date(now + 3600000).toISOString(),
+      show_current_beacon: true,
+      current_beacon_id: "beacon",
+      current_activity: null,
+      current_audience: "friends",
+      current_audience_id: null,
+      sharing: true,
+    },
+  ];
+  const friend = socialFriends(data, DEMO_ID, now).find(
+    (row) => row.id === "jordan",
+  )!;
+  assert.ok(["available", "ending-soon"].includes(friend.availability));
+  assert.equal(friend.statusText, "Finishing my book");
+  assert.equal(friend.currentBeacon?.activity.title, "Quiet reading");
+  const found = filterSocialFriends([friend], data, DEMO_ID, {
+    scope: "friends",
+    query: "Quiet reading",
+    filter: "All",
+  });
+  assert.equal(found.length, 1);
+  data.activities[0].status_note_hidden = true;
+  const hidden = socialFriends(data, DEMO_ID, now).find(
+    (row) => row.id === "jordan",
+  )!;
+  assert.equal(hidden.statusText, "");
+  assert.equal(
+    filterSocialFriends([hidden], data, DEMO_ID, {
+      query: "Finishing my book",
+      filter: "All",
+    }).length,
+    0,
+  );
+  data.presence[0].availability_until = null;
+  const unlimited = socialFriends(data, DEMO_ID, now).find(
+    (row) => row.id === "jordan",
+  )!;
+  assert.equal(availabilityLabel(unlimited, now), "Available now");
+  data.presence[0].availability = null;
+  const unknown = socialFriends(data, DEMO_ID, now).find(
+    (row) => row.id === "jordan",
+  )!;
+  assert.equal(unknown.availability, "unknown");
+  assert.ok(unknown.currentBeacon);
+});
+
+test("no-friend and empty scope results never manufacture availability or actionable people", () => {
+  const data = fixture();
+  data.friendships = [];
+  assert.deepEqual(socialFriends(data, DEMO_ID, now), []);
+  assert.deepEqual(
+    filterSocialFriends([], data, DEMO_ID, {
+      scope: "favorites",
+      query: "",
+      filter: "All",
+    }),
+    [],
+  );
+  assert.deepEqual(
+    filterSocialFriends([], data, DEMO_ID, {
+      scope: "custom:empty",
+      query: "",
+      filter: "Available",
+    }),
+    [],
+  );
 });

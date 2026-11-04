@@ -1,4 +1,13 @@
 import {
+  selectedBeaconCategories,
+  wantsHappeningNow,
+} from "@/src/shared/explorationFilters";
+import { isBeaconLive } from "@/src/features/beacons/beaconLive";
+import {
+  prepareDiscoveryFriends,
+  matchesDiscoveryFriends,
+} from "./discoveryFriends";
+import {
   beaconCapacity,
   isApprovedGoing,
 } from "@/src/features/beacons/permissions";
@@ -223,7 +232,11 @@ export function matchesBeaconFilters(
   userId: ID | null,
   filters: ExplorationFilters,
   now = Date.now(),
-  options: { includeBaseFilters?: boolean; query?: string } = {},
+  options: {
+    includeBaseFilters?: boolean;
+    query?: string;
+    friends?: ReturnType<typeof prepareDiscoveryFriends>;
+  } = {},
 ) {
   if (
     !userId ||
@@ -232,26 +245,33 @@ export function matchesBeaconFilters(
   )
     return false;
   const includeBase = options.includeBaseFilters !== false;
+  const categories = selectedBeaconCategories(filters);
   if (
     includeBase &&
-    filters.category !== "All categories" &&
-    activity.category !== filters.category
+    categories.length &&
+    !categories.includes(activity.category)
   )
     return false;
   if (includeBase && !matchesAudience(data, activity, userId, filters.audience))
     return false;
-  if (includeBase && filters.time === "Now") {
-    if (!(
-      Date.parse(activity.starts_at) <= now &&
-      Date.parse(activity.ends_at) > now
-    ))
-      return false;
-  } else if (includeBase && filters.time === "Upcoming") {
-    if (!(
+  if (wantsHappeningNow(filters) && !isBeaconLive(activity, now)) return false;
+  if (
+    filters.friendScope &&
+    !matchesDiscoveryFriends(
+      activity,
+      options.friends ??
+        prepareDiscoveryFriends(data, userId, filters.friendScope),
+    )
+  )
+    return false;
+  if (
+    includeBase &&
+    filters.time === "Upcoming" &&
+    !(
       Date.parse(activity.starts_at) > now && Date.parse(activity.ends_at) > now
-    ))
-      return false;
-  }
+    )
+  )
+    return false;
   if (includeBase && filters.planId && activity.plan_id !== filters.planId)
     return false;
   if (!matchesWhen(activity, filters.when, now)) return false;
@@ -306,8 +326,10 @@ export function matchesBeaconFilters(
 export function explorationFilterCount(filters: ExplorationFilters) {
   return (
     Number(filters.audience !== "Everyone") +
-    Number(filters.category !== "All categories") +
-    Number(filters.time !== "All") +
+    selectedBeaconCategories(filters).length +
+    Number(filters.time === "Upcoming") +
+    Number(wantsHappeningNow(filters)) +
+    Number(!!filters.friendScope) +
     Number(!!filters.planId) +
     Number(!!filters.when && filters.when !== "Any") +
     Number(!!filters.join && filters.join !== "Any") +

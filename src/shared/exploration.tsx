@@ -1,3 +1,5 @@
+import { normalizeExplorationFilters } from "./explorationFilters";
+import type { PeopleListSelection } from "@/src/features/people/privateLists";
 import React, {
   createContext,
   useCallback,
@@ -36,6 +38,9 @@ export type ExplorationFilters = {
   audience: "Everyone" | "Friends" | "Public" | (string & {});
   category: "All categories" | Category;
   categories?: Category[];
+  friendScope?: PeopleListSelection | null;
+  happeningNow?: boolean;
+  personalizedRanking?: boolean;
   time: "All" | "Now" | "Upcoming";
   planId: string | null;
   /** New discovery filters stay optional so older map/filter constructors remain valid. */
@@ -184,7 +189,19 @@ export function ExplorationProvider({
     setAreaValue(next);
     setAreaRevision((revision) => revision + 1);
   }, []);
-  const [filters, setFilters] = useState(defaultFilters);
+  const [filters, setFiltersValue] = useState(() =>
+    normalizeExplorationFilters(defaultFilters),
+  );
+  const setFilters = useCallback(
+    (next: ExplorationFilters) =>
+      setFiltersValue((previous) => {
+        const normalized = normalizeExplorationFilters(next);
+        return JSON.stringify(previous) === JSON.stringify(normalized)
+          ? previous
+          : normalized;
+      }),
+    [],
+  );
   const value = useMemo(
     () => ({
       query,
@@ -195,7 +212,7 @@ export function ExplorationProvider({
       filters,
       setFilters,
     }),
-    [query, area, areaRevision, setArea, filters],
+    [query, area, areaRevision, setArea, filters, setFilters],
   );
   return (
     <ExplorationContext.Provider value={value}>

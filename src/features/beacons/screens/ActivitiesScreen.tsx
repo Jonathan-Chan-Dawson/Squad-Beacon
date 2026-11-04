@@ -23,7 +23,12 @@ import {
 } from "expo-router";
 import { shareBeaconInvitation } from "@/src/features/sharing/shareBeacon";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Bookmark, CalendarDays, ChevronRight } from "lucide-react-native";
+import {
+  Bookmark,
+  CalendarDays,
+  FolderOpen,
+  LayoutTemplate,
+} from "lucide-react-native";
 import type { Activity } from "@/src/shared/types";
 import { useBeacon } from "@/src/shared/store";
 import { useNow } from "@/src/shared/useNow";
@@ -162,9 +167,9 @@ export default function ActivitiesScreen() {
 
   const shareActivity = useCallback(
     async (activity: Activity) => {
-      await shareBeaconInvitation(data,userId,activity);
+      await shareBeaconInvitation(data, userId, activity);
     },
-    [data,userId],
+    [data, userId],
   );
 
   const respond = useCallback(
@@ -562,7 +567,20 @@ export default function ActivitiesScreen() {
         ) : null}
 
         <SharedStatusControl compact />
-        {home.kind === "welcome" || (!hasPersonal && home.kind === "compact") ? (
+        {userId ? (
+          <View
+            testID="home-friends-section"
+            style={{
+              borderTopWidth: 1,
+              borderTopColor: designColors.border,
+              paddingTop: 16,
+            }}
+          >
+            <SocialFriendsSection key={userId ?? "signed-out"} />
+          </View>
+        ) : null}
+        {home.kind === "welcome" ||
+        (!hasPersonal && home.kind === "compact") ? (
           <HomeInvitation
             welcome={home.kind === "welcome"}
             friends={home.friends}
@@ -606,18 +624,6 @@ export default function ActivitiesScreen() {
                 )}
               </View>
             )}
-          </View>
-        ) : null}
-        {home.friends ? (
-          <View
-            testID="home-friends-section"
-            style={{
-              borderTopWidth: 1,
-              borderTopColor: designColors.border,
-              paddingTop: 16,
-            }}
-          >
-            <SocialFriendsSection key={userId ?? "signed-out"} />
           </View>
         ) : null}
         {nowPreview.length || upcomingPreview.length ? (
@@ -754,54 +760,52 @@ export default function ActivitiesScreen() {
             paddingTop: 12,
           }}
         >
-          <Pressable
-            testID="saved-tools-entry"
-            accessibilityRole="button"
-            accessibilityLabel="My Collection"
-            onPress={() => router.push("/my-collection" as Href)}
+          <Text
+            accessibilityRole="header"
             style={{
-              minHeight: 60,
-              flexDirection: "row",
-              gap: 12,
-              alignItems: "center",
-              paddingVertical: 8,
+              color: designColors.textPrimary,
+              ...tokens.type.secondary,
+              fontWeight: "500",
             }}
           >
-            <View
-              style={{
-                width: 34,
-                height: 34,
-                borderRadius: 10,
-                backgroundColor: designColors.surfaceRaised,
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <Bookmark size={18} color={designColors.accent} />
-            </View>
-            <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-              <Text
-                style={{
-                  color: designColors.textPrimary,
-                  fontSize: 14,
-                  lineHeight: 20,
-                  fontWeight: "500",
-                }}
-              >
-                My Collection
-              </Text>
-              <Text
-                style={{
-                  color: designColors.textSecondary,
-                  fontSize: 12,
-                  lineHeight: 17,
-                }}
-              >
-                Saved Beacons, Plans, templates
-              </Text>
-            </View>
-            <ChevronRight size={18} color={designColors.textSecondary} />
-          </Pressable>
+            Saved &amp; Tools
+          </Text>
+          <View
+            testID="saved-tools-entry"
+            style={{
+              flexDirection: "row",
+              flexWrap: "wrap",
+              gap: 8,
+              paddingTop: 6,
+            }}
+          >
+            {(
+              [
+                { title: "Plans", path: "/plans", icon: CalendarDays },
+                {
+                  title: "Saved",
+                  path: "/my-collection?section=saved",
+                  icon: Bookmark,
+                },
+                {
+                  title: "Templates",
+                  path: "/my-collection?section=templates",
+                  icon: LayoutTemplate,
+                },
+                { title: "Library", path: "/library", icon: FolderOpen },
+              ] as const
+            ).map(({ title, path, icon: Icon }) => (
+              <View key={title} style={{ flexGrow: 1, flexBasis: "40%" }}>
+                <HomeAction
+                  title={title}
+                  stretch
+                  outlined
+                  icon={<Icon size={16} color={designColors.accent} />}
+                  onPress={() => router.push(path as Href)}
+                />
+              </View>
+            ))}
+          </View>
         </View>
       </ScrollView>
 

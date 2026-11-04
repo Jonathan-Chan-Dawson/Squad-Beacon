@@ -244,10 +244,36 @@ export function bloomGeometry(item: NativeMapPresentation) {
   return value;
 }
 
+/** Hide new decorations when existing artwork occupies their corner; never move petals. */
+export function petalBookmarkVisible(
+  geometry: ReturnType<typeof bloomGeometry>,
+  index: number,
+) {
+  const size = geometry.markerSize;
+  const origin = geometry.offsets[index];
+  if (size < 24 || !origin) return false;
+  const x = origin.x + size * 0.4;
+  const y = origin.y - size * 0.35;
+  const radius = size * 0.22;
+  return (
+    !geometry.offsets.some(
+      (other, i) =>
+        i !== index && Math.hypot(other.x - x, other.y - y) < size / 2 + radius,
+    ) &&
+    !geometry.satelliteOffsets.some(
+      (other) =>
+        Math.hypot(other.x - x, other.y - y) <
+        geometry.satelliteSize / 2 + radius,
+    )
+  );
+}
+
 export function bloomAccessibilityLabel(item: NativeMapPresentation) {
   const beacons = item.beacons.length,
     people = item.people.length;
-  if (new Set(item.group.members.map(member => member.id)).size <= 1)
-    return beacons ? "Map Beacon. Open Beacon preview" : "Map person. Open person preview";
+  if (new Set(item.group.members.map((member) => member.id)).size <= 1)
+    return beacons
+      ? "Map Beacon. Open Beacon preview"
+      : "Map person. Open person preview";
   return `Map cluster: ${beacons} beacons, ${people} people. ${people ? "Nearby shared friend locations; proximity does not indicate Beacon attendance. " : ""}${beacons + people > 5 ? "Open searchable cluster explorer" : "Open nearby cluster explorer"}`;
 }

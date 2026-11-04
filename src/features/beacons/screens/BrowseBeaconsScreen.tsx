@@ -1,3 +1,8 @@
+import { discoveryFriendScopeLabel } from "@/src/features/maps/discoveryFriends";
+import {
+  wantsHappeningNow,
+  selectedBeaconCategories,
+} from "@/src/shared/explorationFilters";
 import { BeaconCollections } from "../components/BeaconCollections";
 import { SemanticEmpty } from "@/src/features/onboarding/OnboardingUI";
 import { discoveryActivities } from "../discoverySelectors";
@@ -129,12 +134,9 @@ export default function BrowseBeaconsScreen() {
   );
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [savedOpen, setSavedOpen] = useState(false);
-  const [selectedCategories, setSelectedCategories] = useState(
-    () =>
-      exploration.filters.categories ??
-      (exploration.filters.category === "All categories"
-        ? []
-        : [exploration.filters.category]),
+  const selectedCategories = useMemo(
+    () => selectedBeaconCategories(exploration.filters),
+    [exploration.filters],
   );
   const [rsvpActivityId, setRsvpActivityId] = useState<string | null>(null);
   const [publicPreviewSelection, setPublicPreviewSelection] = useState<{
@@ -145,15 +147,7 @@ export default function BrowseBeaconsScreen() {
   const [requestError, setRequestError] = useState("");
   const [refreshing, setRefreshing] = useState(false);
 
-  const activeCategories = useMemo(
-    () =>
-      selectedCategories.length
-        ? selectedCategories
-        : exploration.filters.category === "All categories"
-          ? []
-          : [exploration.filters.category],
-    [exploration.filters.category, selectedCategories],
-  );
+  const activeCategories = selectedCategories;
 
   const audiences = useMemo<MapAudienceChoice[]>(() => {
     if (!userId || data.viewer_id !== userId) return [];
@@ -274,6 +268,8 @@ export default function BrowseBeaconsScreen() {
         filters: exploration.filters,
         area: exploration.area,
         now,
+        data,
+        viewerId: userId,
       }),
     [
       activeCategories,
@@ -282,6 +278,8 @@ export default function BrowseBeaconsScreen() {
       exploration.query,
       now,
       publicDirectory.rows,
+      data,
+      userId,
     ],
   );
   const publicUpcoming = useMemo(
@@ -293,6 +291,8 @@ export default function BrowseBeaconsScreen() {
         filters: exploration.filters,
         area: exploration.area,
         now,
+        data,
+        viewerId: userId,
       }),
     [
       activeCategories,
@@ -301,6 +301,8 @@ export default function BrowseBeaconsScreen() {
       exploration.query,
       now,
       publicDirectory.rows,
+      data,
+      userId,
     ],
   );
   const publicDetailScopeKey = useMemo(
@@ -364,8 +366,11 @@ export default function BrowseBeaconsScreen() {
     useBeaconCommunities(communityActivityIds);
   const interests = useMemo(
     () =>
-      data.profiles.find((profile) => profile.id === userId)?.interests ?? [],
-    [data.profiles, userId],
+      exploration.filters.personalizedRanking === false
+        ? []
+        : (data.profiles.find((profile) => profile.id === userId)?.interests ??
+          []),
+    [data.profiles, userId, exploration.filters.personalizedRanking],
   );
   const nowEntries = useMemo(
     () =>
@@ -922,6 +927,57 @@ export default function BrowseBeaconsScreen() {
                         </Text>
                       </Pressable>
                     ) : null}
+                    {exploration.filters.friendScope && (
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Remove Friends filter"
+                        onPress={() =>
+                          exploration.setFilters({
+                            ...exploration.filters,
+                            friendScope: null,
+                          })
+                        }
+                        style={{
+                          minHeight: 44,
+                          justifyContent: "center",
+                          paddingHorizontal: 8,
+                        }}
+                      >
+                        <Text style={{ color: colors.textSecondary }}>
+                          {discoveryFriendScopeLabel(
+                            data,
+                            userId,
+                            exploration.filters.friendScope,
+                          )}{" "}
+                          ×
+                        </Text>
+                      </Pressable>
+                    )}
+                    {wantsHappeningNow(exploration.filters) && (
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Remove Happening now filter"
+                        onPress={() =>
+                          exploration.setFilters({
+                            ...exploration.filters,
+                            happeningNow: false,
+                            time:
+                              exploration.filters.time === "Now"
+                                ? "All"
+                                : exploration.filters.time,
+                          })
+                        }
+                        style={{
+                          minHeight: 44,
+                          justifyContent: "center",
+                          paddingHorizontal: 8,
+                        }}
+                      >
+                        <Text style={{ color: colors.textSecondary }}>
+                          Happening now ×
+                        </Text>
+                      </Pressable>
+                    )}
                     {filterCount > 0 ? (
                       <Text
                         style={{
@@ -1012,7 +1068,6 @@ export default function BrowseBeaconsScreen() {
                             onPress: () => {
                               exploration.setQuery("");
                               exploration.setArea(null);
-                              setSelectedCategories([]);
                               exploration.setFilters({
                                 audience: "Everyone",
                                 category: "All categories",
@@ -1039,20 +1094,29 @@ export default function BrowseBeaconsScreen() {
           visible={filtersOpen}
           onClose={() => setFiltersOpen(false)}
           filters={exploration.filters}
-          onChange={(next) => {
-            exploration.setFilters(next);
-            setSelectedCategories(
-              next.category === "All categories"
-                ? (next.categories ?? [])
-                : [next.category],
-            );
-          }}
+          onChange={exploration.setFilters}
           audiences={audiences}
+          friendChoices={
+            userId && data.viewer_id === userId
+              ? [
+                  { id: "friends", label: "All Friends" },
+                  { id: "favorites", label: "Starred Friends" },
+                  ...data.lists
+                    .filter((list) => list.owner_id === userId)
+                    .map((list) => ({
+                      id: `custom:${list.id}` as const,
+                      label: list.name,
+                    })),
+                ]
+              : []
+          }
+          hasProfileInterests={
+            !!data.profiles.find((p) => p.id === userId)?.interests?.length
+          }
           planOptions={planOptions}
           resultCount={totalCount}
           selectedCategories={activeCategories}
           onCategoriesChange={(next) => {
-            setSelectedCategories(next);
             exploration.setFilters({
               ...exploration.filters,
               category: "All categories",

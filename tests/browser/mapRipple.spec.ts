@@ -1,4 +1,10 @@
-import { mapIdentityColors } from "../../src/features/maps/markerIdentity";
+import { getDesignColorTheme } from "../../src/theme/data";
+import { themeNames } from "../../src/theme/palettes";
+import {
+  mapIdentityColors,
+  BEACON_PULSE_DURATION,
+  BEACON_PULSE_SCALE,
+} from "../../src/features/maps/markerIdentity";
 import { test, expect } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import ts from "typescript";
@@ -27,8 +33,10 @@ const script = ts.transpileModule(
   let zoom = 13;
   let resolvedAppearance = "light";
   const mapIdentityColors = ${JSON.stringify(mapIdentityColors)};
-  const colors = { green: "#218466", ink: "#182c30", white: "#fff" };
+  let colors = { green: "#218466", ink: "#182c30", white: "#fff", success: "#176B4A", outline: "#718078", surface: "#fff", textPrimary: "#182c30" };
   const reducedMotion = false, group = {}, coordinates = [];
+  const onPick = undefined, identityViewer = "viewer";
+  const BEACON_PULSE_DURATION = ${BEACON_PULSE_DURATION}, BEACON_PULSE_SCALE = ${BEACON_PULSE_SCALE};
   const m = { getZoom: () => zoom };
   let clicks = 0;
   const L = { DomEvent: { disableClickPropagation() {} }, divIcon: icon => icon,
@@ -52,7 +60,10 @@ const script = ts.transpileModule(
     document.querySelectorAll(".beacon-marker").forEach(node => node.remove());
     zoom = 16;
     resolvedAppearance = input.appearance;
-    marker(41.88, -87.64, "?", "Test Beacon", () => clicks++, false, 0, "#218466", false, false, "", "unknown", false, "", { glyph: "\u2665", label: "Friends", kind: "social" }, input.owned);
+    colors = input.colors ?? colors;
+    document.body.style.background = colors.surface;
+    const result = marker(41.88, -87.64, "?", "Test Beacon, " + (input.owned ? "Your Beacon, " : "") + "Saved, Friend-hosted, Live", () => clicks++, false, 0, "#218466", false, false, "", "unknown", true, "", { owned: input.owned, saved: true, friendHosted: true, live: true }, input.owned, input.compact, false);
+    if (input.compact) document.body.append(result);
   };
   window.markerClicks = () => clicks;
 `,
@@ -86,7 +97,9 @@ test("web Beacon ripple stays at the badge center across dot/full sizes, chips, 
               animation.pause();
               animation.currentTime = time;
             });
-            const badge = halo.parentElement!.lastElementChild as HTMLElement;
+            const badge = halo.parentElement!.querySelector(
+              ":scope > span:nth-child(2)",
+            )! as HTMLElement;
             const wave = halo.getBoundingClientRect(),
               face = badge.getBoundingClientRect();
             return {
@@ -109,7 +122,9 @@ test("web Beacon ripple stays at the badge center across dot/full sizes, chips, 
   await page.emulateMedia({ reducedMotion: "reduce" });
   const reduced = await page.evaluate(() => {
     const halo = document.querySelector(".map-now-halo") as HTMLElement;
-    const badge = halo.parentElement!.lastElementChild as HTMLElement;
+    const badge = halo.parentElement!.querySelector(
+      ":scope > span:nth-child(2)",
+    )! as HTMLElement;
     const wave = halo.getBoundingClientRect(),
       face = badge.getBoundingClientRect();
     return {
@@ -123,29 +138,93 @@ test("web Beacon ripple stays at the badge center across dot/full sizes, chips, 
   expect(Math.abs(reduced.y)).toBeLessThan(0.1);
 });
 
-test("friend-host hearts use rose, and ownership stars coexist without overlapping", async ({
+test("ownership, saved and friend signals remain legible without competing badges", async ({
   page,
 }) => {
   await page.setContent("<body></body>");
   await page.addStyleTag({ content: css });
   await page.addScriptTag({ content: script });
-  for (const appearance of ["light", "dark"] as const) {
-    for (const owned of [false, true]) {
-      await page.evaluate(
-        (input) => (window as any).renderIdentityMarker(input),
-        { appearance, owned },
-      );
-      const heart = page.locator('span[aria-label="Friends"]');
-      const color = mapIdentityColors.heart[appearance];
-      const rgb = `rgb(${parseInt(color.slice(1, 3), 16)}, ${parseInt(color.slice(3, 5), 16)}, ${parseInt(color.slice(5, 7), 16)})`;
-      await expect(heart).toHaveCSS("color", rgb);
-      const star = page.getByTestId("beacon-ownership-star");
-      await expect(star).toHaveCount(Number(owned));
-      if (owned) {
-        const left = (await heart.boundingBox())!;
-        const right = (await star.boundingBox())!;
-        expect(left.x + left.width).toBeLessThanOrEqual(right.x);
+  for (const theme of themeNames)
+    for (const appearance of ["light", "dark"] as const) {
+      const semantic = getDesignColorTheme(theme, appearance).colors;
+      const colors = {
+        ...semantic,
+        white: semantic.surface,
+        ink: semantic.textPrimary,
+        green: semantic.primary,
+      };
+      for (const owned of [false, true]) {
+        await page.evaluate(
+          (input) => (window as any).renderIdentityMarker(input),
+          { appearance, owned, colors },
+        );
+        const bookmark = page.getByTestId("beacon-saved-bookmark");
+        await expect(bookmark).toHaveCount(Number(!owned));
+        await expect(page.getByTestId("beacon-ownership-star")).toHaveCount(
+          Number(owned),
+        );
+        const rim = page.getByTestId("beacon-friend-rim");
+        if (owned)
+          await expect(page.getByRole("button")).toHaveAccessibleName(
+            /Your Beacon/,
+          );
+        await expect(rim).toHaveCSS("pointer-events", "none");
+        await expect(rim).toHaveAttribute("aria-hidden", "true");
+        if (!owned) {
+          await expect(bookmark).toHaveCSS("pointer-events", "none");
+          await expect(bookmark).toHaveAttribute("aria-hidden", "true");
+          const badge = page.locator("[data-cluster-face] > span").nth(1);
+          const face = (await badge.boundingBox())!,
+            saved = (await bookmark.boundingBox())!;
+          expect(saved.x).toBeGreaterThan(face.x + face.width / 2);
+          expect(saved.y).toBeLessThan(face.y + face.height / 2);
+        }
+        await expect(page.getByRole("button")).toHaveAccessibleName(
+          /Saved, Friend-hosted, Live/,
+        );
       }
     }
-  }
+});
+
+test("pulse expands, fades and stops during gestures; detached petals never animate", async ({
+  page,
+}) => {
+  await page.setContent(
+    '<body><div class="beacon-map-moving" id="map"></div></body>',
+  );
+  await page.addStyleTag({ content: css });
+  await page.addScriptTag({ content: script });
+  await page.evaluate(() =>
+    (window as any).renderMarker({ zoom: 13, selected: false, chip: "" }),
+  );
+  const frames = await page.locator(".map-now-halo").evaluate((node) => {
+    const animation = node.getAnimations()[0];
+    animation.pause();
+    return [0, 500, 1500].map((time) => {
+      animation.currentTime = time;
+      return {
+        width: node.getBoundingClientRect().width,
+        opacity: Number(getComputedStyle(node).opacity),
+      };
+    });
+  });
+  expect(frames[2].width).toBeGreaterThan(frames[1].width);
+  expect(frames[1].width).toBeGreaterThan(frames[0].width);
+  expect(frames[2].opacity).toBeLessThan(frames[1].opacity);
+  await page.evaluate(() => document.body.classList.add("beacon-map-moving"));
+  await expect(page.locator(".map-now-halo")).toHaveCSS(
+    "animation-name",
+    "none",
+  );
+  await expect(page.locator(".map-now-halo")).toHaveCSS("opacity", "0");
+  await page.evaluate(() => {
+    document.body.classList.remove("beacon-map-moving");
+    (window as any).renderIdentityMarker({
+      appearance: "light",
+      owned: false,
+      compact: true,
+    });
+  });
+  await expect(page.locator(".map-now-halo")).toHaveCount(0);
+  expect(await page.evaluate(() => document.getAnimations().length)).toBe(0);
 });

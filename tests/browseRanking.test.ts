@@ -129,21 +129,39 @@ test("public Browse filters honor period, selected categories, query, and coarse
     }),
     publicSummary("other-query", -10, 30, { title: "Library hour" }),
   ];
-  const rows = filterPublicSummariesForBrowse(summaries, options);
+  // Public timing alone cannot prove the Plan lifecycle needed by Happening Now.
+  assert.deepEqual(filterPublicSummariesForBrowse(summaries, options), []);
+  const data = makeDemo();
+  const base = data.activities[0];
+  data.activities = summaries.map((row) => ({
+    ...base,
+    id: row.activity_id,
+    owner_id: DEMO_ID,
+    mode: "open",
+    audience: "public",
+    audience_id: null,
+    status: "scheduled",
+    plan_id: null,
+    plan_step: null,
+    starts_at: row.starts_at,
+    ends_at: row.ends_at,
+  }));
+  const authorizedOptions = { ...options, data, viewerId: DEMO_ID };
+  const rows = filterPublicSummariesForBrowse(summaries, authorizedOptions);
   assert.deepEqual(
     rows.map((row) => row.activity_id),
     ["match", "going", "unknown-format"],
   );
   assert.deepEqual(
     filterPublicSummariesForBrowse(summaries, {
-      ...options,
+      ...authorizedOptions,
       filters: { ...options.filters, format: "Physical" },
     }).map((row) => row.activity_id),
     ["match", "going"],
   );
   assert.deepEqual(
     filterPublicSummariesForBrowse(summaries, {
-      ...options,
+      ...authorizedOptions,
       filters: { ...options.filters, format: "Virtual" },
     }),
     [],

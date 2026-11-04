@@ -65,6 +65,7 @@ export function beaconDiscoveryTier(
   activity: Activity,
   viewerId: string,
   now: number,
+  personalized = true,
 ) {
   if (Date.parse(activity.ends_at) <= now) return 8;
   const response = data.rsvps.find(
@@ -100,7 +101,7 @@ export function beaconDiscoveryTier(
     activity.audience === "organization"
   )
     return 4;
-  return beaconInterestMatch(data, activity, viewerId) ? 5 : 7;
+  return personalized && beaconInterestMatch(data, activity, viewerId) ? 5 : 7;
 }
 
 /** Only rank readable rows; search never uses a hidden meeting place or profile. */
@@ -110,6 +111,7 @@ export function discoverBeacons(
   query: string,
   now: number,
   origin?: Coordinate | null,
+  personalized = true,
 ) {
   if (data.viewer_id !== viewerId) return [];
   return data.activities
@@ -135,8 +137,8 @@ export function discoverBeacons(
     })
     .sort(
       (a, b) =>
-        beaconDiscoveryTier(data, a, viewerId, now) -
-          beaconDiscoveryTier(data, b, viewerId, now) ||
+        beaconDiscoveryTier(data, a, viewerId, now, personalized) -
+          beaconDiscoveryTier(data, b, viewerId, now, personalized) ||
         Math.floor(
           (beaconDiscoveryDistance(data, a, viewerId, origin) ?? Infinity) / 5,
         ) -
@@ -144,8 +146,8 @@ export function discoverBeacons(
             (beaconDiscoveryDistance(data, b, viewerId, origin) ?? Infinity) /
               5,
           ) ||
-        Number(beaconInterestMatch(data, b, viewerId)) -
-          Number(beaconInterestMatch(data, a, viewerId)) ||
+        Number(personalized && beaconInterestMatch(data, b, viewerId)) -
+          Number(personalized && beaconInterestMatch(data, a, viewerId)) ||
         Date.parse(a.starts_at) - Date.parse(b.starts_at) ||
         a.id.localeCompare(b.id),
     );

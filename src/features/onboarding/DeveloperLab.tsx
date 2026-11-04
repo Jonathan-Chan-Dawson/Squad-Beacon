@@ -41,7 +41,7 @@ export function DeveloperLab() {
     updateFriendsBrowseState(DEMO_ID, {
       query: "",
       filter: "All",
-      listId: null,
+      scope: "friends",
     });
     router.replace("/(tabs)/activities");
     switchDemoScenario(value);

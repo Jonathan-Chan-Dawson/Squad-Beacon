@@ -255,16 +255,18 @@ for (const [width, height, dark] of [
     await expect(explorer).toBeVisible();
     await stayedStill(page, before);
     if (width === 375) {
-      const search = explorer.getByRole("textbox", { name: "Search nearby Beacons and friends" });
-        await search.fill("Coffee");
-        const summary = await explorer.innerText();
+      const search = explorer.getByRole("textbox", {
+        name: "Search nearby Beacons and friends",
+      });
+      await search.fill("Coffee");
+      const summary = await explorer.innerText();
       await page.mouse.move(6, 350);
       await page.mouse.down();
       await page.mouse.move(6, 326, { steps: 8 });
       await page.mouse.up();
       await expect.poll(() => camera(page)).not.toBe(before);
       await expect.poll(() => explorer.innerText()).toBe(summary);
-        await expect(search).toHaveValue("Coffee");
+      await expect(search).toHaveValue("Coffee");
       await page.waitForTimeout(350);
       before = await camera(page);
     }
@@ -358,4 +360,66 @@ test("cluster Info preserves selection and explicit Zoom to Fit still moves the 
   await page.getByRole("button", { name: "Zoom to fit", exact: true }).click();
   await expect.poll(() => camera(page)).not.toBe(before);
   await expect(explorer).toBeVisible();
+});
+
+test("saving a Map Beacon refreshes its Bookmark without moving the camera", async ({
+  page,
+}) => {
+  test.setTimeout(120000);
+  await page.setViewportSize({ width: 430, height: 900 });
+  await enter(page, false);
+  const marker = await exposedMarker(
+    page,
+    page.locator(
+      '.leaflet-container button[aria-label^="Map:"]:not([aria-label*="Your Beacon"])',
+    ),
+  );
+  const initial = await marker.evaluate((node) => (node.getAttribute("aria-label") ?? node.querySelector("button[aria-label]")?.getAttribute("aria-label"))!);
+  const base = initial.replace(/, Saved/g, "");
+  const stableMarker = page
+    .locator('.leaflet-container button[aria-label^="Map:"]')
+    .filter({ has: page.locator("[data-cluster-face]") })
+    .and(
+      page.getByRole("button", {
+        name: new RegExp(
+          "^" +
+            base
+              .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+              .replace(/, Friend-hosted|, Live/g, "") +
+            "(?:,|$)",
+        ),
+      }),
+    )
+    .first();
+  const before = await camera(page);
+  await marker.click();
+  const card = page.getByTestId("map-tooltip-card");
+  await expect(card).toBeVisible();
+  const unsave = card.getByRole("button", {
+    name: "Unsave Beacon",
+    exact: true,
+  });
+  if (await unsave.count()) await unsave.click();
+  await expect(stableMarker.getByTestId("beacon-saved-bookmark")).toHaveCount(
+    0,
+  );
+  await card.getByRole("button", { name: "Save Beacon", exact: true }).click();
+  await expect(stableMarker.getByTestId("beacon-saved-bookmark")).toHaveCount(
+    1,
+  );
+  await expect(stableMarker).toHaveAttribute("aria-label", /Saved/);
+  await stayedStill(page, before);
+  await card.getByRole("button", { name: "Close map preview", exact: true }).click();
+  await expect(card).toHaveCount(0);
+  await expect(stableMarker.getByTestId("beacon-saved-bookmark")).toHaveCount(1);
+  await page.screenshot({ path: test.info().outputPath("saved-beacon.png") });
+  await stableMarker.click();
+  await expect(card).toBeVisible();
+  await card
+    .getByRole("button", { name: "Unsave Beacon", exact: true })
+    .click();
+  await expect(stableMarker.getByTestId("beacon-saved-bookmark")).toHaveCount(
+    0,
+  );
+  await stayedStill(page, before);
 });

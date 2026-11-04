@@ -1,9 +1,93 @@
 import { friendIds } from "@/src/shared/domain";
 import type { Activity, Data } from "@/src/shared/types";
 import { canReadBeaconActivity } from "@/src/features/beacons/beaconModules";
+import { isBeaconLive } from "@/src/features/beacons/beaconLive";
+import { communityTypeLabel } from "@/src/features/social/communityPresentation";
+
+export type BeaconMarkerState = {
+  owned: boolean;
+  saved: boolean;
+  friendHosted: boolean;
+  live: boolean;
+};
+export const EMPTY_MARKER_STATE: BeaconMarkerState = {
+  owned: false,
+  saved: false,
+  friendHosted: false,
+  live: false,
+};
+export const BEACON_PULSE_DURATION = 2000;
+export const BEACON_PULSE_SCALE = 1.45;
+
+/** Prepare once per authorized snapshot, never from another account's relationships. */
+export function prepareMapIdentity(data: Data, viewerId: string | null) {
+  const authorized = !!viewerId && data.viewer_id === viewerId;
+  return {
+    viewerId: authorized ? viewerId : null,
+    blockedHosts: new Set(
+      authorized
+        ? data.blocks.flatMap((row) =>
+            row.blocker_id === viewerId
+              ? [row.blocked_id]
+              : row.blocked_id === viewerId
+                ? [row.blocker_id]
+                : [],
+          )
+        : [],
+    ),
+    excludedBeacons: new Set(
+      authorized
+        ? data.activity_exclusions
+            .filter((row) => row.user_id === viewerId)
+            .map((row) => row.activity_id)
+        : [],
+    ),
+    friends: new Set(authorized ? friendIds(data, viewerId) : []),
+    saved: new Set(
+      authorized
+        ? data.beacon_favorites
+            .filter((row) => row.owner_id === viewerId)
+            .map((row) => row.activity_id)
+        : [],
+    ),
+  };
+}
+
+export function beaconMarkerState(
+  data: Data,
+  activity: Activity,
+  lookup: ReturnType<typeof prepareMapIdentity>,
+  now: number,
+): BeaconMarkerState {
+  const viewer = lookup.viewerId;
+  if (
+    !viewer ||
+    data.viewer_id !== viewer ||
+    lookup.blockedHosts.has(activity.owner_id) ||
+    lookup.excludedBeacons.has(activity.id) ||
+    !canReadBeaconActivity(data, activity, viewer)
+  )
+    return EMPTY_MARKER_STATE;
+  return {
+    owned: activity.owner_id === viewer,
+    saved: lookup.saved.has(activity.id),
+    friendHosted: lookup.friends.has(activity.owner_id),
+    live: isBeaconLive(activity, now),
+  };
+}
+
+export function markerStateLabel(state: BeaconMarkerState) {
+  return [
+    state.owned && "Your Beacon",
+    state.saved && "Saved",
+    state.friendHosted && "Friend-hosted",
+    state.live && "Live",
+  ]
+    .filter(Boolean)
+    .join(", ");
+}
 export const mapIdentityColors = {
   ownership: "#168578",
-  heart: { light: "#C44771", dark: "#FF91B2" },
 };
 
 export function ownsMapBeacon(
@@ -77,12 +161,29 @@ export function markerIdentity(
     (row) => row.activity_id === activity.id,
   );
   if (host?.entity_type === "organization")
-    return { glyph: "◈", label: "Organization", kind: "community" } as const;
+    return {
+      glyph: "◈",
+      label: communityTypeLabel("organization"),
+      kind: "community",
+    } as const;
   if (host?.entity_type === "space")
-    return { glyph: "✺", label: "Network", kind: "community" } as const;
+    return {
+      glyph: "✺",
+      label: communityTypeLabel("space"),
+      kind: "community",
+    } as const;
   if (host?.entity_type === "squad" || activity.audience === "squad")
     return { glyph: "✦", label: "Squad", kind: "social" } as const;
   if (friendIds(data, viewerId).includes(activity.owner_id))
     return { glyph: "♥", label: "Friends", kind: "social" } as const;
   return null;
 }
+
+/** Map rings use fixed, vivid status colors independently of the selected theme. */
+export const mapAvailabilityColors = {
+  available: "#16C65B",
+  unavailable: "#F12B38",
+  endingSoon: "#F3C917",
+  "ending-soon": "#F3C917",
+  unknown: "#B7BEC8A6",
+};

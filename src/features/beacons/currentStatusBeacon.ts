@@ -1,3 +1,4 @@
+import { isBeaconLive } from "./beaconLive";
 import type { Activity, Data } from "@/src/shared/types";
 import { canReadActivityPreview } from "./beaconModules";
 import { beaconRoleFor, isApprovedGoing } from "./permissions";
@@ -18,16 +19,6 @@ function locallyRevoked(data: Data, activity: Activity, viewerId: string) {
     data.activity_exclusions.some(
       (row) => row.activity_id === activity.id && row.user_id === viewerId,
     )
-  );
-}
-
-function isLivePublishedBeacon(activity: Activity, now: number) {
-  return (
-    activity.mode !== "solo" &&
-    activity.status === "scheduled" &&
-    Date.parse(activity.starts_at) <= now &&
-    Date.parse(activity.ends_at) > now &&
-    !(activity.plan_id && activity.plan_step && !activity.plan_started_at)
   );
 }
 
@@ -59,7 +50,7 @@ function eligibleForOwner(
   if (!ownerId) return [];
   return data.activities
     .flatMap((activity) => {
-      if (!isLivePublishedBeacon(activity, now)) return [];
+      if (!isBeaconLive(activity, now)) return [];
       const role = ownerRole(data, activity, ownerId);
       if (!role || !canReadActivityPreview(data, activity, ownerId)) return [];
       return [{ activity, role }];
@@ -95,7 +86,7 @@ function visibleSource(
   const activity = data.activities.find((row) => row.id === sourceId);
   if (
     !activity ||
-    !isLivePublishedBeacon(activity, now) ||
+    !isBeaconLive(activity, now) ||
     locallyRevoked(data, activity, viewerId) ||
     !canReadActivityPreview(data, activity, viewerId)
   )
@@ -105,7 +96,7 @@ function visibleSource(
 
 export function projectedOwnerRelationshipIsCurrent(
   data: Data,
-  status: Pick<Activity,"owner_id">,
+  status: Pick<Activity, "owner_id">,
   source: Activity,
   role: CurrentBeaconRole,
 ): boolean {

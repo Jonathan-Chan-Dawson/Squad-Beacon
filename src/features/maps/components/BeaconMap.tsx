@@ -23,6 +23,10 @@ export type MapControlCommand = {
   kind: "zoom-in" | "zoom-out" | "fit" | "restore" | "north" | "focus";
   revision: number;
   camera?: MapViewport;
+  zoom?: number;
+  animate?: boolean;
+  durationMs?: number;
+  notifySettled?: boolean;
   coordinates?: { latitude: number; longitude: number }[];
 };
 export type MapStyle = "standard" | "satellite";
@@ -79,6 +83,7 @@ export interface MapProps {
   pulsePopPlaceKey?: string;
   calm?: boolean;
   onViewportChange?: (viewport: MapViewport, userMoved?: boolean) => void;
+  onCameraCommandSettled?: (revision: number, settledAt: number) => void;
   /** Native rotation only; web does not expose an unsupported compass. */
   onBearingChange?: (bearing: number) => void;
   onOptions?: () => void;

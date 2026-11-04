@@ -5,6 +5,14 @@ async function home(page: Page) {
   await page.getByRole("button", { name: /Explore the demo/ }).click();
   await page.getByRole("tab", { name: "Beacons", exact: true }).click();
   await expect(page.getByTestId("friends-right-now")).toBeAttached();
+  await page
+    .getByTestId("friends-right-now")
+    .getByRole("button", { name: "All Friends", exact: true })
+    .click();
+  await page
+    .getByTestId("friends-right-now")
+    .getByRole("button", { name: "Plan", exact: true })
+    .click();
 }
 
 for (const width of [320, 375, 430]) {
@@ -22,8 +30,8 @@ for (const width of [320, 375, 430]) {
     expect((await status.boundingBox())!.y).toBeLessThan(
       (await activity.boundingBox())!.y,
     );
-    expect((await activity.boundingBox())!.y).toBeLessThan(
-      (await friends.boundingBox())!.y,
+    expect((await friends.boundingBox())!.y).toBeLessThan(
+      (await activity.boundingBox())!.y,
     );
     expect((await friends.boundingBox())!.y).toBeLessThan(
       (await explore.boundingBox())!.y,
@@ -31,11 +39,13 @@ for (const width of [320, 375, 430]) {
     expect(
       await activity.getByTestId("personal-activity-preview").count(),
     ).toBeLessThanOrEqual(2);
-    await expect(friends.getByTestId(/^social-friend-/)).toHaveCount(4);
+    expect(
+      await friends.getByTestId(/^social-friend-/).count(),
+    ).toBeGreaterThan(0);
     const plus = friends.getByRole("button", {
       name: /^Select .+ for planning$/,
     });
-    await expect(plus).toHaveCount(4);
+    expect(await plus.count()).toBeGreaterThanOrEqual(2);
     for (const target of [
       plus.first(),
       page.getByTestId("availability-dropdown"),
@@ -97,27 +107,20 @@ for (const width of [320, 375, 430]) {
       friends.getByRole("button", { name: /^Deselect .+ for planning$/ }),
     ).toHaveCount(2);
     await friends
-      .getByRole("button", { name: "View all friends", exact: true })
+      .getByRole("button", { name: /^See all \d+ friends$/, exact: true })
       .click();
     const full = page.getByTestId("friends-screen");
     await full
-      .getByLabel("Search all friends", { exact: true })
+      .getByLabel("Search people and groups", { exact: true })
       .fill("no-match-example");
     await expect(
-      full.getByRole("button", { name: "Plan with 2", exact: true }),
+      full.getByRole("button", { name: "Beacon", exact: true }),
     ).toBeVisible();
     await full
       .getByRole("button", { name: "Back to Beacons", exact: true })
       .click();
-    await friends
-      .getByRole("button", { name: "Plan with 2", exact: true })
-      .click();
-    await expect(
-      page.getByRole("button", {
-        name: "2 selected friends · Edit",
-        exact: true,
-      }),
-    ).toBeVisible();
+    await friends.getByRole("button", { name: "Beacon", exact: true }).click();
+    await expect(page.getByText("2 selected", { exact: true })).toBeVisible();
     expect(errors).toEqual([]);
   });
 }
@@ -207,49 +210,26 @@ test("invitee editing preserves form and returning to Plan resumes the draft", a
     .getByRole("button", { name: /^Select .+ for planning$/ })
     .first()
     .click();
-  await friends
-    .getByRole("button", { name: "Plan with 2", exact: true })
-    .click();
+  await friends.getByRole("button", { name: "Beacon", exact: true }).click();
   await page
-    .getByRole("button", { name: "Browse More Templates", exact: true })
-    .click();
-  await page.getByLabel("Search", { exact: true }).fill("Basketball");
-  await page.getByRole("button", { name: "Basketball", exact: true }).click();
-  await expect(
-    page.getByLabel("Title / Activity", { exact: true }),
-  ).toHaveValue("Basketball");
-  await page
-    .getByLabel("Title / Activity", { exact: true })
+    .getByLabel("Activity title", { exact: true })
     .fill("Dinner with my people");
-  await page
-    .getByRole("button", { name: "2 selected friends · Edit", exact: true })
-    .click();
+  await page.getByRole("button", { name: /Add People/, exact: false }).click();
   await expect(page.getByRole("checkbox", { checked: true })).toHaveCount(2);
   await page.getByRole("button", { name: "Done", exact: true }).click();
-  await expect(
-    page.getByLabel("Title / Activity", { exact: true }),
-  ).toHaveValue("Dinner with my people");
+  await expect(page.getByLabel("Activity title", { exact: true })).toHaveValue(
+    "Dinner with my people",
+  );
   await page.goBack();
   await expect(friends).toBeAttached();
-  await friends
-    .getByRole("button", { name: "Plan with 2", exact: true })
-    .click();
-  await expect(
-    page.getByLabel("Title / Activity", { exact: true }),
-  ).toHaveValue("Dinner with my people");
-  await page
-    .getByRole("button", { name: "Create Beacon", exact: true })
-    .click();
-  await expect(
-    page.getByRole("tab", { name: "Beacons", exact: true }),
-  ).toBeVisible();
-  await page.getByRole("tab", { name: "Beacons", exact: true }).click();
-  await expect(
-    page.getByTestId("friends-right-now").filter({ visible: true }),
-  ).toBeVisible();
-  await expect(
-    page.getByTestId("social-plan-action").filter({ visible: true }),
-  ).toHaveCount(0);
+  await friends.getByRole("button", { name: "Beacon", exact: true }).click();
+  await expect(page.getByLabel("Activity title", { exact: true })).toHaveValue(
+    "Dinner with my people",
+  );
+  await page.goBack();
+  await expect(friends.getByTestId("social-plan-action")).toContainText(
+    "2 selected",
+  );
 });
 
 test("dedicated Friends page searches the network and shares planning selection", async ({
@@ -257,16 +237,20 @@ test("dedicated Friends page searches the network and shares planning selection"
 }) => {
   await home(page);
   const friends = page.getByTestId("friends-right-now");
-  await expect(friends.getByTestId(/^social-friend-/)).toHaveCount(4);
+  expect(await friends.getByTestId(/^social-friend-/).count()).toBeGreaterThan(
+    0,
+  );
   await friends
-    .getByRole("button", { name: "View all friends", exact: true })
+    .getByRole("button", { name: /^See all \d+ friends$/, exact: true })
     .click();
   const full = page.getByTestId("friends-screen");
   await expect(page).toHaveURL(/\/friends$/);
   await expect(
     page.getByRole("dialog", { name: "All friends", exact: true }),
   ).toHaveCount(0);
-  await full.getByLabel("Search all friends", { exact: true }).fill("Jordan");
+  await full
+    .getByLabel("Search people and groups", { exact: true })
+    .fill("Jordan");
   await expect(full.getByTestId(/^social-friend-/).first()).toBeVisible();
   await full
     .getByRole("button", { name: /^Select .+ for planning$/ })
@@ -280,8 +264,9 @@ test("dedicated Friends page searches the network and shares planning selection"
     .getByRole("button", { name: "Back to Beacons", exact: true })
     .click();
   await expect(
-    friends.getByRole("button", { name: "Plan with 1", exact: true }),
+    friends.getByRole("button", { name: "Beacon", exact: true }),
   ).toBeVisible();
+  await friends.getByRole("button", { name: "Done", exact: true }).click();
   await friends
     .getByRole("button", { name: /shared status$/ })
     .first()

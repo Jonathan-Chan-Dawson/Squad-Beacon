@@ -1,16 +1,35 @@
-import { SocialSelector } from "@/src/features/people/components/SocialSelector";
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, ScrollView, Text, View } from "react-native";
-import { router } from "expo-router";
-import { Check, Plus, Radio, Radar, X, UsersRound } from "lucide-react-native";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import {
+  FlatList,
+  Pressable,
+  ScrollView,
+  Text,
+  View,
+  useWindowDimensions,
+} from "react-native";
+import { router, useFocusEffect } from "expo-router";
+import {
+  Check,
+  X,
+  UsersRound,
+  ArrowRight,
+  CircleHelp,
+  Radio,
+} from "lucide-react-native";
 import { HomeAction } from "../HomeAction";
-import { BeaconIcon } from "../BeaconIcon";
 import { useDesignTheme } from "@/src/shared/design-system";
-import { Button, Field, Txt } from "@/src/shared/ui";
+import { Button, Txt } from "@/src/shared/ui";
 import { useBeacon } from "@/src/shared/store";
 import { usePreferences } from "@/src/shared/preferences";
 import { useNow } from "@/src/shared/useNow";
 import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
+import { PrivateListsSheet } from "@/src/features/people/components/PrivateListsSheet";
 import { StatusViewer } from "./StatusViewer";
 import {
   availabilityLabel,
@@ -19,19 +38,20 @@ import {
   type SocialFriend,
 } from "../../socialFriends";
 import {
+  initializeFriendsScope,
   useFriendsBrowseState,
-  type FriendsFilter,
 } from "../../friendsBrowseSession";
 import { hubInviteeParams } from "../../hubSelectors";
+import {
+  eligibleCreationInvitees,
+  validateCreationInvitees,
+} from "../../createHandoff";
 import {
   usePlanningSelection,
   startPlanningDraft,
 } from "../../socialPlanningSession";
 
-export function useSocialFriendsController({
-  showSelectedPeople = false,
-  sharedSelector = false,
-} = {}) {
+export function useSocialFriendsController() {
   const { colors, tokens } = useDesignTheme();
   const { data, userId, loading } = useBeacon();
   const now = useNow();
@@ -40,44 +60,50 @@ export function useSocialFriendsController({
     [data, userId, now],
   );
   const [selectedIds, setSelectedIds] = usePlanningSelection(userId);
-  const [{ query, filter, listId }, updateBrowse] =
-    useFriendsBrowseState(userId);
-  const [detailId, setDetailId] = useState<string | null>(null);
-  const [error, setError] = useState("");
+  const [browse] = useFriendsBrowseState(userId);
+  const [session, setSession] = useState({
+    viewer: userId,
+    detailId: null as string | null,
+    error: "",
+  });
+  if (session.viewer !== userId)
+    setSession({ viewer: userId, detailId: null, error: "" });
+  const { detailId, error } = session;
+  const setDetailId = (id: string | null) =>
+    setSession((previous) => ({ ...previous, detailId: id }));
+  const setError = (message: string) =>
+    setSession((previous) => ({ ...previous, error: message }));
   const afterDetail = useRef<(() => void) | null>(null);
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    if (!loading && userId && data.viewer_id === userId) {
+      initializeFriendsScope(
+        userId,
+        friends.some((friend) => friend.starred),
+        data.lists
+          .filter((list) => list.owner_id === userId)
+          .map((list) => list.id),
+      );
+    }
+  }, [data, friends, loading, userId]);
+  useEffect(() => {
+    afterDetail.current = null;
+    return () => {
       afterDetail.current = null;
-    },
-    [],
-  );
-  const navigate = (action: () => void) => {
-    if (detailId) {
-      afterDetail.current = action;
-      setDetailId(null);
-    } else action();
-  };
-  const lists =
-    data.viewer_id === userId
-      ? data.lists.filter((list) => list.owner_id === userId)
-      : [];
-  const [visibleFriendIds, setVisibleFriendIds] = useState<string[] | null>(
-    null,
-  );
-  const filtered = sharedSelector
-    ? friends.filter(
-        (friend) =>
-          visibleFriendIds === null || visibleFriendIds.includes(friend.id),
-      )
-    : filterSocialFriends(friends, data, userId, {
-        query,
-        filter,
-        listId,
-      });
-  const detail = friends.find((friend) => friend.id === detailId);
-  const available = friends.filter((friend) =>
+    };
+  }, [userId]);
+  const scoped = filterSocialFriends(friends, data, userId, {
+    query: "",
+    filter: "All",
+    scope: browse.scope,
+  });
+  const filtered = filterSocialFriends(friends, data, userId, browse);
+  const available = scoped.filter((friend) =>
     ["available", "ending-soon"].includes(friend.availability),
   ).length;
+  const inBeacons = scoped.filter(
+    (friend) => friend.currentBeacon || friend.beacon,
+  ).length;
+  const detail = friends.find((friend) => friend.id === detailId);
   const toggle = (id: string) => {
     setSelectedIds(
       selectedIds.includes(id)
@@ -87,188 +113,145 @@ export function useSocialFriendsController({
     setError("");
   };
   const openProfile = (id: string) => {
-    navigate(() => router.push({ pathname: "/person/[id]", params: { id } }));
+    const action = () =>
+      router.push({ pathname: "/person/[id]", params: { id } });
+    if (detailId) {
+      afterDetail.current = action;
+      setDetailId(null);
+    } else action();
   };
   const plan = () => {
     try {
+      validateCreationInvitees(data, userId, selectedIds);
       const params = hubInviteeParams(
         selectedIds,
-        friends.map((friend) => friend.id),
+        eligibleCreationInvitees(data, userId),
       );
       const planSession = startPlanningDraft(userId);
       setError("");
-      router.push({ pathname: "/create", params: { ...params, planSession } });
+      router.push({
+        pathname: "/create",
+        params: { ...params, planSession, kind: "beacon", editor: "yes" },
+      });
     } catch (failure) {
       setError(
         failure instanceof Error ? failure.message : "Review your selection.",
       );
     }
   };
-  const chip = (label: string, selected: boolean, onPress: () => void) => (
-    <View
-      key={label}
-      style={{
-        borderBottomWidth: selected ? 1 : 0,
-        borderBottomColor: colors.accent,
-      }}
-    >
-      <HomeAction title={label} selected={selected} onPress={onPress} plain />
-    </View>
-  );
-  const controls = sharedSelector ? (
-    <View style={{ gap: 8 }}>
-      <SocialSelector
-        friends={filterSocialFriends(friends, data, userId, {
-          query: "",
-          filter,
-          listId,
-        })}
-        query={query}
-        initialCategory={listId || filter === "Favorites" ? "Friends" : "All"}
-        list={
-          listId
-            ? `custom:${listId}`
-            : filter === "Favorites"
-              ? "favorites"
-              : "friends"
-        }
-        onListChange={(value) =>
-          updateBrowse({
-            listId: value.startsWith("custom:") ? value.slice(7) : null,
-            filter:
-              value === "favorites"
-                ? "Favorites"
-                : filter === "Favorites"
-                  ? "All"
-                  : filter,
-          })
-        }
-        onQueryChange={(query) => updateBrowse({ query })}
-        onCategoryChange={(category) => {
-          if (category === "All") updateBrowse({ filter: "All", listId: null });
-        }}
-        selected={selectedIds.map((id) => ({ kind: "friend", id }))}
-        onChange={(rows) =>
-          setSelectedIds(
-            rows.filter((row) => row.kind === "friend").map((row) => row.id),
-          )
-        }
-        supportedKinds={["friend"]}
-        bulk
-        renderFriendRows={false}
-        onVisibleFriendIdsChange={setVisibleFriendIds}
-      />
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={{ gap: 6 }}
-      >
-        {(["Available", "In a Beacon"] as FriendsFilter[]).map((value) =>
-          chip(value, filter === value, () =>
-            updateBrowse({ filter: filter === value ? "All" : value }),
-          ),
-        )}
-      </ScrollView>
-    </View>
-  ) : (
-    <View style={{ gap: 8 }}>
-      <Field
-        label="Search all friends"
-        value={query}
-        onChangeText={(query) => updateBrowse({ query })}
-        placeholder="Find your people"
-      />
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ gap: 6 }}
-      >
-        {(
-          ["All", "Available", "In a Beacon", "Favorites"] as FriendsFilter[]
-        ).map((value) =>
-          chip(value, filter === value, () => updateBrowse({ filter: value })),
-        )}
-      </ScrollView>
-      {lists.length ? (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={{ gap: 6 }}
-        >
-          {chip("All lists", !listId, () => updateBrowse({ listId: null }))}
-          {lists.map((list) =>
-            chip(list.name, listId === list.id, () =>
-              updateBrowse({ listId: list.id }),
-            ),
-          )}
-        </ScrollView>
-      ) : null}
-    </View>
-  );
+  const eligible = new Set(eligibleCreationInvitees(data, userId));
   const action = selectedIds.length ? (
-    <View style={{ gap: 4 }}>
-      {showSelectedPeople ? (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ gap: 6 }}
-        >
-          {selectedIds.map((id) => (
-            <HomeAction
-              key={id}
-              title={
-                friends.find((friend) => friend.id === id)?.name ??
-                "Selected friend"
-              }
-              label={`Remove ${friends.find((friend) => friend.id === id)?.name ?? "friend"} from plan`}
-              icon={<X size={13} color={colors.textSecondary} />}
-              onPress={() => toggle(id)}
-            />
-          ))}
-        </ScrollView>
-      ) : null}
+    <View testID="social-plan-action" style={{ gap: 6, paddingVertical: 6 }}>
       <View
-        testID="social-plan-action"
         style={{
           flexDirection: "row",
           flexWrap: "wrap",
           alignItems: "center",
           gap: 6,
-          paddingHorizontal: 8,
-          minHeight: 48,
-          backgroundColor: tokens.availability.available.tint,
-          borderRadius: 12,
         }}
       >
         <Text
           style={{
-            flex: 1,
-            minWidth: 0,
             color: colors.textPrimary,
-            fontSize: 13,
-            lineHeight: 18,
-            fontWeight: "500",
+            ...tokens.type.secondary,
           }}
         >
           {selectedIds.length} selected
-          {showSelectedPeople ? "" : " for planning"}
         </Text>
+        <View style={{ flex: 1 }} />
         <HomeAction
+          title="Clear"
           label="Clear selection"
+          plain
           onPress={() => {
             setSelectedIds([]);
             setError("");
           }}
-          plain
-          icon={<X size={16} color={colors.textSecondary} />}
         />
-        <HomeAction
-          title={`Plan with ${selectedIds.length}`}
-          primary
-          onPress={plan}
-        />
+      </View>
+      <ScrollView
+        style={{ maxHeight: 88 }}
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{
+          flexDirection: "row",
+          flexWrap: "wrap",
+          gap: 4,
+        }}
+      >
+        {selectedIds.map((id) => {
+          const name = eligible.has(id)
+            ? friends.find((friend) => friend.id === id)?.name
+            : undefined;
+          return (
+            <Pressable
+              key={id}
+              accessibilityRole="button"
+              accessibilityLabel={
+                "Remove " + (name ?? "unavailable person") + " from plan"
+              }
+              onPress={() => toggle(id)}
+              style={{
+                maxWidth: "100%",
+                minHeight: 44,
+                minWidth: 44,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 4,
+                paddingHorizontal: 10,
+                borderWidth: 1,
+                borderColor: colors.border,
+                borderRadius: 22,
+                backgroundColor: colors.surfaceRaised,
+              }}
+            >
+              <Text
+                numberOfLines={1}
+                style={{
+                  flexShrink: 1,
+                  color: colors.textSecondary,
+                  ...tokens.type.caption,
+                }}
+              >
+                {name ?? "Unavailable person"}
+              </Text>
+              <X size={13} color={colors.textSecondary} />
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+      <Text
+        testID="ping-audience-explanation"
+        style={{ color: colors.textSecondary, ...tokens.type.caption }}
+      >
+        Ping uses the audience you choose in its editor, not the selected
+        people. Your selection stays for a Beacon.
+      </Text>
+      <View style={{ flexDirection: "row", gap: 8 }}>
+        <View style={{ flex: 1 }}>
+          <HomeAction
+            title="Ping"
+            icon={<CircleHelp size={18} color={colors.textSecondary} />}
+            stretch
+            outlined
+            onPress={() =>
+              router.push({
+                pathname: "/planning/create",
+                params: { kind: "ping" },
+              })
+            }
+          />
+        </View>
+        <View style={{ flex: 1 }}>
+          <HomeAction
+            title="Beacon"
+            icon={
+              <Radio size={18} color={tokens.availability.available.color} />
+            }
+            stretch
+            tone={tokens.availability.available}
+            onPress={plan}
+          />
+        </View>
       </View>
     </View>
   ) : null;
@@ -281,18 +264,17 @@ export function useSocialFriendsController({
       openProfile={openProfile}
       openDetail={setDetailId}
       toggle={toggle}
-      mintSelection={showSelectedPeople}
     />
   );
   const detailSheet = (
     <StatusViewer
-      personId={detailId}
-      visible={!!detailId}
+      personId={detail?.id ?? null}
+      visible={!!detail}
       onClose={() => setDetailId(null)}
       onDismiss={() => {
-        const callback = afterDetail.current;
+        const action = afterDetail.current;
         afterDetail.current = null;
-        callback?.();
+        action?.();
       }}
     >
       {detail && (
@@ -312,17 +294,92 @@ export function useSocialFriendsController({
   );
   return {
     friends,
+    scoped,
     filtered,
     available,
+    inBeacons,
     loading,
     row,
-    controls,
     action,
     detailSheet,
     error,
     userId,
     selectedIds,
+    toggle,
+    openDetail: setDetailId,
   };
+}
+
+/** Each title has one place; shared notes remain independent of activity context. */
+function FriendContext({
+  friend,
+  compact = false,
+}: {
+  friend: SocialFriend;
+  compact?: boolean;
+}) {
+  const { colors, tokens } = useDesignTheme();
+  const beacon = friend.currentBeacon?.activity ?? friend.beacon;
+  const activityTitle = beacon?.title ?? friend.currentActivityTitle;
+  const differentTitle = activityTitle && activityTitle !== friend.statusText;
+  const attachment = friend.attachment;
+  return (
+    <View style={{ gap: 2, minHeight: compact ? 54 : undefined }}>
+      {!!friend.statusText && (
+        <Text
+          numberOfLines={2}
+          style={{ color: colors.textSecondary, ...tokens.type.caption }}
+        >
+          {friend.statusText}
+        </Text>
+      )}
+      {beacon ? (
+        <Text
+          numberOfLines={2}
+          style={{
+            color: colors.accent,
+            ...tokens.type.caption,
+            ...(compact ? { fontSize: 11, lineHeight: 15 } : {}),
+          }}
+        >
+          In a Beacon{differentTitle ? " · " + activityTitle : ""}
+          {compact ? "" : " · Happening now"}
+        </Text>
+      ) : differentTitle ? (
+        <Text
+          numberOfLines={2}
+          style={{ color: colors.textSecondary, ...tokens.type.caption }}
+        >
+          Activity · {activityTitle}
+        </Text>
+      ) : null}
+      {!compact &&
+      attachment &&
+      attachment.id !== beacon?.id &&
+      attachment.title !== friend.statusText &&
+      attachment.title !== activityTitle ? (
+        <Text
+          numberOfLines={1}
+          style={{ color: colors.accent, ...tokens.type.caption }}
+        >
+          {attachment.type === "vote" ? "Vote Council" : attachment.type} ·{" "}
+          {attachment.title}
+        </Text>
+      ) : null}
+      {!compact &&
+      friend.ping &&
+      friend.ping.id !== attachment?.id &&
+      friend.ping.title !== friend.statusText &&
+      friend.ping.title !== activityTitle ? (
+        <Text
+          numberOfLines={1}
+          style={{ color: colors.accent, ...tokens.type.caption }}
+        >
+          Ping · {friend.ping.title}
+        </Text>
+      ) : null}
+    </View>
+  );
 }
 
 export function SocialFriendRow({
@@ -332,7 +389,6 @@ export function SocialFriendRow({
   openProfile,
   openDetail,
   toggle,
-  mintSelection = false,
 }: {
   friend: SocialFriend;
   selected: boolean;
@@ -340,7 +396,6 @@ export function SocialFriendRow({
   openProfile: (id: string) => void;
   openDetail: (id: string) => void;
   toggle: (id: string) => void;
-  mintSelection?: boolean;
 }) {
   const { colors, tokens } = useDesignTheme();
   const { showAvatars } = usePreferences();
@@ -348,341 +403,415 @@ export function SocialFriendRow({
     tokens.availability[
       friend.availability === "ending-soon" ? "endingSoon" : friend.availability
     ];
-  const mergedFeaturedCurrent =
-    friend.currentBeacon?.activity.id === friend.attachment?.id &&
-    friend.attachment?.type === "beacon";
   return (
     <View
-      key={friend.id}
-      testID={`social-friend-${friend.id}`}
+      testID={"social-friend-" + friend.id}
       style={{
         flexDirection: "row",
         alignItems: "center",
         gap: 8,
-        minHeight: 64,
+        minHeight: 72,
         paddingVertical: 8,
-        borderBottomWidth: mintSelection ? 0 : 1,
-        borderBottomColor: colors.border,
       }}
     >
-      {showAvatars ? (
+      {showAvatars && (
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`View ${friend.name}'s profile`}
+          accessibilityLabel={"View " + friend.name + "'s profile"}
           onPress={() => openProfile(friend.id)}
           style={{
             minWidth: 44,
             minHeight: 44,
-            alignItems: "center",
             justifyContent: "center",
+            alignItems: "center",
           }}
         >
-          <View
-            style={{
-              padding: 1,
-              borderRadius: 23,
-              borderWidth: 1,
-              borderColor: friend.ping ? colors.accent : colors.border,
-            }}
-          >
-            <ProfileAvatar profile={friend.profile} size={38} />
-            <View
-              style={{
-                position: "absolute",
-                right: 0,
-                bottom: 0,
-                width: 10,
-                height: 10,
-                borderRadius: 5,
-                backgroundColor: status.color,
-                borderWidth: 2,
-                borderColor: colors.surface,
-              }}
-            />
-          </View>
+          <ProfileAvatar profile={friend.profile} size={40} />
         </Pressable>
-      ) : null}
+      )}
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel={`Open ${friend.name}'s shared status`}
+        accessibilityLabel={"Open " + friend.name + "'s shared status"}
         onPress={() => openDetail(friend.id)}
         style={{
           flex: 1,
           minWidth: 0,
           minHeight: 44,
-          flexDirection: "row",
-          alignItems: "center",
-          gap: 5,
+          gap: 2,
+          justifyContent: "center",
         }}
       >
-        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-            <Text
-              numberOfLines={1}
-              style={{
-                flexShrink: 1,
-                color: colors.textPrimary,
-                fontSize: 14,
-                lineHeight: 20,
-                fontWeight: "500",
-              }}
-            >
-              {friend.name}
-            </Text>
-            {friend.beacon && !friend.currentBeacon ? (
-              <View accessible accessibilityLabel="In a Beacon">
-                <Radio size={12} color={colors.accent} />
-              </View>
-            ) : null}
-            {friend.ping && !friend.currentBeacon ? (
-              <View accessible accessibilityLabel="Shared Ping">
-                <Radar size={12} color={colors.accent} />
-              </View>
-            ) : null}
-          </View>
-          <Text
-            testID={`availability-badge-${friend.id}`}
-            accessibilityLabel={`Availability: ${status.label}`}
-            numberOfLines={2}
-            style={{
-              color: status.color,
-              fontSize: 12,
-              lineHeight: 16,
-              fontWeight: "400",
-            }}
-          >
-            {availabilityLabel(friend, now)}
-          </Text>
-          {!!friend.statusText && (
-            <Text
-              numberOfLines={1}
-              style={{
-                color: colors.textSecondary,
-                fontSize: 13,
-                lineHeight: 18,
-              }}
-            >
-              {friend.statusText}
-            </Text>
-          )}
-          {friend.attachment && !mergedFeaturedCurrent ? (
-            <Text
-              numberOfLines={1}
-              style={{ color: colors.accent, fontSize: 11, lineHeight: 16 }}
-            >
-              {friend.attachment.type === "vote"
-                ? "Vote Council"
-                : friend.attachment.type[0].toUpperCase() +
-                  friend.attachment.type.slice(1)}{" "}
-              · {friend.attachment.title}
-            </Text>
-          ) : null}
-          {friend.currentBeacon ? (
-            <Text
-              numberOfLines={1}
-              style={{ color: colors.accent, fontSize: 11, lineHeight: 16 }}
-            >
-              {mergedFeaturedCurrent
-                ? "Featured · Happening now"
-                : "Happening now"}{" "}
-              · {friend.currentBeacon.activity.title}
-            </Text>
-          ) : !friend.attachment && !friend.statusText && friend.beacon ? (
-            <View
-              style={{ flexDirection: "row", gap: 5, alignItems: "center" }}
-            >
-              <BeaconIcon
-                emoji={friend.beacon.emoji}
-                category={friend.beacon.category}
-                size={16}
-                inline
-              />
-              <Text
-                numberOfLines={1}
-                style={{
-                  flex: 1,
-                  color: colors.textSecondary,
-                  fontSize: 12,
-                  lineHeight: 18,
-                  fontWeight: "400",
-                }}
-              >
-                {friend.beacon.label} · {friend.beacon.title}
-              </Text>
-              {
-                <Text
-                  style={{
-                    color: colors.textSecondary,
-                    fontSize: 11,
-                    lineHeight: 16,
-                    fontWeight: "400",
-                  }}
-                >
-                  {friend.beacon.goingCount} going
-                </Text>
-              }
-            </View>
-          ) : !friend.attachment && !friend.statusText && friend.ping ? (
-            <View
-              style={{ flexDirection: "row", gap: 5, alignItems: "center" }}
-            >
-              <Radar size={13} color={colors.accent} />
-              <Text
-                numberOfLines={1}
-                style={{
-                  flex: 1,
-                  color: colors.textSecondary,
-                  fontSize: 12,
-                  lineHeight: 18,
-                  fontWeight: "400",
-                }}
-              >
-                Ping · {friend.ping.title}
-              </Text>
-            </View>
-          ) : null}
-        </View>
-      </Pressable>
-
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`${selected ? "Deselect" : "Select"} ${friend.name} for planning`}
-
-        accessibilityHint="Select for planning. Invitations are sent only when you publish a Beacon."
-        accessibilityState={{ selected }}
-        aria-pressed={selected}
-        onPress={() => toggle(friend.id)}
-        style={({ pressed }) => ({
-          width: 44,
-          height: 44,
-          alignItems: "center",
-          justifyContent: "center",
-          opacity: pressed ? 0.7 : 1,
-        })}
-      >
-        <View
+        <Text
+          numberOfLines={1}
           style={{
-            width: 28,
-            height: 28,
-            borderRadius: 14,
-            borderWidth: 1,
-            borderColor: mintSelection
-              ? tokens.availability.available.color
-              : selected
-                ? colors.accent
-                : colors.textSecondary,
-            backgroundColor: selected
-              ? mintSelection
-                ? tokens.availability.available.color
-                : colors.accent
-              : mintSelection
-                ? tokens.availability.available.tint
-                : "transparent",
-            alignItems: "center",
-            justifyContent: "center",
+            color: colors.textPrimary,
+            ...tokens.type.secondary,
+            fontWeight: "500",
           }}
         >
-          {selected ? (
-            <Check
-              size={13}
-              color={
-                mintSelection
-                  ? tokens.availability.available.onColor
-                  : colors.onAccent
-              }
-            />
-          ) : (
-            <Plus
-              size={15}
-              color={
-                mintSelection
-                  ? tokens.availability.available.color
-                  : colors.accent
-              }
-            />
-          )}
-        </View>
+          {friend.name}
+        </Text>
+        <Text
+          testID={"availability-badge-" + friend.id}
+          accessibilityLabel={"Availability: " + status.label}
+          style={{ color: status.color, ...tokens.type.caption }}
+        >
+          {availabilityLabel(friend, now)}
+        </Text>
+        <FriendContext friend={friend} />
       </Pressable>
+      <HomeAction
+        title={selected ? "✓ Added" : "Plan"}
+        outlined
+        label={
+          (selected ? "Deselect " : "Select ") + friend.name + " for planning"
+        }
+        selected={selected}
+        tone={{
+          color: colors.textSecondary,
+          tint: "transparent",
+        }}
+        onPress={() => toggle(friend.id)}
+      />
     </View>
+  );
+}
+
+function FriendCard({
+  friend,
+  planning,
+  selected,
+  onPress,
+}: {
+  friend: SocialFriend;
+  planning: boolean;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  const { colors, tokens } = useDesignTheme();
+  const { fontScale } = useWindowDimensions();
+  const status =
+    tokens.availability[
+      friend.availability === "ending-soon" ? "endingSoon" : friend.availability
+    ];
+  const label =
+    friend.availability === "available" || friend.availability === "ending-soon"
+      ? "Free"
+      : friend.availability === "unavailable"
+        ? "Busy"
+        : "Not shared";
+  return (
+    <Pressable
+      testID={"social-friend-" + friend.id}
+      accessibilityRole="button"
+      accessibilityLabel={
+        planning
+          ? (selected ? "Deselect " : "Select ") + friend.name + " for planning"
+          : "Open " + friend.name + "'s shared status"
+      }
+      accessibilityState={planning ? { selected } : undefined}
+      aria-pressed={planning ? selected : undefined}
+      onPress={onPress}
+      style={({ pressed }) => ({
+        width: 108,
+        minHeight: 182 * Math.max(1, fontScale),
+        padding: 8,
+        gap: 4,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: selected
+          ? tokens.availability.available.color
+          : colors.border,
+        backgroundColor: colors.surfaceRaised,
+        opacity: pressed ? 0.7 : 1,
+      })}
+    >
+      <View style={{ alignSelf: "center" }}>
+        <ProfileAvatar profile={friend.profile} size={48} />
+        {selected && (
+          <View
+            style={{
+              position: "absolute",
+              right: -3,
+              bottom: -2,
+              borderRadius: 8,
+              padding: 2,
+              backgroundColor: tokens.availability.available.color,
+            }}
+          >
+            <Check size={12} color={tokens.availability.available.onColor} />
+          </View>
+        )}
+      </View>
+      <Text
+        numberOfLines={1}
+        style={{
+          color: colors.textPrimary,
+          ...tokens.type.secondary,
+          fontWeight: "500",
+        }}
+      >
+        {friend.name}
+      </Text>
+      <Text
+        testID={"availability-badge-" + friend.id}
+        style={{ color: status.color, ...tokens.type.caption }}
+      >
+        {label}
+      </Text>
+      <FriendContext friend={friend} compact />
+    </Pressable>
   );
 }
 
 export function SocialFriendsSection() {
   const { colors, tokens } = useDesignTheme();
-  const { friends, available, loading, row, action, detailSheet, error } =
-    useSocialFriendsController();
+  const { data } = useBeacon();
+  const controller = useSocialFriendsController();
+  const {
+    friends,
+    scoped,
+    available,
+    inBeacons,
+    loading,
+    userId,
+    selectedIds,
+  } = controller;
+  const [browse, updateBrowse] = useFriendsBrowseState(userId);
+  const [planning, setPlanning] = useState(false);
+  const [listsOpen, setListsOpen] = useState(false);
+  const [visit, setVisit] = useState(0);
+  useFocusEffect(
+    useCallback(() => {
+      setVisit((value) => value + 1);
+    }, []),
+  );
+  // Retain IDs only, never stale status/profile objects. Scope and visit reset ranking.
+  const orderKey = userId + ":" + browse.scope + ":" + visit;
+  const [order, setOrder] = useState(() => ({
+    key: orderKey,
+    ids: scoped.map((friend) => friend.id),
+  }));
+  const current = new Map(scoped.map((friend) => [friend.id, friend]));
+  const retained =
+    order.key === orderKey ? order.ids.filter((id) => current.has(id)) : [];
+  const retainedSet = new Set(retained);
+  const orderedIds = [
+    ...retained,
+    ...scoped
+      .filter((friend) => !retainedSet.has(friend.id))
+      .map((friend) => friend.id),
+  ];
+  if (
+    order.key !== orderKey ||
+    order.ids.length !== orderedIds.length ||
+    order.ids.some((id, index) => id !== orderedIds[index])
+  ) {
+    setOrder({ key: orderKey, ids: orderedIds });
+  }
+  const ordered = orderedIds.map((id) => current.get(id)!);
+  const listName =
+    data.viewer_id === userId
+      ? data.lists.find(
+          (list) =>
+            list.id === browse.scope.slice(7) && list.owner_id === userId,
+        )?.name
+      : undefined;
   return (
-    <View
-      testID="friends-right-now"
-      style={{
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 16,
-        borderWidth: 1,
-        borderColor: colors.border,
-        backgroundColor: colors.surface,
-        overflow: "hidden",
-      }}
-    >
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <Text
-            accessibilityRole="header"
-            style={{
-              color: colors.textPrimary,
-              fontSize: 18,
-              lineHeight: 24,
-              fontWeight: "500",
-              letterSpacing: -0.5,
-            }}
-          >
-            Friends Right Now
-          </Text>
-          <Text style={{ color: colors.textSecondary, ...tokens.type.caption }}>
-            <Text style={{ color: colors.accent, fontWeight: "500" }}>
-              {available} available
-            </Text>
-            {" · "}
-            {friends.filter((friend) => friend.beacon).length} in Beacons
-          </Text>
-        </View>
+    <View testID="friends-right-now" style={{ gap: 6, paddingVertical: 6 }}>
+      <View
+        style={{
+          flexDirection: "row",
+          flexWrap: "wrap",
+          alignItems: "center",
+          columnGap: 8,
+        }}
+      >
+        <Text
+          accessibilityRole="header"
+          style={{
+            flexGrow: 1,
+            color: colors.textPrimary,
+            fontSize: 18,
+            lineHeight: 24,
+            fontWeight: "500",
+          }}
+        >
+          Your People
+        </Text>
         <HomeAction
-          title="View all →"
-          label="View all friends"
+          title={"See all " + scoped.length + " →"}
+          label={"See all " + scoped.length + " friends"}
           plain
-          icon={<UsersRound size={16} color={colors.accent} />}
           onPress={() => router.push("/friends")}
         />
+        <HomeAction
+          title={planning ? "Done" : "Plan"}
+          outlined
+          prominent
+          icon={
+            planning ? (
+              <Check size={15} color={tokens.availability.available.color} />
+            ) : (
+              <UsersRound
+                size={15}
+                color={tokens.availability.available.color}
+              />
+            )
+          }
+          selected={planning}
+          tone={tokens.availability.available}
+          onPress={() => setPlanning(!planning)}
+        />
       </View>
-      {!available && friends.length ? (
-        <Txt muted>
-          No shared availability right now. You can still make a plan.
-        </Txt>
-      ) : null}
-      {friends.slice(0, 4).map(row)}
-      {!friends.length ? (
-        <View style={{ gap: 8 }}>
-          <Txt muted>
-            {loading
-              ? "Loading your people…"
-              : "Good plans start with your people."}
-          </Txt>
-          {!loading ? (
-            <HomeAction
-              plain
-              title="Find friends"
-              onPress={() => router.push("/find-friends")}
-            />
-          ) : null}
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 4 }}>
+        <HomeAction
+          title="All Friends"
+          selected={browse.scope === "friends"}
+          plain
+          onPress={() => updateBrowse({ scope: "friends" })}
+        />
+        <HomeAction
+          title="★ Favorites"
+          selected={browse.scope === "favorites"}
+          plain
+          onPress={() => updateBrowse({ scope: "favorites" })}
+        />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={listName ? "Lists: " + listName : "Lists"}
+          accessibilityState={{ selected: browse.scope.startsWith("custom:") }}
+          onPress={() => setListsOpen(true)}
+          style={{
+            minHeight: 44,
+            minWidth: 44,
+            maxWidth: 130,
+            justifyContent: "center",
+            paddingHorizontal: 4,
+          }}
+        >
+          <Text
+            numberOfLines={1}
+            style={{
+              color: listName ? colors.accent : colors.textSecondary,
+              ...tokens.type.caption,
+            }}
+          >
+            {listName ?? "Lists"} ▾
+          </Text>
+        </Pressable>
+      </View>
+      <Text
+        testID="your-people-summary"
+        style={{ color: colors.textSecondary, ...tokens.type.caption }}
+      >
+        {scoped.length} {browse.scope === "favorites" ? "favorites" : "friends"}{" "}
+        · {available} free · {inBeacons} in Beacons
+      </Text>
+      {planning ? (
+        <View
+          accessibilityLiveRegion="polite"
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 8,
+            padding: 10,
+            borderRadius: 10,
+            backgroundColor: tokens.availability.available.tint,
+            borderWidth: 1,
+            borderColor: tokens.availability.available.color,
+          }}
+        >
+          <UsersRound size={18} color={tokens.availability.available.color} />
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text
+              style={{
+                color: colors.textPrimary,
+                ...tokens.type.secondary,
+                fontWeight: "600",
+              }}
+            >
+              You’re planning
+              {selectedIds.length ? ` · ${selectedIds.length} selected` : ""}
+            </Text>
+            <Text
+              style={{ color: colors.textSecondary, ...tokens.type.caption }}
+            >
+              Tap people to add them · Scroll for more
+            </Text>
+          </View>
+          <ArrowRight size={16} color={tokens.availability.available.color} />
         </View>
       ) : null}
-      {error ? (
+      <FlatList
+        key={userId + ":" + browse.scope}
+        testID="your-people-carousel"
+        horizontal
+        data={ordered}
+        extraData={{ selectedIds, planning }}
+        keyExtractor={(friend) => friend.id}
+        showsHorizontalScrollIndicator={false}
+        initialNumToRender={6}
+        maxToRenderPerBatch={6}
+        windowSize={3}
+        contentContainerStyle={{ gap: 8, paddingVertical: 4 }}
+        renderItem={({ item }) => (
+          <FriendCard
+            friend={item}
+            planning={planning}
+            selected={selectedIds.includes(item.id)}
+            onPress={() =>
+              planning
+                ? controller.toggle(item.id)
+                : controller.openDetail(item.id)
+            }
+          />
+        )}
+        ListEmptyComponent={
+          <View style={{ gap: 4 }}>
+            <Txt muted>
+              {loading
+                ? "Loading your people…"
+                : !friends.length
+                  ? "Good plans start with your people."
+                  : browse.scope === "favorites"
+                    ? "No favorites yet."
+                    : "No friends in this list yet."}
+            </Txt>
+            {!loading && (
+              <HomeAction
+                title={friends.length ? "View All Friends" : "Find Friends"}
+                plain
+                onPress={() =>
+                  friends.length
+                    ? updateBrowse({ scope: "friends" })
+                    : router.push("/find-friends")
+                }
+              />
+            )}
+          </View>
+        }
+      />
+      {!!controller.error && (
         <Text accessibilityRole="alert" style={{ color: colors.danger }}>
-          {error}
+          {controller.error}
         </Text>
+      )}
+      {planning ? (
+        controller.action
+      ) : selectedIds.length ? (
+        <HomeAction
+          title={selectedIds.length + " selected · Continue planning"}
+          plain
+          onPress={() => setPlanning(true)}
+        />
       ) : null}
-      {action}
-      {detailSheet}
+      <PrivateListsSheet
+        visible={listsOpen}
+        onClose={() => setListsOpen(false)}
+        onSelect={(scope) => updateBrowse({ scope })}
+      />
+      {controller.detailSheet}
     </View>
   );
 }

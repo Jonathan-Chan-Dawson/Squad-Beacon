@@ -69,11 +69,19 @@ test("Beacons home and dedicated activity screens, and Squads stay compact at 39
   await enterDemo(page);
 
   await page.getByRole("tab", { name: "Beacons", exact: true }).click();
-  await expect(page.getByText("Friends Right Now", { exact: true })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Your Activity", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Browse", exact: true })).toBeVisible();
-  await expect(page.getByRole("tablist", { name: "Beacon time period" })).toHaveCount(0);
-  const titleTarget = page.getByRole("button", { name: /^View .* details$/ }).first();
+  await expect(page.getByText("Your People", { exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Your Activity", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Browse", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("tablist", { name: "Beacon time period" }),
+  ).toHaveCount(0);
+  const titleTarget = page
+    .getByRole("button", { name: /^View .* details$/ })
+    .first();
   await expect(titleTarget).toBeVisible();
   expect((await titleTarget.boundingBox())?.height).toBeGreaterThanOrEqual(44);
   await expectNoHorizontalOverflow(page);
@@ -85,21 +93,41 @@ test("Beacons home and dedicated activity screens, and Squads stay compact at 39
   await expect(page.getByTestId("browse-beacons-upcoming")).toBeVisible();
   await expectNoHorizontalOverflow(page);
   await page.screenshot({ path: "test-results/ui-polish-browse-beacons.png" });
-  await page.getByRole("button", { name: "Back to Beacons", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Back to Beacons", exact: true })
+    .click();
 
-  await page.getByText("Coming Up", { exact: true }).filter({ visible: true }).locator("..").getByRole("button", { name: "See all", exact: true }).click();
+  await page
+    .getByText("Coming Up", { exact: true })
+    .filter({ visible: true })
+    .locator("..")
+    .getByRole("button", { name: "See all", exact: true })
+    .click();
   await expect(page).toHaveURL(/\/browse-beacons(?:\?.*section=upcoming)?/);
   await expect(page.getByTestId("browse-beacons-upcoming")).toBeVisible();
-  await page.getByRole("button", { name: "Back to Beacons", exact: true }).click();
-  await page.getByText("Your Activity", { exact: true }).filter({ visible: true }).locator("..").getByRole("button", { name: "See all", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Back to Beacons", exact: true })
+    .click();
+  await page
+    .getByText("Your Activity", { exact: true })
+    .filter({ visible: true })
+    .locator("..")
+    .getByRole("button", { name: "See all", exact: true })
+    .click();
   await expect(page.getByTestId("your-activity-screen")).toBeVisible();
-  await expect(page.getByTestId("your-activity-header")).toHaveText("Your Activity");
+  await expect(page.getByTestId("your-activity-header")).toHaveText(
+    "Your Activity",
+  );
   await expectNoHorizontalOverflow(page);
   await page.screenshot({ path: "test-results/ui-polish-your-activity.png" });
-  await page.getByRole("button", { name: "Back to Beacons", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Back to Beacons", exact: true })
+    .click();
 
   await page.getByRole("tab", { name: "Profile", exact: true }).click();
-  await page.getByRole("button", { name: "Open Friends & Lists", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Open Friends & Lists", exact: true })
+    .click();
   const sectionControls = page.getByLabel("Directory sections");
   const allSections = sectionControls.getByRole("button", {
     name: "All",
@@ -179,7 +207,9 @@ test("reduced motion keeps a shared Button at identity while hovering, pressing,
     await page.mouse.up();
 
     await expect(page).toHaveURL(/\/browse-beacons\/?$/);
-    await page.getByRole("button", { name: "Back to Beacons", exact: true }).click();
+    await page
+      .getByRole("button", { name: "Back to Beacons", exact: true })
+      .click();
     const returnedButton = page.getByRole("button", {
       name: "Browse",
       exact: true,
@@ -212,7 +242,8 @@ test("normal press animates, then a live reduced-motion change resets scale", as
     await control.scrollIntoViewIfNeeded();
     const bounds = await control.boundingBox();
     expect(bounds).not.toBeNull();
-    if (!bounds) throw new Error("Create Beacon button has no clickable bounds.");
+    if (!bounds)
+      throw new Error("Create Beacon button has no clickable bounds.");
     await page.mouse.move(
       bounds.x + bounds.width / 2,
       bounds.y + bounds.height / 2,

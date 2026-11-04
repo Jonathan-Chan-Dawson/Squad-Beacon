@@ -14,6 +14,10 @@ for (const width of [320, 390, 430]) {
       await page.goto("/friends");
       await page.getByRole("button", { name: /Explore the demo/ }).click();
       const screen = page.getByTestId("friends-screen");
+      await screen
+        .getByRole("button", { name: "All Friends", exact: true })
+        .click();
+      await screen.getByRole("button", { name: "All", exact: true }).click();
       const groups = screen.getByRole("button", { name: /^Groups \(/ });
       const friends = screen.getByRole("button", { name: /^Friends \(/ });
       await expect(groups).toHaveAttribute("aria-expanded", "false");
@@ -50,7 +54,7 @@ for (const width of [320, 390, 430]) {
         }),
       ).toHaveAttribute("aria-pressed", "true");
       await expect(
-        screen.getByRole("button", { name: "Plan with 1", exact: true }),
+        screen.getByRole("button", { name: "Beacon", exact: true }),
       ).toBeVisible();
       await page.screenshot({
         path: `.expo/friends-refinement/groups-${width}-${appearance}.png`,
@@ -59,11 +63,11 @@ for (const width of [320, 390, 430]) {
       await expect(group).toHaveAttribute("aria-expanded", "false");
       await screen.getByRole("button", { name: "Squads", exact: true }).click();
       await expect(
-        screen.getByRole("button", { name: "Plan with 1", exact: true }),
+        screen.getByRole("button", { name: "Beacon", exact: true }),
       ).toBeVisible();
       await screen.getByRole("button", { name: "All", exact: true }).click();
       await expect(
-        screen.getByRole("button", { name: "Plan with 1", exact: true }),
+        screen.getByRole("button", { name: "Beacon", exact: true }),
       ).toBeVisible();
       expect(
         await page.evaluate(

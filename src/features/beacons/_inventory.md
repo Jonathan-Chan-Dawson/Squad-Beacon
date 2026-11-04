@@ -1,6 +1,7 @@
 Beacons feature
 
-- screens/ActivitiesScreen.tsx: compact Beacons home with personal status, friend selection, a prioritized confirmed activity card, discovery previews and secondary saved tools. Legacy period links hand off to the dedicated activity and browse screens.
+- screens/ActivitiesScreen.tsx: compact Beacons home with retained personal status, one Your People carousel, personal activity, discovery previews and direct Saved & Tools shortcuts. Legacy period links hand off to the dedicated activity and browse screens.
+- components/feed/SocialFriendsSection.tsx, socialFriends.ts and friendsBrowseSession.ts: authorized independent availability/notes/activity, shared account-scoped friend scope, stable carousel order and direct Ping/Beacon planning actions; screens/FriendsScreen.tsx retains the searchable virtualized directory. Ping audiences remain editor-selected, separate from the shared Beacon crew.
 - screens/BrowseBeaconsScreen.tsx and screens/discoveryPlan.ts: shared readable/public discovery cards, viewer-scoped safe public preview sheets, and Plan links resolved only from an authorized Beacon relationship.
 - activityHistory.ts: typed, bounded activity history query/page summaries, privacy-aware demo selector and strict RPC page parser; shared store loader uses session epoch checks.
 - screens/CalendarScreen.tsx, calendarSelectors.ts: personal month/week agendas, existing weekly progress, authorized Plan schedules and date-only authoritative next Routine previews. Date/timezone handoffs reuse existing creation and Plan/Routine routes; no recurrence materialization.

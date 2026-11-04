@@ -1,5 +1,10 @@
+import {
+  matchesKnownDiscoveryContext,
+  type prepareDiscoveryFriends,
+} from "./discoveryFriends";
+import { selectedBeaconCategories } from "@/src/shared/explorationFilters";
 import type { PublicBeaconSummary } from "@/src/features/discovery/types";
-import type { Category } from "@/src/shared/types";
+import type { Category, Data } from "@/src/shared/types";
 import {
   matchesExplorationArea,
   type ExplorationFilters,
@@ -17,6 +22,12 @@ export function publicMapBeacons(
   hasContext: boolean,
   viewport: MapViewport | null,
   now: number,
+  context?: {
+    data: Data;
+    viewerId: string | null;
+    now: number;
+    friends?: ReturnType<typeof prepareDiscoveryFriends>;
+  },
 ) {
   if (
     hasContext ||
@@ -32,6 +43,8 @@ export function publicMapBeacons(
     return [];
   return rows
     .filter((row) => {
+      if (!matchesKnownDiscoveryContext(row.activity_id, filters, context))
+        return false;
       if (
         row.closed ||
         Date.parse(row.ends_at) <= now ||
@@ -46,8 +59,8 @@ export function publicMapBeacons(
       )
         return false;
       if (
-        (filters.category !== "All categories" &&
-          row.category !== filters.category) ||
+        (selectedBeaconCategories(filters).length > 0 &&
+          !selectedBeaconCategories(filters).includes(row.category)) ||
         !matchesSelectedCategories(row.category, categories)
       )
         return false;

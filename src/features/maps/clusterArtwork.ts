@@ -10,7 +10,13 @@ import {
   type FriendAvailabilityState,
 } from "@/src/shared/domain";
 import { canViewProfile } from "@/src/features/profile/privacy";
-import { markerIdentity, ownsMapBeacon } from "./markerIdentity";
+import {
+  prepareMapIdentity,
+  beaconMarkerState,
+  markerStateLabel,
+  EMPTY_MARKER_STATE,
+  type BeaconMarkerState,
+} from "./markerIdentity";
 import { formatLocationAge, type ClusterPoint } from "./cluster";
 
 export type ClusterMemberArtwork = {
@@ -19,7 +25,7 @@ export type ClusterMemberArtwork = {
   category: Category;
   label: string;
   owned: boolean;
-  identity: ReturnType<typeof markerIdentity>;
+  markerState: BeaconMarkerState;
   profile?: Profile;
   availability: FriendAvailabilityState;
   age: string;
@@ -39,6 +45,7 @@ export class ClusterArtworkCache {
     data: Data,
     viewer: string | null,
     now: number,
+    lookup = prepareMapIdentity(data, viewer),
   ) {
     const activitiesById = new Map(activities.map((row) => [row.id, row]));
     const profilesById = new Map(profiles.map((row) => [row.id, row]));
@@ -56,20 +63,24 @@ export class ClusterArtworkCache {
         profile = point.kind === "person" ? profilesById.get(id) : undefined;
       const activity =
         point.kind === "beacon" ? activitiesById.get(id) : undefined;
-      const owned = !!activity && ownsMapBeacon(data, activity, viewer);
-      const identity = activity ? markerIdentity(data, activity, viewer) : null;
+      const markerState = activity
+        ? beaconMarkerState(data, activity, lookup, now)
+        : EMPTY_MARKER_STATE;
+      const owned = markerState.owned;
       const availability = profile ? (states.get(id) ?? "unknown") : "unknown";
       const age = profile
         ? (formatLocationAge(locationsById.get(id)?.updated_at ?? null, now) ??
           "now")
         : "";
-      const label = profile?.name ?? activity?.title ?? "Beacon";
+      const label =
+        profile?.name ??
+        `${activity?.title ?? "Beacon"}${markerStateLabel(markerState) ? `, ${markerStateLabel(markerState)}` : ""}`;
       const category = point.category ?? activity?.category ?? "Other";
       const visualRevision = JSON.stringify([
         point.id,
         category,
         owned,
-        identity,
+        markerState,
         availability,
         profile?.avatar_seed,
         profile?.avatar_style,
@@ -90,7 +101,7 @@ export class ClusterArtworkCache {
               category,
               label,
               owned,
-              identity,
+              markerState,
               profile,
               availability,
               age,

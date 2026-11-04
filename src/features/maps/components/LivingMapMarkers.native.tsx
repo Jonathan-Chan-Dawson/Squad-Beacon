@@ -7,7 +7,11 @@ import Svg, {
   RadialGradient,
   Stop,
 } from "react-native-svg";
-import { bloomGeometry, bloomAccessibilityLabel } from "../clusterBloom";
+import {
+  bloomGeometry,
+  bloomAccessibilityLabel,
+  petalBookmarkVisible,
+} from "../clusterBloom";
 import { Marker, Polygon } from "react-native-maps";
 import { AvatarStatusBadge } from "@/src/features/profile/AvatarStatusBadge";
 import { ActivityBadge } from "@/src/features/beacons/ActivityBadge";
@@ -36,6 +40,7 @@ import {
 } from "../nativeMapPresentation";
 import {
   BeaconMarkerArtwork,
+  SavedBookmark,
   FriendMapAvatar,
   useMarkerTracking,
 } from "./BeaconMapMarkers.native";
@@ -49,15 +54,19 @@ type ArtworkProps = {
 const MemberArtwork = React.memo(function MemberArtwork({
   model,
   compact = false,
+  showIdentity = true,
+  showSaved = true,
   categoryColors,
   availabilityColors,
   onImageLoad,
 }: Omit<ArtworkProps, "members"> & {
   model: ClusterMemberArtwork;
   compact?: boolean;
+  showIdentity?: boolean;
+  showSaved?: boolean;
   onImageLoad?: () => void;
 }) {
-  const { colors, resolvedAppearance } = useTheme();
+  const { colors } = useTheme();
   const loaded = useRef<string | null>(null);
   const imageKey = `${model.id}:${model.profile?.avatar_updated_at ?? ""}`;
   const imageLoaded = useCallback(() => {
@@ -69,6 +78,8 @@ const MemberArtwork = React.memo(function MemberArtwork({
   if (model.kind === "beacon" && !compact)
     return (
       <BeaconMarkerArtwork
+        markerState={model.markerState}
+        showSaved={showSaved}
         id={model.id.slice(7)}
         category={model.category}
         categoryColor={categoryColors[model.category]}
@@ -94,7 +105,7 @@ const MemberArtwork = React.memo(function MemberArtwork({
           borderRadius: size / 2,
           borderWidth: 2,
           borderColor: color,
-          backgroundColor: "#FFFFFF",
+          backgroundColor: colors.surface,
           alignItems: "center",
           justifyContent: "center",
         }}
@@ -111,44 +122,14 @@ const MemberArtwork = React.memo(function MemberArtwork({
         {model.kind === "person" && (
           <AvatarStatusBadge state={model.availability} size={8} />
         )}
-        {model.identity && (
+        {showIdentity &&
+          showSaved &&
+          model.markerState.saved &&
+          !model.owned && <SavedBookmark small />}
+        {showIdentity && model.owned && (
           <View
-            accessibilityLabel={model.identity.label}
-            style={{
-              position: "absolute",
-              ...(model.owned ? { left: -2 } : { right: -2 }),
-              bottom: -2,
-              width: 12,
-              height: 12,
-              borderRadius: model.identity.kind === "community" ? 4 : 6,
-              borderWidth: 1,
-              borderColor: colors.white,
-              backgroundColor:
-                model.identity.glyph === "♥"
-                  ? resolvedAppearance === "dark"
-                    ? "#3D2430"
-                    : "#FFF0F5"
-                  : colors.ink,
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-          >
-            <Text
-              style={{
-                color:
-                  model.identity.glyph === "♥"
-                    ? mapIdentityColors.heart[resolvedAppearance]
-                    : colors.white,
-                fontSize: 8,
-              }}
-            >
-              {model.identity.glyph}
-            </Text>
-          </View>
-        )}
-        {model.owned && (
-          <View
-            accessibilityLabel="Your Beacon"
+            pointerEvents="none"
+            accessible={false}
             testID="beacon-ownership-star"
             style={{
               position: "absolute",
@@ -290,7 +271,10 @@ function LivingMapPinComponent({
       anchor={{ x: 0.5, y: 0.5 }}
       zIndex={presentation.owned.length ? 6 : 3}
       tracksViewChanges={tracking}
-      accessibilityLabel={bloomAccessibilityLabel(presentation)}
+      accessibilityLabel={`${bloomAccessibilityLabel(presentation)}. ${members
+        .filter((m) => m.kind === "beacon")
+        .map((m) => m.label)
+        .join("; ")}`}
       accessibilityActions={[
         ...(!explorer
           ? (geometry.friendsOnly ? presentation.people : geometry.primary).map(
@@ -402,6 +386,8 @@ function LivingMapPinComponent({
                 <MemberArtwork
                   model={model}
                   compact={!geometry.fullBeacon}
+                  showIdentity={geometry.markerSize >= 24}
+                  showSaved={petalBookmarkVisible(geometry, index)}
                   categoryColors={categoryColors}
                   availabilityColors={availabilityColors}
                   onImageLoad={loaded}

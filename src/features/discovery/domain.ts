@@ -1,3 +1,4 @@
+import { matchesKnownDiscoveryContext } from "@/src/features/maps/discoveryFriends";
 import { communityTypeLabel } from "@/src/features/social/communityPresentation";
 import type { Activity, Data } from "@/src/shared/types";
 import { friendIds } from "@/src/shared/domain";
@@ -97,6 +98,8 @@ export function filterPublicSummariesForBrowse(
     filters: ExplorationFilters;
     area: ExplorationArea | null;
     now: number;
+    data?: Data;
+    viewerId?: string | null;
   },
 ) {
   const { period, query, categories, filters, area, now } = options;
@@ -108,6 +111,16 @@ export function filterPublicSummariesForBrowse(
   )
     return [];
   return summaries.filter((summary) => {
+    if (
+      !matchesKnownDiscoveryContext(
+        summary.activity_id,
+        filters,
+        options.data
+          ? { data: options.data, viewerId: options.viewerId ?? null, now }
+          : undefined,
+      )
+    )
+      return false;
     const startsAt = Date.parse(summary.starts_at);
     const endsAt = Date.parse(summary.ends_at);
     const active = startsAt <= now && endsAt > now;
@@ -219,7 +232,6 @@ function publicContext(
     area: summary.area_label.trim().toLocaleLowerCase() || null,
   };
 }
-
 
 function activePrimaryAssociation(
   activityId: string,

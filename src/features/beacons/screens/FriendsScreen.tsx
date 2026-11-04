@@ -43,9 +43,7 @@ export default function FriendsScreen() {
   const { colors, tokens } = useDesignTheme();
   const { data } = useBeacon();
   const insets = useSafeAreaInsets();
-  const controller = useSocialFriendsController({
-    showSelectedPeople: true,
-  });
+  const controller = useSocialFriendsController();
   const { friends, filtered, available, loading, userId, selectedIds } =
     controller;
   const [browse, updateBrowse] = useFriendsBrowseState(userId);
@@ -98,14 +96,14 @@ export default function FriendsScreen() {
       list.current?.scrollToOffset({ offset: 0, animated: false });
     }
   }, [browse, restore]);
-  const inBeacons = friends.filter((friend) => friend.beacon).length;
+  const inBeacons = controller.inBeacons;
   const showFriends = category === "All" || category === "Friends";
   const showGroups =
     category !== "Friends" && (category !== "All" || groupsOpen);
   const baseFriends = filterSocialFriends(friends, data, userId, {
     query: "",
     filter: browse.filter,
-    listId: browse.listId,
+    scope: browse.scope,
   });
   const groups = selectableSocialGroups(data, userId)
     .filter(
@@ -119,13 +117,21 @@ export default function FriendsScreen() {
       const matching = nameMatches
         ? members
         : members.filter((friend) =>
-            matchesSearch(browse.query, friend.name, friend.note?.title ?? ""),
+            matchesSearch(
+              browse.query,
+              friend.name,
+              friend.statusText,
+              friend.currentActivityTitle ?? "",
+              friend.currentBeacon?.activity.title ??
+                friend.beacon?.title ??
+                "",
+            ),
           );
       return { ...group, members: matching, nameMatches };
     })
     .filter((group) => group.nameMatches || group.members.length > 0);
   const listName = data.lists.find(
-    (item) => item.id === browse.listId && item.owner_id === userId,
+    (item) => item.id === browse.scope.slice(7) && item.owner_id === userId,
   )?.name;
   const friendControls = (
     <View style={{ gap: 2 }}>
@@ -135,7 +141,25 @@ export default function FriendsScreen() {
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ gap: 4 }}
       >
-        {(["Favorites", "Available", "In a Beacon"] as const).map((value) => (
+        <NavigationFilterChip
+          label="All Friends"
+          selected={browse.scope === "friends" && browse.filter === "All"}
+          onPress={() => {
+            setCategory("Friends");
+            setFriendsOpen(true);
+            updateBrowse({ scope: "friends", filter: "All", query: "" });
+          }}
+        />
+        <NavigationFilterChip
+          label="Favorites"
+          selected={browse.scope === "favorites"}
+          onPress={() =>
+            updateBrowse({
+              scope: browse.scope === "favorites" ? "friends" : "favorites",
+            })
+          }
+        />
+        {(["Available", "In a Beacon"] as const).map((value) => (
           <NavigationFilterChip
             key={value}
             label={value}
@@ -157,11 +181,11 @@ export default function FriendsScreen() {
           }
           plain
         />
-        {browse.listId ? (
+        {browse.scope.startsWith("custom:") ? (
           <HomeAction
             title={`${listName ?? "Private list"} \u00d7`}
             label="Clear list"
-            onPress={() => updateBrowse({ listId: null })}
+            onPress={() => updateBrowse({ scope: "friends" })}
             plain
           />
         ) : null}
@@ -292,7 +316,7 @@ export default function FriendsScreen() {
               </Text>
               {" · "}
               {inBeacons} in Beacons{" · "}
-              {friends.length} friends
+              {controller.scoped.length} friends
             </Text>
           </View>
           <HomeAction
@@ -406,7 +430,7 @@ export default function FriendsScreen() {
                         setCategory(value);
                         setShownGroups(8);
                         if (value === "All")
-                          updateBrowse({ filter: "All", listId: null });
+                          updateBrowse({ filter: "All", scope: "friends" });
                       }}
                     />
                   ))}
@@ -415,12 +439,14 @@ export default function FriendsScreen() {
                   label="Manage Private Lists"
                   onPress={() => setListsOpen(true)}
                   plain
-                  selected={!!browse.listId}
+                  selected={browse.scope.startsWith("custom:")}
                   icon={
                     <List
                       size={20}
                       color={
-                        browse.listId ? colors.accent : colors.textSecondary
+                        browse.scope.startsWith("custom:")
+                          ? colors.accent
+                          : colors.textSecondary
                       }
                     />
                   }
@@ -444,7 +470,7 @@ export default function FriendsScreen() {
                   onPress={() => setFriendsOpen(!friendsOpen)}
                 />
               )}
-              {showFriends && friendsOpen && friendControls}
+              {friendControls}
             </View>
           }
           ListEmptyComponent={
@@ -473,11 +499,10 @@ export default function FriendsScreen() {
           <View
             testID="friends-planning-footer"
             style={{
-              borderTopWidth: 1,
-              borderTopColor: colors.border,
-              backgroundColor: colors.surface,
+              backgroundColor: colors.bg,
               paddingBottom: Math.max(8, insets.bottom),
-              paddingTop: 4,
+              paddingTop: 8,
+              paddingHorizontal: tokens.layout.screenGutter,
             }}
           >
             <View
@@ -486,6 +511,11 @@ export default function FriendsScreen() {
                 maxWidth: tokens.layout.contentMaxWidth,
                 alignSelf: "center",
                 paddingHorizontal: tokens.layout.screenGutter,
+                paddingVertical: 6,
+                borderRadius: 16,
+                borderWidth: 1,
+                borderColor: colors.border,
+                backgroundColor: colors.surface,
                 gap: 4,
               }}
             >
@@ -506,10 +536,7 @@ export default function FriendsScreen() {
         visible={listsOpen}
         onClose={() => setListsOpen(false)}
         onSelect={(selection) => {
-          updateBrowse({
-            listId: selection.startsWith("custom:") ? selection.slice(7) : null,
-            filter: selection === "favorites" ? "Favorites" : "All",
-          });
+          updateBrowse({ scope: selection });
         }}
       />
       {controller.detailSheet}

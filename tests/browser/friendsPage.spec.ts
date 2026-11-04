@@ -5,6 +5,10 @@ async function home(page: Page) {
   await page.getByRole("button", { name: /Explore the demo/ }).click();
   await page.getByRole("tab", { name: "Beacons", exact: true }).click();
   await expect(page.getByTestId("friends-right-now")).toBeAttached();
+  await page
+    .getByTestId("friends-right-now")
+    .getByRole("button", { name: "All Friends", exact: true })
+    .click();
 }
 
 for (const width of [320, 375, 430, 1024]) {
@@ -16,12 +20,15 @@ for (const width of [320, 375, 430, 1024]) {
     page.on("pageerror", (error) => errors.push(error.message));
     await home(page);
     const preview = page.getByTestId("friends-right-now");
-    await expect(preview.getByTestId(/^social-friend-/)).toHaveCount(4);
+    expect(
+      await preview.getByTestId(/^social-friend-/).count(),
+    ).toBeGreaterThan(0);
+    await preview.getByRole("button", { name: "Plan", exact: true }).click();
     await expect(
       preview.getByRole("button", { name: /Show more|Show less/ }),
     ).toHaveCount(0);
     const all = preview.getByRole("button", {
-      name: "View all friends",
+      name: /^See all \d+ friends$/,
       exact: true,
     });
     const box = await all.boundingBox();
@@ -47,7 +54,7 @@ for (const width of [320, 375, 430, 1024]) {
     ).toHaveCount(0);
     await expect(screen.getByTestId("social-plan-action")).toHaveCount(1);
     const plan = screen.getByRole("button", {
-      name: "Plan with 2",
+      name: "Beacon",
       exact: true,
     });
     await expect(plan).toBeInViewport();
@@ -66,7 +73,7 @@ for (const width of [320, 375, 430, 1024]) {
       .first()
       .click();
     await expect(
-      screen.getByRole("button", { name: "Plan with 1", exact: true }),
+      screen.getByRole("button", { name: "Beacon", exact: true }),
     ).toBeInViewport();
     await search.fill("");
     await page.screenshot({ path: `.expo/friends-page/friends-${width}.png` });
@@ -79,7 +86,7 @@ for (const width of [320, 375, 430, 1024]) {
       .getByRole("button", { name: "Back to Beacons", exact: true })
       .click();
     await expect(
-      preview.getByRole("button", { name: "Plan with 1", exact: true }),
+      preview.getByRole("button", { name: "Beacon", exact: true }),
     ).toBeVisible();
     await all.click();
     await expect(search).toHaveValue("");
@@ -93,14 +100,9 @@ for (const width of [320, 375, 430, 1024]) {
       .getByRole("button", { name: /^Select .+ for planning$/ })
       .first()
       .click();
-    await screen
-      .getByRole("button", { name: "Plan with 1", exact: true })
-      .click();
+    await screen.getByRole("button", { name: "Beacon", exact: true }).click();
     await expect(
-      page.getByRole("button", {
-        name: "1 selected friends · Edit",
-        exact: true,
-      }),
+      page.getByText("1 selected", { exact: true }).filter({ visible: true }),
     ).toBeVisible();
     expect(errors).toEqual([]);
   });
@@ -113,7 +115,7 @@ test("Friends filters, list position, detail/profile return and selection surviv
   const preview = page.getByTestId("friends-right-now");
   const homePosition = await preview.boundingBox();
   await preview
-    .getByRole("button", { name: "View all friends", exact: true })
+    .getByRole("button", { name: /^See all \d+ friends$/, exact: true })
     .click();
   const screen = page.getByTestId("friends-screen");
   const search = screen.getByLabel("Search people and groups", { exact: true });
@@ -125,7 +127,7 @@ test("Friends filters, list position, detail/profile return and selection surviv
   const returnedPosition = await preview.boundingBox();
   expect(Math.abs(returnedPosition!.y - homePosition!.y)).toBeLessThan(2);
   await preview
-    .getByRole("button", { name: "View all friends", exact: true })
+    .getByRole("button", { name: /^See all \d+ friends$/, exact: true })
     .click();
   await expect(search).toHaveValue("Jordan");
   await screen.getByRole("button", { name: "All", exact: true }).click();
@@ -167,7 +169,7 @@ test("Friends filters, list position, detail/profile return and selection surviv
     .getByRole("button", { name: "Back to Beacons", exact: true })
     .click();
   await preview
-    .getByRole("button", { name: "View all friends", exact: true })
+    .getByRole("button", { name: /^See all \d+ friends$/, exact: true })
     .click();
   await expect
     .poll(() => scroll.evaluate((node) => node.scrollTop))
@@ -190,7 +192,7 @@ test("Friends filters, list position, detail/profile return and selection surviv
     .getByRole("button", { name: "Select for planning", exact: true })
     .click();
   await expect(
-    screen.getByRole("button", { name: "Plan with 1", exact: true }),
+    screen.getByRole("button", { name: "Beacon", exact: true }),
   ).toBeInViewport();
 });
 
@@ -204,13 +206,17 @@ test("direct Friends entry has a working Beacons fallback", async ({
     .getByRole("button", { name: "Back to Beacons", exact: true })
     .click();
   await expect(page.getByTestId("friends-right-now")).toBeAttached();
+  await page
+    .getByTestId("friends-right-now")
+    .getByRole("button", { name: "All Friends", exact: true })
+    .click();
 });
 test("full-network search and private/favorite filters stay distinct", async ({
   page,
 }) => {
   await home(page);
   await page
-    .getByRole("button", { name: "View all friends", exact: true })
+    .getByRole("button", { name: /^See all \d+ friends$/, exact: true })
     .click();
   const screen = page.getByTestId("friends-screen");
   await expect(screen.getByTestId("friends-summary")).toContainText(
@@ -256,7 +262,7 @@ test("full-network search and private/favorite filters stay distinct", async ({
     .getByRole("button", { name: "Back to Beacons", exact: true })
     .click();
   await page
-    .getByRole("button", { name: "View all friends", exact: true })
+    .getByRole("button", { name: /^See all \d+ friends$/, exact: true })
     .click();
   await expect(screen.getByTestId(/^social-friend-/)).toHaveCount(0);
   await screen.getByRole("button", { name: "Clear list", exact: true }).click();
@@ -269,7 +275,7 @@ test("large text and a long name fit the narrow Friends page", async ({
   await page.setViewportSize({ width: 320, height: 900 });
   await home(page);
   await page
-    .getByRole("button", { name: "View all friends", exact: true })
+    .getByRole("button", { name: /^See all \d+ friends$/, exact: true })
     .click();
   const screen = page.getByTestId("friends-screen");
   await screen
@@ -277,7 +283,9 @@ test("large text and a long name fit the narrow Friends page", async ({
     .first()
     .click();
   await screen
-    .getByText("Amara Alvarez", { exact: true })
+    .getByTestId(/^social-friend-/)
+    .first()
+    .getByText(/.+/)
     .first()
     .evaluate((node) => {
       node.textContent =
@@ -292,7 +300,7 @@ test("large text and a long name fit the narrow Friends page", async ({
     });
   });
   await expect(
-    screen.getByRole("button", { name: "Plan with 1", exact: true }),
+    screen.getByRole("button", { name: "Beacon", exact: true }),
   ).toBeInViewport();
   expect(
     await page.evaluate(

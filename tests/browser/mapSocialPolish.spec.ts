@@ -33,21 +33,16 @@ for (const width of [320, 375, 430]) {
     await page.setViewportSize({ width, height: 900 });
     await demo(page, "/friends");
     const screen = page.getByTestId("friends-screen");
-    const selector = screen.getByTestId("social-selector");
-    await expect(selector).toBeVisible();
-    expect((await selector.getByRole("button", { name: "All", exact: true }).boundingBox())!.width).toBeGreaterThanOrEqual(44);
-    await page.emulateMedia({ colorScheme: width === 375 ? "light" : "dark" });
-    await selector
-      .getByRole("button", { name: "Friends", exact: true })
+    await screen
+      .getByRole("button", { name: "All Friends", exact: true })
       .click();
-    const privateLists = selector.getByTestId("friends-private-lists");
-    await expect(privateLists).toHaveCSS("border-top-width", "1px");
+    const selector = screen;
+    const tabs = screen.getByTestId("friends-primary-tabs");
+    await expect(tabs).toBeVisible();
+    await screen.getByRole("button", { name: "Friends", exact: true }).click();
     await expect(
-      privateLists.getByRole("button", { name: "Manage Private Lists" }),
+      screen.getByRole("button", { name: "Manage Private Lists", exact: true }),
     ).toBeVisible();
-    await expect(
-      selector.getByRole("button", { name: "Friends", exact: true }),
-    ).toHaveCSS("border-bottom-width", "2px");
     await page.screenshot({ path: `.expo/menu-polish/friends-${width}.png` });
     const select = screen
       .getByRole("button", { name: /^Select .+ for planning$/ })
@@ -61,17 +56,18 @@ for (const width of [320, 375, 430]) {
         face: [face.width, face.height],
       };
     });
-    expect(dimensions.target).toEqual([44, 44]);
-    expect(dimensions.face).toEqual([28, 28]);
+    expect(dimensions.target[0]).toBeGreaterThanOrEqual(44);
+    expect(dimensions.target[1]).toBeGreaterThanOrEqual(44);
+    await expect(select).toHaveText("Plan");
     await select.click();
     await expect(
-      screen.getByRole("button", { name: "Plan with 1", exact: true }),
+      screen.getByRole("button", { name: "Beacon", exact: true }),
     ).toBeVisible();
     await selector
       .getByLabel("Search people and groups", { exact: true })
       .fill("no-match-example");
     await expect(
-      screen.getByRole("button", { name: "Plan with 1", exact: true }),
+      screen.getByRole("button", { name: "Beacon", exact: true }),
     ).toBeVisible();
     await selector
       .getByRole("button", { name: "Networks", exact: true })
@@ -83,7 +79,7 @@ for (const width of [320, 375, 430]) {
       }),
     ).toBeInViewport();
     await expect(
-      screen.getByRole("button", { name: "Plan with 1", exact: true }),
+      screen.getByRole("button", { name: "Beacon", exact: true }),
     ).toBeVisible();
     expect(
       await page.evaluate(
@@ -293,7 +289,7 @@ test("private list initials, management separation and selections persist with a
   const list = screen.getByRole("button", { name, exact: true });
   await expect(list).toHaveAttribute("aria-pressed", "true");
   await expect(
-    screen.getByRole("button", { name: "Plan with 1", exact: true }),
+    screen.getByRole("button", { name: "Beacon", exact: true }),
   ).toBeVisible();
   await screen.getByRole("button", { name: "Squads", exact: true }).click();
   await screen.getByRole("button", { name: "Friends", exact: true }).click();

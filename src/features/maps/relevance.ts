@@ -9,6 +9,7 @@ export function deriveMapPointPriorities(
   activityIds: string[],
   personIds: string[],
   now: number,
+  personalized = true,
 ): Record<string, MapPointPriority> {
   const priorities: Record<string, MapPointPriority> = {};
   for (const activityId of activityIds) {
@@ -20,9 +21,9 @@ export function deriveMapPointPriorities(
         (rsvp) => rsvp.activity_id === activity.id && rsvp.status === "going",
       ).length + 1;
     priorities[`beacon:${activity.id}`] = {
-      tier: beaconDiscoveryTier(data, activity, viewerId, now),
+      tier: beaconDiscoveryTier(data, activity, viewerId, now, personalized),
       affinity:
-        Number(beaconInterestMatch(data, activity, viewerId)) +
+        Number(personalized && beaconInterestMatch(data, activity, viewerId)) +
         (activity.owner_id === viewerId ? 100 : 0),
       attendance,
     };

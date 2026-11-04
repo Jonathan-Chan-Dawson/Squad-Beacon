@@ -1,3 +1,11 @@
+import { mapAvailabilityColors ,
+  categoryMarkerGlyphs,
+  visibleFriendLabels,
+  ownsMapBeacon,
+  prepareMapIdentity,
+  beaconMarkerState,
+} from "../markerIdentity";
+import { isBeaconLive } from "@/src/features/beacons/beaconLive";
 import Svg, { Path as CountPath } from "react-native-svg";
 import {
   CLUSTER_COUNT_PATHS,
@@ -7,11 +15,7 @@ import {
 } from "../clusterLayout";
 import { ClusterArtworkCache } from "../clusterArtwork";
 import { bloomGeometry } from "../clusterBloom";
-import {
-  categoryMarkerGlyphs,
-  visibleFriendLabels,
-  ownsMapBeacon,
-} from "../markerIdentity";
+
 import {
   nativeMapMode,
   MapPresentationCache,
@@ -115,18 +119,10 @@ function nativeMapZoom(longitudeDelta: number, width: number) {
   );
 }
 
-function isNowBeacon(activity: MapProps["activities"][number], now: number) {
-  return (
-    activity.status === "scheduled" &&
-    Date.parse(activity.starts_at) <= now &&
-    Date.parse(activity.ends_at) > now
-  );
-}
-
 function mapTimeChip(activity: MapProps["activities"][number], now: number) {
   const startsAt = Date.parse(activity.starts_at);
   const endsAt = Date.parse(activity.ends_at);
-  if (startsAt <= now && endsAt > now)
+  if (isBeaconLive(activity, now))
     return `${Math.max(1, Math.ceil((endsAt - now) / 60_000))}m left`;
   if (!Number.isFinite(startsAt)) return "";
   return new Date(startsAt).toLocaleTimeString([], {
@@ -161,6 +157,7 @@ export default function BeaconMap({
   friendsProminent = false,
   onMapTap,
   onViewportChange,
+  onCameraCommandSettled,
   onBearingChange,
   explorationTarget,
   onOptions,
@@ -179,11 +176,54 @@ export default function BeaconMap({
 }: MapProps) {
   const { data: identityData, userId: identityViewer } = useBeacon();
   const { colors, resolvedAppearance } = useTheme();
-  const { categories, availability } = useDesignTheme();
+  const { categories } = useDesignTheme();
 
   const map = useRef<MapView>(null);
-  const projectionBusy = useRef(false);
   const gestureActive = useRef(false);
+  const cameraSettledCallback = useRef(onCameraCommandSettled);
+  useEffect(() => {
+    cameraSettledCallback.current = onCameraCommandSettled;
+  }, [onCameraCommandSettled]);
+  const pendingCameraCommand = useRef<{
+    revision: number;
+    center: { latitude: number; longitude: number };
+    zoom: number;
+  } | null>(null);
+  useEffect(
+    () => () => {
+      pendingCameraCommand.current = null;
+    },
+    [],
+  );
+  const settledZoom = useRef<number | null>(null);
+  const settleCameraCommand = useCallback(async (regionZoom?: number) => {
+    const pending = pendingCameraCommand.current;
+    if (!pending || !map.current || gestureActive.current) return;
+    try {
+      const camera = await map.current.getCamera();
+      if (pendingCameraCommand.current !== pending || gestureActive.current)
+        return;
+      if (
+        Math.abs(camera.center.latitude - pending.center.latitude) < 0.0001 &&
+        Math.abs(
+          ((camera.center.longitude - pending.center.longitude + 540) % 360) -
+            180,
+        ) < 0.0001 &&
+        Math.abs(
+          (Platform.OS === "ios"
+            ? (regionZoom ?? settledZoom.current ?? camera.zoom ?? -100)
+            : (camera.zoom ?? regionZoom ?? settledZoom.current ?? -100)) -
+            pending.zoom,
+        ) < 0.15
+      ) {
+        pendingCameraCommand.current = null;
+        cameraSettledCallback.current?.(pending.revision, Date.now());
+      }
+    } catch {
+      /* A subsequent region completion can retry while the map remains mounted. */
+    }
+  }, []);
+  const projectionBusy = useRef(false);
   const suppressMapPressUntil = useRef(0);
   const [ready, setReady] = useState(false);
   const [pulsePoints, setPulsePoints] = useState<ProjectedPulse[]>([]);
@@ -201,6 +241,20 @@ export default function BeaconMap({
   const { height } = useWindowDimensions();
   const { showAvatars } = usePreferences();
   const now = useNow();
+  const identityLookup = useMemo(
+    () => prepareMapIdentity(identityData, identityViewer),
+    [identityData, identityViewer],
+  );
+  const markerStates = useMemo(
+    () =>
+      new Map(
+        activities.map((a) => [
+          a.id,
+          beaconMarkerState(identityData, a, identityLookup, now),
+        ]),
+      ),
+    [activities, identityData, identityLookup, now],
+  );
   const reducedMotion = useReducedMotion();
   const categoryColors = useMemo(
     () =>
@@ -289,7 +343,7 @@ export default function BeaconMap({
     (id: string) => latestSelectionActions.current.onPerson(id),
     [],
   );
-  const appearanceKey = `${resolvedAppearance}:${colors.bg}:${colors.green}`;
+  const appearanceKey = `${identityViewer}:${resolvedAppearance}:${colors.bg}:${colors.green}`;
   const mapPadding = {
     top: viewportInsets?.top ?? (fullScreen ? controlsTop : 10),
     right: viewportInsets?.right ?? 10,
@@ -391,6 +445,7 @@ export default function BeaconMap({
     if (appliedControlRevision.current === controlCommand.revision) return;
     const currentMap = map.current;
     if (!currentMap) return;
+    pendingCameraCommand.current = null;
     if (controlCommand.kind === "north") {
       // A partial camera update preserves center, zoom and pitch.
       currentMap.animateCamera({ heading: 0 }, { duration: 180 });
@@ -399,11 +454,41 @@ export default function BeaconMap({
     }
 
     if (controlCommand.kind === "focus" && controlCommand.coordinates?.[0]) {
-      currentMap.animateCamera(
-        { center: controlCommand.coordinates[0], zoom: 16 },
-        { duration: reducedMotion ? 0 : 180 },
+      const zoom = Math.max(
+        0,
+        Math.min(MAP_MAX_ZOOM, controlCommand.zoom ?? 16),
       );
+      if (controlCommand.notifySettled)
+        pendingCameraCommand.current = {
+          revision: controlCommand.revision,
+          center: controlCommand.coordinates[0],
+          zoom,
+        };
+      const duration =
+        reducedMotion || controlCommand.animate === false
+          ? 0
+          : (controlCommand.durationMs ?? 180);
+      if (Platform.OS === "ios" && controlCommand.zoom != null) {
+        const longitudeDelta = (mapSize.width * 360) / (256 * 2 ** zoom);
+        currentMap.animateToRegion(
+          {
+            ...controlCommand.coordinates[0],
+            longitudeDelta,
+            latitudeDelta:
+              ((longitudeDelta * mapSize.height) / Math.max(1, mapSize.width)) *
+              Math.cos(
+                (controlCommand.coordinates[0].latitude * Math.PI) / 180,
+              ),
+          },
+          duration,
+        );
+      } else
+        currentMap.animateCamera(
+          { center: controlCommand.coordinates[0], zoom },
+          { duration },
+        );
       appliedControlRevision.current = controlCommand.revision;
+      void settleCameraCommand(); // Also acknowledges no-op and immediate camera moves.
       return;
     }
     if (controlCommand.kind === "restore" && controlCommand.camera) {
@@ -415,7 +500,9 @@ export default function BeaconMap({
           latitudeDelta: bounds.north - bounds.south,
           longitudeDelta: bounds.east - bounds.west,
         },
-        180,
+        reducedMotion || controlCommand.animate === false
+          ? 0
+          : (controlCommand.durationMs ?? 180),
       );
       appliedControlRevision.current = controlCommand.revision;
       return;
@@ -457,6 +544,9 @@ export default function BeaconMap({
     );
     appliedControlRevision.current = controlCommand.revision;
   }, [
+    settleCameraCommand,
+    mapSize.height,
+    mapSize.width,
     controlCommand,
     reducedMotion,
     coordinates,
@@ -626,6 +716,7 @@ export default function BeaconMap({
         identityData,
         identityViewer,
         now,
+        identityLookup,
       ),
     [
       artworkCache,
@@ -636,17 +727,18 @@ export default function BeaconMap({
       availabilityActivities,
       identityData,
       identityViewer,
+      identityLookup,
       now,
     ],
   );
   const availabilityColors = useMemo(
     () => ({
-      available: availability.available.color,
-      unavailable: availability.unavailable.color,
-      "ending-soon": availability.endingSoon.color,
-      unknown: availability.unknown.color,
+      available: mapAvailabilityColors.available,
+      unavailable: mapAvailabilityColors.unavailable,
+      "ending-soon": mapAvailabilityColors.endingSoon,
+      unknown: mapAvailabilityColors.unknown,
     }),
-    [availability],
+    [],
   );
   const clusterAppearanceKey = `${appearanceKey}:${JSON.stringify(categoryColors)}:${JSON.stringify(availabilityColors)}`;
   const modelsFor = (item: NativeMapPresentation) =>
@@ -772,11 +864,79 @@ export default function BeaconMap({
         const activity = activities.find(
           (item) => item.id === place.activity_id,
         );
-        return !!activity && isNowBeacon(activity, now);
+        return (
+          !!activity &&
+          markerStates.get(activity.id)?.live === true &&
+          (!selectedActivityId || selectedActivityId === activity.id) &&
+          (!contextPoints.some((p) => p.activityId) ||
+            contextPoints.some((p) => p.activityId === activity.id))
+        );
       })
+      .sort((a, b) => a.activity_id.localeCompare(b.activity_id))
       .slice(0, availableHaloSlots)
       .map((place) => `beacon:${place.activity_id}`),
   );
+  const haloRevision = JSON.stringify([
+    identityViewer,
+    zoom,
+    region,
+    mapSize,
+    selectedActivityId,
+    [...nowHaloIds],
+    pins
+      .filter((p) => nowHaloIds.has(`beacon:${p.activity_id}`))
+      .map((p) => [p.activity_id, p.latitude, p.longitude])
+      .sort((a, b) => String(a[0]).localeCompare(String(b[0]))),
+    contextPoints
+      .map((p) => [p.activityId, p.suggestion])
+      .sort((a, b) => String(a[0]).localeCompare(String(b[0]))),
+  ]);
+  const [haloProjection, setHaloProjection] = useState<{
+    revision: string;
+    centers: Record<string, { latitude: number; longitude: number }>;
+  }>({ revision: "", centers: {} });
+  useEffect(() => {
+    if (!ready || cameraMoving || !map.current) return;
+    let active = true;
+    const view = map.current;
+    void Promise.all(
+      pins
+        .filter((p) => nowHaloIds.has(`beacon:${p.activity_id}`))
+        .map(async (place) => {
+          const coordinate = {
+            latitude: place.latitude!,
+            longitude: place.longitude!,
+          };
+          const point = await view.pointForCoordinate(coordinate);
+          const hasChip =
+            zoom >= 15 ||
+            contextPoints.some((p) => p.activityId === place.activity_id);
+          const isSelected = selectedActivityId === place.activity_id;
+          // Anchor and scale match BeaconMapPin/MarkerContent; the artwork face is 40px.
+          const height = hasChip ? 70 : 56;
+          const faceY =
+            height / 2 + (20 - height / 2) * (isSelected ? 1.25 : 1);
+          const center = await view.coordinateForPoint({
+            x: point.x,
+            y: point.y + faceY - height * (hasChip ? 0.82 : 0.92),
+          });
+          return [place.activity_id, center] as const;
+        }),
+    )
+      .then((entries) => {
+        if (active)
+          setHaloProjection({
+            revision: haloRevision,
+            centers: Object.fromEntries(entries),
+          });
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+    // The revision contains the eligible set, coordinates and settled camera, not the clock tick.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [haloRevision, cameraMoving, ready]);
   async function pressCluster(
     group: MapPointGroup,
     areaSummary = false,
@@ -874,16 +1034,23 @@ export default function BeaconMap({
               details?.isGesture ?? gestureActive.current,
             );
           gestureActive.current = false;
+          settledZoom.current = nativeMapZoom(
+            nextRegion.longitudeDelta,
+            mapSize.width,
+          );
+          void settleCameraCommand(settledZoom.current);
           onGestureChange?.(false);
           void updateAnchor();
         }}
         onPanDrag={() => {
+          pendingCameraCommand.current = null;
           gestureActive.current = true;
           onGestureChange?.(true);
         }}
         onRegionChange={(next, details) => {
           setCameraMoving(true);
           if (details?.isGesture) {
+            pendingCameraCommand.current = null;
             gestureActive.current = true;
             onGestureChange?.(true);
           }
@@ -1073,14 +1240,20 @@ export default function BeaconMap({
             const activity = activities.find(
               (item) => item.id === place.activity_id,
             );
-            if (!activity || !isNowBeacon(activity, now)) return null;
+            if (
+              !activity ||
+              !markerStates.get(activity.id)?.live ||
+              haloProjection.revision !== haloRevision ||
+              !haloProjection.centers[activity.id]
+            )
+              return null;
             return (
               <NowBeaconHalo
                 key={`now-halo:${activity.id}`}
-                coordinate={{
-                  latitude: place.latitude!,
-                  longitude: place.longitude!,
-                }}
+                coordinate={haloProjection.centers[activity.id]}
+                zoom={zoom}
+                selected={selectedActivityId === activity.id}
+                paused={cameraMoving || !!onPick}
                 color={categoryColors[activity.category]}
               />
             );
@@ -1130,6 +1303,7 @@ export default function BeaconMap({
                   latitude: place.latitude!,
                   longitude: place.longitude!,
                 }}
+                markerState={markerStates.get(activity.id)!}
                 category={activity.category}
                 categoryColor={categoryColors[activity.category]}
                 selected={selectedPin}
@@ -1169,7 +1343,7 @@ export default function BeaconMap({
                 key={`person:${location.owner_id}`}
                 location={location}
                 profile={profile}
-                availabilityColor={availability[availabilityKey].color}
+                availabilityColor={mapAvailabilityColors[availabilityKey]}
                 availabilityLabel={ownerAvailability.replace("-", " ")}
                 showLabel={friendLabelIds.has(profile.id)}
                 ageLabel={ageLabel}
