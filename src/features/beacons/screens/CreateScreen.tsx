@@ -1744,6 +1744,12 @@ function CreateEditor() {
       scrollPositionRef={scrollPosition}
       create={false}
       headerAction={
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+        {!templateEditor && <Button
+          compact
+          title="See templates"
+          onPress={() => { void checkpoint().then(() => router.push({ pathname: "/create", params: { templates: "mine" } })); }}
+        />}
         <Button
           compact
           secondary
@@ -1751,6 +1757,7 @@ function CreateEditor() {
           disabled={savingDraft}
           onPress={() => void saveDraft()}
         />
+        </View>
       }
       footer={
         <View style={{ flexDirection: "row", gap: 8 }}>

@@ -101,7 +101,11 @@ export function MapControlPopover({
           <X size={17} color={colors.ink} />
         </Pressable>
       </View>
-      <ScrollView style={{ flexShrink: 1 }} contentContainerStyle={{ gap: 5 }}>
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        style={{ flexShrink: 1, scrollbarWidth: "none" }}
+        contentContainerStyle={{ gap: 0 }}
+      >
         {children}
       </ScrollView>
     </Animated.View>

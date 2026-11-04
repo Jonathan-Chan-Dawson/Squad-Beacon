@@ -32,7 +32,7 @@ for (const width of [320, 390, 1024]) {
           name: /^See all \d+ friends$/,
         });
         await expect(
-          rail.getByRole("button", { name: "★ Favorites", exact: true }),
+          rail.getByRole("button", { name: "All Friends", exact: true }),
         ).toHaveAttribute("aria-pressed", "true");
         const summary = await rail
           .getByTestId("your-people-summary")
@@ -61,7 +61,7 @@ for (const width of [320, 390, 1024]) {
           .click();
         await expect(
           rail.getByTestId("ping-audience-explanation"),
-        ).toContainText("not the selected people");
+        ).toContainText("Ping audience is chosen in its editor");
         await rail
           .getByRole("button", { name: "★ Favorites", exact: true })
           .click();
@@ -172,7 +172,7 @@ test("directory search never narrows homepage counts; private lists carry across
   await page
     .getByRole("dialog", { name: "Private Lists", exact: true })
     .getByRole("button", {
-      name: "Filter people by Close Friends",
+      name: "Close Friends",
       exact: true,
     })
     .click();

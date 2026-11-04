@@ -29,7 +29,7 @@ import { useBeacon } from "@/src/shared/store";
 import { usePreferences } from "@/src/shared/preferences";
 import { useNow } from "@/src/shared/useNow";
 import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
-import { PrivateListsSheet } from "@/src/features/people/components/PrivateListsSheet";
+import { ActionRow, ContextMenu } from "@/src/shared/ContextMenu";
 import { StatusViewer } from "./StatusViewer";
 import {
   availabilityLabel,
@@ -141,7 +141,7 @@ export function useSocialFriendsController() {
   };
   const eligible = new Set(eligibleCreationInvitees(data, userId));
   const action = selectedIds.length ? (
-    <View testID="social-plan-action" style={{ gap: 6, paddingVertical: 6 }}>
+    <View testID="social-plan-action" style={{ gap: 8, paddingVertical: 6 }}>
       <View
         style={{
           flexDirection: "row",
@@ -219,17 +219,11 @@ export function useSocialFriendsController() {
           );
         })}
       </ScrollView>
-      <Text
-        testID="ping-audience-explanation"
-        style={{ color: colors.textSecondary, ...tokens.type.caption }}
-      >
-        Ping uses the audience you choose in its editor, not the selected
-        people. Your selection stays for a Beacon.
-      </Text>
       <View style={{ flexDirection: "row", gap: 8 }}>
         <View style={{ flex: 1 }}>
           <HomeAction
             title="Ping"
+            prominent
             icon={<CircleHelp size={18} color={colors.textSecondary} />}
             stretch
             outlined
@@ -244,6 +238,8 @@ export function useSocialFriendsController() {
         <View style={{ flex: 1 }}>
           <HomeAction
             title="Beacon"
+            outlined
+            prominent
             icon={
               <Radio size={18} color={tokens.availability.available.color} />
             }
@@ -253,6 +249,13 @@ export function useSocialFriendsController() {
           />
         </View>
       </View>
+      <Text
+        testID="ping-audience-explanation"
+        style={{ color: colors.textSecondary, ...tokens.type.caption }}
+      >
+        Ping audience is chosen in its editor. Selected people are kept for a
+        Beacon.
+      </Text>
     </View>
   ) : null;
   const row = (friend: SocialFriend) => (
@@ -412,6 +415,16 @@ export function SocialFriendRow({
         gap: 8,
         minHeight: 72,
         paddingVertical: 8,
+        paddingHorizontal: 6,
+        marginVertical: 2,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: selected
+          ? tokens.availability.available.color
+          : "transparent",
+        backgroundColor: selected
+          ? tokens.availability.available.tint
+          : "transparent",
       }}
     >
       {showAvatars && (
@@ -467,9 +480,12 @@ export function SocialFriendRow({
           (selected ? "Deselect " : "Select ") + friend.name + " for planning"
         }
         selected={selected}
+        primary={selected}
         tone={{
-          color: colors.textSecondary,
-          tint: "transparent",
+          color: selected
+            ? tokens.availability.available.onColor
+            : colors.textSecondary,
+          tint: selected ? tokens.availability.available.color : "transparent",
         }}
         onPress={() => toggle(friend.id)}
       />
@@ -522,7 +538,9 @@ function FriendCard({
         borderColor: selected
           ? tokens.availability.available.color
           : colors.border,
-        backgroundColor: colors.surfaceRaised,
+        backgroundColor: selected
+          ? tokens.availability.available.tint
+          : colors.surfaceRaised,
         opacity: pressed ? 0.7 : 1,
       })}
     >
@@ -580,6 +598,7 @@ export function SocialFriendsSection() {
   const [browse, updateBrowse] = useFriendsBrowseState(userId);
   const [planning, setPlanning] = useState(false);
   const [listsOpen, setListsOpen] = useState(false);
+  const listsAnchor = useRef<View>(null);
   const [visit, setVisit] = useState(0);
   useFocusEffect(
     useCallback(() => {
@@ -618,7 +637,7 @@ export function SocialFriendsSection() {
         )?.name
       : undefined;
   return (
-    <View testID="friends-right-now" style={{ gap: 6, paddingVertical: 6 }}>
+    <View testID="friends-right-now" style={{ gap: 2, paddingVertical: 6 }}>
       <View
         style={{
           flexDirection: "row",
@@ -653,53 +672,94 @@ export function SocialFriendsSection() {
             planning ? (
               <Check size={15} color={tokens.availability.available.color} />
             ) : (
-              <UsersRound
-                size={15}
-                color={tokens.availability.available.color}
-              />
+              <UsersRound size={15} color={colors.textSecondary} />
             )
           }
           selected={planning}
-          tone={tokens.availability.available}
+          tone={{
+            color: planning
+              ? tokens.availability.available.color
+              : colors.textSecondary,
+            tint: "transparent",
+          }}
           onPress={() => setPlanning(!planning)}
         />
       </View>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 4 }}>
-        <HomeAction
-          title="All Friends"
-          selected={browse.scope === "friends"}
-          plain
-          onPress={() => updateBrowse({ scope: "friends" })}
-        />
-        <HomeAction
-          title="★ Favorites"
-          selected={browse.scope === "favorites"}
-          plain
-          onPress={() => updateBrowse({ scope: "favorites" })}
-        />
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={listName ? "Lists: " + listName : "Lists"}
-          accessibilityState={{ selected: browse.scope.startsWith("custom:") }}
-          onPress={() => setListsOpen(true)}
-          style={{
-            minHeight: 44,
-            minWidth: 44,
-            maxWidth: 130,
-            justifyContent: "center",
-            paddingHorizontal: 4,
-          }}
-        >
-          <Text
-            numberOfLines={1}
+      <View
+        style={{
+          flexDirection: "row",
+          flexWrap: "wrap",
+          columnGap: 18,
+          rowGap: 0,
+          marginTop: -4,
+        }}
+      >
+        {(
+          [
+            { scope: "friends", label: "All Friends" },
+            { scope: "favorites", label: "★ Favorites" },
+          ] as const
+        ).map(({ scope, label }) => (
+          <Pressable
+            key={scope}
+            accessibilityRole="button"
+            accessibilityLabel={label}
+            accessibilityState={{ selected: browse.scope === scope }}
+            aria-pressed={browse.scope === scope}
+            onPress={() => updateBrowse({ scope })}
             style={{
-              color: listName ? colors.accent : colors.textSecondary,
-              ...tokens.type.caption,
+              minHeight: 44,
+              justifyContent: "center",
+              borderBottomWidth: 2,
+              borderBottomColor:
+                browse.scope === scope ? colors.accent : "transparent",
             }}
           >
-            {listName ?? "Lists"} ▾
-          </Text>
-        </Pressable>
+            <Text
+              style={{
+                color:
+                  browse.scope === scope
+                    ? colors.textPrimary
+                    : colors.textSecondary,
+                ...tokens.type.caption,
+                fontWeight: browse.scope === scope ? "600" : "400",
+              }}
+            >
+              {label}
+            </Text>
+          </Pressable>
+        ))}
+        <View ref={listsAnchor} collapsable={false} style={{ maxWidth: 130 }}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={listName ? "Lists: " + listName : "Lists"}
+            accessibilityState={{
+              selected: browse.scope.startsWith("custom:"),
+              expanded: listsOpen,
+            }}
+            onPress={() => setListsOpen(!listsOpen)}
+            style={{
+              minHeight: 44,
+              minWidth: 44,
+              justifyContent: "center",
+              borderBottomWidth: 2,
+              borderBottomColor: browse.scope.startsWith("custom:")
+                ? colors.accent
+                : "transparent",
+            }}
+          >
+            <Text
+              numberOfLines={1}
+              style={{
+                color: listName ? colors.textPrimary : colors.textSecondary,
+                ...tokens.type.caption,
+                fontWeight: listName ? "600" : "400",
+              }}
+            >
+              {listName ?? "Lists"} ▾
+            </Text>
+          </Pressable>
+        </View>
       </View>
       <Text
         testID="your-people-summary"
@@ -714,33 +774,25 @@ export function SocialFriendsSection() {
           style={{
             flexDirection: "row",
             alignItems: "center",
-            gap: 8,
-            padding: 10,
-            borderRadius: 10,
-            backgroundColor: tokens.availability.available.tint,
-            borderWidth: 1,
-            borderColor: tokens.availability.available.color,
+            gap: 6,
+            paddingVertical: 6,
           }}
         >
-          <UsersRound size={18} color={tokens.availability.available.color} />
-          <View style={{ flex: 1, gap: 2 }}>
-            <Text
-              style={{
-                color: colors.textPrimary,
-                ...tokens.type.secondary,
-                fontWeight: "600",
-              }}
-            >
-              You’re planning
-              {selectedIds.length ? ` · ${selectedIds.length} selected` : ""}
-            </Text>
-            <Text
-              style={{ color: colors.textSecondary, ...tokens.type.caption }}
-            >
-              Tap people to add them · Scroll for more
-            </Text>
-          </View>
-          <ArrowRight size={16} color={tokens.availability.available.color} />
+          <UsersRound size={16} color={colors.textSecondary} />
+          <Text
+            style={{
+              flex: 1,
+              color: colors.textPrimary,
+              ...tokens.type.caption,
+              fontWeight: "500",
+            }}
+          >
+            Select your people
+          </Text>
+          <Text style={{ color: colors.textSecondary, ...tokens.type.caption }}>
+            Scroll for more
+          </Text>
+          <ArrowRight size={14} color={colors.textSecondary} />
         </View>
       ) : null}
       <FlatList
@@ -806,11 +858,48 @@ export function SocialFriendsSection() {
           onPress={() => setPlanning(true)}
         />
       ) : null}
-      <PrivateListsSheet
+      <ContextMenu
+        title="Private Lists"
+        mode="dropdown"
         visible={listsOpen}
+        anchorRef={listsAnchor}
         onClose={() => setListsOpen(false)}
-        onSelect={(scope) => updateBrowse({ scope })}
-      />
+      >
+        {data.viewer_id === userId &&
+          data.lists
+            .filter((list) => list.owner_id === userId)
+            .map((list) => (
+              <ActionRow
+                key={list.id}
+                label={list.name}
+                selected={browse.scope === "custom:" + list.id}
+                onPress={() => {
+                  updateBrowse({
+                    scope: ("custom:" + list.id) as `custom:${string}`,
+                  });
+                  setListsOpen(false);
+                }}
+              />
+            ))}
+        {!data.lists.some((list) => list.owner_id === userId) && (
+          <Text
+            style={{
+              padding: 12,
+              color: colors.textSecondary,
+              ...tokens.type.caption,
+            }}
+          >
+            No private lists yet.
+          </Text>
+        )}
+        <ActionRow
+          label="Manage Private Lists"
+          onPress={() => {
+            setListsOpen(false);
+            router.push("/friends");
+          }}
+        />
+      </ContextMenu>
       {controller.detailSheet}
     </View>
   );

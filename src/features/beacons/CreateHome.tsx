@@ -104,11 +104,12 @@ export function CreateHome({
     fromMap?: string;
     timezone?: string;
     savedDraft?: string;
+    templates?: string;
   }>();
   const context = handoffContext ?? creationHandoffParams(routeContext);
   const { styles, colors } = useTheme();
-  const [browser, setBrowser] = useState(false);
-  const [source, setSource] = useState("Browse");
+  const [browser, setBrowser] = useState(routeContext.templates === "mine");
+  const [source, setSource] = useState(routeContext.templates === "mine" ? "My Templates" : "Browse");
   const [query, setQuery] = useState("");
   const [family, setFamily] = useState<TemplateFamily | null>(null);
   const [launcherError] = useState("");

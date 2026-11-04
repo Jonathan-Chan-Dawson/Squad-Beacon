@@ -58,9 +58,9 @@ test("browsing and restoration cannot leak across accounts or change signed-out 
 
 test("scope defaults initialize once, after loading, without overriding explicit choices", () => {
   initializeFriendsScope("default-favorites", true, []);
-  assert.equal(friendsBrowseState("default-favorites").scope, "favorites");
+  assert.equal(friendsBrowseState("default-favorites").scope, "friends");
   initializeFriendsScope("default-favorites", false, []);
-  assert.equal(friendsBrowseState("default-favorites").scope, "favorites");
+  assert.equal(friendsBrowseState("default-favorites").scope, "friends");
   initializeFriendsScope("default-all", false, []);
   assert.equal(friendsBrowseState("default-all").scope, "friends");
   updateFriendsBrowseState("chosen-during-load", { scope: "friends" });

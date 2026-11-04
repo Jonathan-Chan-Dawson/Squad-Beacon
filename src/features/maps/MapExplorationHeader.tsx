@@ -11,6 +11,15 @@ import {
   useWindowDimensions,
 } from "react-native";
 import {
+  BookOpen,
+  Dumbbell,
+  Gamepad2,
+  Palette,
+  Coffee,
+  Sparkles,
+  Users,
+  Star,
+  List,
   Check,
   ChevronDown,
   Dices,
@@ -20,6 +29,7 @@ import {
   X,
   Zap,
 } from "lucide-react-native";
+import { useDesignTheme } from "@/src/theme";
 import { GlassBar } from "@/src/shared/design-system";
 import { useTheme } from "@/src/shared/ui";
 import type { Category } from "@/src/shared/types";
@@ -101,6 +111,15 @@ export function MapExplorationHeader({
   onHeightChange(height: number): void;
 }) {
   const { colors } = useTheme();
+  const categoryTokens = useDesignTheme().categories;
+  const categoryIcons = {
+    Study: BookOpen,
+    Fitness: Dumbbell,
+    Gaming: Gamepad2,
+    Creative: Palette,
+    Social: Coffee,
+    Other: Sparkles,
+  };
   const size = useWindowDimensions();
   const friendsAnchor = useRef<View>(null),
     interestsAnchor = useRef<View>(null);
@@ -135,15 +154,11 @@ export function MapExplorationHeader({
       onMenuChange(next);
     });
   }
-  const chipStyle = (selected: boolean) => ({
+  const chipStyle = (_selected: boolean) => ({
     minHeight: 44,
     flexShrink: 0 as const,
-    borderRadius: 22,
-    paddingHorizontal: 12,
+    paddingHorizontal: 8,
     justifyContent: "center" as const,
-    backgroundColor: selected ? colors.primaryContainer + "EB" : colors.surface + "DF",
-    borderWidth: 1,
-    borderColor: selected ? colors.primary : colors.outline,
   });
   const iconStyle = (selected: boolean) => ({
     width: 44,
@@ -151,7 +166,9 @@ export function MapExplorationHeader({
     borderRadius: 22,
     borderWidth: 1,
     borderColor: selected ? colors.primary : colors.outline,
-    backgroundColor: selected ? colors.primaryContainer + "EB" : colors.surface + "DF",
+    backgroundColor: selected
+      ? colors.primaryContainer + "EB"
+      : colors.surface + "DF",
     alignItems: "center" as const,
     justifyContent: "center" as const,
     flexShrink: 0 as const,
@@ -273,15 +290,6 @@ export function MapExplorationHeader({
           <View
             style={{
               flexDirection: "row",
-              borderRadius: 22,
-              overflow: "hidden",
-              backgroundColor: filters.friendScope
-                ? colors.primaryContainer
-                : colors.surface + "DF",
-              borderWidth: 1,
-              borderColor: filters.friendScope
-                ? colors.primary
-                : colors.outline,
             }}
           >
             <Pressable
@@ -410,12 +418,18 @@ export function MapExplorationHeader({
             accessibilityState={{ selected: nowSelected }}
             aria-pressed={nowSelected}
             onPress={() => onQuickFilter("Now")}
-            style={iconStyle(nowSelected)}
+            style={{
+              ...iconStyle(nowSelected),
+              borderColor: nowSelected ? "#F3C917" : colors.outline,
+              backgroundColor: nowSelected
+                ? "#F3C91730"
+                : colors.surface + "DF",
+            }}
           >
             <Zap
               size={18}
-              color={nowSelected ? colors.primary : colors.ink}
-              fill={nowSelected ? colors.primary : "none"}
+              color="#E9B900"
+              fill={nowSelected ? "#F3C917" : "none"}
             />
           </Pressable>
           <Pressable
@@ -517,7 +531,30 @@ export function MapExplorationHeader({
                         paddingHorizontal: 8,
                       }}
                     >
-                      <Text style={{ color: colors.ink }}>{choice.label}</Text>
+                      {React.createElement(
+                        choice.id === "friends"
+                          ? Users
+                          : choice.id === "favorites"
+                            ? Star
+                            : List,
+                        {
+                          size: 18,
+                          color:
+                            choice.id === "favorites"
+                              ? colors.warning
+                              : colors.primary,
+                        },
+                      )}
+                      <Text
+                        style={{
+                          color: colors.ink,
+                          flex: 1,
+                          marginLeft: 10,
+                          fontSize: 13,
+                        }}
+                      >
+                        {choice.label}
+                      </Text>
                       {filters.friendScope === choice.id && (
                         <Check size={17} color={colors.primary} />
                       )}
@@ -549,7 +586,20 @@ export function MapExplorationHeader({
                           paddingHorizontal: 8,
                         }}
                       >
-                        <Text style={{ color: colors.ink }}>{category}</Text>
+                        {React.createElement(categoryIcons[category], {
+                          size: 18,
+                          color: categoryTokens[category].color,
+                        })}
+                        <Text
+                          style={{
+                            color: colors.ink,
+                            flex: 1,
+                            marginLeft: 10,
+                            fontSize: 13,
+                          }}
+                        >
+                          {category}
+                        </Text>
                         {categories.includes(category) && (
                           <Check size={17} color={colors.primary} />
                         )}
@@ -573,7 +623,17 @@ export function MapExplorationHeader({
                         opacity: hasProfileInterests ? 1 : 0.55,
                       }}
                     >
-                      <Text style={{ color: colors.ink, flex: 1 }}>For Me</Text>
+                      <Sparkles size={18} color={colors.primary} />
+                      <Text
+                        style={{
+                          color: colors.ink,
+                          flex: 1,
+                          marginLeft: 10,
+                          fontSize: 13,
+                        }}
+                      >
+                        For Me
+                      </Text>
                       {forMe && <Check size={17} color={colors.primary} />}
                     </Pressable>
                     <Text

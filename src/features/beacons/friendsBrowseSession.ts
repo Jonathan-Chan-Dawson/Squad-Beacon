@@ -42,14 +42,14 @@ export function updateFriendsBrowseState(
 /** Called only after the current account's snapshot is ready. Explicit choices win. */
 export function initializeFriendsScope(
   viewer: string | null,
-  hasFavorites: boolean,
+  _hasFavorites: boolean,
   ownedListIds: readonly string[],
 ) {
   if (!viewer) return;
   const value = session(viewer);
   if (!value.scopeInitialized) {
     updateFriendsBrowseState(viewer, {
-      scope: hasFavorites ? "favorites" : "friends",
+      scope: "friends",
     });
   } else if (
     value.state.scope.startsWith("custom:") &&
