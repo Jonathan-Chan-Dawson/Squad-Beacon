@@ -185,5 +185,5 @@ export const mapAvailabilityColors = {
   unavailable: "#F12B38",
   endingSoon: "#F3C917",
   "ending-soon": "#F3C917",
-  unknown: "#B7BEC8A6",
+  unknown: "#B7BEC8C7",
 };

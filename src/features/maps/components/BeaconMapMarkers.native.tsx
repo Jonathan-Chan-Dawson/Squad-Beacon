@@ -292,7 +292,7 @@ export function BeaconMarkerArtwork({
               accessible={false}
               style={{
                 position: "absolute",
-                inset: 1,
+                inset: 3,
                 borderWidth: 2.5,
                 borderColor: colors.success,
                 opacity: 0.95,

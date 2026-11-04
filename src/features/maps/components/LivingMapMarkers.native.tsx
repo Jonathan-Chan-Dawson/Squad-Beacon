@@ -378,8 +378,8 @@ function LivingMapPinComponent({
                     width: 32,
                     height: 32,
                     borderRadius: 16,
-                    backgroundColor: colors.ink,
-                    opacity: presentation.scale === "micro" ? 0.35 : 0.6,
+                    backgroundColor: availabilityColors[model.kind === "person" ? model.availability : "unknown"],
+                    opacity: presentation.scale === "micro" ? 0.75 : 0.9,
                   }}
                 />
               ) : (

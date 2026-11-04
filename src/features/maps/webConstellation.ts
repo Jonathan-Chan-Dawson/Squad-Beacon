@@ -24,6 +24,7 @@ type Options = {
   member: (point: ClusterPoint, full?: boolean) => HTMLButtonElement;
   open: (section?: "Beacons" | "Friends") => void;
   ink: string;
+  friendColor?: (point: ClusterPoint) => string;
   surface: string;
   line: string;
   ownership: string;
@@ -113,8 +114,8 @@ export function webConstellation(
     ) {
       item.replaceChildren();
       item.style.borderRadius = "50%";
-      item.style.background = options.ink;
-      item.style.opacity = presentation.scale === "micro" ? ".35" : ".6";
+      item.style.background = options.friendColor?.(point) ?? options.ink;
+      item.style.opacity = presentation.scale === "micro" ? ".75" : ".9";
     }
     // Identity decorations never enlarge or obscure the established cluster footprint.
     if (markerSize < 24)
@@ -138,7 +139,7 @@ export function webConstellation(
     dot.style.cssText = `position:absolute;left:${center + offset.x - s / 2}px;top:${center + offset.y - s / 2}px;width:${s}px;height:${s}px;box-sizing:border-box;border-radius:50%;background:${options.surface};color:${options.ink};border:1px solid ${options.line};padding:1px;display:flex;align-items:center;justify-content:center;line-height:0;z-index:30;pointer-events:none;opacity:${presentation.friendsProminent ? 0.8 : 0.62};`;
     if (s >= 10) dot.innerHTML = personSvg;
     else {
-      dot.style.background = options.ownership;
+      dot.style.background = options.friendColor?.(point) ?? options.ownership;
       dot.style.borderColor = options.surface;
     }
     node.append(dot);

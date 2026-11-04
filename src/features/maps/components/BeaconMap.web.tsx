@@ -813,7 +813,7 @@ export default function BeaconMap(props: MapProps) {
           const rim = document.createElement("span");
           rim.dataset.testid = "beacon-friend-rim";
           rim.setAttribute("aria-hidden", "true");
-          rim.style.cssText = `position:absolute;inset:3px;border:2.5px solid ${colors.success};opacity:.95;border-radius:50%;pointer-events:none;`;
+          rim.style.cssText = `position:absolute;inset:5px;border:2.5px solid ${colors.success};opacity:.95;border-radius:50%;pointer-events:none;`;
           face.append(rim);
         }
         if (identity?.saved && !owned && !dot) {
@@ -1145,7 +1145,7 @@ export default function BeaconMap(props: MapProps) {
       const visualRevision = JSON.stringify([
         presentation.mode,
         presentation.overflow,
-        presentation.people.map((point) => point.id),
+        presentation.people.map((point) => [point.id, models.get(point.id)?.revision]),
         presentation.friendsProminent,
         bloomGeometry(presentation).satelliteOffsets,
         bloomGeometry(presentation).countBadge,
@@ -1185,6 +1185,10 @@ export default function BeaconMap(props: MapProps) {
             line: colors.line,
             ownership: mapIdentityColors.ownership,
             reducedMotion,
+            friendColor: (point) => {
+              const model = models.get(point.id);
+              return mapAvailabilityColors[model?.kind === "person" ? model.availability : "unknown"];
+            },
             categoryColor: (point) =>
               categories[point.category ?? "Other"].color,
           });
