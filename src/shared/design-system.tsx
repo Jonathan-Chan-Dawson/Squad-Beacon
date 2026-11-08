@@ -287,15 +287,18 @@ export function SegmentedControl<T extends string>({
   onChange,
   accessibilityLabel,
   testID,
+  shape = "pill",
 }: {
   options: readonly SegmentOption<T>[];
   value: T;
   onChange: (value: T) => void;
   accessibilityLabel?: string;
   testID?: string;
+  shape?: "pill" | "panel";
 }) {
   const { colors, tokens: themeTokens } = useDesignTheme();
   const reducedMotion = useReducedMotion();
+  const corner = shape === "panel" ? 12 : radius.pill;
   const [controlWidth, setControlWidth] = useState(0);
   const activeIndex = Math.max(
     0,
@@ -333,7 +336,7 @@ export function SegmentedControl<T extends string>({
         alignItems: "stretch",
         gap: space.xs,
         padding: space.xs,
-        borderRadius: radius.pill,
+        borderRadius: corner,
         backgroundColor: colors.surfaceRaised,
         borderColor: colors.border,
         borderWidth: StyleSheet.hairlineWidth,
@@ -348,7 +351,7 @@ export function SegmentedControl<T extends string>({
             top: space.xs,
             bottom: space.xs,
             width: segmentWidth,
-            borderRadius: radius.pill,
+            borderRadius: corner,
             backgroundColor: colors.surface,
             borderWidth: StyleSheet.hairlineWidth,
             borderColor: colors.border,

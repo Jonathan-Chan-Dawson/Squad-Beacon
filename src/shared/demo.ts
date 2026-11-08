@@ -1,3 +1,7 @@
+import {demoBoostAction,reconcileDemoBoosts} from "@/src/features/people/squadBoosts";
+import {applyDemoPremiumTools,toolFeature,validateToolSettings} from "@/src/features/beacons/premiumTools";
+import { demoPlanEditor } from "@/src/features/plans/demoPlanEditor";
+import { assertTemplateQuota, pauseDemoPremiumRoutines,requirePremiumFeature } from "./entitlements";
 import { demoRepeatablePlan } from "@/src/features/plans/demoRepeatablePlans";
 import { applyDemoLivingPlan, connectDemoPlanResults } from "@/src/features/plans/demoLivingPlans";
 import { demoConnected } from "@/src/features/planning/demoConnected";
@@ -25,6 +29,7 @@ import {
   beaconCapacity,
   canAdmitBeaconParticipants,
   canAssignBeaconRole,
+  canManageBeacon,
   canManageBeaconSettings,
   canRemoveBeaconParticipant,
   canRevokeBeaconRole,
@@ -1713,6 +1718,7 @@ function demoActionInner(previous: Data, action: string, p: Payload): Data {
   const d = structuredClone(previous),
     id = String(p.id ?? ""),
     uid = DEMO_ID;
+  if (applyDemoPremiumTools(d,action,p,uid,()=>"demo-"+Math.random().toString(36).slice(2))) return d;
   if (applyDemoMessaging(d, uid, action, p, () => "demo-" + Math.random().toString(36).slice(2))) return d;
   if (action === "create_activity_with_invitees" || action === "create_plan_beacon_with_invitees") {
     if (p.expected_actor_id && p.expected_actor_id!==uid) throw new Error("Your account changed before publication. Return to the account that started this Beacon.");
@@ -2645,6 +2651,7 @@ function demoActionInner(previous: Data, action: string, p: Payload): Data {
       });
   }
   if (action === "save_template") {
+    if(p.premium_appearance)requirePremiumFeature(d,toolFeature("appearance",validateToolSettings("appearance",p.premium_appearance)),undefined,true);
     if (!String(p.name ?? "").trim() || !String(p.title ?? "").trim())
       throw new Error("Give your template a name and activity.");
     const minutes = Number(p.minutes);
@@ -2686,6 +2693,7 @@ function demoActionInner(previous: Data, action: string, p: Payload): Data {
       target_count: p.target_count == null ? null : Number(p.target_count),
       approval_required: !!p.approval_required,
       module_defaults: moduleDefaults,
+      premium_appearance: p.premium_appearance===undefined?existing?.premium_appearance??null:p.premium_appearance===null?null:validateToolSettings("appearance",p.premium_appearance),
     };
     if (existing) Object.assign(existing, template);
     else d.templates.push(template);
@@ -2780,12 +2788,7 @@ function demoActionInner(previous: Data, action: string, p: Payload): Data {
         )
           throw new Error("This item ID is already in use.");
       } else {
-        if (
-          d.beacon_checklist_items.filter(
-            (item) => item.activity_id === activityId,
-          ).length >= 50
-        )
-          throw new Error("This beacon already has 50 checklist items.");
+
         d.beacon_checklist_items.push({
           id: rowId,
           activity_id: activityId,
@@ -3696,11 +3699,31 @@ function demoActionInner(previous: Data, action: string, p: Payload): Data {
 }
 
 function demoBaseAction(previous: Data, action: string, payload: Payload): Data {
- return applyDemoLivingPlan(previous, DEMO_ID, action, payload) ?? demoConnected(previous, DEMO_ID, action, payload, demoActionInner) ?? applyDemoLivingActivity(previous, DEMO_ID, action, payload) ?? demoActionInner(previous, action, payload);
+ if(action==="prepare_plan_teams") {
+  let d=structuredClone(previous);const source=d.activities.find(a=>a.id===payload.activity_id),target=d.activities.find(a=>a.id===payload.target_activity_id);
+  const cfg=d.premium_tool_configs?.find(c=>c.activity_id===source?.id&&c.kind==="teams");
+  if(!source||!target||!cfg?.settings.rotation||cfg.revision!==payload.revision)throw new Error("Review the current rotation preset.");
+  requirePremiumFeature(d,"team_rotation",source);requirePremiumFeature(d,"team_rotation",target);
+  const stops=d.plan_stops?.filter(s=>s.plan_id===payload.plan_id&&s.state==="active"&&s.approval==="approved")??[];
+  const src=stops.find(s=>s.activity_id===source.id)?.position,dest=stops.find(s=>s.activity_id===target.id)?.position;
+  if(src===undefined||dest===undefined||dest<=src||!canManageBeacon(d,source,DEMO_ID)||!canManageBeacon(d,target,DEMO_ID)||d.beacon_teams.some(t=>t.activity_id===target.id))throw new Error("Choose a later session without teams that you organize.");
+  const names=cfg.settings.team_names??[];if(!names.length)throw new Error("Save team names before preparing another session.");
+  for(let i=0;i<names.length;i++)d=demoActionInner(d,"create_beacon_team",{activity_id:target.id,id:"demo-"+Math.random().toString(36).slice(2),name:names[(i+dest-src)%names.length]});
+  return d;
+ }
+
+ const next=applyDemoLivingPlan(previous, DEMO_ID, action, payload) ?? demoConnected(previous, DEMO_ID, action, payload, demoActionInner) ?? applyDemoLivingActivity(previous, DEMO_ID, action, payload) ?? demoActionInner(previous, action, payload);
+ if(payload.premium_appearance&&["create_activity","create_activity_with_invitees","create_plan_beacon","create_plan_beacon_with_invitees"].includes(action)){
+  const created=next.activities.find(a=>!previous.activities.some(p=>p.id===a.id));
+  if(created)applyDemoPremiumTools(next,"save_tool_config",{activity_id:created.id,kind:"appearance",settings:payload.premium_appearance,revision:-1},DEMO_ID,()=>"demo-"+Math.random().toString(36).slice(2));
+ }
+ return next;
 }
 export function demoAction(previous: Data, action: string, payload: Payload): Data {
- const changed = demoRepeatablePlan(previous,DEMO_ID,action,payload,demoBaseAction) ?? demoBaseAction(previous,action,payload);
+ if (payload.expected_actor_id && payload.expected_actor_id !== DEMO_ID) throw new Error("Your account changed.");
+ assertTemplateQuota(previous, DEMO_ID, action, payload);
+ const changed = demoBoostAction(previous,action,payload,DEMO_ID,()=>"demo-"+Math.random().toString(36).slice(2)) ?? demoPlanEditor(previous,DEMO_ID,action,payload,demoBaseAction) ?? demoRepeatablePlan(previous,DEMO_ID,action,payload,demoBaseAction) ?? demoBaseAction(previous,action,payload);
  const next = connectDemoPlanResults(previous,changed,DEMO_ID,action,payload);
  next.beacon_supply_claims = next.beacon_supply_claims.filter(row => eligibleSupplyClaim(next,row));
- return next;
+ return pauseDemoPremiumRoutines(reconcileDemoBoosts(next));
 }

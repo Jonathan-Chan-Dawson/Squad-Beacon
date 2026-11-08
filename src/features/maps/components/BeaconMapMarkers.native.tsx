@@ -292,7 +292,7 @@ export function BeaconMarkerArtwork({
               accessible={false}
               style={{
                 position: "absolute",
-                inset: 3,
+                inset: 0,
                 borderWidth: 2.5,
                 borderColor: colors.success,
                 opacity: 0.95,
@@ -370,6 +370,7 @@ function BeaconMapPinComponent({
   dot?: boolean;
   markerState: BeaconMarkerState;
 }) {
+  const { colors } = useTheme();
   const stateLabel = markerStateLabel(markerState);
   const tracking = useMarkerTracking(
     `${JSON.stringify(markerState)}:${id}:${categoryColor}:${selected}:${dimmed}:${streetTime ?? ""}:${appearanceKey}:${dot}`,
@@ -401,7 +402,9 @@ function BeaconMapPinComponent({
               borderRadius: 5,
               backgroundColor: categoryColor,
               borderWidth: 1,
-              borderColor: "#FFFFFF",
+              borderColor: markerState.friendHosted
+                ? colors.success
+                : "#FFFFFF",
             }}
           />
         </View>

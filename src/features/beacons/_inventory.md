@@ -21,6 +21,7 @@ Beacons feature
 - controls.ts, permissions.ts: organizer roles/capabilities and authorization helpers.
 - createTiming.ts, focusTimer.ts: duration/deadline and local focus timer helpers.
 - CreateHome.tsx: compact creation launcher with blank first, diverse For You, Recent, direct activity search, and saved-template reuse/editing. Compact secondary Plan/Routine entries retain canonical routes. The focused editor in screens/CreateScreen.tsx owns persistence and placement.
+- app/beacon-templates.tsx opens the full-screen catalog/My Templates browser through the existing creation controller; CreateHome owns category/search presentation and template callbacks. The former template bottom sheet is removed.
 - templateBrowser.ts: presentation-only template families referencing stable IDs in shared/templates.ts; six core families and seventeen additional families use one catalog, including cross-listed Music, Photography, Home and Classes presets. No saved-template migration.
 - Remaining redesign extensions (2026-10-13): shared status-reaction registry/picker; atomic own-status service and legacy StatusPanel route; bounded Routine projection DTO/read hook; transactional selected-invitation creation with frozen request UUID/reconciliation. Chronological Supabase migrations 202610130001 through 004 are source-only pending hosted rollout. Existing template, status-conversion and map/date handoffs remain supported.
 
@@ -45,3 +46,8 @@ Beacons feature
 - components/ActivityCategoryChoices.tsx, components/BeaconTimingEditor.tsx and creationPublicListing.ts: compact category grid and optional activity ideas; staged creation/manage timing; recoverable opt-in public discovery after authoritative publication.
 
 - beaconCardShortcuts.ts and components/BeaconCardShortcuts.tsx: viewer-checked reactions/comments, one Chat/host-message or Memories shortcut, counted Tools and authorized Map actions in More across readable cards; public projections remain separate.
+
+- Plan-draft handoffs reuse CreateScreen and existing creation storage: Add to Plan returns private configuration without publication. Only the Plan scheduling transaction creates selected Beacons.
+
+- premiumTools.ts and components/PremiumToolSettings.tsx: validated configuration-only presets and inline Focus, appearance, Teams and Council advanced tools. focusPersistence.ts stores per-account/Beacon absolute-deadline sessions through chunked draft adapters.
+- useChecklistPages.ts: viewer-guarded incremental Checklist reads beyond the bounded snapshot. components/JournalEnhancements.tsx and MemoryCollections.tsx preserve note/media authorization and reference-only collections/Afterglow.

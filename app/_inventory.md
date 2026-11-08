@@ -28,3 +28,11 @@ Keep route paths stable; move reusable screens and feature logic into src/featur
 - activity-note.tsx and activity-created.tsx: shared Activity Note editor/history route and post-publication optional linking without republishing.
 
 - your-activity.tsx, plans.tsx and calendar.tsx render the same Your Activity workspace with compatible default subtabs and retained incoming parameters; see docs/YOUR_ACTIVITY_UX_VALIDATION.md.
+
+- beacon-templates.tsx: full-screen Beacon template browsing and existing creation-editor handoff.
+
+- settings/premium.tsx: Premium comparison, current entitlement and usage; demo-only tier switching. No billing integration.
+
+- plan-editor.tsx: full-page new Plan editor; saved organizer Plans reuse it through plan/[id]. Old creation intent parameters are forwarded without changing Your Activity tabs.
+
+- squad-boosts.tsx: focused authorized Squad Boost management and demo simulation route; no bottom navigation entry.

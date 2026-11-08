@@ -96,6 +96,11 @@ test("Friends, categories and Now combine; All preserves time and advanced restr
     advanced.getByRole("checkbox", { name: "Study", exact: true }),
   ).toBeChecked();
   await advanced.getByRole("radio", { name: "Tomorrow", exact: true }).click();
+  // Upcoming + Now is incompatible even when an active Beacon spans midnight.
+  await advanced
+    .getByRole("button", { name: "More filters", exact: true })
+    .click();
+  await advanced.getByRole("button", { name: "Upcoming", exact: true }).click();
   await page.getByRole("button", { name: /^Show \d+ Beacons$/ }).click();
   await expect(
     page.getByRole("dialog", { name: "Filters", exact: true }),

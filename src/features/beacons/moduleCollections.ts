@@ -1,3 +1,5 @@
+import { requirePremiumFeature } from "@/src/shared/entitlements";
+import { validateChecklistTiming } from "@/src/shared/premiumFeatures";
 import { canUseBeaconModules, canAddBeaconNote, canReadBeaconActivity, canReadBeaconModuleEntry, canReadBeaconNote, canEditBeaconChecklist } from "@/src/features/beacons/beaconModules";
 import {
   canManageBeacon,
@@ -153,6 +155,7 @@ export function applyDemoModuleCollectionAction(
     if (!activity || !canUseBeaconModules(data, activity, userId) || !isBeaconModuleEnabled(activity, "checklist")) error("This Beacon checklist is unavailable.");
     const existing = data.library_saved_checklists.find((list) => list.owner_id === userId && list.source_activity_id === activity.id);
     if (existing) return true;
+    requirePremiumFeature(data,"checklist_presets");
     const sections = data.beacon_checklist_sections.filter((item) => item.activity_id === activity.id).map((item) => ({ id: item.id, title: item.title, position: item.position }));
     const items = data.beacon_checklist_items.filter((item) => item.activity_id === activity.id && itemVisible(item)).map((item) => ({ id: item.id, text: item.text, completed: item.completed, section_id: item.section_id, assignee_id: item.assignee_id }));
     data.library_saved_checklists.push({ id: newId(), owner_id: userId, source_activity_id: activity.id, title: activity.title.slice(0, 120), sections, items, revision: 0, created_at: now(), updated_at: now() });
@@ -165,8 +168,9 @@ export function applyDemoModuleCollectionAction(
       sections = Array.isArray(payload.sections) ? payload.sections as Data["library_saved_checklists"][number]["sections"] : [],
       items = Array.isArray(payload.items) ? payload.items as Data["library_saved_checklists"][number]["items"] : [],
       existing = data.library_saved_checklists.find((list) => list.id === listId);
-    if (!title || title.length > 120 || sections.length > 30 || items.length > 50) error("Checklists need a title, up to 30 sections, and 50 items.");
-    if (new Set(sections.map((item) => item.id)).size !== sections.length || sections.some((item) => !item.id || !item.title.trim() || item.title.length > 80 || !Number.isInteger(item.position) || item.position < 0 || item.position > 29)) error("Choose valid, uniquely identified checklist sections.");
+    if (!existing) requirePremiumFeature(data,"checklist_presets");
+    if (!title || title.length > 120 || JSON.stringify(payload).length > 50000) error("Checklists need a title and a compact saved payload.");
+    if (new Set(sections.map((item) => item.id)).size !== sections.length || sections.some((item) => !item.id || !item.title.trim() || item.title.length > 80 || !Number.isInteger(item.position) || item.position < 0)) error("Choose valid, uniquely identified checklist sections.");
     if (new Set(items.map((item) => item.id)).size !== items.length || items.some((item) => !item.id || !item.text.trim() || item.text.length > 160 || (item.section_id != null && !sections.some((section) => section.id === item.section_id)))) error("Choose valid checklist items and section assignments.");
     if (existing) {
       if (existing.owner_id !== userId) error("This saved List is unavailable.");
@@ -207,7 +211,7 @@ export function applyDemoModuleCollectionAction(
       data.beacon_checklist_sections.push({ id: copiedId, activity_id: target.id, title: section.title, position: section.position, created_at: now() });
     }
     for (const item of list.items) {
-      const assigned = item.assignee_id && isApprovedGoing(target, data.rsvps.find((row) => row.activity_id === target.id && row.user_id === item.assignee_id)) ? item.assignee_id : null;
+      const assigned = null; // Presets do not copy people assignments.
       data.beacon_checklist_items.push({ id: newId(), activity_id: target.id, author_id: userId, text: item.text, completed: false, section_id: item.section_id ? sectionsById.get(item.section_id) ?? null : null, assignee_id: assigned, created_at: now(), updated_at: now() });
     }
     return true;
@@ -223,7 +227,7 @@ export function applyDemoModuleCollectionAction(
       if (!title || title.length > 80) error("Section titles must be 1 to 80 characters.");
       const duplicate = data.beacon_checklist_sections.find((entry) => entry.id === sectionId);
       if (duplicate) { if (duplicate.activity_id === target.id && duplicate.title === title) return true; error("This section ID is already in use."); }
-      if (list.length >= 30) error("A checklist can have up to 30 sections.");
+
       data.beacon_checklist_sections.push({ id: sectionId, activity_id: target.id, title, position: list.length, created_at: now() });
     } else if (action === "edit_checklist_section") {
       if (!section) throw new Error("This checklist section is unavailable.");
@@ -265,7 +269,11 @@ export function applyDemoModuleCollectionAction(
       const assignee = data.rsvps.find((rsvp) => rsvp.activity_id === target.id && rsvp.user_id === assigneeId);
       if (!isApprovedGoing(target, assignee) || !canReadBeaconActivityForDemo(data, target, assigneeId)) error("Assign items to an accepted Beacon participant.");
     }
+    const timing = {due_on: payload.due_on === undefined ? item?.due_on : payload.due_on as string|null, due_at: payload.due_at === undefined ? item?.due_at : payload.due_at as string|null, due_timezone: payload.due_timezone === undefined ? item?.due_timezone ?? target.timezone : payload.due_timezone as string|null, reminder_minutes: payload.reminder_minutes === undefined ? item?.reminder_minutes : payload.reminder_minutes as number|null};
+    validateChecklistTiming(timing);
+    if ((assigneeId && assigneeId !== item?.assignee_id) || (["due_on","due_at","reminder_minutes"] as const).some(k => timing[k]!=null && timing[k]!==item?.[k])) requirePremiumFeature(data,"checklist_details",target);
     if (item) {
+      Object.assign(item,timing);
       item.text = text; item.section_id = sectionId; item.assignee_id = assigneeId; item.updated_at = now();
     } else {
       const itemId = id || newId(), duplicate = data.beacon_checklist_items.find((entry) => entry.id === itemId);
@@ -273,13 +281,14 @@ export function applyDemoModuleCollectionAction(
         if (duplicate.activity_id === target.id && duplicate.author_id === userId && duplicate.text === text && duplicate.section_id === sectionId && duplicate.assignee_id === assigneeId) return true;
         error("This item ID is already in use.");
       }
-      if (data.beacon_checklist_items.filter((entry) => entry.activity_id === target.id).length >= 50) error("This Beacon already has 50 checklist items.");
-      data.beacon_checklist_items.push({ id: itemId, activity_id: target.id, author_id: userId, text, completed: false, section_id: sectionId, assignee_id: assigneeId, created_at: now(), updated_at: now() });
+
+      data.beacon_checklist_items.push({ id: itemId, activity_id: target.id, author_id: userId, text, completed: false, ...timing, section_id: sectionId, assignee_id: assigneeId, created_at: now(), updated_at: now() });
     }
     return true;
   }
 
   if (action === "move_library_resource") {
+    if(payload.folder_id) requirePremiumFeature(data,"library_organization");
     const kind = payload.kind,
       resourceId = String(payload.resource_id ?? ""),
       folderId = payload.folder_id == null ? null : String(payload.folder_id);
@@ -296,6 +305,7 @@ export function applyDemoModuleCollectionAction(
   }
 
   if (action === "create_library_folder" || action === "rename_library_folder") {
+    if(action === "create_library_folder") requirePremiumFeature(data,"library_organization");
     const kind = payload.kind,
       name = textValue(payload.name),
       parentId = payload.parent_id == null ? null : String(payload.parent_id),

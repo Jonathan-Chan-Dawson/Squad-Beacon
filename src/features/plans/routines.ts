@@ -1,3 +1,4 @@
+import { nextRecurrenceDate, type RecurrenceFields } from "./recurrence";
 import type {
   Activity,
   ActivityPlace,
@@ -16,7 +17,9 @@ export interface PlanMember {
 export type PlanRoutineStatus = "active" | "paused" | "ended";
 
 /** A recurring Beacon Plan. Beacon steps remain the source of truth for each occurrence. */
-export interface PlanRoutine {
+export interface PlanRoutine extends RecurrenceFields {
+  premium_pause_reason?: "plus_required" | null;
+  premium_eligible?: boolean;
   source_reviewed_at?: string | null;
   source_stop_count?: number | null;
   id: string;
@@ -141,13 +144,14 @@ export function validateRoutineSchedule(input: {
  * Find the next local calendar date after `afterDate` that matches the anchored
  * interval and weekday set. Dates are compared as ISO local dates, not UTC instants.
  */
-export function nextRoutineOccurrence(input: {
+export function nextRoutineOccurrence(input: RecurrenceFields & {
   anchor_date: string;
   weekdays: number[];
   interval_weeks: number;
   after_date: string;
   ends_on?: string | null;
 }): string | null {
+  if (input.frequency) return nextRecurrenceDate(input, input.after_date);
   validateRoutineSchedule({ ...input, ends_on: input.ends_on ?? null });
   if (!isLocalDate(input.after_date))
     throw new Error("Choose a valid reference date.");

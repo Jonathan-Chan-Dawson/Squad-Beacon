@@ -131,7 +131,7 @@ test("Compass opens without requesting location, and selecting a result opens it
   await expect(compass).toHaveCount(0);
   await expect(
     page.getByRole("button", {
-      name: "Place: choose a location to create",
+      name: "Choose a place",
       exact: true,
     }),
   ).toBeVisible();

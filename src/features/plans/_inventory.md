@@ -13,7 +13,7 @@ Plans feature
 - Migration `202610040003_plan_routines.sql` persists membership and Routine settings/occurrence history. Every generated occurrence reuses `private.apply_plan_action('create_plan', ...)`.
 - `202610100001_create_flow.sql` extends the existing writers with Plan step timing metadata, manual start/end actions, transactional Beacon insertion, template usage history, and manual Routine reuse. Apply this additive migration before using the new actions against a connected account.
 - Scheduled Routine occurrences retain source local times. Run Now creates a fresh Plan starting within two minutes and preserves spacing, audience, places, and start/end choices without consuming the next scheduled repeat.
-- Create opens a Beacon / Plan / Routine chooser. It reuses the unchanged Beacon template catalog and existing personal template storage. Routines never have an app template catalog.
+- Create offers Beacon and Plan creation; Repeat is contextual on a saved source. It reuses the unchanged Beacon template catalog and existing personal template storage. Routines never have an app template catalog.
 - Plan steps retain their reusable local schedule in `activities.plan_step`. A pending manual step uses a deferred timestamp to stay out of live discovery; a manual end uses an extended deadline until the owner explicitly ends it. `plan_started_at` distinguishes pending steps. Completed steps advance dependent Beacons, including duration chains, using the actual end.
 - Browser coverage: `tests/browser/createFlow.spec.ts`. Domain/demo coverage: `tests/createFlow.test.ts`. Server permissions, idempotency and persistence coverage extends `tests/plansRoutine.database.test.ts`.
 
@@ -30,3 +30,11 @@ select cron.schedule(
 The runner function is executable only by `service_role`; do not call it from a client app or expose a service key. Reminder notices enter the normal server notice/push queue when due; delivery still depends on device permission/settings.
 
 - planWorkspaceSelectors.ts: readable, contributor-eligible unfinished Plan selection and human-readable authorized list summaries; planCreationRecovery.ts: account/epoch-scoped in-session request recovery across temporary route loss.
+
+- Premium: scheduled multi-Beacon sources require the Routine owner’s verified Plus/Pro tier; single-Beacon recurrence and manual reuse remain Free. Downgrade pauses future generation without removing sources or occurrences; resume is explicit.
+
+- PlanEditorScreen.tsx and app/plan-editor.tsx: full-page staged Plan editing with Idea / Beacon / Decide entry points, searchable existing links, centered ordering, explicit Save Draft / Schedule Plan, and account-isolated durable drafts. Saved organizer routes use the same editor; older backends retain the legacy editor.
+- planEditorModel.ts, planEditorRepository.ts and planEditorStorage.ts: stable stop identities, private Beacon configurations, atomic chunked storage, frozen replay requests and conflict recovery. demoPlanEditor.ts mirrors canonical save/schedule actions.
+- recurrence.ts: typed daily/weekly/monthly date rules with fixed month-day clamping. RoutineScheduleSheet.tsx renders the shared inline controls/previews; LegacyRoutineScheduleSheet.tsx and LegacyRoutinesScreen.tsx support older backends.
+
+- PlanPreparation.tsx: authorized linked-Beacon task overview and Pro overdue/unassigned filters within the existing Plan editor.

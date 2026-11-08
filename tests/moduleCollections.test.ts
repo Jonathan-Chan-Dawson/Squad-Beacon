@@ -43,7 +43,7 @@ test("Beacon Journal defaults private; shared entries require current authorized
 });
 
 test("automatic checklist copies never overwrite an edited personal List", () => {
-  const initial = makeDemo(),
+  const initial = {...makeDemo(),demo_premium_tier:"plus" as const},
     activity = initial.activities.find((item) => item.id === "demo-tools");
   assert.ok(activity);
   const copied = demoAction(initial, "ensure_saved_checklist_copy", {
@@ -79,7 +79,7 @@ test("automatic checklist copies never overwrite an edited personal List", () =>
 });
 
 test("private Library folders nest by kind, and moving an entry does not duplicate it", () => {
-  const initial = makeDemo();
+  const initial = {...makeDemo(),demo_premium_tier:"plus" as const};
   const withNote = demoAction(initial, "create_journal_entry", {
     id: "demo-standalone-entry",
     body: "A personal note, not shared with the Beacon.",

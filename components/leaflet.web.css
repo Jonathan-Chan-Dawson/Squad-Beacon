@@ -716,3 +716,6 @@ svg.leaflet-image-layer.leaflet-interactive path {
   animation: none;
   opacity: 0;
 }
+
+#map-place-action-scroll { scrollbar-width: none; }
+#map-place-action-scroll::-webkit-scrollbar { display: none; }

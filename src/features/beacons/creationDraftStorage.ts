@@ -38,3 +38,5 @@ export const {
   deleteCreationSnapshot,
   discardCreationDraft,
 } = repository;
+
+export const draftStorageIO = { read, write, remove };

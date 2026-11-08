@@ -1,3 +1,6 @@
+import {planStops,stopActivity} from "@/src/features/plans/livingPlans";
+import {PremiumToolSettings} from "./components/PremiumToolSettings";
+import {resolvePremiumFeature} from "@/src/shared/entitlements";
 import React, { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import * as Crypto from "expo-crypto";
@@ -71,6 +74,13 @@ export function BeaconScoreboard({
     data.viewer_id === userId &&
     !!currentActivity &&
     canManageBeacon(data, currentActivity, userId);
+  const teamConfig=data.premium_tool_configs?.find(t=>t.activity_id===activity.id&&t.kind==="teams");
+  const savedSettings=teamConfig?.settings;
+  const rotationPlan=data.plans.find(p=>p.id===activity.plan_id)??data.plans.find(p=>data.plan_stops?.some(s=>s.plan_id===p.id&&s.activity_id===activity.id));
+  const rotationStops=rotationPlan?planStops(data,rotationPlan,userId):[];
+  const sourcePosition=rotationStops.find(s=>s.activity_id===activity.id)?.position??Infinity;
+  const nextSession=rotationStops.filter(s=>s.position>sourcePosition&&s.state==="active"&&s.approval==="approved").map(s=>stopActivity(data,s,userId)).find(a=>!!a&&!!userId&&canManageBeacon(data,a,userId)&&resolvePremiumFeature(data,"team_rotation",a).available);
+  const customScoring=resolvePremiumFeature(data,"team_presets",activity).available;
   const teams = eligible ? teamsForActivity(data, activity.id) : [];
   if (!eligible) return null;
 
@@ -118,6 +128,9 @@ export function BeaconScoreboard({
 
   return (
     <View style={{ gap: 12 }}>
+      <PremiumToolSettings activity={activity} kind="teams"/>
+      {manager&&savedSettings?.team_names?.length&&!teams.length?<Button compact secondary title="Create teams from saved names" onPress={()=>{void (async()=>{for(const name of savedSettings.team_names??[])if(!await run("create_beacon_team",{activity_id:activity.id,id:Crypto.randomUUID(),name}))break;})();}}/>:null}
+      {manager&&savedSettings?.rotation&&rotationPlan&&nextSession&&resolvePremiumFeature(data,"team_rotation",activity).available&&<View style={{gap:6}}><Txt muted>Next session · {nextSession.title} · {teamsForActivity(data,nextSession.id).length?"Teams ready":"Needs team setup"}</Txt>{!teamsForActivity(data,nextSession.id).length&&<Button compact secondary title="Prepare next session teams" onPress={()=>void run("prepare_plan_teams",{activity_id:activity.id,target_activity_id:nextSession.id,plan_id:rotationPlan.id,revision:teamConfig?.revision})}/>}</View>}
       {compact ? (
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
           <View
@@ -239,6 +252,7 @@ export function BeaconScoreboard({
                       : ""}
                   </Txt>
                 </View>
+                {manager&&customScoring&&savedSettings?.score_steps?.filter(s=>s.points!==1).map(s=><Button key={s.label} compact secondary title={`${s.label} +${s.points}`} onPress={()=>void run("adjust_beacon_team_score",{team_id:team.id,delta:s.points})}/>)}
                 {(!compact || section === "game") && (
                   <View style={[styles.row, { gap: 6 }]}>
                     <Pressable

@@ -13,3 +13,7 @@ Profile feature
 - Sonar has no recipient-count cap; selections still require currently accepted friends and explicit review.
 
 - ProfileSonarCard stages Choose People then Review Sharing before the existing permission/start sequence. ProfileScreen consumes section=aspirations and positions the About content.
+
+- settings/PremiumScreen.tsx and PremiumUI.tsx: Premium comparison, quota previews and shared simulated Free/Plus/Pro control; Settings exposes Premium and demo-only Demo Controls.
+
+- settings/PremiumScreen.tsx and PremiumUI.tsx: capability-aware benefits, shared demo controls, personal template usage and Squad Boost allowance/management summaries; billing remains unavailable.

@@ -1,3 +1,4 @@
+import { hasPlanRecurrenceEntitlement } from "@/src/shared/entitlements";
 import { canReadBeaconActivity } from "@/src/features/beacons/beaconModules";
 import type { Activity, Data, Payload } from "@/src/shared/types";
 import { localDate } from "@/src/shared/domain";
@@ -41,6 +42,7 @@ export function demoRepeatablePlan(
       "update_routine_source",
       "run_routine_now",
       "run_routine_once",
+      "resume_routine",
     ].includes(action)
   )
     return;
@@ -193,6 +195,14 @@ export function demoRepeatablePlan(
     !next.demo_repeat_sources[pid]
   )
     capture();
+  const mode = payload.run_mode ?? routine?.run_mode ?? "scheduled";
+  const ownerId = routine?.owner_id ?? plan.owner_id;
+  if (
+    mode !== "manual" &&
+    next.demo_repeat_sources[pid].steps.length > 1 &&
+    !hasPlanRecurrenceEntitlement(next,pid,ownerId)
+  )
+    throw new Error("PREMIUM_REQUIRED: Multi-Beacon repeats need the Routine owner's BEACON+ membership. Single-Beacon repeats and manual Plan reuse are Free.");
   if (action === "update_routine_source") {
     if (!routine) throw new Error("Routine unavailable.");
     routine.source_reviewed_at = new Date().toISOString();
@@ -247,6 +257,20 @@ export function demoRepeatablePlan(
         r.plan_id === pid &&
         !previous.plan_routines.some((old) => old.id === r.id),
     );
+  if (routine && action === "resume_routine") {
+    routine.premium_pause_reason = null;
+    routine.next_occurrence_on = nextRoutineOccurrence({
+      ...routine, after_date: localDate(new Date(), plan.timezone),
+    });
+    while (routine.next_occurrence_on && generated.demo_routine_occurrences?.some(
+      row => row.routine_id === routine!.id && row.occurrence_on === routine!.next_occurrence_on,
+    ))
+      routine.next_occurrence_on = nextRoutineOccurrence({
+        ...routine, after_date: routine.next_occurrence_on,
+      });
+    if (!routine.next_occurrence_on) routine.status = "ended";
+  }
+  if (routine && action === "edit_routine") routine.premium_pause_reason = null;
   if (
     routine &&
     (action === "repeat_beacon" || action === "create_routine") &&
@@ -309,6 +333,12 @@ export function demoRepeatablePlan(
         if (place) place.online_url = source.online_urls[index];
       }
     }
+  }
+  if (routine && payload.frequency) {
+    if (!["daily","weekly","monthly"].includes(String(payload.frequency))) throw new Error("Choose a repeat frequency.");
+    Object.assign(routine,{frequency:payload.frequency,interval_count:Number(payload.interval_count ?? 1),anchor_date:String(payload.anchor_date ?? routine.anchor_date),month_day:Number(payload.month_day ?? String(payload.anchor_date ?? routine.anchor_date).slice(8))});
+    routine.next_occurrence_on = routine.run_mode === "manual" ? null : nextRoutineOccurrence({...routine,after_date:localDate(new Date(),plan.timezone)});
+    while(routine.next_occurrence_on && generated.demo_routine_occurrences?.some(o=>o.routine_id===routine!.id && o.occurrence_on===routine!.next_occurrence_on)) routine.next_occurrence_on=nextRoutineOccurrence({...routine,after_date:routine.next_occurrence_on});
   }
   return generated;
 }

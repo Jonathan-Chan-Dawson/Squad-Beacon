@@ -7,6 +7,7 @@ import { addLocalDays } from "../src/features/plans/routines";
 const now=Date.now();
 function fixture() {
   const data=makeDemo();
+  data.demo_premium_tier="plus"; // These cases exercise paid multi-Beacon generation.
   const routine=data.plan_routines[0];
   const plan=data.plans.find((item)=>item.id===routine.plan_id)!;
   const startOn=routine.next_occurrence_on!;

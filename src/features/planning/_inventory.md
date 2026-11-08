@@ -21,3 +21,5 @@ Planning feature
 - connected.ts, handoff.ts, and demoConnected.ts: scheduling rules, reviewed Beacon editor handoffs, and demo action parity. Hosted authority remains in the additive connected_planning migration.
 
 - PlanningTimeField and ZonedTimeField platform adapters use the shared DateField ISO-instant boundary with explicit timezone; wall-time conversion is owned by shared/dateTime.ts.
+
+- CouncilEnhancements.tsx: contextual saved Council configuration, option groups, preparation checks and optional response explanations; existing responses remain Free.

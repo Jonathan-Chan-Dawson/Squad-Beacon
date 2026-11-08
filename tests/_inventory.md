@@ -54,3 +54,10 @@ Tests should exercise product flows through public routes/actions and preserve e
 - beaconCardShortcuts.test.ts and browser/beaconShortcuts.spec.ts: viewer/module/location permissions, direct card actions, public privacy, map return and compact phone/desktop layouts.
 
 - browser/beaconFilterMotion.spec.ts: actual Map/Browse centered Filters fade frames, reduced motion, stable position, Reset/Show actions and Escape dismissal.
+
+- premium.test.ts, premium.database.test.ts and browser/premium.spec.ts: all demo tiers, quota boundaries/downgrades, verified-grant isolation, Routine ownership, scheduled generation, Premium navigation and responsive appearance. Run npm run test:premium; database coverage uses local PGlite.
+
+- planEditor.test.ts, planEditorRepository.test.ts and planEditor.database.test.ts: staged save/publication, replay, private editor projections, revision checks, account/mode isolation, atomic storage and monthly rules. Run npm run test:plan-editor. browser/planEditor.spec.ts covers defined create/link choices, centered reordering, appearances and explicit publication; livingPlans/createFlow/activityWorkspace browser suites preserve existing creation/navigation assertions.
+
+- premiumTools.test.ts and premiumTools.database.test.ts: all-tier configuration permissions, former Checklist ceilings, paging, reminder replay, private Journal/media authorization, private allocation writes, pooled shared access, transfer waits, grace and explicit Routine resume. Run npm run test:premium-tools; ordered history runs in PGlite.
+- browser/premiumTools.spec.ts: compact Checklist details/downgrade continuity, Boost contribution/withdrawal and separated demo totals at narrow width in both appearances.

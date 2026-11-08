@@ -361,7 +361,7 @@ export function Action({
       />
       {!!error && (
         <Text accessibilityRole="alert" style={styles.error}>
-          {error}
+          {error.replace(/^PREMIUM_(?:QUOTA|REQUIRED):\s*/, "")}
         </Text>
       )}
     </View>
@@ -579,7 +579,7 @@ export function Sheet({
   const safeBottom = centered ? 0 : insets.bottom;
   const capPercent = Math.max(35, Math.min(94, maxHeightPercent));
   const centeredHeight = Math.min(
-    620,
+    Math.max(240, snapHeight ?? 620),
     ((height - insets.top - insets.bottom) * capPercent) / 100,
   );
   const snapPoints = React.useMemo(

@@ -1,3 +1,5 @@
+import {PremiumToolSettings} from "../components/PremiumToolSettings";
+import type { Href } from "expo-router";
 import { BeaconTimingEditor } from "../components/BeaconTimingEditor";
 import { RepeatBeaconAction } from "@/src/features/plans/RepeatBeaconAction";
 import { GuestShareSheet } from "@/src/features/sharing/GuestShareSheet";
@@ -950,12 +952,15 @@ export default function ActivityDetail() {
     if (tool === "music") return isBeaconModuleEnabled(activity, "music");
     return isBeaconModuleEnabled(activity, tool);
   };
-  const toolOrder: ToolId[] =
+  const appearance=data.premium_tool_configs?.find(t=>t.activity_id===activity.id&&t.kind==="appearance")?.settings;
+  const defaultToolOrder: ToolId[] =
     activity.category === "Fitness"
       ? ["scoreboard", "checklist", "focus", "journal", "music"]
       : activity.category === "Study"
         ? ["focus", "journal", "checklist", "music", "scoreboard"]
         : ["checklist", "journal", "focus", "music", "scoreboard"];
+  const preferred=appearance?.module_order?.filter((k):k is ToolId=>defaultToolOrder.includes(k as ToolId))??(appearance?.layout==="session"?["focus","scoreboard"] as ToolId[]:appearance?.layout==="preparation"?["checklist"] as ToolId[]:[]);
+  const toolOrder=[...new Set([...preferred,...defaultToolOrder])];
   const checklistHistory = data.beacon_checklist_items
     .filter(
       (item) =>
@@ -1627,6 +1632,9 @@ export default function ActivityDetail() {
                   />
                 ) : null}
                 {canManageSettings ? (
+                  <PremiumToolSettings activity={activity} kind="appearance"/>
+                ) : null}
+                {canManageSettings ? (
                   <BeaconSettings
                     key={beaconSettingsDraftKey(activity)}
                     activity={activity}
@@ -1686,6 +1694,7 @@ export default function ActivityDetail() {
           </Animated.ScrollView>
 
           <ActivityDetailHero
+            premiumStyle={appearance?.style}
             title={activity.title}
             category={activity.category}
             modeLabel={
@@ -1826,6 +1835,10 @@ export default function ActivityDetail() {
             icon: <Bookmark size={17} />,
             onPress: () => void toggleSavedBeacon(),
           },
+          ...((data.is_demo || data.capabilities?.plan_editor) && activity.status!=="cancelled" ? [{
+            label:"Add to Plan",
+            onPress:()=>router.push(("/plan-editor?beaconId="+encodeURIComponent(activity.id)+"&choosePlan=yes") as Href),
+          }]:[]),
           {
             label: "Save as a template",
             icon: <ClipboardCheck size={17} />,

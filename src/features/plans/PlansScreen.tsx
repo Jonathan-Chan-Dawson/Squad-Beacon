@@ -1,9 +1,10 @@
+import { PremiumPreview } from "@/src/features/profile/settings/PremiumUI";
 import { ActivityFrame } from "@/src/features/activity/ActivityFrame";
 import { ActivityActionBar } from "@/src/features/activity/ActivityActionBar";
 import { LivingPlansScreen } from "./LivingPlansScreen";
 import { livingPlansEnabled } from "./livingPlans";
 import React, { useMemo, useState } from "react";
-import { router, useLocalSearchParams } from "expo-router";
+import { router, usePathname, useLocalSearchParams } from "expo-router";
 import { Plus, Repeat2, Sparkles } from "lucide-react-native";
 import { PanResponder, Pressable, Text, View } from "react-native";
 import { useBeacon } from "@/src/shared/store";
@@ -108,6 +109,7 @@ export default function PlansScreen() {
 }
 
 function PlanBuilderScreen() {
+  const viewingPremium = usePathname() === "/settings/premium";
   const { styles } = useTheme();
   const { data, userId, act } = useBeacon();
   const params = useLocalSearchParams<{
@@ -642,7 +644,7 @@ function PlanBuilderScreen() {
       </Sheet>
       <Sheet
         title={templateEditor ? "Plan template" : "Build a plan"}
-        visible={editor}
+        visible={editor && !viewingPremium}
         onClose={() => setEditor(false)}
       >
         {scopeId && selectedSquad ? (
@@ -1042,6 +1044,7 @@ function PlanBuilderScreen() {
             run={createPlan}
           />
         )}
+        <PremiumPreview kind="Plan" />
         <Action
           title={templateEditor ? "Save template" : "Save as template"}
           secondary

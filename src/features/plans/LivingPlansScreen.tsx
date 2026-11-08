@@ -1,3 +1,4 @@
+import { PremiumPreview } from "@/src/features/profile/settings/PremiumUI";
 import { ActivityActionBar } from "@/src/features/activity/ActivityActionBar";
 import { GuestShareButton } from "@/src/features/sharing/GuestShareSheet";
 import {
@@ -20,7 +21,7 @@ import {
 } from "@/src/features/onboarding/OnboardingUI";
 import PlanDateField from "./PlanDateField";
 import { ConnectedPlanningActions } from "@/src/features/planning/ConnectedPlanningActions";
-import React, { useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { View } from "react-native";
 import ZonedTimeField from "@/src/features/planning/ZonedTimeField";
 import {
@@ -43,7 +44,7 @@ import {
 } from "lucide-react-native";
 import { PlanChoice, TimelineHeading, PlanProgress } from "./PlanPresentation";
 import { randomUUID } from "expo-crypto";
-import { router, useLocalSearchParams } from "expo-router";
+import { router, usePathname, useLocalSearchParams, type Href } from "expo-router";
 import { useBeacon } from "@/src/shared/store";
 import {
   Action,
@@ -103,6 +104,17 @@ export function LivingPlansScreen() {
     sourcePlan?: string;
     routine?: string;
   }>();
+  const forwardedCreate = useRef(false);
+  useEffect(() => {
+    if (params.create !== "yes") { forwardedCreate.current = false; return; }
+    if (!forwardedCreate.current && (data.is_demo || data.capabilities?.plan_editor)) {
+      forwardedCreate.current = true;
+      const context = { ...params };
+      delete context.create;
+      router.setParams({create:undefined});
+      router.push(("/plan-editor?"+new URLSearchParams(Object.entries(context).filter((entry): entry is [string,string]=>typeof entry[1]==="string")).toString()) as Href);
+    }
+  }, [params, data.is_demo, data.capabilities?.plan_editor]);
   const recoveryScope = `${userId}:${demo}:${viewerEpoch}`;
   const recovering = pendingPlanCreation(recoveryScope);
   const squads = data.squads.filter((s) =>
@@ -208,6 +220,9 @@ export function LivingPlansScreen() {
     timezone = "UTC";
   }
   const openNewPlan = () => {
+    if (data.is_demo || data.capabilities?.plan_editor) {
+      router.push(("/plan-editor"+(filter!=="All"&&filter!=="Personal"?"?squadId="+encodeURIComponent(filter):"")) as Href); return;
+    }
     setTitle("");
     setDate("");
     setStarter("Custom");
@@ -277,6 +292,7 @@ export function LivingPlansScreen() {
               secondary
               title={t.title}
               onPress={() => {
+                if(data.is_demo || data.capabilities?.plan_editor){router.push(("/plan-editor?template="+encodeURIComponent(t.id)) as Href);return;}
                 setTemplateId(t.id);
                 setTitle(t.title);
                 setCreating(true);
@@ -339,7 +355,7 @@ export function LivingPlansScreen() {
       })}
       <Sheet
         title="New Plan"
-        visible={creating}
+        visible={creating && !data.is_demo && !data.capabilities?.plan_editor}
         onClose={() =>
           creationGuard.close(() => {
             setCreating(false);
@@ -537,6 +553,7 @@ export function LivingPlanDetail() {
 }
 
 function PlanTimeline({ planId }: { planId: string }) {
+  const viewingPremium = usePathname() === "/settings/premium";
   const now = useNow(1000);
   const params = useLocalSearchParams<{ repeat?: string }>();
   const { data, userId, act, getViewerEpoch, refresh } = useBeacon();
@@ -1444,7 +1461,7 @@ function PlanTimeline({ planId }: { planId: string }) {
             />
           ))}
       </Sheet>
-      <Sheet title="Plan tools" visible={more} onClose={() => setMore(false)}>
+      <Sheet title="Plan tools" visible={more && !viewingPremium} onClose={() => setMore(false)}>
         {access.editor && (
           <>
             <Button
@@ -1458,6 +1475,7 @@ function PlanTimeline({ planId }: { planId: string }) {
                 setMore(false);
               }}
             />
+            <PremiumPreview kind="Plan" />
             <Action
               secondary
               title="Save as My Template"

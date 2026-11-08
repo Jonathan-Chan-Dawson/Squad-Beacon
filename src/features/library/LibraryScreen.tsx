@@ -1,3 +1,5 @@
+import {JournalReflectionSearch} from "@/src/features/beacons/components/JournalEnhancements";
+import { PremiumPreview } from "@/src/features/profile/settings/PremiumUI";
 import React, { useMemo, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import * as Crypto from "expo-crypto";
@@ -315,6 +317,7 @@ export function LibraryScreen() {
 
   return (
     <Screen title="Your library" eyebrow="PAST" create={false}>
+      <JournalReflectionSearch/>
       <View style={styles.card}>
         <Txt>
           Your journal entries and saved lists are private to you. Shared Beacon
@@ -685,6 +688,7 @@ export function LibraryScreen() {
           {error}
         </Text>
       )}
+      {error.startsWith("PREMIUM_REQUIRED") && <PremiumPreview />}
 
       {historyCards.length ? (
         <View style={[styles.card, { gap: 9 }]}>

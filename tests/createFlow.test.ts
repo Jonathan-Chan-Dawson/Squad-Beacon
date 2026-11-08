@@ -110,7 +110,7 @@ test("manual Plan execution preserves the reusable itinerary and advances a dura
       ?.next_occurrence_on,
     null,
   );
-  const scheduled = demoAction(reusable, "edit_routine", {
+  const scheduled = demoAction({ ...reusable, demo_premium_tier: "plus" }, "edit_routine", {
     id: routine.id,
     run_mode: "scheduled",
     weekdays: [5],

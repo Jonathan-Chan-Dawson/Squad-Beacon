@@ -23,3 +23,9 @@ Feature-specific business rules belong under src/features/; keep only true cross
 - NavigationTabs.tsx: theme-aware underlined primary tabs and compact filter chips, with focus and reduced-motion support.
 
 - Explicitly centered Sheet and Dialog surfaces use short reduced-motion-aware fades; non-centered sheets retain their existing spring presentation. Long centered/anchored web menus retain thin theme-colored scrollbars.
+
+- entitlements.ts: typed Free/Plus/Pro catalog, personal/Beacon/Squad resolution, personal template quotas and demo downgrade pausing. Real grants come only from authorized snapshots; demo tiers stay session-scoped in store.tsx.
+
+- Plan editor snapshots include authorized private configurations and plan_editor/recurrence_v2 capabilities. getCurrentData provides the current viewer-matched snapshot for conflict review; demo session identity isolates draft storage across fresh sessions.
+
+- premiumFeatures.ts and entitlements.ts: typed personal/shared feature catalog, capability-aware personal/Beacon/Squad decisions and continuity rules. Verified projections never grant resource-editing permissions; demo overrides remain isolated.

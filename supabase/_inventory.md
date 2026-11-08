@@ -33,3 +33,11 @@ No remote deployment is performed by local source changes.
 - 202610140004_community_profiles.sql: authenticated exact-ID community summaries using existing visibility predicates; no new tables or membership hierarchy. Hosted application is a separate rollout step.
 
 - 20261026031141_beacon_invitation_recommendation.sql: removes the atomic Beacon recipient-count cap and raises only its invitation throttle to the approved 300/hour. Friendship, permissions, replay and the general action ceiling remain enforced. Source-only; hosted rollout pending.
+
+- 20261104233043_premium_foundation.sql: private verified grants, serialized personal-template quotas, owner-scoped recurrence enforcement, expiry/downgrade pauses and authorized Premium snapshot projection. Source-only until separately deployed.
+
+- 20261105052042_streamline_plan_routine_creation.sql: additive private Plan configurations, revision-checked transactional draft saving/selected publication, request replay, typed recurrence rules and authorized bounded routine_upcoming reads. Reuses canonical Beacon and Premium writers; local source only, hosted rollout separate.
+
+- 20261107011114_premium_tools_checklists.sql: unlimited incremental Checklist reads, paid details/presets, Free Bring Items canonical writes, revision-safe task notices and push revalidation.
+- 20261107012458_premium_beacon_tools.sql: private typed tool settings/presets, Journal metadata, authorized media-reference collections/Afterglow, Council extras, configured scoring and Plan team rotation.
+- 20261107014652_squad_boost_lifecycle.sql: private atomic allocations, verified allowances, transfer waits, expiry-based non-extending grace, authorized projections and shared Routine eligibility. All three are source-only until separate hosted rollout; PGlite does not establish multi-connection locking.

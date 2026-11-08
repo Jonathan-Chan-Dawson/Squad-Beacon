@@ -72,8 +72,6 @@ import {
   Maximize,
   Settings2,
   X,
-  CalendarDays,
-  MessageCircle,
 } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import BeaconMap, {
@@ -179,7 +177,7 @@ import { classifyPlaceCategory } from "@/src/features/maps/placeCategories";
 import { MapControlPopover, MapNavigationRow } from "../MapControlPopover";
 import { useMapWeather, weatherCondition } from "../mapWeather";
 import { MapOptions, MapStyleControls } from "@/src/features/maps/MapOptions";
-import { MapContextMenu } from "@/src/features/maps/MapContextMenu";
+import { MapPlaceActions } from "@/src/features/maps/MapPlaceActions";
 import {
   readMapDevicePreferences,
   writeMapDevicePreferences,
@@ -480,6 +478,7 @@ export default function MapScreen() {
   );
   const [placeSearchOpen, setPlaceSearchOpen] = useState(false);
   const [headerHeight, setHeaderHeight] = useState(0);
+  const [placeSearchHeaderHeight, setPlaceSearchHeaderHeight] = useState(160);
   const [createdNotice, setCreatedNotice] = useState(false);
   const [viewport, setViewport] = useState<MapViewport | null>(null);
   const weather = useMapWeather(
@@ -673,11 +672,29 @@ export default function MapScreen() {
   );
   const [locationPickError, setLocationPickError] = useState("");
   const creationLocationContext = useRef<Record<string, string>>({});
-  const [pickedMapPoint, setPickedMapPoint] = useState<{
+  const [selectedPlace, setSelectedPlace] = useState<{
     latitude: number;
     longitude: number;
     label: string;
+    source?: "hold" | "button" | "search" | "place";
+    phase?: "placement" | "menu";
+    knownPlace?: PulsePlace;
   } | null>(null);
+  const selectedPlaceReadable =
+    !selectedPlace?.knownPlace?.placeKey.startsWith("saved:") || !!pulsePlace;
+  useEffect(() => {
+    if (selectedPlaceReadable) return;
+    const frame = requestAnimationFrame(() => {
+      const previous = pickRestore.current;
+      pickRestore.current = null;
+      setSelectedPlace(null);
+      setPickMode(false);
+      setPlaceSearchOpen(false);
+      if (previous?.viewer === userId) exploration.setQuery(previous.query);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [selectedPlaceReadable, userId, exploration]);
+
   const processedRouteSelection = useRef<string | null>(null);
   const clearRouteSelection = useCallback(() => {
     processedRouteSelection.current = JSON.stringify([
@@ -746,6 +763,7 @@ export default function MapScreen() {
       }, 400);
   }
   function choosePulsePlace(place: PulsePlace) {
+    cancelSurprise();
     setCompassSheetOpen(false);
     const existing = mapPreferences.liveUpdates
       ? pulse.summaries.find(
@@ -767,12 +785,24 @@ export default function MapScreen() {
     setClusterActivityIds(null);
     setClusterPersonIds(null);
     setContextPoint(null);
+    setMapAnchor(null);
     setPulsePlace(canonicalPlace);
     setAddUpdate(false);
     setInitialAnswers(undefined);
     setPlaceSearchOpen(false);
-    setPickMode(false);
-    setPickedMapPoint(null);
+    if (!pickRestore.current)
+      pickRestore.current = { viewer: userId, query: exploration.query };
+    closePopovers();
+    setPickingDraft(false);
+    setPickMode(true);
+    setSelectedPlace({
+      latitude: canonicalPlace.lat,
+      longitude: canonicalPlace.lng,
+      label: canonicalPlace.name,
+      source: "place",
+      knownPlace: canonicalPlace,
+      phase: "menu",
+    });
   }
   function openAddUpdate(answers?: PulseAnswers) {
     if (!mapPreferences.liveUpdates) updateMapPreference({ liveUpdates: true });
@@ -1863,7 +1893,7 @@ export default function MapScreen() {
     setPerson(null);
     setPlaceSearchOpen(false);
     setPickMode(false);
-    setPickedMapPoint(null);
+    setSelectedPlace(null);
   }
 
   function choosePerson(id: string) {
@@ -1898,20 +1928,32 @@ export default function MapScreen() {
     setLocationPickError("");
     setPickingDraft(false);
     closePopovers();
-    setPickedMapPoint(null);
+    setSurprise(null);
+    surpriseRef.current = null;
+    setPulseSelection(null);
+    setMapAnchor(null);
+    setSelectedPlace(null);
     setPickMode(true);
     setPlaceSearchOpen(false);
-  }, [userId, exploration.query, closePopovers]);
+  }, [
+    userId,
+    exploration.query,
+    closePopovers,
+    setSelectedPlace,
+    setMapAnchor,
+    setPulseSelection,
+  ]);
 
   function finishPicking() {
     Keyboard.dismiss();
     const previous = pickRestore.current;
     pickRestore.current = null;
     creationLocationContext.current = {};
-    setPickedMapPoint(null);
+    setSelectedPlace(null);
     setPickMode(false);
     setPickingDraft(false);
     setPlaceSearchOpen(false);
+    setPulsePlace(null);
     if (previous?.viewer === userId) exploration.setQuery(previous.query);
   }
 
@@ -1951,7 +1993,7 @@ export default function MapScreen() {
       creationLocationContext.current = {};
       setPickMode(false);
       setPickingDraft(false);
-      setPickedMapPoint(null);
+      setSelectedPlace(null);
       setPlaceSearchOpen(false);
     }
   }, [userId]);
@@ -1965,14 +2007,14 @@ export default function MapScreen() {
       creationLocationContext.current = context;
       setPickingDraft(context.locationPicker === "editor");
       if (context.latitude && context.longitude) {
-        setPickedMapPoint({
+        setSelectedPlace({
           latitude: Number(context.latitude),
           longitude: Number(context.longitude),
           label:
             context.placeLabel ||
             (Platform.OS !== "web" ? "Pinned location" : "Pinned map location"),
         });
-      } else if (context.locationPicker === "editor") setPickedMapPoint(null);
+      } else if (context.locationPicker === "editor") setSelectedPlace(null);
       router.setParams({
         pickLocation: undefined,
         locationPicker: undefined,
@@ -1990,6 +2032,22 @@ export default function MapScreen() {
   }, [params, startPickingLocation]);
 
   function exploreSavedPlace(place: ActivityPlace) {
+    if (pickMode && validPhysicalPlace(place)) {
+      const knownPlace =
+        savedPulsePlace(place) ??
+        areaPulsePlace(place.latitude, place.longitude);
+      setSelectedPlace({
+        latitude: place.latitude,
+        longitude: place.longitude,
+        label: place.label,
+        knownPlace: pickingDraft ? undefined : knownPlace,
+        source: "search",
+        phase: "menu",
+      });
+      if (!pickingDraft) setPulsePlace(knownPlace);
+      setPlaceSearchOpen(false);
+      return;
+    }
     if (discoveryRestore.current) discoveryRestore.current.cameraChanged = true;
     if (!validPhysicalPlace(place)) return;
     clearRouteSelection();
@@ -1998,7 +2056,7 @@ export default function MapScreen() {
     setSelected(null);
     setPerson(null);
     setPickMode(false);
-    setPickedMapPoint(null);
+    setSelectedPlace(null);
     exploration.setQuery("");
     exploration.setArea({
       kind: "place",
@@ -2025,7 +2083,23 @@ export default function MapScreen() {
   function exploreWorldPlace(place: WorldwidePlace) {
     if (pickMode && isValidCoordinate(place.coordinate)) {
       Keyboard.dismiss();
-      setPickedMapPoint({ ...place.coordinate, label: place.label });
+      const knownPlace: PulsePlace = {
+        placeKey: place.id,
+        name: place.label,
+        lat: place.coordinate.latitude,
+        lng: place.coordinate.longitude,
+        category: classifyPlaceCategory(
+          place.primaryType ? [place.primaryType] : [],
+        ),
+      };
+      setSelectedPlace({
+        ...place.coordinate,
+        label: place.label,
+        source: "search",
+        phase: "menu",
+        knownPlace,
+      });
+      if (!pickingDraft) setPulsePlace(knownPlace);
       setPlaceSearchOpen(false);
       setControlCommand((previous) => ({
         kind: "focus",
@@ -2042,7 +2116,7 @@ export default function MapScreen() {
     setSelected(null);
     setPerson(null);
     setPickMode(false);
-    setPickedMapPoint(null);
+    setSelectedPlace(null);
     exploration.setQuery("");
     const isCity = [
       "locality",
@@ -2521,13 +2595,13 @@ export default function MapScreen() {
   }
 
   function confirmPickedLocation() {
-    if (!pickedMapPoint || !isValidCoordinate(pickedMapPoint)) return;
+    if (!selectedPlace || !isValidCoordinate(selectedPlace)) return;
     const context = creationLocationContext.current;
     if (context.locationPicker === "editor") {
       const returnParams = finishCreationLocationPick(
         userId,
         context.planSession,
-        pickedMapPoint,
+        selectedPlace,
       );
       if (!returnParams) {
         setLocationPickError(
@@ -2542,16 +2616,17 @@ export default function MapScreen() {
 
   function createAtPickedLocation(kind: "beacon" | "ping") {
     if (
-      !pickedMapPoint ||
-      !isValidCoordinate(pickedMapPoint) ||
+      !selectedPlace ||
+      !selectedPlaceReadable ||
+      !isValidCoordinate(selectedPlace) ||
       pickRestore.current?.viewer !== userId
     )
       return;
     const location = {
       fromMap: "yes",
-      latitude: String(pickedMapPoint.latitude),
-      longitude: String(pickedMapPoint.longitude),
-      placeLabel: pickedMapPoint.label,
+      latitude: String(selectedPlace.latitude),
+      longitude: String(selectedPlace.longitude),
+      placeLabel: selectedPlace.label,
     };
     finishPicking();
     if (kind === "ping")
@@ -2599,6 +2674,19 @@ export default function MapScreen() {
     : [];
   const headerTop = insets.top + 7;
   const mapBottomClearance = 24;
+  const placeMenuHeight = Math.min(
+    244,
+    Math.max(
+      100,
+      Math.max(
+        (mapAnchor?.y ?? mapSize.height / 2) - headerTop - 48,
+        mapSize.height -
+          mapBottomClearance -
+          (mapAnchor?.y ?? mapSize.height / 2) -
+          48,
+      ),
+    ),
+  );
   // An expanded sheet leaves only its exposed map available for floating controls.
   const controlsTop = headerTop + headerHeight - 44 + 12;
   const availableControlHeight = Math.max(
@@ -2798,7 +2886,8 @@ export default function MapScreen() {
             }}
             onLongPress={(touch) => {
               if (
-                pickMode ||
+                (pickMode &&
+                  (pickingDraft || selectedPlace?.phase === "placement")) ||
                 !isValidCoordinate(touch.coordinate) ||
                 !Number.isFinite(touch.point.x) ||
                 !Number.isFinite(touch.point.y)
@@ -2810,7 +2899,12 @@ export default function MapScreen() {
                   touch.coordinate.longitude,
                 ),
               );
-              setContextPoint({ ...touch.point, ...touch.coordinate });
+              setSelectedPlace({
+                ...touch.coordinate,
+                label: "Pinned location",
+                source: "hold",
+                phase: "menu",
+              });
               uiHaptics.light();
             }}
             hideControls
@@ -2828,7 +2922,9 @@ export default function MapScreen() {
             focused={focusedCoordinate}
             anchorCoordinate={
               pickMode
-                ? pickedMapPoint
+                ? selectedPlaceReadable
+                  ? selectedPlace
+                  : null
                 : selectedPublic
                   ? {
                       latitude: selectedPublic.coarse_lat!,
@@ -2861,19 +2957,33 @@ export default function MapScreen() {
             }
             selectedActivityId={selected}
             onPick={
-              pickMode
+              pickMode &&
+              (pickingDraft ||
+                !selectedPlace ||
+                selectedPlace.phase === "placement")
                 ? (latitude, longitude) => {
                     if (!isValidCoordinate({ latitude, longitude })) return;
                     setLocationPickError("");
-                    setPickedMapPoint({
+                    setMapAnchor(null);
+                    setSelectedPlace({
                       latitude,
                       longitude,
                       label: "Pinned location",
+                      source: "button",
+                      phase: "menu",
                     });
+                    if (!pickingDraft)
+                      setPulsePlace(areaPulsePlace(latitude, longitude));
                   }
                 : undefined
             }
-            selected={pickMode ? pickedMapPoint : contextPoint}
+            selected={
+              pickMode
+                ? selectedPlaceReadable
+                  ? selectedPlace
+                  : null
+                : contextPoint
+            }
             selectionIsTemporary={pickMode || !!contextPoint}
             onActivity={(id) => chooseBeacon(id)}
             onPerson={choosePerson}
@@ -2934,7 +3044,11 @@ export default function MapScreen() {
               }
             }}
             onMapTap={() => {
-              if (pickMode) return;
+              if (pickMode) {
+                if (!pickingDraft && selectedPlace?.phase !== "placement")
+                  cancelPicking();
+                return;
+              }
               if (contextPoint) {
                 dismissLocationMenu();
                 return;
@@ -2996,6 +3110,9 @@ export default function MapScreen() {
           {pickMode ? (
             activeSearchVisible ? (
               <View
+                onLayout={(event) =>
+                  setPlaceSearchHeaderHeight(event.nativeEvent.layout.height)
+                }
                 style={{
                   padding: 12,
                   gap: 8,
@@ -3184,7 +3301,9 @@ export default function MapScreen() {
           <View
             style={{
               position: "absolute",
-              top: headerTop + headerHeight,
+              top:
+                headerTop +
+                (pickMode ? placeSearchHeaderHeight + 8 : headerHeight),
               left: Math.max(
                 0,
                 (mapSize.width - tokens.layout.contentMaxWidth) / 2,
@@ -3212,7 +3331,7 @@ export default function MapScreen() {
                 style={{
                   maxHeight: Math.max(
                     120,
-                    mapSize.height - headerTop - headerHeight - 140,
+                    mapSize.height - headerTop - placeSearchHeaderHeight - 140,
                   ),
                   backgroundColor: colors.white,
                   borderRadius: 16,
@@ -3480,7 +3599,7 @@ export default function MapScreen() {
         />
         {(compassSheetOpen || mapControlSettingsOpen || weatherOpen) &&
           !pickMode &&
-          !pickedMapPoint && (
+          !selectedPlace && (
             <Pressable
               testID="map-toolbar-dismiss-area"
               accessibilityRole="button"
@@ -3497,7 +3616,7 @@ export default function MapScreen() {
             />
           )}
         {!pickMode &&
-        !pickedMapPoint &&
+        !selectedPlace &&
         !activeSearchVisible &&
         controlsVisible &&
         !beaconPreviewOpen ? (
@@ -3736,15 +3855,14 @@ export default function MapScreen() {
               zIndex: 21,
             }}
           >
-            <MapControl
-              label="Place: choose a location to create"
-              onPress={startPickingLocation}
-            >
+            <MapControl label="Choose a place" onPress={startPickingLocation}>
               <MapPinPlus size={21} color={colors.green} />
             </MapControl>
           </View>
         ) : null}
-        {pickMode && !activeSearchVisible && !pickedMapPoint ? (
+        {pickMode &&
+        !activeSearchVisible &&
+        (!selectedPlace || selectedPlace.phase === "placement") ? (
           <View
             testID="map-place-instructions"
             style={{
@@ -3764,7 +3882,7 @@ export default function MapScreen() {
             }}
           >
             <Text style={[styles.muted, { flexShrink: 1 }]}>
-              Tap the map to place a pin
+              Tap the map to choose a place.
             </Text>
             <IconButton
               label="Search for a location"
@@ -3778,7 +3896,11 @@ export default function MapScreen() {
             <Button compact secondary title="Cancel" onPress={cancelPicking} />
           </View>
         ) : null}
-        {pickMode && !activeSearchVisible && pickedMapPoint && mapAnchor ? (
+        {pickMode &&
+        pickingDraft &&
+        !activeSearchVisible &&
+        selectedPlace &&
+        mapAnchor ? (
           <MapCallout
             testID="map-place-confirmation"
             compact
@@ -3808,7 +3930,7 @@ export default function MapScreen() {
                   numberOfLines={1}
                   style={[styles.label, { flex: 1, fontSize: 12 }]}
                 >
-                  {pickedMapPoint.label}
+                  {selectedPlace.label}
                 </Text>
                 <Pressable
                   accessibilityRole="button"
@@ -3848,7 +3970,7 @@ export default function MapScreen() {
                 </Text>
               )}
               <View style={{ flexDirection: "row", gap: 8 }}>
-                {pickingDraft ? (
+                {
                   <Pressable
                     accessibilityRole="button"
                     onPress={confirmPickedLocation}
@@ -3871,74 +3993,7 @@ export default function MapScreen() {
                       Use This Location
                     </Text>
                   </Pressable>
-                ) : (
-                  <>
-                    <Pressable
-                      accessibilityRole="button"
-                      onPress={() => createAtPickedLocation("beacon")}
-                      style={{
-                        flex: 1,
-                        minHeight: 44,
-                        flexDirection: "row",
-                        gap: 4,
-                        justifyContent: "center",
-                        alignItems: "center",
-                        borderRadius: 10,
-                        backgroundColor: "#AFE8C3",
-                      }}
-                    >
-                      <CalendarDays
-                        size={15}
-                        color="#12382C"
-                        accessible={false}
-                      />
-                      <Text
-                        numberOfLines={1}
-                        style={{
-                          flexShrink: 1,
-                          color: "#12382C",
-                          fontSize: 12,
-                          fontWeight: "700",
-                        }}
-                      >
-                        Create Beacon
-                      </Text>
-                    </Pressable>
-                    <Pressable
-                      accessibilityRole="button"
-                      onPress={() => createAtPickedLocation("ping")}
-                      style={{
-                        flex: 1,
-                        minHeight: 44,
-                        flexDirection: "row",
-                        gap: 4,
-                        justifyContent: "center",
-                        alignItems: "center",
-                        borderRadius: 10,
-                        backgroundColor: colors.bg,
-                        borderWidth: 1,
-                        borderColor: colors.line,
-                      }}
-                    >
-                      <MessageCircle
-                        size={15}
-                        color={colors.ink}
-                        accessible={false}
-                      />
-                      <Text
-                        numberOfLines={1}
-                        style={{
-                          flexShrink: 1,
-                          color: colors.ink,
-                          fontSize: 12,
-                          fontWeight: "700",
-                        }}
-                      >
-                        Create Ping
-                      </Text>
-                    </Pressable>
-                  </>
-                )}
+                }
               </View>
             </View>
           </MapCallout>
@@ -4165,81 +4220,86 @@ export default function MapScreen() {
           />
         ) : null}
 
-        {!pickMode && pulsePlace && !contextPoint ? (
-          <View
-            testID="map-place-preview-slot"
-            style={{
-              position: "absolute",
-              left: Math.max(
-                tokens.layout.screenGutter,
-                (mapSize.width - tokens.layout.contentMaxWidth) / 2,
-              ),
-              right: Math.max(
-                tokens.layout.screenGutter,
-                (mapSize.width - tokens.layout.contentMaxWidth) / 2,
-              ),
-              bottom: mapBottomClearance + 8,
-              maxHeight: Math.max(
-                120,
-                mapSize.height -
-                  headerTop -
-                  headerHeight -
-                  mapBottomClearance -
-                  24,
-              ),
-              zIndex: 22,
-              elevation: 22,
-            }}
-          >
-            <ScrollView keyboardShouldPersistTaps="handled">
-              <PulsePlacePreview
-                scopeKey={pulseScopeKey}
-                place={pulsePlace}
-                summary={placeSummary}
-                onClose={() => setPulsePlace(null)}
-                onAdd={openAddUpdate}
-                onConfirm={pulse.confirm}
-                confirmedUntil={pulse.confirmedUntil(pulsePlace.placeKey)}
-                lastAnswers={pulse.lastAnswers(pulsePlace.placeKey)}
-                onCreateBeacon={createAtPulsePlace}
-                onDirections={directionsAtPulsePlace}
-                onPing={() =>
-                  router.push({
-                    pathname: "/councils",
-                    params: {
-                      newPing: "yes",
-                      placeLabel: pulsePlace.name,
-                      pingSeed: String(Date.now()),
-                    },
-                  })
-                }
-                onNearby={() => {
-                  setPulsePlace(null);
-                  resetFilters();
-                  exploration.setQuery("");
-                  setPlaceSearchOpen(true);
-                }}
-                onReportNote={pulse.reportNote}
-                happeningHere={
-                  happeningHereRows.length ? happeningHereRows : undefined
-                }
-              />
-            </ScrollView>
-          </View>
-        ) : null}
-        {!pickMode && contextPoint && pulsePlace ? (
-          <MapContextMenu
-            point={contextPoint}
+        {pickMode &&
+        !pickingDraft &&
+        selectedPlace &&
+        selectedPlaceReadable &&
+        selectedPlace.phase !== "placement" &&
+        !activeSearchVisible &&
+        mapAnchor &&
+        !addUpdate ? (
+          <MapCallout
+            testID="map-place-menu"
+            motion="place"
+            maxWidth={288}
+            anchor={mapAnchor}
+            onDismiss={cancelPicking}
             bounds={{
               ...mapSize,
-              top: headerTop + headerHeight + 8,
+              top: headerTop + 8,
               bottom: mapBottomClearance + 8,
             }}
-            onUpdate={() => openAddUpdate()}
-            onCreate={createAtPulsePlace}
-            onClose={dismissLocationMenu}
-            onDirections={directionsAtPulsePlace}
-          />
+          >
+            <MapPlaceActions
+              maxHeight={placeMenuHeight}
+              title={selectedPlace.label}
+              onClose={cancelPicking}
+              onCreate={() => createAtPickedLocation("beacon")}
+              onPing={() => createAtPickedLocation("ping")}
+              onUpdate={() => openAddUpdate()}
+              onDirections={() => {
+                const url = physicalDirectionsUrl(
+                  selectedPlace.latitude,
+                  selectedPlace.longitude,
+                );
+                finishPicking();
+                if (url) void Linking.openURL(url).catch(() => {});
+              }}
+              onSearch={() => {
+                exploration.setQuery("");
+                setPlaceSearchOpen(true);
+              }}
+            >
+              {pulsePlace &&
+              (selectedPlace.knownPlace ||
+                placeSummary ||
+                happeningHereRows.length > 0) ? (
+                <PulsePlacePreview
+                  detailsOnly
+                  scopeKey={pulseScopeKey}
+                  place={pulsePlace}
+                  summary={placeSummary}
+                  onClose={cancelPicking}
+                  onAdd={openAddUpdate}
+                  onConfirm={pulse.confirm}
+                  confirmedUntil={pulse.confirmedUntil(pulsePlace.placeKey)}
+                  lastAnswers={pulse.lastAnswers(pulsePlace.placeKey)}
+                  onCreateBeacon={createAtPulsePlace}
+                  onDirections={directionsAtPulsePlace}
+                  onPing={() =>
+                    router.push({
+                      pathname: "/councils",
+                      params: {
+                        newPing: "yes",
+                        placeLabel: pulsePlace.name,
+                        pingSeed: String(Date.now()),
+                      },
+                    })
+                  }
+                  onNearby={() => {
+                    setPulsePlace(null);
+                    resetFilters();
+                    exploration.setQuery("");
+                    setPlaceSearchOpen(true);
+                  }}
+                  onReportNote={pulse.reportNote}
+                  happeningHere={
+                    happeningHereRows.length ? happeningHereRows : undefined
+                  }
+                />
+              ) : null}
+            </MapPlaceActions>
+          </MapCallout>
         ) : null}
         <AddLiveUpdateSheet
           visible={addUpdate && !!pulsePlace}

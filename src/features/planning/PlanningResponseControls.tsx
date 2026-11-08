@@ -1,3 +1,4 @@
+import {CouncilResponseExtra} from "./CouncilEnhancements";
 import { CouncilChoices } from "./CouncilChoices";
 import { AvailabilityControls } from "./TimeFinder";
 import { submitPlanning } from "./submission";
@@ -13,7 +14,7 @@ import {
 } from "./planningInteraction";
 import { PingPreferences } from "./PingPreferences";
 
-export function PlanningResponseControls({
+function PlanningResponseControlsBody({
   threadId,
   onOpen = () => {},
   showDeadline = true,
@@ -140,3 +141,5 @@ export function PlanningResponseControls({
     </View>
   );
 }
+
+export function PlanningResponseControls(props:React.ComponentProps<typeof PlanningResponseControlsBody>){return <View style={{gap:8}}><PlanningResponseControlsBody {...props}/>{props.expanded!==false&&<CouncilResponseExtra threadId={props.threadId}/>}</View>;}

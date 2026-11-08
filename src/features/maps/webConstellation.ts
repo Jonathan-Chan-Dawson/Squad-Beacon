@@ -120,9 +120,7 @@ export function webConstellation(
     // Identity decorations never enlarge or obscure the established cluster footprint.
     if (markerSize < 24)
       item
-        .querySelectorAll(
-          '[data-testid="beacon-ownership-star"], [data-testid="beacon-friend-rim"]',
-        )
+        .querySelectorAll('[data-testid="beacon-ownership-star"]')
         .forEach((decoration) => decoration.remove());
     if (!petalBookmarkVisible(geometry, index))
       item.querySelector('[data-testid="beacon-saved-bookmark"]')?.remove();

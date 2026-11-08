@@ -1,3 +1,8 @@
+import {resolveBeaconEntitlements,resolvePersonalEntitlements} from "@/src/shared/entitlements";
+import {tierRank,premiumFeatures} from "@/src/shared/premiumFeatures";
+import {toolFeature,type ToolSettings} from "../premiumTools";
+import { readPlanDraft, writePlanDraft, planDraftKey } from "@/src/features/plans/planEditorStorage";
+import { PremiumPreview } from "@/src/features/profile/settings/PremiumUI";
 import { ActivityCategoryChoices } from "../components/ActivityCategoryChoices";
 import { finishCreationPublicListing, type CreationPublicListing } from "../creationPublicListing";
 import { BeaconTimingEditor } from "../components/BeaconTimingEditor";
@@ -83,6 +88,7 @@ import {
 } from "@/src/features/organizations/domain";
 import type { SocialEntityType } from "@/src/features/social/types";
 import type {
+  Activity,
   Audience,
   BeaconModuleDefaults,
   Category,
@@ -119,7 +125,7 @@ function moduleDefaultsFromControls(
     enable_music: controls.enable_music,
   };
 }
-export default function CreateActivity() {
+export default function CreateActivity({ templateBrowser = false }: { templateBrowser?: boolean } = {}) {
   const params = useLocalSearchParams();
   const { userId } = useBeacon();
   if (typeof params.resumeDraft === "string")
@@ -131,7 +137,7 @@ export default function CreateActivity() {
     );
   if (usesSharedStatusEditor(params))
     return <LegacyStatusScreen params={params} />;
-  return <CreateEditor key={userId + JSON.stringify(params)} />;
+  return <CreateEditor templateBrowser={templateBrowser} key={userId + JSON.stringify(params)} />;
 }
 
 function RestoreDraft({ token }: { token: string }) {
@@ -179,7 +185,7 @@ function CreationKeyboardScreen(props: React.ComponentProps<typeof Screen>) {
   );
 }
 
-function CreateEditor() {
+function CreateEditor({ templateBrowser = false }: { templateBrowser?: boolean } = {}) {
   const { styles, colors } = useTheme();
 
   const { data, userId, act, getViewerEpoch } = useBeacon();
@@ -188,6 +194,8 @@ function CreateEditor() {
     kind?: string;
     editor?: string;
     planId?: string;
+    planDraftKey?: string;
+    planDraftStopId?: string;
     returnPlanId?: string;
     planStopId?: string;
     stopPosition?: string;
@@ -619,7 +627,7 @@ function CreateEditor() {
       params.spaceId ||
       saved ||
       previous ||
-      templateEditor
+      templateEditor || params.planDraftKey
     )
       return;
     const key = `${userId}:${controlsRouteKey}`;
@@ -651,6 +659,7 @@ function CreateEditor() {
   }, [
     userId,
     data,
+    params.planDraftKey,
     params.kind,
     params.squadId,
     params.organizationId,
@@ -753,6 +762,12 @@ function CreateEditor() {
   const [optionalSection, setOptionalSection] = usePlanningDraftState<
     "none" | "modules" | "advanced"
   >(userId, draftToken, "creationOptionalSection", "none");
+  const [premiumAppearance,setPremiumAppearance]=usePlanningDraftState<ToolSettings|null>(userId,draftToken,"premiumAppearance",(planningDraftObject(userId,draftToken,"planBeaconPayload",()=>({})) as {premium_appearance?:ToolSettings}).premium_appearance??saved?.premium_appearance??null);
+  const appearanceContext=resolveBeaconEntitlements(data,{id:"draft-premium",owner_id:userId??"",audience,audience_id:audienceId} as Activity);
+  const personalAppearance=resolvePersonalEntitlements(data,userId);
+  const appearanceTier=templateEditor?personalAppearance.tier:appearanceContext.tier;
+  const canUseAppearance=(data.is_demo||data.capabilities?.advanced_beacon_tools===true)&&appearanceTier!=="free";
+  const appearanceAllowed=!premiumAppearance||tierRank(appearanceTier)>=tierRank(premiumFeatures[toolFeature("appearance",premiumAppearance)].tier);
   const [allAspirations, setAllAspirations] = useState(false);
   const [descriptionHeight, setDescriptionHeight] = useState(96);
   const [savingDraft, setSavingDraft] = useState(false);
@@ -867,7 +882,9 @@ function CreateEditor() {
     value: BeaconControlValues;
   }>(userId, draftToken, "beaconControlDraft", () => ({
     routeKey: controlsRouteKey,
-    value: saved?.module_defaults
+    value: params.planDraftKey
+      ? { ...defaultBeaconControlValues(), ...planningDraftObject(userId,draftToken,"planBeaconPayload",()=>({})) }
+      : saved?.module_defaults
       ? { ...defaultBeaconControlValues(), ...saved.module_defaults }
       : previous
         ? {
@@ -952,6 +969,7 @@ function CreateEditor() {
       target_count: target.trim() ? Number(target) : null,
       approval_required: approval === "Host approval",
       module_defaults: moduleDefaultsFromControls(beaconControls),
+      ...(premiumAppearance&&tierRank(personalAppearance.tier)>=tierRank(premiumFeatures[toolFeature("appearance",premiumAppearance)].tier)?{premium_appearance:premiumAppearance}:{}),
     });
     if (
       !templateEditor ||
@@ -1071,7 +1089,7 @@ function CreateEditor() {
     }
   }
   async function submit(largeBatchConfirmed = false) {
-    if (!largeBatchConfirmed && needsLargeInviteConfirmation(inviteeIds) && !invitationSession.current.atomicAttempt) {
+    if (!params.planDraftKey && !largeBatchConfirmed && needsLargeInviteConfirmation(inviteeIds) && !invitationSession.current.atomicAttempt) {
       setLargeInviteSelection([...inviteeIds]);
       return;
     }
@@ -1172,7 +1190,7 @@ function CreateEditor() {
     if (
       kind !== "Status" &&
       addTo !== "Vote / Draw" &&
-      !params.planningOptionId &&
+      !params.planningOptionId && !params.planDraftKey &&
       placeType === "In person" &&
       !pin
     ) {
@@ -1187,7 +1205,7 @@ function CreateEditor() {
       kind !== "Status" &&
       addTo !== "Vote / Draw" &&
       !params.planningOptionId &&
-      placeType === "Online" &&
+      !params.planDraftKey && placeType === "Online" &&
       !validCreationMeetingLink(url)
     ) {
       setFieldError({
@@ -1238,6 +1256,7 @@ function CreateEditor() {
       latitude: placeType === "In person" ? (pin?.latitude ?? null) : null,
       longitude: placeType === "In person" ? (pin?.longitude ?? null) : null,
       ...(controls ?? {}),
+      ...(kind!=="Status"&&premiumAppearance&&appearanceAllowed?{premium_appearance:premiumAppearance}:{}),
       ...(params.savedChecklist
         ? { saved_checklist_id: params.savedChecklist }
         : {}),
@@ -1249,6 +1268,19 @@ function CreateEditor() {
         payload.target_count > 100)
     )
       throw new Error("Choose a crew target from 2 to 100, or leave it blank.");
+    if (params.planDraftKey && params.planDraftStopId) {
+      if (!userId || !params.planDraftKey.startsWith(planDraftKey(data.is_demo?`${userId}:${data.demo_session_id??"fixture"}`:userId, data.is_demo === true, ""))) throw new Error("Your account changed. Reopen this Plan draft.");
+      const stageEpoch = getViewerEpoch();
+      const parent = await readPlanDraft(params.planDraftKey);
+      if(stageEpoch!==getViewerEpoch() || dataRef.current.viewer_id!==userId) throw new Error("Your account changed. Reopen this Plan draft.");
+      if (!parent || parent.request || !parent.stops.some(s => s.id === params.planDraftStopId)) throw new Error("This Plan draft changed. Return to the Plan before adding this Beacon.");
+      if (!payload.title) throw new Error("Give this Beacon a title.");
+      await writePlanDraft(params.planDraftKey, { ...parent, stops: parent.stops.map(s => s.id === params.planDraftStopId ? { ...s, kind: "beacon", creation_token: undefined, title: payload.title, details: "", beacon: { ...payload, invitee_ids: inviteeIds, draft_timing: when, duration_minutes: durationMinutesForLabel(duration, starts, ends), public_listing: publicListing.enabled?{enabled:true,area:publicListing.area}:undefined }, include: !!(payload.label || payload.online_url || payload.latitude != null) } : s) });
+      if(stageEpoch!==getViewerEpoch() || dataRef.current.viewer_id!==userId) throw new Error("Your account changed. Your draft is preserved.");
+      completePlanningDraft(userId, draftToken);
+      router.back();
+      return;
+    }
     validateActivity(payload);
     if (
       (audience === "list" ||
@@ -1656,6 +1688,7 @@ function CreateEditor() {
   if (home)
     return (
       <CreateHome
+        browserScreen={templateBrowser}
         inviteeControl={
           <CreationInvitees ids={inviteeIds} onChange={setInviteeIds} allowedIds={allowedPlanningInvitees} />
         }
@@ -1711,7 +1744,7 @@ function CreateEditor() {
   const moduleNames = creationModules
     .filter((row) => beaconControls[row.field])
     .map((row) => row.name);
-  const primaryAction = params.planningOptionId ? "Save Council Option" : templateEditor
+  const primaryAction = params.planDraftKey ? "Add to Plan" : params.planningOptionId ? "Save Council Option" : templateEditor
     ? "Save Template"
     : addTo === "Plan"
       ? "Add Beacon Step"
@@ -1748,7 +1781,7 @@ function CreateEditor() {
         {!templateEditor && <Button
           compact
           title="See templates"
-          onPress={() => { void checkpoint().then(() => router.push({ pathname: "/create", params: { templates: "mine" } })); }}
+          onPress={() => { void checkpoint().then(() => router.push({ pathname: "/beacon-templates", params: { ...handoff, templates: "mine", planSession: draftToken } })); }}
         />}
         <Button
           compact
@@ -1807,6 +1840,7 @@ function CreateEditor() {
             : `Council proposal: ${decision?.title ?? "New Council"}`}
         </Txt>
       ) : null}
+      {templateEditor && <PremiumPreview kind="Beacon" onOpen={async () => { await checkpoint(); router.push("/settings/premium" as Href); }} />}
       {templateEditor ? (
         <Field
           label="Template name"
@@ -2118,6 +2152,9 @@ function CreateEditor() {
           onToggle={() => toggleOptional("advanced")}
         >
           {errorFor("advanced")}
+          {canUseAppearance&&<View style={{gap:8}}><Txt>Additional Beacon styles</Txt>{audience==="squad"&&tierRank(appearanceContext.tier)>tierRank(personalAppearance.tier)&&<Txt muted>Unlocked by {data.squads.find(s=>s.id===audienceId)?.name??"your Squad"}</Txt>}<Chips options={["Standard","Sunrise","Ocean"]} value={premiumAppearance?.style==="sunrise"?"Sunrise":premiumAppearance?.style==="ocean"?"Ocean":"Standard"} onChange={v=>setPremiumAppearance(v==="Standard"&&!premiumAppearance?.layout?null:{...premiumAppearance,style:v.toLowerCase() as ToolSettings["style"]})}/>{appearanceTier==="pro"&&<Chips options={["Standard layout","Preparation","Session"]} value={premiumAppearance?.layout==="preparation"?"Preparation":premiumAppearance?.layout==="session"?"Session":"Standard layout"} onChange={v=>setPremiumAppearance({...premiumAppearance,layout:v==="Preparation"?"preparation":v==="Session"?"session":"standard"})}/>}</View>}
+          {!appearanceAllowed&&<Txt muted>Your saved advanced style is preserved. This publication will use the standard appearance.</Txt>}
+
           <Field
             label="Description & details"
             inputRef={descriptionInput}
@@ -2209,13 +2246,14 @@ function CreateEditor() {
                 onChangeText={setTemplateName}
                 maxLength={80}
               />
+              <PremiumPreview kind="Beacon" onOpen={async () => { await checkpoint(); router.push("/settings/premium" as Href); }} />
               <Action secondary title="Save as template" run={saveTemplate} />
             </>
           ) : null}
 
         </CreationDisclosure>
       </View>
-      {!templateEditor ? (
+      {!templateEditor && !params.planDraftKey ? (
         <Pressable
           accessibilityRole="button"
           style={{ minHeight: 44, justifyContent: "center" }}

@@ -146,6 +146,10 @@ export default function BeaconMap(props: MapProps) {
     gestureActive = useRef(false),
     removeGestureListeners = useRef<(() => void) | null>(null),
     appliedControlRevision = useRef<number | null>(null);
+  useEffect(() => {
+    // Placement is explicit Map intent; a later initial fit must not move its pin.
+    if (props.onPick) fitted.current = true;
+  }, [props.onPick]);
   const pendingCameraCommand = useRef<{
     revision: number;
     lat: number;
@@ -288,6 +292,7 @@ export default function BeaconMap(props: MapProps) {
           if (!touchOrigin || latest.current.onPick) return;
           longPressFired = true;
           suppressClickUntil = Date.now() + 1000;
+          fitted.current = true;
           latest.current.onLongPress?.({
             coordinate: { latitude: coordinate.lat, longitude: coordinate.lng },
             point,
@@ -395,6 +400,7 @@ export default function BeaconMap(props: MapProps) {
             longPressFired = true;
             suppressClickUntil = Date.now() + 1000;
           }
+          fitted.current = true;
           latest.current.onLongPress?.({
             coordinate: {
               latitude: event.latlng.lat,
@@ -809,12 +815,12 @@ export default function BeaconMap(props: MapProps) {
         badge.textContent = dot ? "" : text;
         badge.style.cssText = `position:relative;box-sizing:border-box;flex-shrink:0;width:${visualSize}px;height:${visualSize}px;border:${dot ? 1 : compact ? 2 : 3}px solid ${dot ? colors.white : tone};border-radius:50%;background:${dot ? tone : colors.white};display:flex;align-items:center;justify-content:center;box-shadow:${compact ? "none" : "0 3px 10px #172c2940"};font-size:${compact ? 20 : 22}px;`;
         face.append(badge);
-        if (identity?.friendHosted && !dot && !compact) {
+        if (identity?.friendHosted) {
           const rim = document.createElement("span");
           rim.dataset.testid = "beacon-friend-rim";
           rim.setAttribute("aria-hidden", "true");
-          rim.style.cssText = `position:absolute;inset:5px;border:2.5px solid ${colors.success};opacity:.95;border-radius:50%;pointer-events:none;`;
-          face.append(rim);
+          rim.style.cssText = `position:absolute;inset:0;box-sizing:border-box;border:${dot ? 1 : compact ? 1.5 : 2.5}px solid ${colors.success};opacity:.95;border-radius:50%;pointer-events:none;`;
+          badge.append(rim);
         }
         if (identity?.saved && !owned && !dot) {
           const bookmark = document.createElement("span");
@@ -1145,7 +1151,10 @@ export default function BeaconMap(props: MapProps) {
       const visualRevision = JSON.stringify([
         presentation.mode,
         presentation.overflow,
-        presentation.people.map((point) => [point.id, models.get(point.id)?.revision]),
+        presentation.people.map((point) => [
+          point.id,
+          models.get(point.id)?.revision,
+        ]),
         presentation.friendsProminent,
         bloomGeometry(presentation).satelliteOffsets,
         bloomGeometry(presentation).countBadge,
@@ -1187,7 +1196,9 @@ export default function BeaconMap(props: MapProps) {
             reducedMotion,
             friendColor: (point) => {
               const model = models.get(point.id);
-              return mapAvailabilityColors[model?.kind === "person" ? model.availability : "unknown"];
+              return mapAvailabilityColors[
+                model?.kind === "person" ? model.availability : "unknown"
+              ];
             },
             categoryColor: (point) =>
               categories[point.category ?? "Other"].color,

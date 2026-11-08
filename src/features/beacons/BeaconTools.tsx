@@ -1,3 +1,17 @@
+import { useChecklistPages } from "./useChecklistPages";
+import {
+  JournalEntryDetails,
+  JournalTemplates,
+} from "./components/JournalEnhancements";
+import { PremiumToolSettings } from "../beacons/components/PremiumToolSettings";
+import { PlanChoice } from "@/src/features/plans/PlanPresentation";
+import { useFocusPersistence } from "./focusPersistence";
+import { canStartAdvancedFocus, type ToolSettings } from "./premiumTools";
+import { useNow } from "@/src/shared/useNow";
+import { resolvePremiumFeature } from "@/src/shared/entitlements";
+import { PremiumPreview } from "@/src/features/profile/settings/PremiumUI";
+import PlanDateField from "@/src/features/plans/PlanDateField";
+import ZonedTimeField from "@/src/features/planning/ZonedTimeField";
 import {
   beaconChecklistLabel,
   canAddBeaconNote,
@@ -9,6 +23,7 @@ import {
 } from "@/src/features/beacons/beaconModules";
 import {
   createFocusTimer,
+  startFocusSequenceTimer,
   pauseFocusTimer,
   startFocusTimer,
   tickFocusTimer,
@@ -50,6 +65,7 @@ import {
   StickyNote,
   Timer,
   Trash,
+  CalendarClock,
 } from "lucide-react-native";
 import React, { useEffect, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
@@ -77,6 +93,7 @@ export function BeaconTools({
   inlineEditors?: boolean;
 }) {
   const { colors, styles } = useTheme();
+  const now = useNow();
   const { data, userId, act, refresh } = useBeacon();
   const checklistEnabled =
     isBeaconModuleEnabled(activity, "checklist") &&
@@ -120,6 +137,18 @@ export function BeaconTools({
   const [itemText, setItemText] = useState("");
   const [itemSectionId, setItemSectionId] = useState<string | null>(null);
   const [itemAssigneeId, setItemAssigneeId] = useState<string | null>(null);
+  const [itemDueOn, setItemDueOn] = useState("");
+  const [itemDueAt, setItemDueAt] = useState("");
+  const [itemReminder, setItemReminder] = useState("");
+  const [taskDetails, setTaskDetails] = useState(false);
+  const [taskLimit, setTaskLimit] = useState(50);
+  const [taskFilter, setTaskFilter] = useState("All tasks");
+  const taskPremium = resolvePremiumFeature(
+    data,
+    "checklist_details",
+    activity,
+  );
+  const taskPro = resolvePremiumFeature(data, "preparation", activity);
   const [itemSaving, setItemSaving] = useState(false);
   const [editingSection, setEditingSection] =
     useState<BeaconChecklistSection | null>(null);
@@ -139,11 +168,55 @@ export function BeaconTools({
   const [standardMinutes, setStandardMinutes] = useState("25");
   const [pomodoroPhase, setPomodoroPhase] = useState<PomodoroPhase>("Focus");
   const [timer, setTimer] = useState(() => createFocusTimer());
+  const [focusSteps, setFocusSteps] = useState<
+      NonNullable<ToolSettings["steps"]>
+    >([]),
+    [focusIndex, setFocusIndex] = useState(0),
+    [focusSummary, setFocusSummary] = useState(false),
+    [focusCompleted, setFocusCompleted] = useState(0);
+  useFocusPersistence(
+    `beacon.focus.${userId}.${data.is_demo ? (data.demo_session_id ?? "demo") : "live"}.${activity.id}`,
+    {
+      timer,
+      mode: timerMode,
+      pomodoro: pomodoroPhase,
+      minutes: standardMinutes,
+      steps: focusSteps,
+      index: focusIndex,
+      summary: focusSummary,
+      completed: focusCompleted,
+    },
+    (stored) => {
+      setTimer(stored.timer);
+      setTimerMode(stored.mode);
+      setPomodoroPhase(stored.pomodoro);
+      setStandardMinutes(stored.minutes);
+      setFocusSteps(stored.steps);
+      setFocusIndex(stored.index);
+      setFocusSummary(stored.summary);
+      setFocusCompleted(stored.completed);
+    },
+  );
+  const startSequence = (settings: ToolSettings) => {
+    if (!userId || !canStartAdvancedFocus(data, activity, settings, userId)) {
+      setInlineError("This new focus session requires current BEACON+ access.");
+      return;
+    }
+    setFocusSteps(settings.steps ?? []);
+    setFocusIndex(0);
+    setFocusSummary(settings.summary === true);
+    setTimerMode("Standard");
+    setTimer(
+      startFocusSequenceTimer((settings.steps?.[0]?.minutes ?? 25) * 60),
+    );
+  };
+
   const [busy, setBusy] = useState(false);
   const [inlineError, setInlineError] = useState("");
   const ensuredCopyActivity = useRef<string | null>(null);
 
   const allowed = !!userId && canUseBeaconModules(data, activity, userId);
+  const pages = useChecklistPages(activity.id, checklistEnabled && allowed);
   const checklistEditable =
     checklistEnabled &&
     !!userId &&
@@ -152,12 +225,12 @@ export function BeaconTools({
     journalEnabled && !!userId && canAddBeaconNote(data, activity, userId);
   const canManage = !!userId && canManageBeacon(data, activity, userId);
   const sections = allowed
-    ? data.beacon_checklist_sections
+    ? pages.sections
         .filter((section) => section.activity_id === activity.id)
         .sort((left, right) => left.position - right.position)
     : [];
-  const checklist = allowed
-    ? data.beacon_checklist_items
+  const allChecklist = allowed
+    ? pages.items
         .filter(
           (item) =>
             item.activity_id === activity.id &&
@@ -165,6 +238,16 @@ export function BeaconTools({
         )
         .sort((left, right) => left.created_at.localeCompare(right.created_at))
     : [];
+  const filteredChecklist = allChecklist.filter((item) =>
+    taskFilter === "Unassigned"
+      ? !item.assignee_id
+      : taskFilter === "Overdue"
+        ? !item.completed &&
+          !!(item.due_at || item.due_on) &&
+          Date.parse(item.due_at || `${item.due_on}T23:59:59`) < now
+        : true,
+  );
+  const checklist = filteredChecklist.slice(0, taskLimit);
   const notes = allowed
     ? data.beacon_notes
         .filter(
@@ -202,7 +285,9 @@ export function BeaconTools({
             : "Participant",
     };
   });
-  const completedCount = checklist.filter((item) => item.completed).length;
+  const completedCount =
+    pages.completed ?? allChecklist.filter((item) => item.completed).length;
+  const totalTasks = pages.total ?? allChecklist.length;
   const remaining = timer.remainingSeconds;
   const timerActionTitle =
     timer.phase === "running"
@@ -272,6 +357,12 @@ export function BeaconTools({
     setItemText(item.text);
     setItemSectionId(item.section_id);
     setItemAssigneeId(item.assignee_id);
+    setItemDueOn(item.due_on ?? "");
+    setItemDueAt(item.due_at ?? "");
+    setItemReminder(
+      item.reminder_minutes == null ? "" : String(item.reminder_minutes),
+    );
+    setTaskDetails(false);
     setInlineError("");
   };
   const saveItemEdit = async () => {
@@ -287,6 +378,15 @@ export function BeaconTools({
         text: itemText.trim(),
         section_id: itemSectionId,
         assignee_id: itemAssigneeId,
+        ...(data.is_demo || data.capabilities?.premium_tools
+          ? {
+              due_on: itemDueOn || null,
+              due_at: itemDueAt || null,
+              due_timezone: editingItem.due_timezone ?? activity.timezone,
+              reminder_minutes:
+                itemReminder === "" ? null : Number(itemReminder),
+            }
+          : {}),
       });
       setEditingItem(null);
     } catch (failure) {
@@ -359,6 +459,8 @@ export function BeaconTools({
     }
   };
   const resetTimer = () => {
+    setFocusSteps([]);
+    setFocusIndex(0);
     setPomodoroPhase("Focus");
     const duration =
       timerMode === "Pomodoro"
@@ -367,6 +469,8 @@ export function BeaconTools({
     setTimer(createFocusTimer(duration));
   };
   const switchTimerMode = (mode: TimerMode) => {
+    setFocusSteps([]);
+    setFocusIndex(0);
     setTimerMode(mode);
     setPomodoroPhase("Focus");
     const duration =
@@ -417,7 +521,7 @@ export function BeaconTools({
               {beaconChecklistLabel(activity)}
             </Text>
             <Text style={styles.muted}>
-              {checklist.length}/50 · {completedCount} done
+              {totalTasks} items · {completedCount} done
             </Text>
             {displayedSection === "checklist" ? (
               <ChevronUp size={20} color={colors.muted} />
@@ -431,7 +535,7 @@ export function BeaconTools({
               accessibilityLabel="Checklist progress"
               accessibilityValue={{
                 min: 0,
-                max: Math.max(1, checklist.length),
+                max: Math.max(1, totalTasks),
                 now: completedCount,
               }}
               style={{
@@ -446,10 +550,20 @@ export function BeaconTools({
                   height: 4,
                   borderRadius: 4,
                   backgroundColor: colors.green,
-                  width: `${checklist.length ? (100 * completedCount) / checklist.length : 0}%`,
+                  width: `${totalTasks ? Math.min(100, (100 * completedCount) / totalTasks) : 0}%`,
                 }}
               />
             </View>
+          )}
+          {taskPro.available && (
+            <Chips
+              options={["All tasks", "Overdue", "Unassigned"]}
+              value={taskFilter}
+              onChange={(value) => {
+                setTaskFilter(value);
+                setTaskLimit(50);
+              }}
+            />
           )}
           {inlineEditors && checklistEditable && (
             <Button
@@ -602,10 +716,22 @@ export function BeaconTools({
                   </View>
                 );
               })()}
-              {!checklist.length ? (
+              {(filteredChecklist.length > taskLimit || pages.more) && (
+                <Button
+                  compact
+                  secondary
+                  title="Show more tasks"
+                  onPress={() => {
+                    setTaskLimit((n) => n + 50);
+                    if (pages.more) pages.loadMore();
+                  }}
+                />
+              )}
+              {!!pages.error && <Txt muted>{pages.error}</Txt>}
+              {!allChecklist.length ? (
                 <Txt muted>No checklist items yet.</Txt>
               ) : null}
-              {checklistEditable && checklist.length < 50 ? (
+              {checklistEditable ? (
                 <>
                   {sections.length > 0 ? (
                     <Chips
@@ -665,9 +791,7 @@ export function BeaconTools({
                   />
                 </>
               ) : null}
-              {checklistEditable &&
-              sections.length < 20 &&
-              (!inlineEditors || checklistOptions) ? (
+              {checklistEditable && (!inlineEditors || checklistOptions) ? (
                 <View style={[styles.card, { padding: 11, gap: 7 }]}>
                   <Field
                     label="New checklist section"
@@ -753,6 +877,16 @@ export function BeaconTools({
           </Pressable>
           {displayedSection === "journal" ? (
             <View style={{ gap: 9 }}>
+              <JournalTemplates
+                activity={activity}
+                onApply={(body, heading) => {
+                  setNoteBody(body);
+                  setNoteHeading(heading);
+                }}
+              />
+              {ownNote && (
+                <JournalEntryDetails note={ownNote} activity={activity} />
+              )}
               <Txt muted>
                 Your note starts private. Share it with this Beacon only when
                 you choose.
@@ -782,7 +916,7 @@ export function BeaconTools({
                       {heading ? (
                         <Text style={styles.label}>{heading}</Text>
                       ) : null}
-                      <Text style={styles.body}>{note.body}</Text>
+                      <JournalEntryDetails note={note} activity={activity} />
                       {deleteNoteAllowed(note, userId, data, activity) ? (
                         <Button
                           compact
@@ -954,6 +1088,56 @@ export function BeaconTools({
           </Pressable>
           {displayedSection === "focus" ? (
             <View style={{ gap: 10, alignItems: "flex-start" }}>
+              <PremiumToolSettings
+                activity={activity}
+                kind="focus"
+                onStart={startSequence}
+              />
+              {focusSteps.length > 0 && (
+                <>
+                  <Txt>
+                    {focusSteps[focusIndex]?.label} · {focusIndex + 1}/
+                    {focusSteps.length}
+                  </Txt>
+                  {timer.phase === "complete" &&
+                    focusIndex + 1 < focusSteps.length && (
+                      <Button
+                        compact
+                        secondary
+                        title="Next interval"
+                        onPress={() => {
+                          const next = focusIndex + 1;
+                          setFocusIndex(next);
+                          setTimer(
+                            startFocusTimer(
+                              createFocusTimer(focusSteps[next].minutes * 60),
+                              Date.now(),
+                            ),
+                          );
+                        }}
+                      />
+                    )}
+                  {timer.phase === "complete" &&
+                    focusIndex + 1 === focusSteps.length &&
+                    focusSummary && (
+                      <Button
+                        compact
+                        secondary
+                        title="Save private session summary"
+                        onPress={() => {
+                          setFocusCompleted((n) => n + 1);
+                          setFocusSteps([]);
+                        }}
+                      />
+                    )}
+                </>
+              )}
+              {focusCompleted > 0 && (
+                <Txt muted>
+                  {focusCompleted} completed focus sessions · private on this
+                  device
+                </Txt>
+              )}
               <Chips
                 accessibilityPrefix="Timer mode"
                 options={["Standard", "Pomodoro"]}
@@ -1207,24 +1391,91 @@ export function BeaconTools({
             }
           />
         ) : null}
-        <Txt muted>Assign to an approved participant</Txt>
-        <Chips
-          accessibilityPrefix="Assignee"
-          options={[
-            "Unassigned",
-            ...assignees.map((assignee) => assignee.label),
-          ]}
-          value={
-            assignees.find((assignee) => assignee.id === itemAssigneeId)
-              ?.label ?? "Unassigned"
-          }
-          onChange={(selection) =>
-            setItemAssigneeId(
-              assignees.find((assignee) => assignee.label === selection)?.id ??
-                null,
-            )
-          }
+        <PlanChoice
+          title="Assignment & deadline"
+          detail="Choose a participant, due date or reminder"
+          icon={CalendarClock}
+          expanded={taskDetails}
+          onPress={() => setTaskDetails(!taskDetails)}
         />
+        {taskDetails && (
+          <View style={{ gap: 10 }}>
+            {taskPremium.available &&
+              (taskPremium.source === "squad" ||
+                taskPremium.source === "grace") && (
+                <Txt muted>
+                  Unlocked by{" "}
+                  {data.squads.find((s) => s.id === activity.audience_id)
+                    ?.name ?? "your Squad"}
+                </Txt>
+              )}
+            <PremiumPreview
+              label={taskPremium.available ? "Premium settings" : undefined}
+            />
+            {taskPremium.available && (
+              <>
+                <Txt muted>Assign to an approved participant</Txt>
+                <Chips
+                  accessibilityPrefix="Assignee"
+                  options={[
+                    "Unassigned",
+                    ...assignees.map((assignee) => assignee.label),
+                  ]}
+                  value={
+                    assignees.find((assignee) => assignee.id === itemAssigneeId)
+                      ?.label ?? "Unassigned"
+                  }
+                  onChange={(selection) =>
+                    setItemAssigneeId(
+                      assignees.find((assignee) => assignee.label === selection)
+                        ?.id ?? null,
+                    )
+                  }
+                />
+                <PlanDateField
+                  label="Due date · optional"
+                  value={itemDueOn}
+                  onChange={(v) => {
+                    setItemDueOn(v);
+                    if (v) setItemDueAt("");
+                  }}
+                />
+                <ZonedTimeField
+                  label="Due time · optional"
+                  value={itemDueAt}
+                  timezone={activity.timezone}
+                  onChange={(v) => {
+                    setItemDueAt(v);
+                    if (v) setItemDueOn("");
+                  }}
+                />
+                <Field
+                  label="Remind minutes before · optional"
+                  value={itemReminder}
+                  onChangeText={setItemReminder}
+                  keyboardType="number-pad"
+                  placeholder="Off"
+                />
+              </>
+            )}
+            {(itemAssigneeId ||
+              itemDueOn ||
+              itemDueAt ||
+              itemReminder !== "") && (
+              <Button
+                compact
+                secondary
+                title="Clear task details"
+                onPress={() => {
+                  setItemAssigneeId(null);
+                  setItemDueOn("");
+                  setItemDueAt("");
+                  setItemReminder("");
+                }}
+              />
+            )}
+          </View>
+        )}
         <Button
           title="Save checklist item"
           disabled={itemSaving || !itemText.trim()}
@@ -1356,6 +1607,9 @@ function ChecklistItemRow({
           <Text style={styles.muted}>
             {assignedName ? "For " + assignedName + " · " : ""}
             {authorName}
+            {item.due_on || item.due_at
+              ? ` · Due ${item.due_on || new Date(item.due_at!).toLocaleString([], { timeZone: item.due_timezone ?? activity.timezone })}`
+              : ""}
           </Text>
         </View>
       </Pressable>

@@ -1,3 +1,5 @@
+import {reconcileDemoBoosts} from "@/src/features/people/squadBoosts";
+import { pauseDemoPremiumRoutines, type PremiumTier } from "./entitlements";
 import { randomUUID } from "expo-crypto";
 import { demoRoutineCalendar, parseRoutineCalendarResult, validateRoutineCalendarRange, type RoutineCalendarRange, type RoutineCalendarResult } from "@/src/features/beacons/calendarRoutineProjection";
 import React, {
@@ -51,12 +53,14 @@ type Store = {
   userId: string | null;
   demo: boolean;
   demoScenario: DemoScenario;
+  setDemoTier: (tier: PremiumTier) => void;
   switchDemoScenario: (scenario: DemoScenario) => void;
   loading: boolean;
   error: string | null;
   session: Session | null;
   refresh: () => Promise<void>;
   getCurrentProfile: () => Profile | null;
+  getCurrentData: () => Data | null;
   getViewerEpoch: () => number;
   viewerEpoch: number;
   act: (action: string, payload?: Payload, requestId?: string) => Promise<Record<string, unknown>>;
@@ -97,6 +101,10 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
     const profile = snapshot.profiles.find((person) => person.id === viewer);
     return profile ? structuredClone(profile) : null;
   }, [demo, session?.user.id]);
+  const getCurrentData = useCallback(() => {
+    const viewer = demo ? DEMO_ID : sessionRef.current?.user.id;
+    return viewer && dataRef.current.viewer_id === viewer ? structuredClone(dataRef.current) : null;
+  },[demo]);
   const epoch = useRef(0),
     fetchId = useRef(0);
   const [viewerEpoch, setViewerEpoch] = useState(0);
@@ -459,6 +467,12 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
           if(requestKey)demoRequests.current.set(requestKey,result);
           return result;
         }
+        if (action === "save_plan_editor" || action === "schedule_plan_editor") {
+          const plan = next.plans.find(p => p.id === payload.plan_id) ?? next.plans.find(p => !baseData.plans.some(old => old.id === p.id));
+          const result = plan ? { id: plan.id, plan_id: plan.id, revision: plan.revision ?? 0, publications: Object.fromEntries((next.plan_stops ?? []).filter(s=>s.plan_id===plan.id && s.activity_id).map(s=>[s.id,s.activity_id])) } : {};
+          if (requestKey) demoRequests.current.set(requestKey,result);
+          return result;
+        }
         if (action === "create_living_plan" || action === "create_plan" || action === "run_routine_once" || action === "run_routine_now") {
           const plan = next.plans.find(
             (item) => !baseData.plans.some((old) => old.id === item.id),
@@ -573,7 +587,7 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
       const beforeAction = dataRef.current;
       const profileAction = action === "onboard" || action === "save_profile";
       const atomicCreation = action === "create_activity_with_invitees" || action === "create_plan_beacon_with_invitees";
-      const actorScoped = action.includes("plan") || action.includes("routine") || action.includes("planning") || action.includes("council") || atomicCreation || action === "create_activity" || action === "create_plan_beacon" || ["rsvp","start_location","stop_location","save_activity_note","end_activity_note","update_presence","save_status_note","create_planning_thread","add_council_proposal"].includes(action);
+      const actorScoped = /(?:boost|checklist|supply|tool_config|tool_preset|journal_details|memory_recap)/.test(action) || action === "save_template" || action === "delete_template" || action.includes("plan") || action.includes("routine") || action.includes("planning") || action.includes("council") || atomicCreation || action === "create_activity" || action === "create_plan_beacon" || ["rsvp","start_location","stop_location","save_activity_note","end_activity_note","update_presence","save_status_note","create_planning_thread","add_council_proposal"].includes(action);
       const assertAtomicViewer = () => {
         if (profileAction && (generation !== epoch.current ||
           sessionRef.current?.user.id !== viewer ||
@@ -637,6 +651,10 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
         userId: demo ? DEMO_ID : (session?.user.id ?? null),
         demo,
         demoScenario,
+        setDemoTier: (tier) => {
+          if (!demo || !dataRef.current.is_demo || !["free", "plus", "pro"].includes(tier)) return;
+          setData(pauseDemoPremiumRoutines(reconcileDemoBoosts({ ...dataRef.current, demo_premium_tier: tier })));
+        },
         switchDemoScenario: (scenario) => {
           if (!__DEV__ || !demo) return;
           epoch.current++;
@@ -647,7 +665,7 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
           setDemoScenario(scenario);
           // Erased with the __DEV__ branch; fixtures must not enter production bundles.
           // eslint-disable-next-line @typescript-eslint/no-require-imports
-          setData(require("@/src/features/onboarding/scenarios").makeScenario(scenario).data);
+          setData(pauseDemoPremiumRoutines({ ...require("@/src/features/onboarding/scenarios").makeScenario(scenario).data, demo_squad_boosts:dataRef.current.demo_squad_boosts, boost_allocations:dataRef.current.boost_allocations, squad_premium:dataRef.current.squad_premium, demo_boost_clock:dataRef.current.demo_boost_clock, demo_session_id: dataRef.current.demo_session_id, demo_premium_tier: dataRef.current.demo_premium_tier ?? "free" }));
           setLoading(false);
           setError(null);
         },
@@ -656,6 +674,7 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
         error,
         refresh,
         getCurrentProfile,
+        getCurrentData,
         getViewerEpoch,
         viewerEpoch,
         act,
@@ -671,7 +690,7 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
           viewerEpochRef.current++;
           setViewerEpoch(viewerEpochRef.current);
           setDemo(true);
-          setData(normalizeData(makeDemo()));
+          setData(pauseDemoPremiumRoutines({ ...normalizeData(makeDemo()), demo_session_id: randomUUID(), demo_premium_tier: "free" }));
           setLoading(false);
           setError(null);
         },

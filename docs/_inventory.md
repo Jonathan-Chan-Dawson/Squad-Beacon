@@ -1,5 +1,7 @@
 Documentation guide
 
+- PREMIUM_TOOLS_LOCAL_VALIDATION_2026-11-06.md: dated local Premium tools/Boost implementation and validation evidence, migration history and hosted/PostgreSQL/native acceptance boundaries; setup stays in README.md.
+
 - AUTH_EMAIL_LINKS_VALIDATION.md: configured account-email origin, confirmation/resend behavior, hosted template rollout and verification boundaries. Setup instructions remain in README.md.
 
 - PHASE_4CA_NAVIGATION_VALIDATION.md: navigation contract audit, localized Beacon Back/accessibility repairs, regression evidence and Phase 4C-B review targets.

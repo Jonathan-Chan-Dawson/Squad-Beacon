@@ -1,3 +1,4 @@
+import {validateToolSettings} from "./premiumTools";
 import { validateBeaconControlValues } from "./controls";
 import { durationMinutesForLabel } from "./createTiming";
 
@@ -139,6 +140,7 @@ export function parseCreationSnapshot(
       throw new Error("This saved draft has an invalid setting.");
   if (value.fields.duration !== undefined && value.fields.duration !== "Custom")
     durationMinutesForLabel(String(value.fields.duration), "", "");
+  if(value.fields.premiumAppearance!=null)validateToolSettings("appearance",value.fields.premiumAppearance);
   const controls = value.fields.beaconControlDraft;
   if (controls !== undefined) {
     if (

@@ -1,3 +1,5 @@
+import { mockOnboardingAccount } from "./onboardingAccount";
+import { makeDemo } from "../../src/shared/demo";
 import { expect, test, type CDPSession, type Page } from "@playwright/test";
 
 test.use({
@@ -6,7 +8,6 @@ test.use({
   isMobile: true,
 });
 
-const menuName = "Actions for this map location";
 const firstPoint = { x: 28, y: 430 };
 const secondPoint = { x: 365, y: 650 };
 
@@ -133,9 +134,9 @@ async function hold(page: Page, session: CDPSession, point = firstPoint) {
       })
       .toBe(true);
   }
-  await expect(page.getByRole("menu", { name: menuName })).toBeVisible();
+  await expect(page.getByTestId("map-place-actions")).toBeVisible();
   await touch(session, "touchEnd");
-  await expect(page.getByRole("menu", { name: menuName })).toBeVisible();
+  await expect(page.getByTestId("map-place-actions")).toBeVisible();
   const pin = page.getByTestId("map-temporary-pin");
   await expect(pin).toHaveCount(1);
   return {
@@ -148,7 +149,7 @@ test("touch taps and pans stay ordinary; long holds select, update and dismiss a
   page,
 }) => {
   const session = await demo(page);
-  const menu = page.getByRole("menu", { name: menuName });
+  const menu = page.getByTestId("map-place-actions");
   await page.touchscreen.tap(firstPoint.x, firstPoint.y);
   await expect(menu).toHaveCount(0);
   await expect(page.getByTestId("map-temporary-pin")).toHaveCount(0);
@@ -186,137 +187,55 @@ test("touch taps and pans stay ordinary; long holds select, update and dismiss a
   await expect(page.getByTestId("map-place-preview-slot")).toHaveCount(0);
 });
 
-test("a full action row opens template-first creation with the exact held coordinate", async ({
-  page,
-}) => {
-  const session = await demo(page);
-  await page.getByRole("button", { name: "Filters", exact: true }).tap();
-  const filters = page.getByRole("dialog", { name: "Filters", exact: true });
-  await filters.getByRole("checkbox", { name: "Study", exact: true }).tap();
-  await filters.getByRole("button", { name: /^Show \d+ Beacons$/ }).tap();
-  await expect(filters).toHaveCount(0);
-  const coordinate = await hold(page, session);
-  const create = page.getByRole("menuitem", {
-    name: "Create a Beacon. Plan an activity here",
-    exact: true,
-  });
-  const row = await create.boundingBox();
-  await create.tap({ position: { x: row!.width - 12, y: row!.height / 2 } });
-  await expect(
-    page.getByRole("button", { name: "Create Blank Template", exact: true }),
-  ).toBeVisible();
-  const params = new URL(page.url()).searchParams;
-  expect(Number(params.get("latitude"))).toBe(coordinate.latitude);
-  expect(Number(params.get("longitude"))).toBe(coordinate.longitude);
-  await page
-    .getByRole("textbox", { name: "Search activities", exact: true })
-    .fill("Study together");
-  await page.getByRole("button", { name: "Study together", exact: true }).tap();
-  await expect(
-    page.getByRole("textbox", { name: "Title / Activity", exact: true }),
-  ).toHaveValue("Study together");
-  await expect(
-    page.getByRole("textbox", { name: "Where? (optional)", exact: true }),
-  ).toHaveValue("Area Update");
-  await page
-    .getByRole("button", { name: "Advanced Options ↓", exact: true })
-    .tap();
-  await expect(
-    page.getByRole("button", { name: "Edit meeting pin", exact: true }),
-  ).toBeVisible();
-});
-
-test("place taps keep their preview and Pulse context; directions use the exact temporary pin", async ({
-  page,
-}) => {
-  const session = await demo(page);
-  await page
-    .getByRole("textbox", {
-      name: "Search places, Beacons, people and communities",
-      exact: true,
-    })
-    .fill("Riverbend Cafe");
-  await page
-    .getByRole("button", { name: "Explore Riverbend Cafe", exact: true })
-    .tap();
-  const preview = page.getByTestId("live-update-place-preview");
-  await expect(preview).toContainText("Riverbend Cafe");
-  await expect(page.getByRole("menu", { name: menuName })).toHaveCount(0);
-  await expect(
-    preview.getByRole("button", { name: "Directions", exact: true }),
-  ).toBeVisible();
-  await preview.getByRole("button", { name: "Update", exact: true }).tap();
-  await expect(page.getByTestId("add-live-update-sheet")).toContainText(
-    "Riverbend Cafe",
-  );
-  await page.getByRole("button", { name: "Close", exact: true }).tap();
-  await expect(page.getByTestId("add-live-update-sheet")).toHaveCount(0);
-  await preview
-    .getByRole("button", { name: "Close place preview", exact: true })
-    .tap();
-  await expect(preview).toHaveCount(0);
-
-  await hold(page, session);
-  const pulse = page.getByRole("menuitem", {
-    name: "Share a Pulse. What's happening here?",
-    exact: true,
-  });
-  const row = await pulse.boundingBox();
-  await pulse.tap({ position: { x: row!.width - 12, y: row!.height / 2 } });
-  await expect(page.getByTestId("add-live-update-sheet")).toContainText(
-    "Area Update",
-  );
-  await expect(page.getByTestId("map-temporary-pin")).toHaveCount(0);
-  await page.getByRole("button", { name: "Close", exact: true }).tap();
-  await expect(page.getByTestId("add-live-update-sheet")).toHaveCount(0);
-  await page
-    .getByRole("button", { name: "Close place preview", exact: true })
-    .tap();
-  await expect(preview).toHaveCount(0);
-
-  const coordinate = await hold(page, session);
-  await page.context().route("https://www.google.com/maps/dir/**", (route) =>
-    route.fulfill({
-      status: 200,
-      contentType: "text/html",
-      body: "Directions",
-    }),
-  );
-  const request = page
-    .context()
-    .waitForEvent("request", (value) =>
-      /google\.com\/maps\/dir\//.test(value.url()),
-    );
-  await page
-    .getByRole("menuitem", {
-      name: "Get Directions. Open in your maps app",
-      exact: true,
-    })
-    .tap();
-  expect(new URL((await request).url()).searchParams.get("destination")).toBe(
-    `${coordinate.latitude},${coordinate.longitude}`,
-  );
-  await expect(page.getByTestId("map-temporary-pin")).toHaveCount(0);
-});
+// Creation, named-place activity and exact directions journeys are covered by mapUnifiedPlace.spec.ts.
 
 test("closing a temporary selection preserves filters, Plan context and the camera", async ({
   page,
 }) => {
-  const session = await demo(
-    page,
-    "/?beacon=demo-routine%3Ademo-you%3Afriday%3Aplan%3Abeacon%3A2",
-  );
-  await page
-    .getByTestId("map-tooltip-card")
-    .getByRole("button", { name: "See overview", exact: true })
-    .tap();
-  const panel = page.getByTestId("map-panel");
-  await panel.getByRole("button", { name: /^Show Plan / }).tap();
-  await expect(panel).toHaveCount(0);
-  const context = page.getByRole("button", {
-    name: /^Remove Plan: Friday Night Routine/,
+  const account = await mockOnboardingAccount(page, { eligible: false });
+  const viewer = account.snapshot.viewer_id!;
+  account.snapshot.capabilities = {
+    ...account.snapshot.capabilities,
+    living_plans: false,
+  };
+  account.snapshot.plans.push({
+    id: "held-place-plan",
+    owner_id: viewer,
+    squad_id: null,
+    title: "Held place itinerary",
+    description: "",
+    timezone: "America/Chicago",
+    start_date: "2026-11-04",
+    status: "scheduled",
+    created_at: new Date().toISOString(),
   });
-  await expect(context).toBeVisible();
+  const base = makeDemo().activities[0];
+  for (const [index, id] of ["held-stop-one", "held-stop-two"].entries()) {
+    account.snapshot.activities.push({
+      ...base,
+      id,
+      owner_id: viewer,
+      audience: "private",
+      audience_id: null,
+      plan_id: "held-place-plan",
+      plan_step_index: index,
+      viewer_can_access: true,
+      viewer_can_read: true,
+      starts_at: new Date(Date.now() + 3600000).toISOString(),
+      ends_at: new Date(Date.now() + 7200000).toISOString(),
+    });
+    account.snapshot.places.push({
+      activity_id: id,
+      label: "Authorized stop",
+      latitude: 41.88 + 0.02 * index,
+      longitude: -87.63,
+      online_url: null,
+    });
+  }
+  await page.goto("/?mapPlan=held-place-plan");
+  const context = page.getByTestId("map-plan-focus");
+  await expect(context).toContainText("2 visible physical stops");
+  const session = await page.context().newCDPSession(page);
   await page.getByTestId("map-filter-toggle").tap();
   const filters = page.getByRole("dialog", { name: "Filters", exact: true });
   await filters.getByRole("checkbox", { name: "Study", exact: true }).tap();

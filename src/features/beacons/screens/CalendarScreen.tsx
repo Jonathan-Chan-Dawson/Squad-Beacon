@@ -1,3 +1,4 @@
+import { PremiumPreview } from "@/src/features/profile/settings/PremiumUI";
 import { PlanChoice } from "@/src/features/plans/PlanPresentation";
 import { ActivityFrame } from "@/src/features/activity/ActivityFrame";
 import { SemanticEmpty } from "@/src/features/onboarding/OnboardingUI";
@@ -219,6 +220,8 @@ export default function CalendarScreen() {
       create={false}
     >
       <Txt muted>Times shown in {timezone}</Txt>
+      {data.plan_routines.some(r => r.premium_pause_reason) && <Txt muted>Multi-Beacon repeats paused for BEACON+. Existing dates remain on your Calendar.</Txt>}
+      <PremiumPreview />
       <View style={[styles.row, { justifyContent: "space-between" }]}>
         <IconButton
           label={monthOpen ? "Previous month" : "Previous week"}

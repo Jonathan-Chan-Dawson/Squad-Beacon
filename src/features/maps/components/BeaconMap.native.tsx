@@ -1,4 +1,5 @@
-import { mapAvailabilityColors ,
+import {
+  mapAvailabilityColors,
   categoryMarkerGlyphs,
   visibleFriendLabels,
   ownsMapBeacon,
@@ -412,6 +413,9 @@ export default function BeaconMap({
       longitude: location.longitude!,
     })),
   ];
+  useEffect(() => {
+    if (onPick) didInitialFit.current = true;
+  }, [onPick]);
   const coordinates = JSON.stringify(points);
   useEffect(() => {
     if (
@@ -1117,6 +1121,7 @@ export default function BeaconMap({
           }
         }}
         onLongPress={(event) => {
+          didInitialFit.current = true;
           if (!onPick) {
             suppressMapPressUntil.current = Date.now() + 500;
             onLongPress?.({

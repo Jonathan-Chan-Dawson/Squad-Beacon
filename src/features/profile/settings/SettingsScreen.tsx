@@ -1,3 +1,4 @@
+import { DemoTierSelector } from "./PremiumUI";
 import { ThemedSwitch } from "@/src/shared/ThemedSwitch";
 import { AvatarToggle } from "@/src/features/profile/AvatarToggle";
 import { profileSavePayload } from "@/src/features/profile/profileEditorDraft";
@@ -165,6 +166,7 @@ function SettingsForm({ profile }: { profile: Profile }) {
   );
   const lifecycle = useRef({ active: false, generation: 0 });
   const now = useNow();
+  const [demoControls, setDemoControls] = useState(false);
   const [query, setQuery] = useState("");
   const [panel, setPanel] = useState<Panel>(null);
   const [quietStart, setQuietStart] = useState(profile.quiet_start);
@@ -379,6 +381,23 @@ function SettingsForm({ profile }: { profile: Profile }) {
       ? "Available in the mobile app"
       : `Permission: ${push.permission} · ${push.registration === "verified" ? "Registered for this account" : push.registration === "unknown" ? "Registration needs checking" : "Not registered"}${!push.physicalDevice ? " · Physical phone required" : !push.projectConfigured ? " · Push project is not configured" : ""}`;
   const groups = [
+    {
+      title: "Premium",
+      items: rows([
+        {
+          title: "Premium",
+          detail: "Free, BEACON+ & Pro · plans and limits",
+          icon: Palette,
+          onPress: () => router.push("/settings/premium" as Href),
+        },
+        ...(demo ? [{
+          title: "Demo Controls",
+          detail: "Simulated Free, Plus & Pro",
+          icon: Palette,
+          onPress: () => setDemoControls(true),
+        }] : []),
+      ]),
+    },
     ...(Platform.OS === "ios" &&
     Constants.executionEnvironment !== ExecutionEnvironment.StoreClient
       ? [
@@ -646,6 +665,13 @@ function SettingsForm({ profile }: { profile: Profile }) {
         </View>
       ) : null}
 
+      <Sheet
+        title="Demo Controls"
+        visible={demoControls}
+        onClose={() => setDemoControls(false)}
+      >
+        <DemoTierSelector />
+      </Sheet>
       <Sheet
         title={panel ? panelTitle[panel] : "Settings"}
         visible={panel !== null}

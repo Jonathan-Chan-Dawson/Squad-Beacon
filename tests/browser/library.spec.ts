@@ -5,8 +5,15 @@ test("shared beacon library files one card privately without duplicating content
 }) => {
   await page.goto("/");
   await page.getByRole("button", { name: /Explore the demo/ }).click();
-  await page.getByRole("tab", { name: "Beacons", exact: true }).click();
-  await page.getByRole("button", { name: "Past", exact: true }).click();
+  await page.getByRole("tab", { name: "Profile", exact: true }).click();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("button", { name: "Premium", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Demo tier: Plus", exact: true })
+    .click();
+  await page.goBack();
+  await page.goBack();
+  await page.getByLabel("Beacons", { exact: true }).click();
   await page.getByRole("button", { name: "Library", exact: true }).click();
   await expect(page.getByText("Your library", { exact: true })).toBeVisible();
   const card = page.getByTestId("library-card-demo-tools");
@@ -48,8 +55,15 @@ test("private Journals and saved Lists have dedicated editors and list handoff",
 }) => {
   await page.goto("/");
   await page.getByRole("button", { name: /Explore the demo/ }).click();
-  await page.getByRole("tab", { name: "Beacons", exact: true }).click();
-  await page.getByRole("button", { name: "Past", exact: true }).click();
+  await page.getByRole("tab", { name: "Profile", exact: true }).click();
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  await page.getByRole("button", { name: "Premium", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Demo tier: Plus", exact: true })
+    .click();
+  await page.goBack();
+  await page.goBack();
+  await page.getByLabel("Beacons", { exact: true }).click();
   await page.getByRole("button", { name: "Library", exact: true }).click();
 
   await page.getByRole("button", { name: "New entry", exact: true }).click();

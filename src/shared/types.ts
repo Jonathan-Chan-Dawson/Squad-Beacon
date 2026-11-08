@@ -244,7 +244,7 @@ export interface PlanTemplate {
   description: string;
   timezone: string;
   steps: PlanStep[];
-  stops?: { title: string; details?: string; proposed_at?: string | null }[];
+  stops?: { title: string; details?: string; proposed_at?: string | null; beacon?: Payload }[];
   created_at: string;
   updated_at: string;
 }
@@ -304,6 +304,7 @@ export interface Report {
   resolved: boolean;
 }
 export interface PersonalTemplate {
+  premium_appearance?: import("@/src/features/beacons/premiumTools").ToolSettings|null;
   id: ID;
   owner_id: ID;
   name: string;
@@ -335,6 +336,10 @@ export interface Message {
   created_at: string;
 }
 export interface BeaconChecklistItem {
+  due_on?: string | null;
+  due_at?: string | null;
+  due_timezone?: string | null;
+  reminder_minutes?: number | null;
   id: ID;
   activity_id: ID;
   author_id: ID;
@@ -436,6 +441,17 @@ export interface ProfileVisibilityGrant {
   target_id: ID;
 }
 export interface Data {
+  council_option_groups?: {proposal_id:string;group_label:string}[];
+  council_explanations?: {thread_id:string;user_id:string;body:string}[];
+  premium_tool_configs?: import("@/src/features/beacons/premiumTools").ToolConfiguration[];
+  premium_presets?: import("@/src/features/beacons/premiumTools").ToolPreset[];
+  journal_details?: import("@/src/features/beacons/premiumTools").JournalDetails[];
+  memory_recaps?: import("@/src/features/beacons/premiumTools").MemoryRecap[];
+  beacon_premium?: Record<string, import("./premiumFeatures").SharedPremiumProjection>;
+  squad_premium?: import("./premiumFeatures").SquadPremiumProjection[];
+  boost_allocations?: import("./premiumFeatures").BoostAllocation[];
+  demo_squad_boosts?: Record<string, number>;
+  demo_boost_clock?: string;
   /** Demo-only reviewed sources; production keeps these in its private schema. */
   demo_repeat_sources?: Record<string, { steps: PlanStep[]; activity_ids: ID[]; defaults: Partial<Activity>[]; online_urls: (string | null)[]; location_access?: boolean[] }>;
   plan_stops?: import("@/src/features/plans/livingPlans").PlanStop[];
@@ -501,6 +517,10 @@ export interface Data {
   profile_visibility_grants: ProfileVisibilityGrant[];
 
   is_moderator?: boolean;
+  plan_beacon_drafts?: { stop_id: string; payload: Payload; include?: boolean }[];
+  premium?: import("./entitlements").EntitlementSnapshot;
+  demo_session_id?: string;
+  demo_premium_tier?: import("./entitlements").PremiumTier;
   is_demo?: boolean;
   viewer_id?: ID | null;
   location_recipients?: string[];
@@ -522,7 +542,7 @@ export interface Data {
   rsvps: RSVP[];
   resolved_beacon_responses?: RSVP[];
   presence?: Presence[];
-  capabilities?: { guest_sharing?: boolean; guest_planning?: boolean; living_plans?: boolean; collaborative_plans?: boolean; repeatable_plans?: boolean; connected_planning?: boolean; living_activity?: boolean; rsvp_decline?: boolean; beacon_supplies?: boolean; status_privacy?: boolean; status_attachments?: boolean; status_current_beacon?: boolean };
+  capabilities?: { advanced_beacon_tools?:boolean; premium_tools?: boolean; squad_boosts?: boolean; premium?: boolean; plan_editor?: boolean; recurrence_v2?: boolean; guest_sharing?: boolean; guest_planning?: boolean; living_plans?: boolean; collaborative_plans?: boolean; repeatable_plans?: boolean; connected_planning?: boolean; living_activity?: boolean; rsvp_decline?: boolean; beacon_supplies?: boolean; status_privacy?: boolean; status_attachments?: boolean; status_current_beacon?: boolean };
   comments: Comment[];
   reactions: Reaction[];
   locations: LocationSession[];
@@ -633,6 +653,13 @@ export function normalizeData(value: Partial<Data> | null | undefined): Data {
   data.capabilities = { connected_planning: data.is_demo === true || data.capabilities?.connected_planning === true, living_activity: data.is_demo === true || data.capabilities?.living_activity === true, status_attachments: data.is_demo === true || data.capabilities?.status_attachments === true, beacon_supplies: data.is_demo === true || data.capabilities?.beacon_supplies === true, status_privacy: data.is_demo === true || data.capabilities?.status_privacy === true, status_current_beacon: data.is_demo === true || data.capabilities?.status_current_beacon === true, rsvp_decline: data.is_demo === true || data.capabilities?.rsvp_decline === true };
   data.dm_message_reads = Array.isArray(data.dm_message_reads) ? data.dm_message_reads : [];
   data.plan_stops = Array.isArray(data.plan_stops) ? data.plan_stops : [];
+  data.capabilities.plan_editor = data.is_demo === true || value?.capabilities?.plan_editor === true;
+  data.capabilities.recurrence_v2 = data.is_demo === true || value?.capabilities?.recurrence_v2 === true;
+  data.capabilities.advanced_beacon_tools = data.is_demo === true || value?.capabilities?.advanced_beacon_tools === true;
+  data.capabilities.premium_tools = data.is_demo === true || value?.capabilities?.premium_tools === true;
+  data.capabilities.squad_boosts = data.is_demo === true || value?.capabilities?.squad_boosts === true;
+  data.capabilities.premium = data.is_demo === true || value?.capabilities?.premium === true;
+  if (!data.is_demo) {data.demo_premium_tier=undefined; data.demo_squad_boosts=undefined; data.demo_boost_clock=undefined;}
   data.capabilities.living_plans = data.is_demo === true || value?.capabilities?.living_plans === true;
   data.capabilities.collaborative_plans = data.is_demo === true || value?.capabilities?.collaborative_plans === true;
   data.capabilities.repeatable_plans = data.is_demo === true || value?.capabilities?.repeatable_plans === true;

@@ -1,5 +1,6 @@
 import React, { createContext, useEffect, useState } from "react";
 import Animated, {
+  FadeInDown,
   FadeIn,
   FadeOut,
   ZoomIn,
@@ -27,6 +28,7 @@ export function MapCallout({
   maxWidth,
   onDismiss,
   compact = false,
+  motion = "default",
 }: {
   anchor: { x: number; y: number } | null;
   bounds: {
@@ -43,6 +45,7 @@ export function MapCallout({
   testID?: string;
   maxWidth?: number;
   compact?: boolean;
+  motion?: "default" | "place";
   onDismiss?: () => void;
 }) {
   const reducedMotion = useReducedMotion();
@@ -90,14 +93,20 @@ export function MapCallout({
   return (
     <Animated.View
       entering={
-        reducedMotion
-          ? FadeIn.duration(mapTooltip.duration)
-          : ZoomIn.duration(mapTooltip.duration).delay(50)
+        motion === "place"
+          ? reducedMotion
+            ? FadeIn.duration(0)
+            : FadeInDown.duration(140)
+          : reducedMotion
+            ? FadeIn.duration(mapTooltip.duration)
+            : ZoomIn.duration(mapTooltip.duration).delay(50)
       }
       exiting={
-        reducedMotion
-          ? FadeOut.duration(mapTooltip.duration)
-          : ZoomOut.duration(mapTooltip.duration)
+        motion === "place"
+          ? FadeOut.duration(reducedMotion ? 0 : 100)
+          : reducedMotion
+            ? FadeOut.duration(mapTooltip.duration)
+            : ZoomOut.duration(mapTooltip.duration)
       }
       pointerEvents="box-none"
       testID={testID}

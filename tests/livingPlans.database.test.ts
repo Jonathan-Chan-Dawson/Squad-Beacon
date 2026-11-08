@@ -349,6 +349,8 @@ test("living Plans durable stops, safe links and role boundaries", async () => {
       interval_weeks: 1,
     }),
   );
+  await root();
+  await db.query("insert into private.premium_grants(owner_id,tier) values($1,'plus')", [ids.alice]);
   await actor("bob");
   const repeat = await action("create_routine", {
     expected_actor_id: ids.bob,
@@ -488,7 +490,7 @@ test("living Plans durable stops, safe links and role boundaries", async () => {
   );
   await db.exec("set role service_role");
   const scheduled = (
-    await db.query<{ n: number }>("select public.run_due_plan_routines(2) n")
+    await db.query<{ n: number }>("select public.run_due_plan_routines(7) n")
   ).rows[0].n;
   assert.ok(
     scheduled >= 1,

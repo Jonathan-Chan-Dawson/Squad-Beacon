@@ -1,3 +1,4 @@
+import { DemoTierSelector } from "@/src/features/profile/settings/PremiumUI";
 import React, { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { router, type Href } from "expo-router";
@@ -77,6 +78,7 @@ export function DeveloperLab() {
         <Txt muted>
           Simulated data only. These controls never change live accounts.
         </Txt>
+        <DemoTierSelector />
         {(Object.entries(scenarios) as [DemoScenario, string][]).map(
           ([key, title]) => (
             <Button

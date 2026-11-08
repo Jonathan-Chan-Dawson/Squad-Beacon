@@ -131,6 +131,10 @@ export function creationHandoffParams(
     "threadId",
     "planId",
     "planSession",
+    "planDraftKey",
+    "planDraftStopId",
+    "returnPlanId",
+    "planStopId",
     "locationPicker",
   ]) {
     if (typeof context[key] === "string" && context[key])

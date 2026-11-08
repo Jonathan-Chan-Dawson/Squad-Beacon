@@ -19,18 +19,34 @@ export function PlanChoice({
   detail,
   icon: Icon,
   onPress,
+  expanded,
+  selected,
 }: {
   title: string;
   detail: string;
   icon: LucideIcon;
   onPress: () => void;
+  expanded?: boolean;
+  selected?: boolean;
 }) {
   const { semanticColors: c, tokens } = useTheme();
+  const EndIcon =
+    expanded === undefined
+      ? selected === undefined
+        ? ChevronRight
+        : selected
+          ? Check
+          : undefined
+      : expanded
+        ? ChevronDown
+        : ChevronRight;
   return (
     <MotionPressable
       accessibilityRole="button"
       accessibilityLabel={title}
       accessibilityHint={detail.replace(/\n/g, ", ")}
+      accessibilityState={{ expanded, selected }}
+      aria-expanded={expanded}
       onPress={onPress}
       style={{
         flexDirection: "row",
@@ -47,7 +63,7 @@ export function PlanChoice({
           width: 36,
           height: 36,
           borderRadius: 12,
-          backgroundColor: c.surfaceRaised,
+          backgroundColor: selected ? c.surfaceSelected : c.surfaceRaised,
           alignItems: "center",
           justifyContent: "center",
         }}
@@ -74,7 +90,11 @@ export function PlanChoice({
           {detail}
         </Text>
       </View>
-      <ChevronRight size={18} color={c.textSecondary} />
+      <View style={{ width: 18 }}>
+        {EndIcon && (
+          <EndIcon size={18} color={selected ? c.accent : c.textSecondary} />
+        )}
+      </View>
     </MotionPressable>
   );
 }

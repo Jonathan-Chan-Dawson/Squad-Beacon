@@ -11,6 +11,12 @@ async function createHome(page: import("@playwright/test").Page) {
 
 async function returnToHub(page: import("@playwright/test").Page) {
   await page.getByRole("button", { name: /^(Back|Back to Beacons)$/ }).click();
+  if (
+    await page
+      .getByRole("heading", { name: /^(Beacon Templates|My Templates)$/ })
+      .isVisible()
+  )
+    await page.goBack();
   const create = page.getByRole("button", { name: "Create", exact: true }),
     blank = page.getByRole("button", {
       name: "+ Create Blank Beacon",
@@ -28,7 +34,9 @@ test("Create stays compact and app templates prefill the Beacon Quick Editor", a
     0,
   );
   await page.getByRole("button", { name: "Browse All", exact: true }).click();
-  await page.getByLabel("Search", { exact: true }).fill("Basketball");
+  await page
+    .getByRole("textbox", { name: "Search", exact: true })
+    .fill("Basketball");
   await page.getByRole("button", { name: "Basketball", exact: true }).click();
   await expect(page.getByLabel("Activity title", { exact: true })).toHaveValue(
     "Basketball",
@@ -51,46 +59,49 @@ test("Plan timeline can create a reusable manual Routine", async ({ page }) => {
   await createHome(page);
   await page.getByRole("button", { name: "Create Plan", exact: true }).click();
   await page
-    .getByLabel("Plan name", { exact: true })
+    .getByLabel("Plan title", { exact: true })
     .fill("Friday test itinerary");
-  await page.getByRole("button", { name: "Save Plan", exact: true }).click();
-  await page.getByRole("button", { name: "+ Beacon", exact: true }).click();
+  await page.getByRole("button", { name: "Add Beacon", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Link Existing Beacon", exact: true })
+    .click();
+  await page
+    .getByLabel("Search eligible Beacons", { exact: true })
+    .fill("Dinner together");
   await page
     .getByRole("button", { name: "Dinner together", exact: true })
     .click();
-  await page.getByRole("button", { name: "Repeat", exact: true }).click();
+  await page.getByRole("button", { name: "Save Draft", exact: true }).click();
+  await page.getByRole("button", { name: "Repeat Plan", exact: true }).click();
   await page
-    .getByRole("button", { name: "Whenever I choose", exact: true })
+    .getByRole("button", { name: "End date & reminders", exact: true })
     .click();
   await page
-    .getByRole("button", { name: "Create Routine", exact: true })
+    .getByRole("button", { name: "Reuse manually instead", exact: true })
     .click();
+  await page.getByRole("button", { name: "Save Repeat", exact: true }).click();
+  const sourceUrl = page.url();
   await page
-    .getByRole("button", { name: "Open Routine tools", exact: true })
+    .getByRole("button", { name: "Repeat options", exact: true })
     .click();
   await page.getByRole("button", { name: "Run Now", exact: true }).click();
   await expect(page).toHaveURL(/\/plan\//);
-  await expect(
-    page.getByText("This occurrence · Edit its Beacons individually", {
-      exact: true,
-    }),
-  ).toBeVisible();
+  await expect(page).not.toHaveURL(sourceUrl);
+  await expect(page.getByRole("button", { name: "1. Dinner together", exact: true })).toBeVisible();
 });
 
-test("Routine quick start offers source Plans and the shared Plan builder", async ({
+test("Create Plan opens the full editor without a standalone Routine setup picker", async ({
   page,
 }) => {
   await createHome(page);
-
-  await page
-    .getByRole("button", { name: "Create Routine", exact: true })
-    .click();
-  await page
-    .getByRole("button", { name: "Build a Plan from scratch", exact: true })
-    .click();
-  await expect(page.getByLabel("Plan name", { exact: true })).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Save Plan", exact: true }),
+    page.getByRole("button", { name: "Create Routine", exact: true }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "Create Plan", exact: true }).click();
+  await expect(page.getByLabel("Plan title", { exact: true })).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "Save Draft", exact: true }),
   ).toBeVisible();
 });
 
@@ -170,7 +181,9 @@ test("launcher preserves blank first, recommendations, search, and compact famil
     .fill("");
   await page.screenshot({ path: "test-results/create-launcher-390.png" });
   await page.getByRole("button", { name: "Browse All", exact: true }).click();
-  const browser = page.getByRole("dialog");
+  await expect(page).toHaveURL(/beacon-templates/);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  const browser = page;
   await expect(
     browser.getByRole("button", { name: "Hangout", exact: true }),
   ).toBeVisible();
@@ -195,7 +208,9 @@ test("launcher preserves blank first, recommendations, search, and compact famil
   await browser
     .getByRole("button", { name: "Back to categories", exact: true })
     .click();
-  await browser.getByLabel("Search", { exact: true }).fill("movie night");
+  await browser
+    .getByRole("textbox", { name: "Search", exact: true })
+    .fill("movie night");
   await browser.getByRole("button", { name: "Movie", exact: true }).click();
   await expect(page.getByLabel("Activity title", { exact: true })).toHaveValue(
     "Movie",
@@ -299,7 +314,6 @@ test("My Templates saves, reuses, and edits the existing configuration", async (
   await returnToHub(page);
   await page.getByRole("button", { name: "My Templates", exact: true }).click();
   await page
-    .getByRole("dialog")
     .getByRole("button", { name: "Weekly groceries", exact: true })
     .click();
   await expect(page.getByLabel("Activity title", { exact: true })).toHaveValue(
@@ -309,7 +323,6 @@ test("My Templates saves, reuses, and edits the existing configuration", async (
   await returnToHub(page);
   await page.getByRole("button", { name: "My Templates", exact: true }).click();
   await page
-    .getByRole("dialog")
     .getByRole("button", {
       name: "Edit template Weekly groceries",
       exact: true,
@@ -324,7 +337,6 @@ test("My Templates saves, reuses, and edits the existing configuration", async (
   await returnToHub(page);
   await page.getByRole("button", { name: "My Templates", exact: true }).click();
   await page
-    .getByRole("dialog")
     .getByRole("button", { name: "Weekly groceries", exact: true })
     .click();
   await expect(page.getByLabel("Activity title", { exact: true })).toHaveValue(

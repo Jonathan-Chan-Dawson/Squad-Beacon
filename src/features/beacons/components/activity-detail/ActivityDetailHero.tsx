@@ -15,6 +15,7 @@ import { radius, space, type } from "@/src/theme/data";
 import { themeVariants } from "@/src/theme/palettes";
 
 export type ActivityDetailHeroProps = {
+  premiumStyle?: "standard"|"sunrise"|"ocean";
   title: string;
   category: Category;
   modeLabel: string;
@@ -30,6 +31,7 @@ export type ActivityDetailHeroProps = {
 };
 
 export function ActivityDetailHero({
+  premiumStyle,
   title,
   category,
   modeLabel,
@@ -141,7 +143,7 @@ export function ActivityDetailHero({
             <Stop offset="0" stopColor={heroBackground} />
             <Stop
               offset="1"
-              stopColor={categoryToken.color}
+              stopColor={premiumStyle==="sunrise"?categories.Creative.color:premiumStyle==="ocean"?categories.Study.color:categoryToken.color}
               stopOpacity="0.82"
             />
           </LinearGradient>

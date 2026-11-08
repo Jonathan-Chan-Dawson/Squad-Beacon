@@ -23,7 +23,7 @@ for (const appearance of ["light", "dark"] as const) {
       page.getByText("Tuesday, November 10", { exact: true }),
     ).toBeVisible();
     await page.screenshot({
-      path: `docs/screenshots/your-activity/${appearance}-calendar-month.png`,
+      path: test.info().outputPath(`${appearance}-calendar-month.png`),
       fullPage: true,
     });
     const historyLength = await page.evaluate(() => history.length);
@@ -56,7 +56,7 @@ for (const appearance of ["light", "dark"] as const) {
           ),
         ).toBe(true);
         await page.screenshot({
-          path: `docs/screenshots/your-activity/${appearance}-${width}-${tab.toLowerCase()}.png`,
+          path: test.info().outputPath(`${appearance}-${width}-${tab.toLowerCase()}.png`),
           fullPage: true,
         });
       }
@@ -69,13 +69,13 @@ for (const appearance of ["light", "dark"] as const) {
     await page.getByRole("button", { name: "All", exact: true }).click();
     await page.setViewportSize({ width: 390, height: 844 });
     await page.screenshot({
-      path: `docs/screenshots/your-activity/${appearance}-plans-all.png`,
+      path: test.info().outputPath(`${appearance}-plans-all.png`),
       fullPage: true,
     });
   });
 }
 
-test("saved Plan creation is consumed once and dirty inline edits require a choice", async ({
+test("saved Plan creation is consumed once and unfinished edits survive Back", async ({
   page,
 }) => {
   await page.goto(
@@ -83,66 +83,37 @@ test("saved Plan creation is consumed once and dirty inline edits require a choi
   );
   await page.getByRole("button", { name: /Explore the demo/ }).click();
   await page
-    .getByLabel("Plan name", { exact: true })
+    .getByLabel("Plan title", { exact: true })
     .fill("Workspace acceptance Plan");
-  await page.getByRole("button", { name: "Save Plan", exact: true }).click();
-  await expect(page.getByText("Saved", { exact: true })).toBeVisible();
-  await expect(page.getByLabel("Plan name", { exact: true })).toHaveCount(0);
-  await page.screenshot({
-    path: "docs/screenshots/your-activity/plan-workspace.png",
-    fullPage: true,
-  });
-  await page.getByRole("button", { name: "+ Idea", exact: true }).click();
+  await page.getByRole("button", { name: "Save Draft", exact: true }).click();
+  await expect(page).toHaveURL(/\/plan\//);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page.getByRole("button", { name: "Add Idea", exact: true }).click();
   await page
-    .getByLabel("What could we do?", { exact: true })
+    .getByLabel("Activity idea", { exact: true })
     .fill("Keep this thought");
   await page.getByRole("button", { name: "Back", exact: true }).click();
   await expect(
-    page.getByRole("dialog", { name: "Discard unsaved changes?" }),
-  ).toBeVisible();
-  await page.getByRole("button", { name: "Keep editing", exact: true }).click();
-  await expect(
-    page.getByLabel("What could we do?", { exact: true }),
-  ).toHaveValue("Keep this thought");
-  await page.getByRole("button", { name: "Add idea", exact: true }).click();
-  await expect(
-    page.getByRole("button", { name: "1. Keep this thought", exact: true }),
-  ).toBeVisible();
-  await page.screenshot({
-    path: "docs/screenshots/your-activity/plan-workspace-with-idea.png",
-    fullPage: true,
-  });
-  await page
-    .getByRole("button", { name: "1. Keep this thought", exact: true })
-    .click();
-  await page.getByRole("button", { name: "Stop options", exact: true }).click();
-  await expect(
-    page.getByRole("dialog", { name: "Stop options", exact: true }),
-  ).toBeVisible();
-  await page.screenshot({
-    path: "docs/screenshots/your-activity/plan-stop-menu.png",
-    fullPage: true,
-  });
-  await page.getByRole("button", { name: "Cancel", exact: true }).click();
-  await expect(
-    page.getByRole("dialog", { name: "Stop options", exact: true }),
-  ).toHaveCount(0);
-  await page.getByRole("button", { name: "Stop options", exact: true }).click();
-  await page.getByRole("button", { name: "Remove idea", exact: true }).click();
-  await expect(
-    page.getByRole("dialog", { name: "Remove this stop?", exact: true }),
-  ).toBeVisible();
-  await page.getByRole("button", { name: "Keep stop", exact: true }).click();
-  await expect(
-    page.getByRole("button", { name: "1. Keep this thought", exact: true }),
-  ).toBeVisible();
-
-  await page.getByRole("button", { name: "Back", exact: true }).click();
-  await expect(page.getByLabel("Plan name", { exact: true })).toHaveCount(0);
+    page.getByRole("tab", { name: "Plans", exact: true }),
+  ).toHaveAttribute("aria-selected", "true");
   await page
     .getByRole("button", { name: "Workspace acceptance Plan", exact: true })
     .last()
     .click();
+  await expect(
+    page.getByRole("button", { name: "1. Keep this thought", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "1. Keep this thought", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Activity options", exact: true })
+    .click();
+  await expect(
+    page.getByRole("dialog", { name: "Keep this thought", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: "1. Keep this thought", exact: true }),
   ).toBeVisible();
@@ -158,6 +129,8 @@ test("an uncertain committed creation replays its original request and opens one
   account.snapshot.capabilities = {
     ...account.snapshot.capabilities,
     living_plans: true,
+    plan_editor: false,
+    recurrence_v2: false,
   };
   const requests: { request_id: string; payload: Record<string, unknown> }[] =
     [];
@@ -225,10 +198,12 @@ for (const kind of ["vote", "draw", "time"] as const) {
     await page.goto("/plans?create=yes");
     await page.getByRole("button", { name: /Explore the demo/ }).click();
     await page
-      .getByLabel("Plan name", { exact: true })
+      .getByLabel("Plan title", { exact: true })
       .fill(`Decision ${kind} Plan`);
-    await page.getByRole("button", { name: "Save Plan", exact: true }).click();
-    await page.getByRole("button", { name: "+ Decide", exact: true }).click();
+    await page.getByRole("button", { name: "Save Draft", exact: true }).click();
+    await page
+      .getByRole("button", { name: "Add Decision", exact: true })
+      .click();
     await page
       .getByRole("button", {
         name:
@@ -275,19 +250,17 @@ for (const kind of ["vote", "draw", "time"] as const) {
   });
 }
 
-test("a linked Beacon publishes through its full editor and returns to the Plan", async ({
+test("a new Beacon stays unpublished until the Plan is explicitly scheduled", async ({
   page,
 }) => {
   await page.goto("/plans?create=yes");
   await page.getByRole("button", { name: /Explore the demo/ }).click();
   await page
-    .getByLabel("Plan name", { exact: true })
+    .getByLabel("Plan title", { exact: true })
     .fill("Linked Beacon Plan");
-  await page.getByRole("button", { name: "Save Plan", exact: true }).click();
-  await page.getByRole("button", { name: "+ Beacon", exact: true }).click();
-  await page
-    .getByRole("button", { name: "Create Beacon", exact: true })
-    .click();
+  await page.getByRole("button", { name: "Save Draft", exact: true }).click();
+  await page.getByRole("button", { name: "Add Beacon", exact: true }).click();
+  await page.getByRole("button", { name: "New Beacon", exact: true }).click();
   await page
     .getByLabel("Activity title", { exact: true })
     .fill("Plan online hangout");
@@ -295,13 +268,25 @@ test("a linked Beacon publishes through its full editor and returns to the Plan"
   await page
     .getByLabel("HTTPS meeting link", { exact: true })
     .fill("https://example.com/hangout");
-  await page
-    .getByRole("button", { name: /^(Create Beacon|Add Beacon Step)$/ })
-    .click();
+  await page.getByRole("button", { name: "Add to Plan", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "1. Plan online hangout", exact: true }),
   ).toBeVisible();
   await expect(page).toHaveURL(/\/plan\//);
+  await expect(
+    page.getByText("Beacon draft \u00b7 unpublished", { exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Schedule activities", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Schedule Plan", exact: true })
+    .click();
+  await expect(
+    page
+      .getByRole("button", { name: "1. Plan online hangout", exact: true })
+      .getByText(/^Linked Beacon/),
+  ).toBeVisible();
 });
 
 test("a Squad Plan is saved under its audience and immediately visible from All", async ({
@@ -310,12 +295,15 @@ test("a Squad Plan is saved under its audience and immediately visible from All"
   await page.goto("/plans?create=yes");
   await page.getByRole("button", { name: /Explore the demo/ }).click();
   await page
-    .getByLabel("Plan name", { exact: true })
+    .getByLabel("Plan title", { exact: true })
     .fill("Squad workspace Plan");
+  await page
+    .getByRole("button", { name: "Details & settings", exact: true })
+    .click();
   await page
     .getByRole("button", { name: "The training crew", exact: true })
     .click();
-  await page.getByRole("button", { name: "Save Plan", exact: true }).click();
+  await page.getByRole("button", { name: "Save Draft", exact: true }).click();
   await expect(
     page.getByText("The training crew", { exact: true }),
   ).toBeVisible();
@@ -334,11 +322,11 @@ test("Calendar scheduling uses compact choices and preserves selected date and t
   await page.getByRole("button", { name: /Explore the demo/ }).click();
   await page.getByRole("button", { name: "+ Schedule", exact: true }).click();
   await page.screenshot({
-    path: "docs/screenshots/your-activity/calendar-schedule-menu.png",
+    path: test.info().outputPath("calendar-schedule-menu.png"),
     fullPage: true,
   });
   await page.getByRole("button", { name: "Plan", exact: true }).click();
-  await expect(page.getByLabel("Plan name", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Plan title", { exact: true })).toBeVisible();
   await expect(page).toHaveURL(/startDate=2026-11-15/);
   await expect(page).toHaveURL(/timezone=America/);
 });
@@ -368,6 +356,7 @@ test("Calendar itineraries open individual Beacons and restore their expanded st
   await page.getByRole("button", { name: "Open Plan", exact: true }).click();
   await expect(page).toHaveURL(/\/plan\//);
   const planUrl = page.url();
+  await page.getByRole("button", { name: /^1\. / }).click();
   await page
     .getByRole("button", { name: "Open Beacon", exact: true })
     .first()
@@ -401,7 +390,9 @@ for (const width of [320, 390]) {
       await expect(
         page.getByRole("textbox", { name: "Message", exact: true }),
       ).toBeVisible();
-      await page.getByRole("button", { name: "Back to Overview", exact: true }).click();
+      await page
+        .getByRole("button", { name: "Back to Overview", exact: true })
+        .click();
       await expect(page).toHaveURL(detailUrl);
       await expect(
         page.getByRole("tab", { name: "Overview", exact: true }),
@@ -414,7 +405,9 @@ for (const width of [320, 390]) {
       ).toHaveCount(0);
       await expect(page.getByTestId("activity-detail-hero")).toBeVisible();
       await page.screenshot({
-        path: test.info().outputPath(`${appearance}-${width}-beacon-overview.png`),
+        path: test
+          .info()
+          .outputPath(`${appearance}-${width}-beacon-overview.png`),
         fullPage: true,
       });
       await page.getByRole("button", { name: "Back", exact: true }).click();

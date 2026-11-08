@@ -103,7 +103,7 @@ export function MapControlPopover({
       </View>
       <ScrollView
         showsVerticalScrollIndicator={false}
-        style={{ flexShrink: 1, scrollbarWidth: "none" }}
+        style={{ flexShrink: 1 }}
         contentContainerStyle={{ gap: 0 }}
       >
         {children}

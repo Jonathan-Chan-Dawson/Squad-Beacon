@@ -1,3 +1,4 @@
+import {resolvePremiumFeature} from "@/src/shared/entitlements";
 import type { Activity, Data, ID, Payload } from "@/src/shared/types";
 import { canManageBeacon } from "@/src/features/beacons/permissions";
 import {
@@ -248,7 +249,7 @@ export function applyDemoBeaconMediaTeamAction(
     canManage(data, teamActivity, userId)
   ) {
     const delta = Number(payload.delta);
-    if (delta !== 1 && delta !== -1)
+    if (delta !== 1 && delta !== -1 && !(resolvePremiumFeature(data,"team_presets",teamActivity).available&&data.premium_tool_configs?.find(t=>t.activity_id===teamActivity.id&&t.kind==="teams")?.settings.score_steps?.some(s=>s.points===delta)))
       throw new Error("Scores can change by one point at a time.");
     team.score = Math.max(0, Math.min(9999, team.score + delta));
     return true;

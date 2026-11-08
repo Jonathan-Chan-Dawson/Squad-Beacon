@@ -83,3 +83,47 @@ export function tickFocusTimer(
 export function resetFocusTimer(timer: FocusTimerState): FocusTimerState {
   return createFocusTimer(timer.durationSeconds);
 }
+
+/** Event-time boundary for starting a local sequence. */
+export function startFocusSequenceTimer(durationSeconds:number) {return startFocusTimer(createFocusTimer(durationSeconds),Date.now());}
+
+export type PersistedFocus = {
+  timer: FocusTimerState;
+  mode: "Standard" | "Pomodoro";
+  pomodoro: "Focus" | "Break";
+  minutes: string;
+  steps: {label:string;minutes:number}[];
+  index: number;
+  summary: boolean;
+  completed: number;
+};
+export function decodeFocus(value: string | null,now=Date.now()): PersistedFocus | null {
+  try {
+    const s = JSON.parse(value ?? "null") as PersistedFocus;
+    if (
+      !s ||
+      !["Standard", "Pomodoro"].includes(s.mode) ||
+      !["Focus", "Break"].includes(s.pomodoro) ||
+      !s.timer ||
+      !["idle", "running", "paused", "complete"].includes(s.timer.phase) ||
+      !Number.isFinite(s.timer.durationSeconds) ||
+      s.timer.durationSeconds < 0 ||
+      s.timer.durationSeconds > 86400 ||
+      !Number.isFinite(s.timer.remainingSeconds) ||
+      s.timer.remainingSeconds < 0 ||
+      s.timer.remainingSeconds > s.timer.durationSeconds ||
+      (s.timer.phase === "running" && !Number.isFinite(s.timer.deadline)) ||
+      !Array.isArray(s.steps) ||
+      s.steps.length > 12 || s.steps.some(p=>!p||typeof p.label!=="string"||!p.label.trim()||p.label.length>36||!Number.isInteger(p.minutes)||p.minutes<1||p.minutes>1440) ||
+      !Number.isInteger(s.index) ||
+      s.index < 0 ||
+      s.index >= Math.max(1, s.steps.length) ||
+      !Number.isInteger(s.completed) ||
+      s.completed < 0
+    )
+      return null;
+    return { ...s, timer: tickFocusTimer(s.timer, now) };
+  } catch {
+    return null;
+  }
+}

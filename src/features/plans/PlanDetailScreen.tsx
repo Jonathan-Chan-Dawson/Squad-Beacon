@@ -1,5 +1,6 @@
+import PlanEditorScreen from "./PlanEditorScreen";
+import { livingPlansEnabled, planPermissions } from "./livingPlans";
 import { LivingPlanDetail } from "./LivingPlansScreen";
-import { livingPlansEnabled } from "./livingPlans";
 import { physicalDirectionsUrl } from "@/src/features/maps/directions";
 import { stepsFromPlan } from "@/src/features/plans/domain";
 import { RoutineScheduleSheet } from "@/src/features/plans/RoutineScheduleSheet";
@@ -22,7 +23,10 @@ import { Linking, Text, View } from "react-native";
 const dayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 export default function PlanDetailScreen() {
-  const { data } = useBeacon();
+  const { data, userId } = useBeacon();
+  const { id, tools } = useLocalSearchParams<{ id?: string; tools?: string }>();
+  const plan = data.plans.find(p=>p.id===id);
+  if ((data.is_demo || data.capabilities?.plan_editor) && plan && !plan.routine_source && tools!=="yes" && planPermissions(data,plan,userId).editor) return <PlanEditorScreen />;
   if (livingPlansEnabled(data)) return <LivingPlanDetail />;
   return <LegacyPlanDetail />;
 }

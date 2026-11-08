@@ -1,3 +1,4 @@
+import {MemoryCollections} from "./components/MemoryCollections";
 import { useConfirmation } from "@/src/shared/Dialogs";
 import React, { useEffect, useMemo, useState } from "react";
 import { Image, Linking, Pressable, Text, View } from "react-native";
@@ -27,6 +28,7 @@ export function BeaconMemories({ activity }: { activity: Activity }) {
   const { colors, styles } = useTheme();
   const { data, userId, act } = useBeacon();
   const { requestConfirmation, confirmationDialog } = useConfirmation();
+  const [albumIds,setAlbumIds]=useState<string[]|null>(null);
   const [caption, setCaption] = useState("");
   const [editId, setEditId] = useState<string | null>(null);
   const [editCaption, setEditCaption] = useState("");
@@ -201,6 +203,7 @@ export function BeaconMemories({ activity }: { activity: Activity }) {
   return (
     <View style={{ gap: 12 }}>
       <Text style={styles.h2}>Beacon Memories</Text>
+      {canRead&&<MemoryCollections activity={activity} onFilter={setAlbumIds}/>}
       <Txt muted>
         Photos and short videos connected to this Beacon, up to{" "}
         {MAX_BEACON_MEMORIES}.
@@ -212,7 +215,7 @@ export function BeaconMemories({ activity }: { activity: Activity }) {
       {!memories.length && (
         <Txt muted>No memories yet. Add a photo or short video.</Txt>
       )}
-      {memories.map((memory) => {
+      {memories.filter(m=>!albumIds||albumIds.includes(m.id)).map((memory) => {
         const url = localPreviews[memory.id] ?? urls[memory.id];
         const editable = canManageMemory(data, memory, userId!);
         const editing = editId === memory.id;

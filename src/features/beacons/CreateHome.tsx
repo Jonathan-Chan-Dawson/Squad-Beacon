@@ -1,11 +1,13 @@
+import { PremiumPreview } from "@/src/features/profile/settings/PremiumUI";
 import { SemanticEmpty } from "@/src/features/onboarding/OnboardingUI";
 import { randomUUID } from "expo-crypto";
 import { useNow } from "@/src/shared/useNow";
 import { CreationSavedDrafts } from "./components/CreationSavedDrafts";
 import React, { useCallback, useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
+import { router, useFocusEffect, useLocalSearchParams, type Href } from "expo-router";
 import {
+  Eye,
   Pencil,
   ChevronRight,
   Sparkles,
@@ -31,6 +33,7 @@ import {
   CircleDot,
   UtensilsCrossed,
 } from "lucide-react-native";
+import { useDesignTheme } from "@/src/shared/design-system";
 import { ActivityBadge } from "./ActivityBadge";
 import { matchesSearch } from "@/src/shared/search";
 import {
@@ -54,10 +57,132 @@ import {
   Field,
   IconButton,
   Screen,
-  Sheet,
   Txt,
   useTheme,
 } from "@/src/shared/ui";
+
+function TemplateChoice({
+  item,
+  icon,
+  expanded,
+  onPreview,
+  onApply,
+  compact = false,
+  title,
+}: {
+  item: BeaconTemplate;
+  icon: React.ReactNode;
+  expanded: boolean;
+  onPreview: () => void;
+  onApply: () => void;
+  compact?: boolean;
+  title?: string;
+}) {
+  const { colors, tokens } = useDesignTheme();
+  const tools = (item.suggestedTools ?? []).map(
+    (tool) =>
+      ({
+        chat: "Chat",
+        checklist: "Checklist",
+        notes: "Sketchboard",
+        focus: "Timer",
+        memories: "Memories",
+        music: "Music",
+        scoreboard: "Teams",
+      })[tool],
+  );
+  return (
+    <View
+      style={{
+        width: compact ? "48%" : "100%",
+        flexGrow: compact ? 1 : 0,
+        padding: 10,
+        gap: 4,
+        borderRadius: 14,
+        borderWidth: 1,
+        borderColor: expanded ? colors.accent : colors.border,
+      }}
+    >
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          justifyContent: "space-between",
+        }}
+      >
+        {icon}
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={"Preview " + (title ?? item.title)}
+          accessibilityState={{ expanded }}
+          aria-expanded={expanded}
+          onPress={onPreview}
+          style={{
+            minWidth: 44,
+            minHeight: 44,
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+        >
+          <Eye
+            size={17}
+            color={expanded ? colors.accent : colors.textSecondary}
+          />
+        </Pressable>
+      </View>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={title ?? item.title}
+        onPress={onApply}
+        style={{ minHeight: 44, gap: 4, paddingVertical: 4 }}
+      >
+        <Text
+          numberOfLines={2}
+          style={{
+            color: colors.textPrimary,
+            ...tokens.type.secondary,
+            fontWeight: "600",
+          }}
+        >
+          {title ?? item.title}
+        </Text>
+        <Text style={{ color: colors.textSecondary, ...tokens.type.caption }}>
+          Sets up · {item.minutes} min
+          {tools.length ? " · " + tools.join(" · ") : ""}
+        </Text>
+      </Pressable>
+      {expanded && (
+        <View
+          style={{
+            gap: 6,
+            paddingTop: 8,
+            borderTopWidth: 1,
+            borderTopColor: colors.border,
+          }}
+        >
+          {!!item.description && (
+            <Text
+              style={{ color: colors.textSecondary, ...tokens.type.caption }}
+            >
+              {item.description}
+            </Text>
+          )}
+          {(item.prepPrompts ?? []).map((prompt, index) => (
+            <Text
+              key={index}
+              style={{ color: colors.textSecondary, ...tokens.type.caption }}
+            >
+              • {prompt}
+            </Text>
+          ))}
+          <Text style={{ color: colors.textSecondary, ...tokens.type.caption }}>
+            Tap the template name to use it.
+          </Text>
+        </View>
+      )}
+    </View>
+  );
+}
 
 function recommendationFamily(item: BeaconTemplate) {
   const quickFamilies: Record<string, string> = {
@@ -69,6 +194,7 @@ function recommendationFamily(item: BeaconTemplate) {
 }
 
 export function CreateHome({
+  browserScreen = false,
   onBlank,
   onReuse,
   onTemplate,
@@ -78,6 +204,7 @@ export function CreateHome({
   onClearInvitees,
   onClearStatusSource,
 }: {
+  browserScreen?: boolean;
   onBlank: () => void;
   onReuse: (id: string) => void;
   onTemplate: (template: BeaconTemplate) => void;
@@ -108,8 +235,17 @@ export function CreateHome({
   }>();
   const context = handoffContext ?? creationHandoffParams(routeContext);
   const { styles, colors } = useTheme();
-  const [browser, setBrowser] = useState(routeContext.templates === "mine");
-  const [source, setSource] = useState(routeContext.templates === "mine" ? "My Templates" : "Browse");
+  const design = useDesignTheme();
+  const [previewId, setPreviewId] = useState<string | null>(null);
+  const togglePreview = (id: string) =>
+    setPreviewId((current) => (current === id ? null : id));
+  const browser =
+    browserScreen ||
+    routeContext.templates === "mine" ||
+    routeContext.templates === "all";
+  const [source, setSource] = useState(
+    routeContext.templates === "mine" ? "My Templates" : "Browse",
+  );
   const [query, setQuery] = useState("");
   const [family, setFamily] = useState<TemplateFamily | null>(null);
   const [launcherError] = useState("");
@@ -198,8 +334,11 @@ export function CreateHome({
           gap: 12,
           paddingVertical: 11,
           minHeight: 64,
-          borderBottomWidth: 1,
+          borderBottomWidth: browser ? 0 : 1,
           borderColor: colors.line,
+          ...(browser
+            ? { paddingHorizontal: 12, borderWidth: 1, borderRadius: 14 }
+            : {}),
           opacity: pressed ? 0.75 : 1,
         },
       ]}
@@ -216,36 +355,52 @@ export function CreateHome({
       <ChevronRight size={17} color={colors.muted} />
     </Pressable>
   );
-  const recipeCard = (item: BeaconTemplate) =>
-    card(
-      item.id ?? item.title,
-      item.title,
-      `${item.category} \u00b7 ${item.minutes} min${item.suggestedTools?.includes("checklist") ? " \u00b7 Checklist" : item.suggestedTools?.includes("focus") ? " \u00b7 Focus Timer" : ""}`,
-      () => {
-        setBrowser(false);
-        onTemplate(item);
-      },
-      recipeIcon(item),
-    );
+  const recipeCard = (item: BeaconTemplate) => (
+    <TemplateChoice
+      key={item.id ?? item.title}
+      item={item}
+      icon={recipeIcon(item)}
+      expanded={previewId === (item.id ?? item.title)}
+      onPreview={() => togglePreview(item.id ?? item.title)}
+      onApply={() => onTemplate(item)}
+    />
+  );
   const savedRoute = (id: string, edit = false) => {
-    setBrowser(false);
     router.push({
       pathname: "/create",
       params: {
         template: id,
         ...context,
+        planSession: undefined,
         ...(edit ? { editTemplate: "yes" } : {}),
       },
     });
   };
-  const savedCard = (item: (typeof own)[number]) =>
-    card(
-      item.id,
-      item.name,
-      `${item.title} \u00b7 ${item.minutes} min`,
-      () => savedRoute(item.id),
-      <ActivityBadge category={item.category} size={34} />,
-    );
+  const savedCard = (item: (typeof own)[number]) => (
+    <TemplateChoice
+      item={{
+        ...item,
+        suggestedTools: (
+          [
+            ["chat", "enable_chat"],
+            ["checklist", "enable_checklist"],
+            ["notes", "enable_journal"],
+            ["focus", "enable_focus"],
+            ["memories", "enable_experiences"],
+            ["music", "enable_music"],
+            ["scoreboard", "enable_scoreboard"],
+          ] as const
+        )
+          .filter(([, key]) => item.module_defaults?.[key])
+          .map(([tool]) => tool),
+      }}
+      title={item.name}
+      icon={<ActivityBadge category={item.category} size={34} />}
+      expanded={previewId === "saved:" + item.id}
+      onPreview={() => togglePreview("saved:" + item.id)}
+      onApply={() => savedRoute(item.id)}
+    />
+  );
   const icons = {
     hangout: UsersRound,
     food: Coffee,
@@ -294,29 +449,65 @@ export function CreateHome({
           height: 34,
           borderRadius: 12,
           borderWidth: 1,
-          borderColor: colors.line,
+          borderColor: design.categories[item.category].color,
+          backgroundColor: design.categories[item.category].tint,
           alignItems: "center",
           justifyContent: "center",
         }}
       >
-        <Icon size={20} color={colors.green} />
+        <Icon size={20} color={design.categories[item.category].color} />
       </View>
     );
   }
   const familyCard = (item: TemplateFamily) => {
     const Icon = icons[item.icon as keyof typeof icons] ?? Sparkles;
-    return card(
-      item.id,
-      item.title,
-      item.description,
-      () => setFamily(item),
-      <Icon size={23} color={colors.green} />,
+    const tone =
+      design.categories[familyTemplates(item)[0]?.category ?? "Other"];
+    return (
+      <Pressable
+        key={item.id}
+        accessibilityRole="button"
+        accessibilityLabel={item.title}
+        onPress={() => setFamily(item)}
+        style={({ pressed }) => ({
+          width: "47%",
+          flexGrow: 1,
+          minHeight: 132,
+          padding: 14,
+          gap: 8,
+          borderWidth: 1,
+          borderColor: colors.line,
+          borderRadius: 16,
+          opacity: pressed ? 0.7 : 1,
+        })}
+      >
+        <View
+          style={{
+            padding: 8,
+            borderRadius: 12,
+            alignSelf: "flex-start",
+            backgroundColor: tone.tint,
+          }}
+        >
+          <Icon size={24} color={tone.color} />
+        </View>
+        <Text numberOfLines={2} style={[styles.h2, { fontSize: 15 }]}>
+          {item.title}
+        </Text>
+        <Text numberOfLines={2} style={[styles.muted, { fontSize: 12 }]}>
+          {item.description}
+        </Text>
+      </Pressable>
     );
   };
   const openBrowser = (nextSource = "Browse") => {
-    setSource(nextSource);
-    setFamily(null);
-    setBrowser(true);
+    router.push({
+      pathname: "/beacon-templates",
+      params: {
+        ...context,
+        templates: nextSource === "My Templates" ? "mine" : "all",
+      },
+    });
   };
   const appResults = (family ? familyTemplates(family) : catalog).filter(
     (item) => templateMatchesSearch(item, query),
@@ -330,6 +521,132 @@ export function CreateHome({
       {children}
     </View>
   );
+  if (browser)
+    return (
+      <Screen
+        title={
+          source === "My Templates"
+            ? "My Templates"
+            : (family?.title ?? "Beacon Templates")
+        }
+        eyebrow="START WITH AN IDEA"
+        compactHeader
+        create={false}
+        scrollStateKey={source + (family?.id ?? "")}
+      >
+        <Txt muted>
+          {source === "My Templates"
+            ? "Your saved starting points, ready for the next plan."
+            : "Find an activity, make it yours, and bring your people."}
+        </Txt>
+        <Field
+          label="Search"
+          placeholder="Search activities or categories…"
+          value={query}
+          onChangeText={setQuery}
+        />
+        <Chips
+          options={["Browse", "My Templates"]}
+          value={source}
+          onChange={(next) => {
+            setSource(next);
+            setFamily(null);
+          }}
+          showSelectedCheckmark={false}
+        />
+        {source === "My Templates" && <PremiumPreview kind="Beacon" />}
+        {source === "My Templates" ? (
+          <>
+            {savedResults.map((item) => (
+              <View
+                key={item.id}
+                style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
+              >
+                <View style={{ flex: 1 }}>{savedCard(item)}</View>
+                <IconButton
+                  label={`Edit template ${item.name}`}
+                  onPress={() => savedRoute(item.id, true)}
+                >
+                  <Pencil size={18} color={colors.muted} />
+                </IconButton>
+              </View>
+            ))}
+            {!savedResults.length && (
+              <SemanticEmpty
+                name={query.trim() ? "empty.search" : "empty.templates"}
+                illustration="templates"
+                density="section"
+                action={{
+                  label: query.trim() ? "Clear search" : "Browse templates",
+                  onPress: () => {
+                    setQuery("");
+                    setSource("Browse");
+                    setFamily(null);
+                  },
+                }}
+              />
+            )}
+            <Button
+              secondary
+              title="Create Blank Template"
+              onPress={() => {
+                router.push({
+                  pathname: "/create",
+                  params: {
+                    ...context,
+                    saveTemplate: "yes",
+                    editor: "yes",
+                    planSession: undefined,
+                  },
+                });
+              }}
+            />
+          </>
+        ) : family ? (
+          <>
+            <Button
+              compact
+              secondary
+              title="Back to categories"
+              onPress={() => setFamily(null)}
+            />
+            <Txt muted>{family.description}</Txt>
+            {appResults.map(recipeCard)}
+            {!appResults.length && (
+              <Empty
+                title="No matching templates"
+                body="Try another activity or go back to categories."
+              />
+            )}
+          </>
+        ) : query.trim() ? (
+          <>
+            {appResults.map(recipeCard)}
+            {!appResults.length && (
+              <Empty
+                title="No matching templates"
+                body="Try another activity or category."
+              />
+            )}
+          </>
+        ) : (
+          <>
+            {section(
+              "QUICK START",
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
+                {mainTemplateFamilies.map(familyCard)}
+              </View>,
+            )}
+            {section(
+              "MORE ACTIVITIES",
+              <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
+                {moreTemplateFamilies.map(familyCard)}
+              </View>,
+            )}
+          </>
+        )}
+      </Screen>
+    );
   return (
     <Screen
       title="Create"
@@ -404,52 +721,48 @@ export function CreateHome({
         </>
       ) : (
         <>
-          <Text style={styles.label}>RECOMMENDED STARTERS</Text>
+          <View
+            style={{
+              flexDirection: "row",
+              flexWrap: "wrap",
+              alignItems: "center",
+              justifyContent: "space-between",
+              columnGap: 8,
+            }}
+          >
+            <Text style={styles.label}>RECOMMENDED STARTERS</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="See All Templates"
+              onPress={() => openBrowser()}
+              style={{ minHeight: 44, justifyContent: "center" }}
+            >
+              <Text
+                style={{ color: colors.green, fontSize: 12, fontWeight: "600" }}
+              >
+                See All Templates →
+              </Text>
+            </Pressable>
+          </View>
           <View
             testID="creation-starters"
-            style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}
+            style={{
+              flexDirection: "row",
+              flexWrap: "wrap",
+              alignItems: "flex-start",
+              gap: 8,
+            }}
           >
             {recommended.map((item) => (
-              <Pressable
+              <TemplateChoice
                 key={item.id ?? item.title}
-                accessibilityRole="button"
-                accessibilityLabel={item.title}
-                onPress={() => onTemplate(item)}
-                style={({ pressed }) => ({
-                  width: "48%",
-                  flexGrow: 1,
-                  minHeight: 110,
-                  padding: 12,
-                  borderRadius: 14,
-                  borderWidth: 1,
-                  borderColor: colors.line,
-                  gap: 6,
-                  opacity: pressed ? 0.7 : 1,
-                })}
-              >
-                <ActivityBadge category={item.category} size={34} />
-                <Text
-                  style={[styles.body, { fontSize: 14, fontWeight: "700" }]}
-                >
-                  {item.title}
-                </Text>
-                <Text style={[styles.muted, { fontSize: 12 }]}>
-                  {item.suggestedTools
-                    ?.map(
-                      (tool) =>
-                        ({
-                          chat: "Chat",
-                          checklist: "Checklist",
-                          notes: "Sketchboard",
-                          focus: "Timer",
-                          memories: "Memories",
-                          music: "Music",
-                          scoreboard: "Teams",
-                        })[tool],
-                    )
-                    .join(" · ") || item.category}
-                </Text>
-              </Pressable>
+                item={item}
+                icon={recipeIcon(item)}
+                compact
+                expanded={previewId === (item.id ?? item.title)}
+                onPreview={() => togglePreview(item.id ?? item.title)}
+                onApply={() => onTemplate(item)}
+              />
             ))}
           </View>
           {!!recent.length &&
@@ -525,113 +838,9 @@ export function CreateHome({
         <Pencil size={20} color={colors.muted} />,
       )}
       {card("plan", "Create Plan", "Organize multiple Beacons", () =>
-        router.push({ pathname: "/plans", params: { create: "yes" } }),
+        router.push({ pathname: data.is_demo || data.capabilities?.plan_editor ? "/plan-editor" : "/plans", params: data.is_demo || data.capabilities?.plan_editor ? {} : { create: "yes" } } as Href),
       )}
-      {card("routine", "Create Routine", "Repeat a Plan or Beacon", () =>
-        router.push({ pathname: "/routines", params: { create: "yes" } }),
-      )}
-      <Sheet
-        title={
-          source === "My Templates"
-            ? "My Templates"
-            : (family?.title ?? "Beacon Templates")
-        }
-        visible={browser}
-        onClose={() => setBrowser(false)}
-      >
-        <Field
-          label="Search"
-          placeholder="Search activities or categories…"
-          value={query}
-          onChangeText={setQuery}
-        />
-        <Chips
-          options={["Browse", "My Templates"]}
-          value={source}
-          onChange={(next) => {
-            setSource(next);
-            setFamily(null);
-          }}
-          showSelectedCheckmark={false}
-        />
-        {source === "My Templates" ? (
-          <>
-            {savedResults.map((item) => (
-              <View
-                key={item.id}
-                style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
-              >
-                <View style={{ flex: 1 }}>{savedCard(item)}</View>
-                <IconButton
-                  label={`Edit template ${item.name}`}
-                  onPress={() => savedRoute(item.id, true)}
-                >
-                  <Pencil size={18} color={colors.muted} />
-                </IconButton>
-              </View>
-            ))}
-            {!savedResults.length && (
-              <SemanticEmpty
-                name={query.trim() ? "empty.search" : "empty.templates"}
-                illustration="templates"
-                density="section"
-                action={{
-                  label: query.trim() ? "Clear search" : "Browse templates",
-                  onPress: () => {
-                    setQuery("");
-                    setSource("Browse");
-                    setFamily(null);
-                  },
-                }}
-              />
-            )}
-            <Button
-              secondary
-              title="Create Blank Template"
-              onPress={() => {
-                setBrowser(false);
-                router.push({
-                  pathname: "/create",
-                  params: { ...context, saveTemplate: "yes", editor: "yes" },
-                });
-              }}
-            />
-          </>
-        ) : family ? (
-          <>
-            <Button
-              compact
-              secondary
-              title="Back to categories"
-              onPress={() => setFamily(null)}
-            />
-            <Txt muted>{family.description}</Txt>
-            {appResults.map(recipeCard)}
-            {!appResults.length && (
-              <Empty
-                title="No matching templates"
-                body="Try another activity or go back to categories."
-              />
-            )}
-          </>
-        ) : query.trim() ? (
-          <>
-            {appResults.map(recipeCard)}
-            {!appResults.length && (
-              <Empty
-                title="No matching templates"
-                body="Try another activity or category."
-              />
-            )}
-          </>
-        ) : (
-          <>
-            {section("QUICK START", mainTemplateFamilies.map(familyCard))}
-            {section("MORE ACTIVITIES", moreTemplateFamilies.map(familyCard))}
-          </>
-        )}
-        <Button secondary title="Done" onPress={() => setBrowser(false)} />
-      </Sheet>
+
     </Screen>
   );
 }

@@ -1,3 +1,4 @@
+import {SquadBoostLink} from "./SquadBoostScreen";
 import { ActivityCard } from "@/src/features/beacons/ActivityCard";
 import { CommunityPublicBeacons } from "@/src/features/discovery/CommunityPublicBeacons";
 import { CommunityPublicProfile } from "@/src/features/discovery/CommunityPublicProfile";
@@ -694,6 +695,7 @@ export default function SquadProfileScreen() {
             )}
           />
 
+          <SquadBoostLink squadId={activeSquadId}/>
           <ProfileSection
             title={`Members · ${members.length}`}
             action={

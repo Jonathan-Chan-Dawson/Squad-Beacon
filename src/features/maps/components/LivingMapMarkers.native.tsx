@@ -119,6 +119,19 @@ const MemberArtwork = React.memo(function MemberArtwork({
             onImageLoad={imageLoaded}
           />
         ) : null}
+        {model.kind === "beacon" && model.markerState.friendHosted && (
+          <View
+            pointerEvents="none"
+            accessible={false}
+            style={{
+              position: "absolute",
+              inset: 0,
+              borderWidth: 1.5,
+              borderColor: colors.success,
+              borderRadius: size / 2,
+            }}
+          />
+        )}
         {model.kind === "person" && (
           <AvatarStatusBadge state={model.availability} size={8} />
         )}
@@ -378,7 +391,10 @@ function LivingMapPinComponent({
                     width: 32,
                     height: 32,
                     borderRadius: 16,
-                    backgroundColor: availabilityColors[model.kind === "person" ? model.availability : "unknown"],
+                    backgroundColor:
+                      availabilityColors[
+                        model.kind === "person" ? model.availability : "unknown"
+                      ],
                     opacity: presentation.scale === "micro" ? 0.75 : 0.9,
                   }}
                 />
