@@ -1,3 +1,4 @@
+import { BeaconCardArtwork } from "@/src/features/beacons/components/BeaconCardArtwork";
 import React, { useEffect, useRef, useState } from "react";
 import {
   Animated,
@@ -15,7 +16,8 @@ import { radius, space, type } from "@/src/theme/data";
 import { themeVariants } from "@/src/theme/palettes";
 
 export type ActivityDetailHeroProps = {
-  premiumStyle?: "standard"|"sunrise"|"ocean";
+  decorationAccent?: string | null;
+  premiumStyle?: "standard" | "sunrise" | "ocean";
   title: string;
   category: Category;
   modeLabel: string;
@@ -31,6 +33,7 @@ export type ActivityDetailHeroProps = {
 };
 
 export function ActivityDetailHero({
+  decorationAccent,
   premiumStyle,
   title,
   category,
@@ -130,33 +133,47 @@ export function ActivityDetailHero({
         borderBottomRightRadius: radius.sheet,
       }}
     >
-      <Svg
-        width="100%"
-        height="100%"
-        viewBox="0 0 400 240"
-        preserveAspectRatio="xMidYMid slice"
-        style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0 }}
-        pointerEvents="none"
-      >
-        <Defs>
-          <LinearGradient id="activityHeroGradient" x1="0" y1="0" x2="1" y2="1">
-            <Stop offset="0" stopColor={heroBackground} />
-            <Stop
-              offset="1"
-              stopColor={premiumStyle==="sunrise"?categories.Creative.color:premiumStyle==="ocean"?categories.Study.color:categoryToken.color}
-              stopOpacity="0.82"
-            />
-          </LinearGradient>
-        </Defs>
-        <Circle cx="400" cy="12" r="174" fill="url(#activityHeroGradient)" />
-        <Circle
-          cx="355"
-          cy="178"
-          r="105"
-          fill={categoryToken.tint}
-          opacity="0.22"
-        />
-      </Svg>
+      {premiumStyle === "sunrise" || premiumStyle === "ocean" ? (
+        <Svg
+          width="100%"
+          height="100%"
+          viewBox="0 0 400 240"
+          preserveAspectRatio="xMidYMid slice"
+          style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0 }}
+          pointerEvents="none"
+        >
+          <Defs>
+            <LinearGradient
+              id="activityHeroGradient"
+              x1="0"
+              y1="0"
+              x2="1"
+              y2="1"
+            >
+              <Stop offset="0" stopColor={heroBackground} />
+              <Stop
+                offset="1"
+                stopColor={
+                  premiumStyle === "sunrise"
+                    ? categories.Creative.color
+                    : categories.Study.color
+                }
+                stopOpacity="0.82"
+              />
+            </LinearGradient>
+          </Defs>
+          <Circle cx="400" cy="12" r="174" fill="url(#activityHeroGradient)" />
+          <Circle
+            cx="355"
+            cy="178"
+            r="105"
+            fill={categoryToken.tint}
+            opacity="0.22"
+          />
+        </Svg>
+      ) : (
+        <BeaconCardArtwork category={category} accent={decorationAccent} />
+      )}
 
       <View
         style={{
@@ -236,7 +253,9 @@ export function ActivityDetailHero({
           )}
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={Platform.OS !== "web" ? "More options" : "More activity options"}
+            accessibilityLabel={
+              Platform.OS !== "web" ? "More options" : "More activity options"
+            }
             onPress={onOverflow}
             style={({ pressed }) => ({
               width: 44,

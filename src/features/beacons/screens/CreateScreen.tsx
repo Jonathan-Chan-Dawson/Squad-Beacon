@@ -2188,6 +2188,7 @@ function CreateEditor({ templateBrowser = false }: { templateBrowser?: boolean }
           <Text style={styles.h2}>Appearance</Text>
           <CreationAppearance
             value={beaconControls}
+            category={category}
             onChange={setBeaconControls}
           />
           <Text style={styles.h2}>
@@ -2283,6 +2284,7 @@ function CreateEditor({ templateBrowser = false }: { templateBrowser?: boolean }
           if (idea && !title.trim()) { textEdited.current.title = true; setTitle(idea); }
         }} />
         <CreationAppearance
+          category={category}
           value={beaconControls}
           onChange={setBeaconControls}
         />

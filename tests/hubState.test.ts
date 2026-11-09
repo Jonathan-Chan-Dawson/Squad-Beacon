@@ -103,6 +103,8 @@ test("Hub uses authoritative DM and Squad reads and keeps empty DMs in Start Cha
   const rows = selectHubConversations(data, "viewer");
   assert.equal(rows.find((row) => row.id === "crew")?.unread, 1);
   assert.equal(rows.find((row) => row.id === "friend")?.unread, 1);
+  assert.equal(rows.find((row) => row.id === "crew")?.memberCount, 2);
+  assert.equal(rows.find((row) => row.id === "friend")?.memberCount, undefined);
   assert.equal(
     rows.some((row) => row.id === "new-friend"),
     false,

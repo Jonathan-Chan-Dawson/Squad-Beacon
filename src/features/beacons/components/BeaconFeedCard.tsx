@@ -1,3 +1,4 @@
+import { BeaconCardArtwork, beaconArtworkStyles } from "./BeaconCardArtwork";
 import {
   useBeaconParticipation,
   ParticipationButtons,
@@ -92,6 +93,8 @@ export interface BeaconFeedCardProps {
   mapPreview?: boolean;
   /** Accessible controls owned by the containing surface, such as Map close. */
   headerAccessory?: React.ReactNode;
+  demoArtwork?: boolean;
+  decorationAccent?: string | null;
   decorationEmoji?: string | null;
   animationVisible?: boolean;
   /** Use the compact home/list treatment while keeping the same permission and RSVP callbacks. */
@@ -312,6 +315,8 @@ export function BeaconFeedCard({
   adaptiveDiscovery = false,
   mapPreview = false,
   headerAccessory,
+  demoArtwork = false,
+  decorationAccent,
   decorationEmoji,
   animationVisible = true,
   compact = false,
@@ -606,6 +611,14 @@ export function BeaconFeedCard({
       </Pressable>
     );
 
+  const artworkVariant = demoArtwork
+    ? beaconArtworkStyles[
+        Array.from(activityId).reduce(
+          (sum, character) => sum + character.charCodeAt(0),
+          0,
+        ) % beaconArtworkStyles.length
+      ]
+    : undefined;
   const card = shouldUseAdaptiveDiscoveryShell(
     presentation,
     adaptiveDiscovery,
@@ -615,6 +628,8 @@ export function BeaconFeedCard({
       activityId={activityId}
       title={title}
       category={category}
+      artworkVariant={artworkVariant}
+      decorationAccent={decorationAccent}
       decorationEmoji={decorationEmoji}
       whenLabel={isCancelled ? "Cancelled" : isEnded ? "Ended" : whenText}
       isLive={isLive}
@@ -728,6 +743,13 @@ export function BeaconFeedCard({
         backgroundColor: colors.surface,
       }}
     >
+      <BeaconCardArtwork
+        category={category}
+        accent={decorationAccent}
+        variant={artworkVariant}
+        quiet={!editorial || compact}
+        radius={editorial || compact ? tokens.radius.md : tokens.radius.card}
+      />
       {editorial ? (
         <>
           <View

@@ -1,4 +1,6 @@
 import { discoveryFriendScopeLabel } from "@/src/features/maps/discoveryFriends";
+import { DiscoveryContextNote } from "@/src/features/discovery/DiscoveryContextNote";
+import { matchesSearch } from "@/src/shared/search";
 import {
   wantsHappeningNow,
   selectedBeaconCategories,
@@ -601,6 +603,13 @@ export default function BrowseBeaconsScreen() {
         ? "associated community"
         : undefined,
     });
+    const contextDetail = visibleContextLabel === "Friend hosting"
+      ? feedProps.hostName
+      : visibleContextLabel === "Matches your interest"
+        ? data.profiles.find((profile) => profile.id === userId)?.interests.find(
+            (interest) => matchesSearch(interest, activity.title, activity.category, activity.description),
+          )
+        : undefined;
     return (
       <View key={activity.id} style={{ gap: tokens.space.xs }}>
         <BeaconFeedCard
@@ -614,14 +623,7 @@ export default function BrowseBeaconsScreen() {
             ) ? (
               <View style={{ gap: tokens.space.xs }}>
                 {visibleContextLabel ? (
-                  <Text
-                    style={{
-                      color: colors.textSecondary,
-                      ...tokens.type.caption,
-                    }}
-                  >
-                    {visibleContextLabel}
-                  </Text>
+                  <DiscoveryContextNote label={visibleContextLabel} detail={contextDetail} />
                 ) : null}
                 <BeaconCommunityRow activityId={activity.id} compact />
               </View>

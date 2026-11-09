@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from "react";
-import { Pressable, Share, View } from "react-native";
+import { Pressable, Share, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { List, Plus } from "lucide-react-native";
+import { ArrowLeft, List, Plus } from "lucide-react-native";
+import { communityTypePlural } from "@/src/features/social/communityPresentation";
 import { useBeacon } from "@/src/shared/store";
 import { inviteContact } from "@/src/platform/contacts";
 import { InviteQR } from "../InviteQR";
@@ -14,18 +15,29 @@ import { Action, Button, Field, Sheet, Txt, useTheme } from "@/src/shared/ui";
 
 export default function MessagingHubScreen({
   communities = false,
+  directory = false,
 }: {
   communities?: boolean;
+  directory?: boolean;
 }) {
   const { styles, colors, tokens } = useTheme();
   const params = useLocalSearchParams<{
     tab?: string;
     peopleLists?: string;
     section?: string;
+    type?: string;
+    discover?: string;
   }>();
+  const focusedType = directory
+    ? params.type === "organization" || params.type === "space"
+      ? params.type
+      : "squad"
+    : undefined;
+  const discoverOnly = directory && params.discover === "yes";
   const { data, userId, act, demo } = useBeacon();
   const [section, setSection] = useState<"Chats" | "Communities">(
-    communities ||
+    directory ||
+      communities ||
       params.section === "Communities" ||
       params.tab === "Organizations"
       ? "Communities"
@@ -94,49 +106,74 @@ export default function MessagingHubScreen({
           alignSelf: "center",
         }}
       >
-        <View
-          style={{
-            paddingHorizontal: tokens.layout.screenGutter,
-            flexDirection: "row",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: 8,
-          }}
-        >
+        {focusedType ? (
           <View
-            testID="messaging-primary-tabs"
-            style={{ flexDirection: "row", flex: 1, minWidth: 0, gap: 8 }}
+            style={[
+              styles.row,
+              { paddingHorizontal: tokens.layout.screenGutter, gap: 12 },
+            ]}
           >
-            {(["Chats", "Communities"] as const).map((destination) => (
-              <PrimaryTab
-                key={destination}
-                label={destination}
-                selected={section === destination}
-                onPress={() => {
-                  setSection(destination);
-                  if (params.section || params.tab)
-                    router.setParams({ section: undefined, tab: undefined });
-                }}
-              />
-            ))}
+            <HeaderAction
+              label="Back"
+              onPress={() => {
+                if (router.canGoBack()) router.back();
+                else router.replace("/communities");
+              }}
+            >
+              <ArrowLeft size={20} color={colors.ink} />
+            </HeaderAction>
+            <Text accessibilityRole="header" style={styles.h2}>
+              {discoverOnly ? "Discover " : "Your "}
+              {communityTypePlural(focusedType)}
+            </Text>
           </View>
-          {section === "Chats" ? (
-            <HeaderAction
-              label="Private Lists"
-              onPress={() => setListsOpen(true)}
+        ) : (
+          <View
+            style={{
+              paddingHorizontal: tokens.layout.screenGutter,
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "space-between",
+              gap: 8,
+            }}
+          >
+            <View
+              testID="messaging-primary-tabs"
+              style={{ flexDirection: "row", flex: 1, minWidth: 0, gap: 8 }}
             >
-              <List size={20} color={colors.muted} />
-            </HeaderAction>
-          ) : (
-            <HeaderAction
-              label="Create community"
-              onPress={() => setNewChat(true)}
-            >
-              <Plus size={20} color={colors.muted} />
-            </HeaderAction>
-          )}
-        </View>
+              {(["Chats", "Communities"] as const).map((destination) => (
+                <PrimaryTab
+                  key={destination}
+                  label={destination}
+                  selected={section === destination}
+                  onPress={() => {
+                    setSection(destination);
+                    if (params.section || params.tab)
+                      router.setParams({ section: undefined, tab: undefined });
+                  }}
+                />
+              ))}
+            </View>
+            {section === "Chats" ? (
+              <HeaderAction
+                label="Private Lists"
+                onPress={() => setListsOpen(true)}
+              >
+                <List size={20} color={colors.muted} />
+              </HeaderAction>
+            ) : (
+              <HeaderAction
+                label="Create community"
+                onPress={() => setNewChat(true)}
+              >
+                <Plus size={20} color={colors.muted} />
+              </HeaderAction>
+            )}
+          </View>
+        )}
         <CommunicationHub
+          focusedType={focusedType}
+          discoverOnly={discoverOnly}
           initialSection={section}
           section={section}
           onSectionChange={setSection}

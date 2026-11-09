@@ -294,6 +294,8 @@ export default function ActivitiesScreen() {
         title: activity.title,
         category: activity.category,
         decorationEmoji: activity.decoration_emoji,
+        decorationAccent: activity.decoration_accent,
+        demoArtwork: data.is_demo && data.viewer_id === userId,
         startsAt: activity.starts_at,
         endsAt: activity.ends_at,
         activityStatus: activity.status,

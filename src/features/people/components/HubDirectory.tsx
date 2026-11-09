@@ -1,3 +1,4 @@
+import { router } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { Compass, Lock, ChevronDown, ChevronRight } from "lucide-react-native";
@@ -14,10 +15,14 @@ import {
 } from "@/src/features/organizations/domain";
 import { Button, Txt, useTheme } from "@/src/shared/ui";
 import { EmptyState } from "@/src/shared/design-system";
+import { communityTypePlural } from "@/src/features/social/communityPresentation";
+import { CommunitySectionHeading } from "./CommunityCard";
 import {
   SocialDirectorySummaryCard,
   SocialDirectorySummaryPreview,
 } from "./SocialDirectorySummaryCard";
+
+const EXPLORE_PREVIEW_SIZE = 3;
 
 /** The server returns sanitized summaries. Hierarchy links grant no child access. */
 export function HubDirectory({
@@ -27,6 +32,7 @@ export function HubDirectory({
   parentId,
   tree = false,
   explore = false,
+  fullList = false,
   onOpen,
 }: {
   query?: string;
@@ -35,9 +41,10 @@ export function HubDirectory({
   parentId?: string;
   tree?: boolean;
   explore?: boolean;
+  fullList?: boolean;
   onOpen: (type: SocialEntityType, id: string) => void;
 }) {
-  const { data, userId, act, searchDirectory } = useBeacon();
+  const { data, userId, viewerEpoch, act, searchDirectory } = useBeacon();
   const { styles, colors } = useTheme();
   const [revision, setRevision] = useState(0);
   const [result, setResult] = useState<{
@@ -58,6 +65,7 @@ export function HubDirectory({
   const key = JSON.stringify([
     userId,
     data.viewer_id,
+    viewerEpoch,
     query.trim(),
     entityType,
     parentType,
@@ -98,6 +106,7 @@ export function HubDirectory({
     data.organization_squads,
   ]);
   useEffect(() => {
+    if (!userId || data.viewer_id !== userId) return;
     const request = ++generation.current;
     let current = true;
     void searchDirectory({
@@ -117,12 +126,27 @@ export function HubDirectory({
       });
     return () => {
       current = false;
+      if (generation.current === request) generation.current += 1;
     };
-  }, [entityType, key, parentId, parentType, query, searchDirectory]);
+  }, [
+    data.viewer_id,
+    entityType,
+    key,
+    parentId,
+    parentType,
+    query,
+    searchDirectory,
+    userId,
+  ]);
   const current = result?.key === key ? result : null;
   const rows = (current?.rows ?? []).filter(
     (row) => !explore || row.action !== "joined",
   );
+  const exploreSection = explore && entityType !== "all";
+  const showFullSection = !exploreSection || fullList || !!query.trim();
+  const visibleRows = showFullSection
+    ? rows
+    : rows.slice(0, EXPLORE_PREVIEW_SIZE);
 
   function canOpen(row: SocialDirectorySummary) {
     if (!userId || data.viewer_id !== userId) return false;
@@ -229,6 +253,26 @@ export function HubDirectory({
   }
   return (
     <View style={{ gap: 10 }}>
+      {exploreSection && !fullList && (
+        <CommunitySectionHeading
+          type={entityType}
+          title={
+            entityType === "squad"
+              ? "Discoverable Squads"
+              : communityTypePlural(entityType)
+          }
+          onToggle={
+            !query.trim() &&
+            (rows.length > EXPLORE_PREVIEW_SIZE || current?.hasMore)
+              ? () =>
+                  router.push({
+                    pathname: "/community-directory",
+                    params: { type: entityType, discover: "yes" },
+                  })
+              : undefined
+          }
+        />
+      )}
       {!current ? (
         <Txt muted>Loading communities…</Txt>
       ) : current.error ? (
@@ -240,6 +284,14 @@ export function HubDirectory({
             onPress={() => setRevision((value) => value + 1)}
           />
         </View>
+      ) : !rows.length && exploreSection ? (
+        <Txt muted>
+          {current.hasMore
+            ? "More results may be available on the next page."
+            : query.trim()
+              ? "No matches in this section."
+              : "Nothing to discover here right now."}
+        </Txt>
       ) : !rows.length ? (
         <EmptyState
           title={
@@ -258,7 +310,7 @@ export function HubDirectory({
         />
       ) : (
         <>
-          {rows.map((row) =>
+          {visibleRows.map((row) =>
             tree ? (
               <View
                 key={`${row.entity_type}:${row.entity_id}`}
@@ -339,25 +391,26 @@ export function HubDirectory({
               <SocialDirectorySummaryCard
                 key={`${row.entity_type}:${row.entity_id}`}
                 summary={row}
+                discoveryCard={exploreSection}
                 onPreview={() => preview(row)}
                 onAction={() => perform(row)}
               />
             ),
           )}
-          {moreError ? (
-            <Txt muted>{"Couldn't load more communities. Try again."}</Txt>
-          ) : null}
-          {current.hasMore ? (
-            <Button
-              secondary
-              title={busy ? "Loading…" : "Load more communities"}
-              disabled={busy}
-              onPress={() => {
-                void loadMore();
-              }}
-            />
-          ) : null}
         </>
+      )}
+      {showFullSection && moreError && (
+        <Txt muted>{"Couldn't load more communities. Try again."}</Txt>
+      )}
+      {showFullSection && current?.hasMore && (
+        <Button
+          secondary
+          title={busy ? "Loading…" : "Load more communities"}
+          disabled={busy}
+          onPress={() => {
+            void loadMore();
+          }}
+        />
       )}
       <SocialDirectorySummaryPreview
         summary={selected?.key === key ? selected.row : null}

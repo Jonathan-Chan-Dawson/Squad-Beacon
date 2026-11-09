@@ -13,6 +13,7 @@ import { ActivityBadge } from "@/src/features/beacons/ActivityBadge";
 import { HomeAction } from "@/src/features/beacons/components/HomeAction";
 import { beaconPreviewWhen } from "@/src/features/maps/discoveryRanking";
 import { DiscoveryBeaconCard } from "./DiscoveryBeaconCard";
+import { DiscoveryContextNote } from "./DiscoveryContextNote";
 import { discoveryContextLabel } from "./discoveryCardPresentation";
 import { MoreHorizontal } from "lucide-react-native";
 import { ContextMenu } from "@/src/shared/ContextMenu";
@@ -329,7 +330,7 @@ export function PublicBeaconPreview({
           visibleContextLabel || !compact ? (
             <View style={{ gap: 2 }}>
               {visibleContextLabel ? (
-                <Text style={styles.muted}>{visibleContextLabel}</Text>
+                <DiscoveryContextNote label={visibleContextLabel} />
               ) : null}
               {!compact ? (
                 <Text style={styles.muted}>

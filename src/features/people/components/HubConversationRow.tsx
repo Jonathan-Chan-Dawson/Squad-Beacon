@@ -5,7 +5,7 @@ import Swipeable, {
   type SwipeableMethods,
 } from "react-native-gesture-handler/ReanimatedSwipeable";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import { CalendarClock, Star } from "lucide-react-native";
+import { CalendarClock, Star, UsersRound } from "lucide-react-native";
 import type { HubConversation } from "../hubState";
 import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
 import { Button, useTheme } from "@/src/shared/ui";
@@ -24,6 +24,11 @@ export function HubConversationRow({
   onGestureActive: (active: boolean) => void;
 }) {
   const { colors, styles } = useTheme();
+  const memberCount = chat.kind === "squad" ? chat.memberCount : undefined;
+  const squadHint =
+    memberCount === undefined
+      ? undefined
+      : `Squad chat, ${memberCount} ${memberCount === 1 ? "member" : "members"}`;
   const ref = useRef<SwipeableMethods>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -121,6 +126,7 @@ export function HubConversationRow({
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={`Open ${chat.kind === "squad" ? "squad profile" : "profile"} avatar ${chat.name}`}
+              accessibilityHint={squadHint}
               onPress={onProfile}
               style={{
                 width: 52,
@@ -133,6 +139,41 @@ export function HubConversationRow({
                 <CommunityAvatar iconKey={chat.iconKey} size={52} />
               ) : (
                 <ProfileAvatar profile={chat.profile} size={52} />
+              )}
+              {memberCount !== undefined && (
+                <View
+                  pointerEvents="none"
+                  style={{
+                    position: "absolute",
+                    right: -4,
+                    top: -3,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 3,
+                    paddingHorizontal: 4,
+                    paddingVertical: 1,
+                    backgroundColor: colors.lime,
+                    borderRadius: 9,
+                    borderWidth: 2,
+                    borderColor: colors.bg,
+                  }}
+                >
+                  <UsersRound
+                    size={10}
+                    color={colors.green}
+                    accessible={false}
+                  />
+                  <Text
+                    maxFontSizeMultiplier={1.3}
+                    style={{
+                      fontSize: 10,
+                      fontWeight: "700",
+                      color: colors.green,
+                    }}
+                  >
+                    {memberCount > 99 ? "99+" : memberCount}
+                  </Text>
+                </View>
               )}
               {chat.starred ? (
                 <View
@@ -155,6 +196,7 @@ export function HubConversationRow({
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={`Message ${chat.name}`}
+              accessibilityHint={squadHint}
               accessibilityActions={[
                 {
                   name: "favorite",

@@ -2,7 +2,11 @@ import React from "react";
 import { Pressable, Text, View } from "react-native";
 import { Action, Empty, Sheet, useTheme } from "@/src/shared/ui";
 import type { SocialDirectorySummary } from "@/src/features/social/types";
-import { CommunityCover, communityTypeLabel } from "./CommunityCard";
+import {
+  CommunityCardDetails,
+  CommunityCover,
+  communityTypeLabel,
+} from "./CommunityCard";
 import { CommunityAvatar } from "./CommunityAvatar";
 
 export function directoryActionLabel(action: SocialDirectorySummary["action"]) {
@@ -14,6 +18,14 @@ export function directoryActionLabel(action: SocialDirectorySummary["action"]) {
     request: "Request",
     invite_required: "Invite only",
   }[action];
+}
+
+function visibilityLabel(summary: SocialDirectorySummary) {
+  return summary.discoverability === "community"
+    ? "Community-only"
+    : summary.discoverability === "private"
+      ? "Private"
+      : "Public";
 }
 
 interface SummaryContentProps {
@@ -32,11 +44,7 @@ function SummaryContent({ summary, onAction, pending }: SummaryContentProps) {
           {communityTypeLabel(summary.entity_type)}
         </Text>
         <Text style={[styles.label, { color: colors.green }]}>
-          {summary.discoverability === "community"
-            ? "Community-only"
-            : summary.discoverability === "private"
-              ? "Private"
-              : "Public"}
+          {visibilityLabel(summary)}
         </Text>
       </View>
       <Text style={styles.h2}>{summary.name}</Text>
@@ -48,6 +56,8 @@ function SummaryContent({ summary, onAction, pending }: SummaryContentProps) {
       <Text style={styles.muted}>
         {summary.member_count}{" "}
         {summary.member_count === 1 ? "member" : "members"}
+        {summary.child_count > 0 &&
+          ` · ${summary.child_count} ${summary.entity_type === "space" ? "linked Squads" : "linked communities"}`}
       </Text>
       {summary.parent_name ? (
         <Text style={styles.muted}>Linked to {summary.parent_name}</Text>
@@ -74,6 +84,7 @@ export function SocialDirectorySummaryCard(
   props: SummaryContentProps & {
     onPreview: () => void;
     compact?: boolean;
+    discoveryCard?: boolean;
     previewLabel?: string;
     showJoinedStatus?: boolean;
     actionDisabled?: boolean;
@@ -98,16 +109,25 @@ export function SocialDirectorySummaryCard(
           accessibilityRole="button"
           accessibilityLabel={`${props.previewLabel ?? "Preview"} ${summary.name}`}
           onPress={props.onPreview}
-          style={{ flex: 1, minWidth: 0, minHeight: 44, justifyContent: "center" }}
+          style={{
+            flex: 1,
+            minWidth: 0,
+            minHeight: 44,
+            justifyContent: "center",
+          }}
         >
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
             <CommunityAvatar type={summary.entity_type} size={36} />
             <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-              <Text numberOfLines={1} style={[styles.body, { fontWeight: "700" }]}>
+              <Text
+                numberOfLines={1}
+                style={[styles.body, { fontWeight: "700" }]}
+              >
                 {summary.name}
               </Text>
               <Text numberOfLines={1} style={styles.muted}>
-                {communityTypeLabel(summary.entity_type)} · {summary.member_count}{" "}
+                {communityTypeLabel(summary.entity_type)} ·{" "}
+                {summary.member_count}{" "}
                 {summary.member_count === 1 ? "member" : "members"}
               </Text>
               {summary.description ? (
@@ -127,7 +147,12 @@ export function SocialDirectorySummaryCard(
                 summary.action === "invite_required" ||
                 summary.action === "requested"
               }
-              disabled={props.pending || props.actionDisabled || summary.action === "invite_required" || (props.showJoinedStatus && summary.action === "joined")}
+              disabled={
+                props.pending ||
+                props.actionDisabled ||
+                summary.action === "invite_required" ||
+                (props.showJoinedStatus && summary.action === "joined")
+              }
               run={async () => {
                 if ((await props.onAction()) === false)
                   throw new Error("Community action was not completed.");
@@ -141,12 +166,16 @@ export function SocialDirectorySummaryCard(
 
   return (
     <View
-      style={{
-        gap: 8,
-        paddingVertical: 10,
-        borderBottomWidth: 1,
-        borderBottomColor: colors.line,
-      }}
+      style={
+        props.discoveryCard
+          ? [styles.card, { padding: 12, gap: 10 }]
+          : {
+              gap: 8,
+              paddingVertical: 10,
+              borderBottomWidth: 1,
+              borderBottomColor: colors.line,
+            }
+      }
     >
       <Pressable
         accessibilityRole="button"
@@ -154,34 +183,34 @@ export function SocialDirectorySummaryCard(
         onPress={props.onPreview}
         style={{ minHeight: 44, justifyContent: "center", gap: 4 }}
       >
-        {props.compact ? (
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 9 }}>
-            <CommunityAvatar type={summary.entity_type} size={36} />
-            <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-              <Text numberOfLines={1} style={styles.h2}>{summary.name}</Text>
-              <Text numberOfLines={1} style={styles.muted}>
-                {communityTypeLabel(summary.entity_type)} · {summary.member_count}{" "}
-                {summary.member_count === 1 ? "member" : "members"}
-              </Text>
-              {summary.description ? (
-                <Text numberOfLines={2} style={styles.muted}>
-                  {summary.description}
-                </Text>
-              ) : null}
-            </View>
-          </View>
+        {props.discoveryCard ? (
+          <CommunityCardDetails
+            type={summary.entity_type}
+            name={summary.name}
+            description={summary.description}
+            memberCount={summary.member_count}
+            badge={visibilityLabel(summary)}
+            context={[
+              summary.parent_name && `In ${summary.parent_name}`,
+              summary.child_count > 0 &&
+                `${summary.child_count} linked ${summary.entity_type === "space" ? "Squads" : "communities"}`,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+            compact
+          />
         ) : (
           <>
-        <Text style={styles.h2}>{summary.name}</Text>
-        <Text style={styles.muted}>
-          {communityTypeLabel(summary.entity_type)} · {summary.member_count}{" "}
-          members
-        </Text>
-        {summary.description ? (
-          <Text numberOfLines={2} style={styles.muted}>
-            {summary.description}
-          </Text>
-        ) : null}
+            <Text style={styles.h2}>{summary.name}</Text>
+            <Text style={styles.muted}>
+              {communityTypeLabel(summary.entity_type)} · {summary.member_count}{" "}
+              members
+            </Text>
+            {summary.description ? (
+              <Text numberOfLines={2} style={styles.muted}>
+                {summary.description}
+              </Text>
+            ) : null}
           </>
         )}
       </Pressable>
@@ -194,7 +223,12 @@ export function SocialDirectorySummaryCard(
               summary.action === "invite_required" ||
               summary.action === "requested"
             }
-            disabled={props.pending || props.actionDisabled || summary.action === "invite_required" || (props.showJoinedStatus && summary.action === "joined")}
+            disabled={
+              props.pending ||
+              props.actionDisabled ||
+              summary.action === "invite_required" ||
+              (props.showJoinedStatus && summary.action === "joined")
+            }
             run={async () => {
               if ((await props.onAction()) === false)
                 throw new Error("Community action was not completed.");

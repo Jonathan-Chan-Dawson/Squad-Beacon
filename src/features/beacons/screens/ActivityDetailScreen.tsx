@@ -1695,6 +1695,7 @@ export default function ActivityDetail() {
 
           <ActivityDetailHero
             premiumStyle={appearance?.style}
+            decorationAccent={activity.decoration_accent}
             title={activity.title}
             category={activity.category}
             modeLabel={

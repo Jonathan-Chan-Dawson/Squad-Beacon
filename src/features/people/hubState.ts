@@ -22,6 +22,7 @@ export interface HubConversation {
   name: string;
   profile?: Profile;
   iconKey?: SquadIconKey;
+  memberCount?: number;
   latest: string;
   preview: string;
   pingId?: string;
@@ -50,6 +51,14 @@ export function selectHubConversations(
       .filter((row) => row.user_id === viewerId)
       .map((row) => row.squad_id),
   );
+  const squadMemberCounts = new Map<string, number>();
+  for (const member of data.squad_members) {
+    if (memberSquads.has(member.squad_id))
+      squadMemberCounts.set(
+        member.squad_id,
+        (squadMemberCounts.get(member.squad_id) ?? 0) + 1,
+      );
+  }
   const bannedSquads = new Set(
     data.squad_bans
       .filter((row) => row.user_id === viewerId)
@@ -155,6 +164,7 @@ export function selectHubConversations(
       return {
         id: squad.id,
         iconKey: squad.icon_key,
+        memberCount: squadMemberCounts.get(squad.id),
         kind: "squad",
         name: squad.name,
         latest: summary.latest,

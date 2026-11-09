@@ -94,6 +94,7 @@ import { makeDemo as makeNeighborhoodDemo } from "@/tests/fixtures/neighborhood"
 import { addDemoMapFixtures } from "./demoMapFixtures";
 import { addDemoProfileFixtures } from "./demoProfileFixtures";
 import { addDemoSocialActivityFixtures } from "./demoSocialActivityFixtures";
+import { addDemoCommunityFixtures } from "./demoCommunityFixtures";
 export const DEMO_ID = "demo-you";
 export function makeDemo(): Data {
   const data = makeNeighborhoodDemo(),
@@ -728,6 +729,7 @@ export function makeDemo(): Data {
   addDemoMapFixtures(data, DEMO_ID, now);
   addDemoProfileFixtures(data, DEMO_ID, now);
   addDemoSocialActivityFixtures(data, DEMO_ID, now);
+  addDemoCommunityFixtures(data, DEMO_ID, now);
   // Feature existing, owned planning activities; this never creates responses.
   for (const [owner, type, id] of [["maya", "vote", "demo-vote-weekend"], ["jordan", "ping", "demo-ping-jordan"]] as const) {
     let note = data.activities.filter(row => row.owner_id === owner && row.mode === "solo" && row.solo_purpose !== "activity_note" && row.status === "scheduled" && Date.parse(row.starts_at) <= now && Date.parse(row.ends_at) > now).sort((a,b) => b.starts_at.localeCompare(a.starts_at))[0];

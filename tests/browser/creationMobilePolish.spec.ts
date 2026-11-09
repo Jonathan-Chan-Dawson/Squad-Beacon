@@ -159,10 +159,25 @@ for (const width of [320, 375, 430, 1024]) {
       await expect(
         page.getByRole("dialog", { name: "Appearance", exact: true }),
       ).toBeVisible();
+      const appearance = page.getByRole("dialog", { name: "Appearance", exact: true });
+      await expect(appearance.getByText("Card Appearance · Preview only")).toBeVisible();
+      const preview = appearance.getByText("Beacon card preview", { exact: true }).locator("..");
+      for (const category of ["Fitness", "Study", "Gaming", "Creative", "Other", "Social"]) {
+        await appearance.getByRole("button", { name: category, exact: true }).click();
+        await expect(preview.getByText(category, { exact: true })).toBeVisible();
+      }
+      for (const style of ["Gradient", "Waves", "Minimal", "Orbit", "Stipple", "Constellation"]) {
+        const option = appearance.getByRole("button", { name: `Card background: ${style}`, exact: true });
+        await option.click();
+        await expect(option).toHaveAttribute("aria-selected", "true");
+      }
       await page
         .getByRole("dialog", { name: "Appearance", exact: true })
         .getByRole("button", { name: "Close", exact: true })
         .click();
+      await expect(page.getByLabel("Activity title", { exact: true })).toHaveValue(
+        "An activity with a long title for our friends",
+      );
       await page.getByLabel("Meeting place", { exact: true }).fill("Chicago");
       await page.getByRole("radio", { name: "Online", exact: true }).click();
       await page

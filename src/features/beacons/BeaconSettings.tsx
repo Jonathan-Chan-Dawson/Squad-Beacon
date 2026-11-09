@@ -1,3 +1,4 @@
+import { CardAppearancePreview } from "./components/CreationAppearance";
 import { BeaconDiscoverySettings } from "@/src/features/discovery/BeaconDiscoverySettings";
 import React, { useState } from "react";
 import { Pressable, Text, View } from "react-native";
@@ -314,6 +315,9 @@ export function BeaconSettings({
                 }
               />
             </>
+          )}
+          {!templateMode && activity && (
+            <CardAppearancePreview category={activity.category} value={current} />
           )}
           {onSave && <Action title="Save beacon settings" run={save} />}
         </View>

@@ -1,3 +1,4 @@
+import { BeaconCardArtwork, type BeaconArtworkStyle } from "@/src/features/beacons/components/BeaconCardArtwork";
 import React from "react";
 import { Pressable, Text, View } from "react-native";
 import {
@@ -28,6 +29,8 @@ export type DiscoveryBeaconCardProps = {
   activityId: string;
   title: string;
   category: Category;
+  artworkVariant?: BeaconArtworkStyle;
+  decorationAccent?: string | null;
   decorationEmoji?: string | null;
   whenLabel?: string | null;
   isLive?: boolean;
@@ -66,6 +69,8 @@ export function DiscoveryBeaconCard({
   activityId,
   title,
   category,
+  artworkVariant,
+  decorationAccent,
   decorationEmoji,
   whenLabel,
   isLive = false,
@@ -89,16 +94,16 @@ export function DiscoveryBeaconCard({
   feedback,
 }: DiscoveryBeaconCardProps) {
   const { colors, tokens } = useDesignTheme();
+  const hasLinkedContext = !!planContext?.title.trim() || !!communityContext;
   const contextBlockStyle = {
-    width: "100%" as const,
     minWidth: 0,
-    minHeight: 44,
-    alignSelf: "stretch" as const,
+    maxWidth: "100%" as const,
+    alignSelf: hasLinkedContext ? ("stretch" as const) : ("flex-start" as const),
     flexShrink: 0,
     backgroundColor: colors.surfaceRaised,
     borderRadius: 10,
-    paddingHorizontal: 8,
-    paddingVertical: 0,
+    paddingHorizontal: 10,
+    paddingVertical: hasLinkedContext ? 0 : 5,
   };
   const categoryToken = tokens.categories[category] ?? tokens.categories.Other;
   const metadata = discoveryCardMetadata({
@@ -149,6 +154,13 @@ export function DiscoveryBeaconCard({
   if (mapPreview)
     return (
       <MapTooltipShell testID={`discovery-beacon-card-${activityId}`}>
+        <BeaconCardArtwork
+          category={category}
+          accent={decorationAccent}
+          variant={artworkVariant}
+          quiet
+          radius={mapTooltip.radius}
+        />
         <MapTooltipHeader
           controls={
             <>
@@ -350,6 +362,7 @@ export function DiscoveryBeaconCard({
         backgroundColor: colors.surface,
       }}
     >
+      <BeaconCardArtwork category={category} accent={decorationAccent} variant={artworkVariant} radius={14} />
       <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12 }}>
         <View style={{ width: 64, alignItems: "center", gap: 5 }}>
           <View

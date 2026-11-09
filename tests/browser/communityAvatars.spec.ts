@@ -13,6 +13,7 @@ test("Squad messages and profiles show group icons and retain real mini avatars 
   await expect(
     identity.getByTestId("community-avatar-squad-users"),
   ).toBeVisible();
+  await expect(identity.getByText(/^\d+$/)).toBeVisible();
   await expect(identity).not.toContainText("TT");
   await page
     .getByRole("button", { name: "Message The training crew", exact: true })

@@ -60,6 +60,8 @@ export function activityFeedCardProps(
     title: activity.title,
     category: activity.category,
     decorationEmoji: activity.decoration_emoji,
+    decorationAccent: activity.decoration_accent,
+    demoArtwork: data.is_demo && data.viewer_id === userId,
     activityMode: activity.mode,
     startsAt: activity.starts_at,
     endsAt: activity.ends_at,

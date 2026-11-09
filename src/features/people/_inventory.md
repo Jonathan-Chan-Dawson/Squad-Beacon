@@ -14,7 +14,7 @@ People feature
 - screens/SquadsScreen.tsx: chat-first Squads entry with temporary search, compact communities and a secondary people/private-list directory, also reused by Profile’s Friends & Lists entry.
 - screens/SquadProfileScreen.tsx: one member-gated Squad Info overview; focused Members, Invite, Beacons & Plans and Settings routes retain existing handlers and normal Back navigation. Legacy tab parameters remain valid.
 - squadProfile.ts: current-snapshot Squad membership, privacy, Beacon, Plan, Routine, Ping/Vote and linked-Organization selectors; Space parent access is selected in spaces/domain.ts.
-- CommunicationHub.tsx / screens/CommunicationHubScreen.tsx: chat-first home and a separate Communities directory; adaptive empty states, a bounded joined-community preview, contextual filters, compact discovery rows and existing invitation/creation menus.
+- CommunicationHub.tsx / screens/CommunicationHubScreen.tsx: chat-first home and a separate Communities directory. Joined Networks, Organizations and Squads have card sections with dedicated searchable full lists with authorized member previews. HubDirectory provides paged, summary-only Explore sections with existing join and request actions.
 - communication.ts: snapshot-safe inbox counts and People search, plus canonical Squad chat summaries with source-linked latest Ping previews and separate pending-response state.
 - SocialDirectoryResults.tsx: stale-snapshot-safe paginated community summaries with server-backed join/request/invite actions.
 - priority.ts: Friends Now relevance tiers; search uses shared/search.ts.

@@ -39,11 +39,12 @@ test("advanced beacon settings save and the host can manually mark arrival", asy
     page.getByRole("button", { name: "Here now · selected" }),
   ).toBeVisible();
 
-  await page.getByRole("tab", { name: "Tools", exact: true }).click();
+  await page.getByRole("tab", { name: "Activity", exact: true }).click();
   await page
     .getByRole("button", { name: "Advanced options", exact: true })
     .click();
   await page.getByLabel("Capacity (optional, including you)").fill("3");
+  await page.getByRole("button", { name: "Card background: Orbit", exact: true }).click();
   await page
     .getByRole("button", { name: "Capacity policy: Strict", exact: true })
     .click();
@@ -54,6 +55,9 @@ test("advanced beacon settings save and the host can manually mark arrival", asy
   await expect(
     page.getByLabel("Capacity (optional, including you)"),
   ).toHaveValue("3");
+  await expect(
+    page.getByRole("button", { name: "Card background: Constellation", exact: true }),
+  ).toHaveAttribute("aria-selected", "true");
   await page.getByLabel("Capacity (optional, including you)").fill("4");
   await page.getByRole("button", { name: "Save beacon settings" }).click();
   await page

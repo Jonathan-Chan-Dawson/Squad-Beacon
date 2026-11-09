@@ -4,9 +4,12 @@ import { OrganizationDirectory } from "@/src/features/organizations/Organization
 import {
   activeOrganizationRole,
   canReadOrganization,
+  canReadOrganizationMembers,
 } from "@/src/features/organizations/domain";
 import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
-import type { SocialEntityType } from "@/src/features/social/types";
+import { canViewProfile } from "@/src/features/profile/privacy";
+import { communityTypePlural } from "@/src/features/social/communityPresentation";
+import type { SocialEntityType, SocialRole } from "@/src/features/social/types";
 import { SpacesDirectory } from "@/src/features/spaces/SpacesDirectory";
 import {
   activeSpaceRole,
@@ -19,14 +22,15 @@ import { matchesSearch } from "@/src/shared/search";
 import { useBeacon } from "@/src/shared/store";
 import { Button, Txt, useTheme } from "@/src/shared/ui";
 import { useNow } from "@/src/shared/useNow";
+import type { SquadIconKey } from "@/src/shared/types";
 import { FlashList, type FlashListRef } from "@shopify/flash-list";
 import { router } from "expo-router";
 import {
   Bell,
-  Building2,
   ChevronDown,
   ChevronRight,
-  Layers3,
+  ChevronUp,
+  Compass,
   MessageCircle,
   Search,
   SquarePen,
@@ -34,10 +38,16 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { communityTypeLabel } from "../components/CommunityCard";
+import {
+  CommunityArtwork,
+  CommunityCardDetails,
+  CommunitySectionHeading,
+  communityDirectoryTypes,
+  communityRoleLabel,
+} from "../components/CommunityCard";
 import { HubConversationRow } from "../components/HubConversationRow";
 import { HubDirectory } from "../components/HubDirectory";
-import { ProfileActions, ProfileLink } from "../components/ProfilePrimitives";
+import { ProfileActions } from "../components/ProfilePrimitives";
 import { ResponsesSheet } from "../components/ResponsesSheet";
 import {
   filterHubConversations,
@@ -47,21 +57,24 @@ import {
   type HubConversation,
 } from "../hubState";
 import { selectListPeople, type PeopleListSelection } from "../privateLists";
-import { canOpenSquadProfile } from "../squadProfile";
+import { activeSquadMembership, canOpenSquadProfile } from "../squadProfile";
 import { usePlanningResponses } from "../usePlanningResponses";
 
 export type { ChatFilter } from "../hubState";
 type Section = "Chats" | "Communities";
 type InitialSection = Section | "Pings" | "Organizations";
-type CommunityView = "All" | "Spaces" | "Organizations";
 const CHAT_FILTERS = ["All", "Squads", "Friends", "Unread"] as const;
+const JOINED_PREVIEW_SIZE = 2;
 type CommunityItem = {
   id: string;
-  type: "space" | "organization";
+  type: SocialEntityType;
   name: string;
+  description: string;
   memberCount: number;
-  role: NonNullable<ReturnType<typeof activeOrganizationRole>>;
-  squads: { id: string; name: string }[];
+  role: SocialRole;
+  memberIds: string[];
+  context?: string;
+  iconKey?: SquadIconKey;
 };
 type ListItem =
   | { key: string; type: "chat"; chat: HubConversation }
@@ -73,10 +86,18 @@ type ListItem =
   | { key: string; type: "community"; community: CommunityItem }
   | {
       key: string;
-      type: "discovery" | "search" | "empty" | "skeleton" | "friends-divider";
+      type: "community-heading";
+      entityType: SocialEntityType;
+      count: number;
+    }
+  | {
+      key: string;
+      type: "search" | "empty" | "skeleton" | "friends-divider";
     };
 
 export function CommunicationHub({
+  focusedType,
+  discoverOnly = false,
   openSquad,
   findFriends,
   inviteFriends,
@@ -100,6 +121,8 @@ export function CommunicationHub({
   createOrganizationOpen,
   onCreateOrganizationOpenChange,
 }: {
+  focusedType?: SocialEntityType;
+  discoverOnly?: boolean;
   openSquad: (id: string) => void;
   findFriends: () => void;
   inviteFriends?: () => void;
@@ -132,9 +155,12 @@ export function CommunicationHub({
     (initialSection === "Organizations" || initialSection === "Communities"
       ? "Communities"
       : "Chats");
-  const [communityView] = useState<CommunityView>(
-    initialSection === "Organizations" ? "Organizations" : "All",
-  );
+  const networkOnly = initialSection === "Organizations";
+  const directoryTypes = focusedType
+    ? [focusedType]
+    : networkOnly
+      ? communityDirectoryTypes.slice(0, 1)
+      : communityDirectoryTypes;
   const [responsesOpen, setResponsesOpen] = useState(
     initialSection === "Pings",
   );
@@ -214,27 +240,43 @@ export function CommunicationHub({
     !current || !userId
       ? []
       : [
-          ...data.spaces.flatMap((space) => {
-            const role = activeSpaceRole(space, data.space_members, userId);
-            if (
-              !role ||
-              !canReadSpace(data, space.id, userId) ||
-              !matchesSearch(communityQuery, space.name, space.description)
-            )
-              return [];
-            return [
-              {
-                id: space.id,
-                type: "space" as const,
-                name: space.name,
-                role,
-                memberCount: data.space_members.filter(
-                  (row) => row.space_id === space.id && row.status === "active",
-                ).length,
-                squads: visibleSpaceSquads(data, space.id, userId),
-              },
-            ];
-          }),
+          ...(!networkOnly
+            ? data.spaces.flatMap((space) => {
+                const role = activeSpaceRole(space, data.space_members, userId);
+                if (
+                  !role ||
+                  !canReadSpace(data, space.id, userId) ||
+                  !matchesSearch(communityQuery, space.name, space.description)
+                )
+                  return [];
+                const memberIds = [
+                  ...new Set([
+                    space.owner_id,
+                    ...data.space_members
+                      .filter(
+                        (row) =>
+                          row.space_id === space.id && row.status === "active",
+                      )
+                      .map((row) => row.user_id),
+                  ]),
+                ];
+                const squads = visibleSpaceSquads(data, space.id, userId);
+                return [
+                  {
+                    id: space.id,
+                    type: "space" as const,
+                    name: space.name,
+                    description: space.description,
+                    role,
+                    memberCount: memberIds.length,
+                    memberIds,
+                    context: squads.length
+                      ? `Squads · ${squads.map((squad) => squad.name).join(", ")}`
+                      : undefined,
+                  },
+                ];
+              })
+            : []),
           ...data.organizations.flatMap((org) => {
             const role = activeOrganizationRole(
               org,
@@ -252,24 +294,19 @@ export function CommunicationHub({
                 .filter((link) => link.organization_id === org.id)
                 .map((link) => link.squad_id),
             );
-            for (const spaceLink of data.organization_spaces.filter(
+            const spaceLinks = data.organization_spaces.filter(
               (link) => link.organization_id === org.id,
-            ))
+            );
+            for (const spaceLink of spaceLinks)
               for (const squad of visibleSpaceSquads(
                 data,
                 spaceLink.space_id,
                 userId,
               ))
                 ids.add(squad.id);
-            return [
-              {
-                id: org.id,
-                type: "organization" as const,
-                name: org.name,
-                role,
-                memberCount:
-                  org.member_count ??
-                  new Set([
+            const memberIds = canReadOrganizationMembers(data, org.id, userId)
+              ? [
+                  ...new Set([
                     org.owner_id,
                     ...data.organization_members
                       .filter(
@@ -278,22 +315,66 @@ export function CommunicationHub({
                           row.status === "active",
                       )
                       .map((row) => row.user_id),
-                  ]).size,
-                squads: data.squads.filter(
-                  (squad) =>
-                    ids.has(squad.id) &&
-                    canOpenSquadProfile(data, squad.id, userId),
-                ),
+                  ]),
+                ]
+              : [];
+            const linkedSpaces = data.spaces.filter(
+              (space) =>
+                spaceLinks.some((link) => link.space_id === space.id) &&
+                canReadSpace(data, space.id, userId),
+            );
+            const squads = data.squads.filter(
+              (squad) =>
+                ids.has(squad.id) &&
+                canOpenSquadProfile(data, squad.id, userId),
+            );
+            return [
+              {
+                id: org.id,
+                type: "organization" as const,
+                name: org.name,
+                description: org.description,
+                role,
+                memberCount: org.member_count ?? memberIds.length,
+                memberIds,
+                context: linkedSpaces.length
+                  ? `Organizations · ${linkedSpaces.map((space) => space.name).join(", ")}`
+                  : squads.length
+                    ? `Squads · ${squads.map((squad) => squad.name).join(", ")}`
+                    : undefined,
               },
             ];
           }),
-        ].filter(
-          (row) =>
-            communityView === "All" ||
-            (communityView === "Spaces"
-              ? row.type === "space"
-              : row.type === "organization"),
-        );
+          ...(!networkOnly
+            ? data.squads.flatMap((squad) => {
+                const membership = activeSquadMembership(
+                  data,
+                  squad.id,
+                  userId,
+                );
+                if (
+                  !membership ||
+                  !matchesSearch(communityQuery, squad.name, squad.description)
+                )
+                  return [];
+                const memberIds = data.squad_members
+                  .filter((row) => row.squad_id === squad.id)
+                  .map((row) => row.user_id);
+                return [
+                  {
+                    id: squad.id,
+                    type: "squad" as const,
+                    name: squad.name,
+                    description: squad.description,
+                    role: membership.role,
+                    memberCount: memberIds.length,
+                    memberIds,
+                    iconKey: squad.icon_key,
+                  },
+                ];
+              })
+            : []),
+        ];
 
   const refreshList = useCallback(async () => {
     setRefreshing(true);
@@ -340,12 +421,33 @@ export function CommunicationHub({
               }))
             : []),
         ];
-  const communityItems: ListItem[] = communities.map((community) => ({
-    key: `${community.type}:${community.id}`,
-    type: "community",
-    community,
-  }));
-  communityItems.push({ key: "discover", type: "discovery" });
+  const communityItems: ListItem[] = discoverOnly
+    ? []
+    : directoryTypes.flatMap((type): ListItem[] => {
+        const rows = communities.filter((community) => community.type === type);
+        if (!rows.length) return [];
+        const visible =
+          communityQuery || focusedType
+            ? rows
+            : rows.slice(0, JOINED_PREVIEW_SIZE);
+        return [
+          ...(!focusedType
+            ? [
+                {
+                  key: `heading:${type}`,
+                  type: "community-heading" as const,
+                  entityType: type,
+                  count: rows.length,
+                },
+              ]
+            : []),
+          ...visible.map((community) => ({
+            key: `${type}:${community.id}`,
+            type: "community" as const,
+            community,
+          })),
+        ];
+      });
   const footerPadding = tokens.layout.scrollClearance + insets.bottom;
 
   function renderItem(item: ListItem) {
@@ -417,57 +519,59 @@ export function CommunicationHub({
           }}
         />
       );
-    if (item.type === "community")
+    if (item.type === "community-heading") {
+      const type = item.entityType;
       return (
-        <ProfileLink
-          title={item.community.name}
-          detail={`${communityTypeLabel(item.community.type)} · ${item.community.memberCount} members${item.community.squads.length ? ` · ${item.community.squads.length} Squads` : ""}`}
-          icon={
-            item.community.type === "space" ? (
-              <Layers3 size={22} color={colors.green} />
-            ) : (
-              <Building2 size={22} color={colors.green} />
-            )
+        <CommunitySectionHeading
+          type={type}
+          title={communityTypePlural(type)}
+          onToggle={
+            !communityQuery && item.count > JOINED_PREVIEW_SIZE
+              ? () =>
+                  router.push({
+                    pathname: "/community-directory",
+                    params: { type },
+                  })
+              : undefined
           }
-          onPress={() => openCommunity(item.community.type, item.community.id)}
         />
       );
-    if (item.type === "discovery")
+    }
+    if (item.type === "community") {
+      const { community } = item;
+      const members = data.profiles
+        .filter(
+          (profile) =>
+            profile.id !== userId &&
+            community.memberIds.includes(profile.id) &&
+            canViewProfile(data, profile, userId),
+        )
+        .slice(0, 3);
       return (
-        <View style={{ gap: 12 }}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Explore Communities"
-            accessibilityState={{ expanded: exploreOpen }}
-            onPress={() => setExploreOpen((value) => !value)}
-            style={{
-              minHeight: 48,
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "space-between",
-            }}
-          >
-            <Text style={styles.h2}>Explore Communities</Text>
-            <ChevronDown size={20} color={colors.green} />
-          </Pressable>
-          {communityQuery.length === 1 ? (
-            <Txt muted>Type at least 2 characters to explore communities.</Txt>
-          ) : exploreOpen || communityQuery ? (
-            <HubDirectory
-              query={communityQuery}
-              explore
-              entityType={
-                communityView === "Spaces"
-                  ? "space"
-                  : communityView === "Organizations"
-                    ? "organization"
-                    : "all"
-              }
-              onOpen={openCommunity}
-            />
-          ) : null}
-        </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={community.name}
+          accessibilityHint={[
+            community.description,
+            `${community.memberCount} members`,
+            members.map((profile) => profile.name).join(", "),
+          ]
+            .filter(Boolean)
+            .join(". ")}
+          onPress={() => openCommunity(community.type, community.id)}
+          style={({ pressed }) => [
+            styles.card,
+            { padding: 14, opacity: pressed ? 0.75 : 1 },
+          ]}
+        >
+          <CommunityCardDetails
+            {...community}
+            badge={communityRoleLabel(community.role)}
+            members={members}
+          />
+        </Pressable>
       );
+    }
     if (item.type === "person")
       return (
         <Pressable
@@ -549,6 +653,72 @@ export function CommunicationHub({
     );
   }
 
+  function renderDiscovery() {
+    if (focusedType) {
+      if (!discoverOnly)
+        return communityItems.length ? null : (
+          <Txt muted>
+            {communityQuery
+              ? "No communities match your search."
+              : "No joined communities here yet."}
+          </Txt>
+        );
+      return communityQuery.length !== 1 ? (
+        <HubDirectory
+          entityType={focusedType}
+          query={communityQuery}
+          explore
+          fullList
+          onOpen={openCommunity}
+        />
+      ) : (
+        <Txt muted>Type at least 2 characters to search.</Txt>
+      );
+    }
+    return (
+      <View style={{ gap: 14, paddingTop: 8 }}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Explore Communities"
+          accessibilityState={{ expanded: exploreOpen || !!communityQuery }}
+          disabled={!!communityQuery}
+          onPress={() => setExploreOpen((value) => !value)}
+          style={[
+            styles.card,
+            styles.row,
+            { backgroundColor: colors.lime, padding: 14, gap: 12 },
+          ]}
+        >
+          <Compass size={25} color={colors.green} />
+          <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
+            <Text style={styles.h2}>Explore Communities</Text>
+            <Text style={styles.muted}>
+              Find Networks, Organizations, and Squads to join.
+            </Text>
+          </View>
+          {exploreOpen || communityQuery ? (
+            <ChevronUp size={20} color={colors.green} />
+          ) : (
+            <ChevronDown size={20} color={colors.green} />
+          )}
+        </Pressable>
+        {communityQuery.length === 1 ? (
+          <Txt muted>Type at least 2 characters to explore communities.</Txt>
+        ) : exploreOpen || communityQuery ? (
+          directoryTypes.map((type) => (
+            <HubDirectory
+              key={type}
+              query={communityQuery}
+              explore
+              entityType={type}
+              onOpen={openCommunity}
+            />
+          ))
+        ) : null}
+      </View>
+    );
+  }
+
   function controls(pageName: Section) {
     const value = queries?.[pageName] ?? query;
     return (
@@ -560,12 +730,10 @@ export function CommunicationHub({
             borderRadius: 12,
             backgroundColor: colors.white,
             paddingHorizontal: 12,
-            gap: pageName === "Chats" ? 8 : 0,
+            gap: 8,
           }}
         >
-          {pageName === "Chats" && (
-            <Search size={17} color={colors.muted} accessible={false} />
-          )}
+          <Search size={17} color={colors.muted} accessible={false} />
           <TextInput
             maxLength={pageName === "Communities" ? 80 : undefined}
             accessibilityLabel={
@@ -718,9 +886,41 @@ export function CommunicationHub({
               </Pressable>
             </View>
           </>
-        ) : (
-          <Text style={styles.h2}>Your Communities</Text>
-        )}
+        ) : !focusedType ? (
+          <View
+            style={{
+              position: "relative",
+              overflow: "hidden",
+              gap: 6,
+              padding: 17,
+              borderRadius: 18,
+              backgroundColor: tokens.categories.Social.tint,
+            }}
+          >
+            <CommunityArtwork type="organization" />
+            <Text
+              style={[
+                styles.label,
+                { color: tokens.categories.Social.color, letterSpacing: 0.9 },
+              ]}
+            >
+              PEOPLE & GROUPS
+            </Text>
+            <Text
+              accessibilityRole="header"
+              style={[styles.title, { fontSize: 26, lineHeight: 33 }]}
+            >
+              Your Communities
+            </Text>
+            <Txt muted>
+              {communities.length
+                ? "The groups you belong to and the people you share them with."
+                : communityQuery
+                  ? "No joined communities match your search."
+                  : "Communities you join will appear here."}
+            </Txt>
+          </View>
+        ) : null}
       </View>
     );
   }
@@ -734,6 +934,9 @@ export function CommunicationHub({
         renderItem={({ item }) => renderItem(item)}
         getItemType={(item) => item.type}
         ListHeaderComponent={controls(pageName)}
+        ListFooterComponent={
+          pageName === "Communities" ? renderDiscovery() : undefined
+        }
         ItemSeparatorComponent={() => (
           <View style={{ height: pageName === "Chats" ? 0 : 8 }} />
         )}
@@ -775,7 +978,10 @@ export function CommunicationHub({
           </View>
         ) : null}
       </View>
-      {(["Chats", "Communities"] as const).map((destination) => (
+      {(focusedType
+        ? (["Communities"] as const)
+        : (["Chats", "Communities"] as const)
+      ).map((destination) => (
         <View
           key={destination}
           style={{

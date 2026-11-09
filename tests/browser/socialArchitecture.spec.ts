@@ -8,6 +8,54 @@ async function communities(page: Page) {
   await page.getByRole("button", { name: "Communities", exact: true }).click();
 }
 
+test("community cards open searchable lists and keep discovery separate", async ({
+  page,
+}) => {
+  await communities(page);
+  await expect(
+    page.getByRole("heading", { name: "Networks", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Organizations", exact: true }),
+  ).toBeVisible();
+  await page.screenshot({ path: "test-results/community-directory-390.png" });
+  await page.getByRole("button", { name: "See more Networks", exact: true }).click();
+  await expect(page).toHaveURL(/community-directory/);
+  await page.getByRole("textbox", { name: "Search communities" }).fill("West Side Music");
+  await expect(page.getByRole("button", { name: "West Side Music Exchange", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Back", exact: true }).click();
+  const more = page.getByRole("button", {
+    name: "See more Squads",
+    exact: true,
+  });
+  await expect(
+    page.getByRole("button", { name: "Pickup Basketball", exact: true }),
+  ).toHaveCount(0);
+  await more.click();
+  const squad = page.getByRole("button", { name: "Pickup Basketball", exact: true });
+  await expect(squad).toContainText(
+    "A growing crew for weekday runs and weekend games.",
+  );
+  await expect(squad).toContainText("35 members");
+  await page
+    .getByRole("button", { name: "Back", exact: true })
+    .click();
+  await expect(squad).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Explore Communities", exact: true })
+    .click();
+  await expect(
+    page.getByRole("heading", { name: "Discoverable Squads", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "See more Discoverable Squads", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Discover Squads", exact: true })).toBeVisible();
+  await page.getByRole("textbox", { name: "Search communities" }).fill("Wednesday");
+  await expect(page.getByRole("button", { name: "Preview Wednesday One-Shots", exact: true })).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Preview Auburn Hoops", exact: true }),
+  ).toHaveCount(0);
+});
+
 test("Organization opens directly with compact content and focused directories", async ({
   page,
 }) => {
