@@ -64,7 +64,8 @@ export type { ChatFilter } from "../hubState";
 type Section = "Chats" | "Communities";
 type InitialSection = Section | "Pings" | "Organizations";
 const CHAT_FILTERS = ["All", "Squads", "Friends", "Unread"] as const;
-const JOINED_PREVIEW_SIZE = 2;
+const joinedPreviewSize = (type: SocialEntityType) =>
+  type === "organization" ? 1 : 2;
 type CommunityItem = {
   id: string;
   type: SocialEntityType;
@@ -429,7 +430,7 @@ export function CommunicationHub({
         const visible =
           communityQuery || focusedType
             ? rows
-            : rows.slice(0, JOINED_PREVIEW_SIZE);
+            : rows.slice(0, joinedPreviewSize(type));
         return [
           ...(!focusedType
             ? [
@@ -526,7 +527,7 @@ export function CommunicationHub({
           type={type}
           title={communityTypePlural(type)}
           onToggle={
-            !communityQuery && item.count > JOINED_PREVIEW_SIZE
+            !communityQuery && item.count > joinedPreviewSize(type)
               ? () =>
                   router.push({
                     pathname: "/community-directory",

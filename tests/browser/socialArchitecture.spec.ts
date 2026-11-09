@@ -19,6 +19,9 @@ test("community cards open searchable lists and keep discovery separate", async 
     page.getByRole("heading", { name: "Organizations", exact: true }),
   ).toBeVisible();
   await page.screenshot({ path: "test-results/community-directory-390.png" });
+  await expect(
+    page.getByRole("button", { name: "Southside Makers Network", exact: true }),
+  ).toHaveCount(0);
   await page.getByRole("button", { name: "See more Networks", exact: true }).click();
   await expect(page).toHaveURL(/community-directory/);
   await page.getByRole("textbox", { name: "Search communities" }).fill("West Side Music");

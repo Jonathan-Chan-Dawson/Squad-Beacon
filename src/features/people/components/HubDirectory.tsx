@@ -22,8 +22,6 @@ import {
   SocialDirectorySummaryPreview,
 } from "./SocialDirectorySummaryCard";
 
-const EXPLORE_PREVIEW_SIZE = 3;
-
 /** The server returns sanitized summaries. Hierarchy links grant no child access. */
 export function HubDirectory({
   query = "",
@@ -143,10 +141,11 @@ export function HubDirectory({
     (row) => !explore || row.action !== "joined",
   );
   const exploreSection = explore && entityType !== "all";
+  const previewSize = entityType === "organization" ? 1 : 3;
   const showFullSection = !exploreSection || fullList || !!query.trim();
   const visibleRows = showFullSection
     ? rows
-    : rows.slice(0, EXPLORE_PREVIEW_SIZE);
+    : rows.slice(0, previewSize);
 
   function canOpen(row: SocialDirectorySummary) {
     if (!userId || data.viewer_id !== userId) return false;
@@ -263,7 +262,7 @@ export function HubDirectory({
           }
           onToggle={
             !query.trim() &&
-            (rows.length > EXPLORE_PREVIEW_SIZE || current?.hasMore)
+            (rows.length > previewSize || current?.hasMore)
               ? () =>
                   router.push({
                     pathname: "/community-directory",
