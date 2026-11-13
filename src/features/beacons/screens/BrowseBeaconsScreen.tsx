@@ -762,6 +762,7 @@ export default function BrowseBeaconsScreen() {
           ]}
           keyExtractor={browseListKey}
           renderItem={({ item }) => renderCard(item)}
+          ItemSeparatorComponent={() => <View style={{ height: 8 }} />}
           initialNumToRender={6}
           maxToRenderPerBatch={8}
           windowSize={5}

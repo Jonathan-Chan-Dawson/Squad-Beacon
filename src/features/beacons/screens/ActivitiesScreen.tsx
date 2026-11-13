@@ -632,7 +632,7 @@ export default function ActivitiesScreen() {
           <View
             testID="home-explore-beacons"
             style={{
-              gap: 4,
+              gap: 8,
               borderTopWidth: 1,
               borderTopColor: designColors.border,
               paddingTop: 12,

@@ -5,6 +5,14 @@ import {
   PlanningToggle,
 } from "./PlanningControls";
 import React, { useState } from "react";
+import {
+  CalendarClock,
+  Check,
+  CircleHelp,
+  Sparkles,
+  X,
+} from "lucide-react-native";
+import { PingIntro, TimeSlotHeading } from "./PingPresentation";
 import { View, Text, Pressable } from "react-native";
 import { randomUUID } from "expo-crypto";
 import { router, useLocalSearchParams } from "expo-router";
@@ -68,7 +76,7 @@ export function SlotFields({
   slots: PlanningSlot[];
   onChange: (slots: PlanningSlot[]) => void;
 }) {
-  const { styles, colors } = useTheme();
+  const { styles, colors, semanticColors } = useTheme();
   const [expanded, setExpanded] = useState<number | null>(null);
   function edit(
     slot: PlanningSlot,
@@ -82,17 +90,34 @@ export function SlotFields({
     );
   }
   return (
-    <View style={{ gap: 4 }}>
-      <Text style={[styles.body, { fontWeight: "600" }]}>Proposed times</Text>
+    <View style={{ gap: 10 }}>
+      <View style={[styles.row, { justifyContent: "space-between" }]}>
+        <Text style={[styles.h2, { fontSize: 17 }]}>Proposed times</Text>
+        <Text style={styles.label}>{slots.length} options</Text>
+      </View>
+      <Text style={styles.muted}>
+        Tap a time to adjust it. Everyone can answer each option.
+      </Text>
       {slots.map((slot, index) => (
         <View
           key={index}
-          style={{ borderBottomWidth: 1, borderBottomColor: colors.line }}
+          style={{
+            padding: 12,
+            gap: 8,
+            borderWidth: 1,
+            borderRadius: 16,
+            backgroundColor:
+              expanded === index
+                ? semanticColors.surfaceRaised
+                : semanticColors.surface,
+            borderColor: expanded === index ? colors.green : colors.line,
+          }}
         >
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={`Edit time ${index + 1}`}
             accessibilityState={{ expanded: expanded === index }}
+            aria-expanded={expanded === index}
             onPress={() => setExpanded(expanded === index ? null : index)}
             style={{
               minHeight: 64,
@@ -101,13 +126,7 @@ export function SlotFields({
               gap: 10,
             }}
           >
-            <Text style={[styles.muted, { width: 20 }]}>{index + 1}</Text>
-            <View style={{ flex: 1, gap: 3 }}>
-              <Text style={[styles.body, { fontSize: 14, fontWeight: "500" }]}>
-                {slotLabel(slot)}
-              </Text>
-              <Text style={styles.muted}>{slot.timezone}</Text>
-            </View>
+            <TimeSlotHeading slot={slot} index={index} />
             <Text style={{ color: colors.green, fontSize: 13 }}>
               {expanded === index ? "Done" : "Edit"}
             </Text>
@@ -139,6 +158,11 @@ export function SlotFields({
           )}
         </View>
       ))}
+      <Text style={styles.label}>
+        Times shown in{" "}
+        {[...new Set(slots.map((slot) => slot.timezone))].join(" · ") ||
+          "your timezone"}
+      </Text>
       {slots.length < 10 && (
         <PlanningLink
           title="Add proposed time"
@@ -166,6 +190,7 @@ export function SlotFields({
 }
 
 export function TimeFinderComposer({ sessionId }: { sessionId: string }) {
+  const { styles } = useTheme();
   const { data, userId, act, getViewerEpoch } = useBeacon();
   const params = useLocalSearchParams<{
     returnPlanId?: string;
@@ -400,11 +425,12 @@ export function TimeFinderComposer({ sessionId }: { sessionId: string }) {
       </Screen>
     );
   return (
-    <Screen title="Find a Time" eyebrow="">
-      <Txt muted>Choose times together. Availability is not Going.</Txt>
+    <Screen title="Find a Time" eyebrow="" compactHeader>
+      <PingIntro time />
       <View pointerEvents={frozen ? "none" : "auto"} style={{ gap: 12 }}>
         <Field
           label="Activity title"
+          placeholder="What would you like to do?"
           value={draft.title}
           maxLength={120}
           onChangeText={(title) => update({ title })}
@@ -413,35 +439,41 @@ export function TimeFinderComposer({ sessionId }: { sessionId: string }) {
           slots={draft.timeSlots ?? []}
           onChange={(timeSlots) => update({ timeSlots })}
         />
-        {params.returnPlanId ? (
-          <Txt muted>
-            For{" "}
-            {data.plans.find((p) => p.id === params.returnPlanId)?.title ??
-              "your Plan"}{" "}
-            ·{" "}
-            {params.squadId
-              ? (data.squads.find((s) => s.id === params.squadId)?.name ??
-                "Squad")
-              : "Personal"}
-          </Txt>
-        ) : (
-          <AudiencePicker
-            value={draft.audience}
-            id={draft.audienceId}
-            onChange={(audience, audienceId) => {
-              if (!source) update({ audience, audienceId });
-            }}
+        <View style={[styles.card, { gap: 16, padding: 16 }]}>
+          <View style={styles.row}>
+            <CalendarClock size={18} color={styles.body.color} />
+            <Text style={styles.h2}>Audience & deadline</Text>
+          </View>
+          {params.returnPlanId ? (
+            <Txt muted>
+              For{" "}
+              {data.plans.find((p) => p.id === params.returnPlanId)?.title ??
+                "your Plan"}{" "}
+              ·{" "}
+              {params.squadId
+                ? (data.squads.find((s) => s.id === params.squadId)?.name ??
+                  "Squad")
+                : "Personal"}
+            </Txt>
+          ) : (
+            <AudiencePicker
+              value={draft.audience}
+              id={draft.audienceId}
+              onChange={(audience, audienceId) => {
+                if (!source) update({ audience, audienceId });
+              }}
+            />
+          )}
+          <ZonedTimeField
+            timezone={
+              draft.timeSlots?.[0]?.timezone ??
+              Intl.DateTimeFormat().resolvedOptions().timeZone
+            }
+            label="Response deadline"
+            value={draft.deadline}
+            onChange={(deadline) => update({ deadline })}
           />
-        )}
-        <ZonedTimeField
-          timezone={
-            draft.timeSlots?.[0]?.timezone ??
-            Intl.DateTimeFormat().resolvedOptions().timeZone
-          }
-          label="Response deadline"
-          value={draft.deadline}
-          onChange={(deadline) => update({ deadline })}
-        />
+        </View>
         <PlanningDisclosure
           title="Activity details"
           summary="Description, category and place · Optional"
@@ -645,7 +677,7 @@ export function AvailabilityControls({
 }) {
   const { data, userId, act, getViewerEpoch } = useBeacon();
   const now = useNow();
-  const { styles, colors } = useTheme();
+  const { styles, colors, semanticColors } = useTheme();
   const saved = (data.planning_availability ?? []).find(
     (a) => a.thread_id === thread.id && a.user_id === userId,
   );
@@ -668,15 +700,30 @@ export function AvailabilityControls({
     !!thread.finalized_at;
   if (!expanded)
     return (
-      <View style={{ gap: 4 }}>
-        <Txt muted>
-          {saved ? "Availability saved" : "Choose your available times"}
-        </Txt>
+      <View style={{ gap: 8 }}>
+        <View style={styles.row}>
+          <CalendarClock size={17} color={colors.green} />
+          <Text style={[styles.body, { fontWeight: "600" }]}>
+            {saved ? "Availability saved" : "Choose your available times"}
+          </Text>
+        </View>
         {slots.slice(0, 2).map((s) => (
-          <Txt key={s.id} muted>
-            {slotLabel(s)}
-          </Txt>
+          <View
+            key={s.id}
+            style={{
+              paddingLeft: 12,
+              borderLeftWidth: 2,
+              borderLeftColor: colors.line,
+            }}
+          >
+            <Txt muted>{slotLabel(s)}</Txt>
+          </View>
         ))}
+        {slots.length > 2 && (
+          <Text style={styles.label}>
+            +{slots.length - 2} more {slots.length === 3 ? "time" : "times"}
+          </Text>
+        )}
         <PlanningLink
           title={saved ? "Edit availability" : "Choose Times"}
           onPress={onExpand}
@@ -689,14 +736,41 @@ export function AvailabilityControls({
     none !== saved.none_work;
   return (
     <View style={{ gap: 14 }}>
-      {summary.slots.map((s) => (
-        <View key={s.id} style={{ gap: 6 }}>
-          <Text style={[styles.body, { fontSize: 14, fontWeight: "600" }]}>
-            {slotLabel(s)}
+      <View style={{ gap: 4 }}>
+        <Text style={styles.h2}>What works for you?</Text>
+        <Text style={styles.muted}>
+          Answer each time, then save your availability.
+        </Text>
+        {!!slots[0] && (
+          <Text style={styles.label}>
+            Times shown in{" "}
+            {[...new Set(slots.map((slot) => slot.timezone))].join(" · ")}
           </Text>
+        )}
+      </View>
+      {summary.slots.map((s, index) => (
+        <View
+          key={s.id}
+          style={{
+            gap: 10,
+            padding: 12,
+            borderRadius: 16,
+            borderWidth: 1,
+            borderColor: answers[s.id] === "yes" ? colors.green : colors.line,
+            backgroundColor: semanticColors.surface,
+          }}
+        >
+          <TimeSlotHeading slot={s} index={index} />
+          {summary.recommended.includes(s.id) && (
+            <View style={styles.row}>
+              <Sparkles size={13} color={colors.green} />
+              <Text style={[styles.label, { color: colors.green }]}>
+                Best availability
+              </Text>
+            </View>
+          )}
           <Text style={styles.muted}>
             {s.yes} Yes · {s.maybe} Maybe · {s.no} No
-            {summary.recommended.includes(s.id) ? " · Recommended" : ""}
           </Text>
           {closed ? (
             <Text style={styles.muted}>
@@ -714,47 +788,61 @@ export function AvailabilityControls({
                 overflow: "hidden",
               }}
             >
-              {(["yes", "maybe", "no"] as const).map((v, index) => (
-                <Pressable
-                  key={v}
-                  accessibilityRole="radio"
-                  accessibilityLabel={v[0].toUpperCase() + v.slice(1)}
-                  accessibilityState={{
-                    checked: answers[s.id] === v,
-                    disabled: busy,
-                  }}
-                  disabled={busy}
-                  onPress={() => {
-                    setNone(false);
-                    setStatus("");
-                    setAnswers({ ...answers, [s.id]: v });
-                  }}
-                  style={{
-                    flex: 1,
-                    minHeight: 44,
-                    alignItems: "center",
-                    justifyContent: "center",
-                    backgroundColor:
-                      answers[s.id] === v ? colors.green : "transparent",
-                    borderLeftWidth: index ? 1 : 0,
-                    borderLeftColor: colors.line,
-                  }}
-                >
-                  <Text
-                    style={[
-                      styles.body,
-                      {
-                        fontSize: 14,
-                        fontWeight: answers[s.id] === v ? "700" : "400",
-                        color:
-                          answers[s.id] === v ? colors.surface : colors.ink,
-                      },
-                    ]}
+              {(["yes", "maybe", "no"] as const).map((v, index) => {
+                const ChoiceIcon =
+                  v === "yes" ? Check : v === "maybe" ? CircleHelp : X;
+                const selected = answers[s.id] === v;
+                return (
+                  <Pressable
+                    key={v}
+                    accessibilityRole="radio"
+                    accessibilityLabel={v[0].toUpperCase() + v.slice(1)}
+                    accessibilityState={{
+                      checked: answers[s.id] === v,
+                      disabled: busy,
+                    }}
+                    disabled={busy}
+                    onPress={() => {
+                      setNone(false);
+                      setStatus("");
+                      setAnswers({ ...answers, [s.id]: v });
+                    }}
+                    style={{
+                      flex: 1,
+                      minHeight: 48,
+                      paddingVertical: 8,
+                      flexDirection: "row",
+                      flexWrap: "wrap",
+                      gap: 4,
+                      alignItems: "center",
+                      justifyContent: "center",
+                      backgroundColor: selected
+                        ? semanticColors.primaryContainer
+                        : "transparent",
+                      borderLeftWidth: index ? 1 : 0,
+                      borderLeftColor: colors.line,
+                    }}
                   >
-                    {v[0].toUpperCase() + v.slice(1)}
-                  </Text>
-                </Pressable>
-              ))}
+                    <ChoiceIcon
+                      size={15}
+                      color={selected ? colors.green : colors.muted}
+                      accessible={false}
+                    />
+                    <Text
+                      style={[
+                        styles.body,
+                        {
+                          fontSize: 14,
+                          fontWeight: answers[s.id] === v ? "700" : "400",
+                          color: selected ? colors.green : colors.ink,
+                        },
+                      ]}
+                    >
+                      {v[0].toUpperCase() + v.slice(1)}
+                    </Text>
+                  </Pressable>
+                );
+              })}
             </View>
           )}
         </View>

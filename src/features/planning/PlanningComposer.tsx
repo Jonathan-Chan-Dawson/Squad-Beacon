@@ -1,9 +1,17 @@
 import { ContextTip } from "@/src/features/onboarding/OnboardingUI";
+import { PingIntro } from "./PingPresentation";
+import {
+  CalendarClock,
+  ChevronRight,
+  Clock3,
+  MapPin,
+  Sparkles,
+} from "lucide-react-native";
 import ZonedTimeField from "./ZonedTimeField";
 import { interestTarget } from "./connected";
 import { PlanningDisclosure, PlanningToggle } from "./PlanningControls";
 import React, { useCallback, useRef, useState } from "react";
-import { Text, View } from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { randomUUID } from "expo-crypto";
 import {
@@ -14,6 +22,7 @@ import {
   Field,
   Screen,
   Txt,
+  useTheme,
 } from "@/src/shared/ui";
 import { useNow } from "@/src/shared/useNow";
 import { useBeacon } from "@/src/shared/store";
@@ -45,6 +54,7 @@ import type { BeaconDraft, PlanningThread, PlanningThreadKind } from "./types";
 import type { Payload } from "@/src/shared/types";
 
 export function PlanningComposer({ sessionId }: { sessionId: string }) {
+  const { styles, colors } = useTheme();
   const { data, userId, act, getViewerEpoch, refresh } = useBeacon();
   const params = useLocalSearchParams<{
     timezone?: string;
@@ -125,7 +135,9 @@ export function PlanningComposer({ sessionId }: { sessionId: string }) {
           ).toISOString(),
           minutes: "60",
           place: sourcePlace ?? params.placeLabel ?? "",
-          coordinate: sourcePlace ? undefined : composerMapCoordinate(params.latitude, params.longitude),
+          coordinate: sourcePlace
+            ? undefined
+            : composerMapCoordinate(params.latitude, params.longitude),
           category: source?.category ?? "Social",
           options:
             kind === "ping"
@@ -410,15 +422,21 @@ export function PlanningComposer({ sessionId }: { sessionId: string }) {
   }
 
   return (
-    <Screen title={`Create ${name}`} eyebrow="" showDemoNotice={false}>
-      {kind === "ping" || kind === "vote" ? <ContextTip name={kind} /> : null}
-      <Txt muted>
-        {kind === "ping"
-          ? "Share an idea. Interested is not Going."
-          : kind === "vote"
+    <Screen
+      title={`Create ${name}`}
+      eyebrow=""
+      showDemoNotice={false}
+      compactHeader={kind === "ping"}
+    >
+      {kind === "ping" ? <PingIntro /> : null}
+      {kind === "vote" ? <ContextTip name={kind} /> : null}
+      {kind !== "ping" && (
+        <Txt muted>
+          {kind === "vote"
             ? "Choose one activity together. Votes can change until responses close."
             : "Gather alternatives. The organizer draws the result after responses close; participants do not vote."}
-      </Txt>
+        </Txt>
+      )}
       <View
         pointerEvents={frozen || busy ? "none" : "auto"}
         style={{ gap: 14, opacity: frozen ? 0.65 : 1 }}
@@ -427,10 +445,21 @@ export function PlanningComposer({ sessionId }: { sessionId: string }) {
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
             {(data.is_demo === true ||
               data.capabilities?.connected_planning === true) && (
-              <Button
-                compact
-                secondary
-                title="When Works?"
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="When Works?"
+                disabled={frozen || busy}
+                style={({ pressed }) => [
+                  styles.card,
+                  {
+                    width: "100%",
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 12,
+                    padding: 14,
+                    opacity: pressed ? 0.7 : 1,
+                  },
+                ]}
                 onPress={() =>
                   router.push({
                     pathname: "/planning/create",
@@ -446,23 +475,71 @@ export function PlanningComposer({ sessionId }: { sessionId: string }) {
                     },
                   })
                 }
-              />
+              >
+                <CalendarClock size={24} color={colors.green} />
+                <View style={{ flex: 1, gap: 3 }}>
+                  <Text style={[styles.body, { fontWeight: "600" }]}>
+                    When works for everyone?
+                  </Text>
+                  <Text style={styles.muted}>
+                    Propose a few times and compare availability.
+                  </Text>
+                </View>
+                <ChevronRight size={18} color={colors.muted} />
+              </Pressable>
             )}
-            {pingStarters.map((starter) => (
-              <Button
-                key={starter.id}
-                compact
-                secondary
-                title={starter.label}
-                disabled={frozen || busy}
-                onPress={() => {
-                  change((next) =>
-                    applyPingStarter(next, starter.id, Date.now()),
-                  );
-                  if (starter.id === "nearby") setDetails(true);
-                }}
-              />
-            ))}
+            <View style={{ width: "100%", flexDirection: "row", gap: 6 }}>
+              {pingStarters.map((starter) => {
+                const Icon =
+                  starter.id === "free"
+                    ? Clock3
+                    : starter.id === "try"
+                      ? Sparkles
+                      : MapPin;
+                return (
+                  <Pressable
+                    key={starter.id}
+                    accessibilityRole="button"
+                    accessibilityLabel={starter.label}
+                    style={({ pressed }) => [
+                      styles.card,
+                      {
+                        flex: 1,
+                        minWidth: 0,
+                        minHeight: 66,
+                        paddingHorizontal: 3,
+                        paddingVertical: 9,
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 5,
+                        opacity: pressed ? 0.65 : 1,
+                      },
+                    ]}
+                    disabled={frozen || busy}
+                    onPress={() => {
+                      change((next) =>
+                        applyPingStarter(next, starter.id, Date.now()),
+                      );
+                      if (starter.id === "nearby") setDetails(true);
+                    }}
+                  >
+                    <Icon size={19} color={colors.green} accessible={false} />
+                    <Text
+                      style={[
+                        styles.label,
+                        { textAlign: "center", color: colors.ink },
+                      ]}
+                    >
+                      {starter.id === "free"
+                        ? "Anyone free?"
+                        : starter.id === "try"
+                          ? "Want to try?"
+                          : "Anyone nearby?"}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
           </View>
         ) : null}
         <Field
