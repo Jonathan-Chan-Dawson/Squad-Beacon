@@ -1,5 +1,11 @@
 import React, { useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Animated, Text, View } from "react-native";
+import {
+  ActivityIndicator,
+  Animated,
+  Pressable,
+  Text,
+  View,
+} from "react-native";
 import { UsersRound } from "lucide-react-native";
 import type { Profile } from "@/src/shared/types";
 import {
@@ -11,6 +17,8 @@ import {
 import { radius, space, type } from "@/src/theme/data";
 
 export type ActivityDetailProgressProps = {
+  embedded?: boolean;
+  onOpenPeople?: () => void;
   avatars: Profile[];
   count: number;
   capacity: number | null;
@@ -19,6 +27,8 @@ export type ActivityDetailProgressProps = {
 };
 
 export function ActivityDetailProgress({
+  embedded = false,
+  onOpenPeople,
   avatars,
   count,
   capacity,
@@ -30,7 +40,8 @@ export function ActivityDetailProgress({
   const [avatarScale] = useState(() => new Animated.Value(1));
   const previousCount = useRef(count);
   const safeCount = Number.isFinite(count) ? Math.max(0, count) : 0;
-  const hasCapacity = capacity != null && Number.isFinite(capacity) && capacity > 0;
+  const hasCapacity =
+    capacity != null && Number.isFinite(capacity) && capacity > 0;
   const hasTarget = target != null && Number.isFinite(target) && target > 0;
   const safeCapacity = hasCapacity ? capacity : null;
   const safeTarget = hasTarget ? target : null;
@@ -54,14 +65,16 @@ export function ActivityDetailProgress({
     return () => animation.stop();
   }, [avatarScale, reducedMotion, safeCount]);
 
+  const Container = embedded ? View : Card;
   return (
-    <Card
+    <Container
       testID="activity-detail-progress"
-      style={{ gap: 10, padding: space.md }}
+      style={{ gap: 10, padding: embedded ? 0 : space.md }}
     >
       <View
         style={{
           flexDirection: "row",
+          flexWrap: "wrap",
           alignItems: "center",
           justifyContent: "space-between",
           gap: space.sm,
@@ -69,10 +82,21 @@ export function ActivityDetailProgress({
       >
         <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
           <UsersRound size={18} color={colors.accent} />
-          <Text style={{ color: colors.textPrimary, ...type.headline }}>
-            {safeCount} going
-          </Text>
+          <Pressable
+            accessibilityRole={onOpenPeople ? "button" : undefined}
+            accessibilityLabel={`${safeCount} going`}
+            disabled={!onOpenPeople}
+            onPress={onOpenPeople}
+            style={{ minHeight: 44, justifyContent: "center" }}
+          >
+            <Text style={{ color: colors.textPrimary, ...type.headline }}>
+              {safeCount} going{onOpenPeople ? " →" : ""}
+            </Text>
+          </Pressable>
         </View>
+        {embedded && people.length > 0 && (
+          <AvatarStack people={people} limit={4} size={28} />
+        )}
         {joining && (
           <View
             accessibilityLiveRegion="polite"
@@ -88,9 +112,12 @@ export function ActivityDetailProgress({
         )}
       </View>
 
-      {people.length > 0 && (
+      {!embedded && people.length > 0 && (
         <Animated.View
-          style={{ alignSelf: "flex-start", transform: [{ scale: avatarScale }] }}
+          style={{
+            alignSelf: "flex-start",
+            transform: [{ scale: avatarScale }],
+          }}
         >
           <AvatarStack people={people} limit={4} size={34} />
         </Animated.View>
@@ -107,7 +134,9 @@ export function ActivityDetailProgress({
               gap: 8,
             }}
           >
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <View
+              style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
+            >
               {safeTarget != null && (
                 <Text
                   accessibilityLabel={`Hoping for ${safeTarget} participants`}
@@ -122,10 +151,10 @@ export function ActivityDetailProgress({
               )}
               {safeCapacity != null && (
                 <Text
-                  accessibilityLabel={`Capacity ${safeCapacity} spots`}
+                  accessibilityLabel={`Capacity ${Math.max(0, safeCapacity - safeCount)} spots left`}
                   style={{ color: colors.textSecondary, ...type.caption }}
                 >
-                  {safeCapacity} spots
+                  {Math.max(0, safeCapacity - safeCount)} spots left
                 </Text>
               )}
             </View>
@@ -173,7 +202,7 @@ export function ActivityDetailProgress({
           )}
         </View>
       )}
-    </Card>
+    </Container>
   );
 }
 

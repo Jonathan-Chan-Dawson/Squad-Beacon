@@ -319,8 +319,8 @@ test("managing a Beacon reuses the staged picker and saves through the existing 
     await route.fulfill({ json: {} });
   });
   await page.goto("/activity/managed-beacon");
-  await page.getByRole("button", { name: "Manage", exact: true }).click();
-  await page.getByRole("button", { name: /Edit.*time/i }).click();
+  await page.getByRole("button", { name: "Manage Beacon", exact: true }).click();
+  await page.getByRole("button", { name: "Edit Beacon", exact: true }).click();
   const manage = page.getByRole("dialog", {
     name: "Update the Beacon",
     exact: true,

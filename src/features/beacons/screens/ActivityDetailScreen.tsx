@@ -1,3 +1,4 @@
+import { PlanningDisclosure } from "@/src/features/planning/PlanningControls";
 import {PremiumToolSettings} from "../components/PremiumToolSettings";
 import type { Href } from "expo-router";
 import { BeaconTimingEditor } from "../components/BeaconTimingEditor";
@@ -89,6 +90,8 @@ import {
   NotebookPen,
   Pencil,
   Share2,
+  SlidersHorizontal,
+  Repeat2,
   Timer,
   Trophy,
   UsersRound,
@@ -113,7 +116,6 @@ import {
   SafeAreaView,
   useSafeAreaInsets,
 } from "react-native-safe-area-context";
-import { BeaconCardEngagement } from "../components/BeaconCardEngagement";
 import { BeaconOrganizerRoles } from "../components/BeaconOrganizerRoles";
 import { BeaconReadiness, BeaconSupplies } from "../components/BeaconSupplies";
 import {
@@ -279,6 +281,12 @@ export default function ActivityDetail() {
   const [comment, setComment] = useState("");
   const detailScrollRef = useRef<ScrollView>(null);
   const commentsSectionRef = useRef<View>(null);
+  const memoriesSectionRef = useRef<View>(null);
+  const repeatSectionRef = useRef<View>(null);
+  const appliedRepeatRequest = useRef(0);
+  const appliedMemoriesEntry = useRef<string | null>(null);
+  const [memoryFocusRequest, setMemoryFocusRequest] = useState(0);
+  const [commentsOpen, setCommentsOpen] = useState(initialTab === "comments");
   const appliedCommentsEntry = useRef<string | null>(null);
   const [edit, setEdit] = useState(false);
   const [editTiming, setEditTiming] = useState(false);
@@ -290,6 +298,7 @@ export default function ActivityDetail() {
   const [reason, setReason] = useState("");
   const [overflow, setOverflow] = useState(false);
   const [manage, setManage] = useState(false);
+  const [repeatOpenRequest, setRepeatOpenRequest] = useState(0);
   const [hostSheet, setHostSheet] = useState(false);
   const [denyTarget, setDenyTarget] = useState<SafeRsvpRow | null>(null);
   const [removeTarget, setRemoveTarget] = useState<SafeRsvpRow | null>(null);
@@ -317,6 +326,7 @@ export default function ActivityDetail() {
     setAppliedToolRoute(toolRouteKey);
     setSelectedTab({ activityId: activity.id, tab: entry.tab });
     setSelectedTool(entry.tool);
+    setCommentsOpen(initialTab === "comments");
   }
 
   const onRefresh = async () => {
@@ -593,6 +603,32 @@ export default function ActivityDetail() {
     );
   }
   function focusComments() {
+    if (repeatOpenRequest > 0 && appliedRepeatRequest.current !== repeatOpenRequest &&
+        detailScrollRef.current && repeatSectionRef.current) {
+      repeatSectionRef.current.measureLayout(
+        detailScrollRef.current.getInnerViewNode(),
+        (_x, y) => {
+          appliedRepeatRequest.current = repeatOpenRequest;
+          detailScrollRef.current?.scrollTo({ y: Math.max(0, y - 68), animated: !reducedMotion });
+        },
+        () => {},
+      );
+    }
+
+    const memoryEntry = entry.tab === "Memories" || memoryFocusRequest > 0;
+    const memoryFocusKey = `${activity?.id}:${memoryFocusRequest}`;
+    if (memoryEntry && activity && canAccess && isBeaconModuleEnabled(activity, "experiences") &&
+        appliedMemoriesEntry.current !== memoryFocusKey &&
+        detailScrollRef.current && memoriesSectionRef.current) {
+      memoriesSectionRef.current.measureLayout(
+        detailScrollRef.current.getInnerViewNode(),
+        (_x, y) => {
+          appliedMemoriesEntry.current = memoryFocusKey;
+          detailScrollRef.current?.scrollTo({ y: Math.max(0, y - 68), animated: !reducedMotion });
+        },
+        () => {},
+      );
+    }
     if (
       initialTab !== "comments" ||
       !canReadComments ||
@@ -684,11 +720,9 @@ export default function ActivityDetail() {
     (activityHasTools(activity) || hasPausedHistory || chatEnabled)
   )
     options.push("Activity");
-  if (canAccess && isBeaconModuleEnabled(activity, "experiences"))
-    options.push("Memories");
   if (canAccess && (chatEnabled || hasChatHistory)) options.push("Chat");
   const requestedTab =
-    selectedTab.activityId === activity.id ? selectedTab.tab : "Overview";
+    selectedTab.activityId === activity.id && selectedTab.tab !== "Memories" ? selectedTab.tab : "Overview";
   const visibleTab =
     requestedTab === "Chat" && canAccess && (chatEnabled || hasChatHistory)
       ? "Chat"
@@ -696,6 +730,11 @@ export default function ActivityDetail() {
         ? requestedTab
         : "Overview";
   const selectTab = (tab: DetailTab) => {
+    if (tab === "Memories") {
+      setSelectedTab({ activityId: activity.id, tab: "Overview" });
+      setMemoryFocusRequest((request) => request + 1);
+      return;
+    }
     if (Platform.OS !== "web" && tab === "Chat") {
       router.push({
         pathname: "/activity/[id]/chat",
@@ -1025,7 +1064,7 @@ export default function ActivityDetail() {
   };
   const tools: ActivityDetailToolDescriptor[] = canAccess
     ? toolOrder
-        .filter((tool) => enabledFor(tool))
+        .filter((tool) => tool !== "experiences" && (enabledFor(tool) || (tool === "checklist" ? checklistHistory.length > 0 : tool === "journal" ? journalHistory.length > 0 : tool === "scoreboard" ? scoreboardHistory.length > 0 : false)))
         .map((tool) => ({
           id: tool,
           icon: toolIcons[tool],
@@ -1092,9 +1131,10 @@ export default function ActivityDetail() {
               reducedMotion={reducedMotion}
             />
 
-            <RepeatBeaconAction activity={activity} onEditOccurrence={()=>selectTab("Activity")} />
+
             {visibleTab === "Overview" ? (
               <>
+                <View style={{ gap: 0 }}>
                 <ActivityDetailInfo
                   startsAt={activity.starts_at}
                   endsAt={activity.ends_at}
@@ -1118,9 +1158,15 @@ export default function ActivityDetail() {
                   onOpenMap={openMap}
                   onOpenOnline={(url) => void openOnline(url)}
                   onOpenDirections={() => void openDirections()}
+                  footer={plan ? (
+                    <Button compact secondary title={"Part of " + plan.title}
+                      onPress={() => router.push({ pathname: "/plan/[id]", params: { id: plan.id } })} />
+                  ) : undefined}
                 />
 
-                <View style={[styles.card, styles.row, { gap: 11 }]}>
+                                </View>
+                <View style={[styles.card, { gap: 12, padding: 16 }]}>
+                <View style={[styles.row, { gap: 11 }]}>
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel="View host profile"
@@ -1162,8 +1208,14 @@ export default function ActivityDetail() {
                     capacity={capacity.limit}
                     target={activity.target_count ?? null}
                     joining={joining}
+                    embedded
+                    onOpenPeople={rosterVisible ? () => selectTab("People") : undefined}
                   />
                 ) : null}
+
+                </View>
+
+                {canAccess ? <AttendanceControls activity={activity} /> : null}
 
                 {activity.description ? (
                   <DescriptionCard description={activity.description} />
@@ -1172,18 +1224,6 @@ export default function ActivityDetail() {
                   <Txt muted>
                     For: {aspirations.map((goal) => goal.title).join(" · ")}
                   </Txt>
-                ) : null}
-                {plan ? (
-                  <Button
-                    title={"Part of " + plan.title}
-                    secondary
-                    onPress={() =>
-                      router.push({
-                        pathname: "/plan/[id]",
-                        params: { id: plan.id },
-                      })
-                    }
-                  />
                 ) : null}
                 {decision ? (
                   <Button
@@ -1203,43 +1243,23 @@ export default function ActivityDetail() {
                   />
                 ) : null}
 
-                <View
-                  style={
-                    Platform.OS !== "web"
-                      ? {
-                          flexDirection: "row",
-                          flexWrap: "wrap",
-                          alignItems: "center",
-                          gap: 6,
-                        }
-                      : undefined
-                  }
-                >
-                  {Platform.OS !== "web" && canAccess && (
-                    <>
-                      {chatEnabled && (
-                        <Button
-                          title="Chat"
-                          compact
-                          secondary
-                          icon={
-                            <MessagesSquare size={16} color={colors.primary} />
-                          }
-                          onPress={() => selectTab("Chat")}
-                        />
-                      )}
-                      {canReadComments && (
-                        <Button
-                          title={`Comments · ${comments.length}`}
-                          compact
-                          secondary
-                          icon={
-                            <MessageCircle size={16} color={colors.primary} />
-                          }
-                          onPress={scrollToComments}
-                        />
-                      )}
-                    </>
+                <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
+                  {chatEnabled && canAccess && (
+                    <Pressable accessibilityRole="button" accessibilityLabel="Chat" onPress={() => selectTab("Chat")}
+                      style={[styles.card, { width: 44, height: 44, padding: 0, alignItems: "center", justifyContent: "center" }]}>
+                      <MessagesSquare size={18} color={colors.green} />
+                    </Pressable>
+                  )}
+                  {canReadComments && (
+                    <Pressable accessibilityRole="button" accessibilityLabel={`Comments · ${comments.length}`}
+                      style={[styles.card, styles.row, { minHeight: 44, paddingHorizontal: 10, paddingVertical: 8, gap: 5 }]}
+                      onPress={() => {
+                        setCommentsOpen(true);
+                        requestAnimationFrame(() => requestAnimationFrame(scrollToComments));
+                      }}>
+                      <MessageCircle size={16} color={colors.green} />
+                      <Text style={styles.label}>Comments {comments.length}</Text>
+                    </Pressable>
                   )}
                   {activity.enable_reactions !== false && canAccess ? (
                     <ReactionPicker
@@ -1264,14 +1284,7 @@ export default function ActivityDetail() {
                           style={[
                             styles.card,
                             styles.row,
-                            { minHeight: 48, padding: 12 },
-                            Platform.OS !== "web"
-                              ? {
-                                  minHeight: 44,
-                                  paddingHorizontal: 10,
-                                  paddingVertical: 8,
-                                }
-                              : undefined,
+                            { minHeight: 44, paddingHorizontal: 10, paddingVertical: 8 },
                           ]}
                         >
                           <Text style={styles.body}>
@@ -1317,25 +1330,26 @@ export default function ActivityDetail() {
               </>
             ) : null}
 
-            {visibleTab === "Overview" || visibleTab === "Memories" ? (
+            {visibleTab === "Overview" ? (
               <View style={{ gap: tokens.space.md }}>
-                {visibleTab === "Memories" && (
-                  <>
-                    <BeaconMemories activity={activity} />
-                    <BeaconCardEngagement activityId={activity.id} />
-                  </>
-                )}
-                {canReadComments ? (
+                {canReadComments && commentsOpen ? (
                   <View
                     ref={commentsSectionRef}
                     onLayout={focusComments}
                     testID="beacon-comments-section"
                     style={[styles.card, { gap: 9 }]}
                   >
-                    <View style={styles.row}>
-                      <MessageCircle size={18} color={colors.green} />
-                      <Text style={styles.h2}>Comments</Text>
-                    </View>
+                    <Pressable accessibilityRole="button" accessibilityLabel="Comments"
+                      accessibilityState={{ expanded: commentsOpen }} aria-expanded={commentsOpen}
+                      onPress={() => setCommentsOpen((open) => !open)}
+                      style={[styles.row, { minHeight: 44, justifyContent: "space-between" }]}>
+                      <View style={styles.row}>
+                        <MessageCircle size={18} color={colors.green} />
+                        <Text style={styles.h2}>Comments · {comments.length}</Text>
+                      </View>
+                      <Text style={styles.label}>{commentsOpen ? "Hide" : "View"}</Text>
+                    </Pressable>
+                    {commentsOpen && <>
                     {comments.length ? (
                       comments.map((item) => {
                         const author = data.profiles.find(
@@ -1411,60 +1425,41 @@ export default function ActivityDetail() {
                         Comments are for people with access to this Beacon.
                       </Txt>
                     )}
+                    </>}
                   </View>
                 ) : null}
-                {canAccess ? <AttendanceControls activity={activity} /> : null}
+                {canAccess && isBeaconModuleEnabled(activity, "experiences") && (
+                  <View ref={memoriesSectionRef} onLayout={focusComments}
+                    style={{ paddingTop: 16, borderTopWidth: 1, borderTopColor: colors.line }}>
+                    <BeaconMemories activity={activity} />
+                  </View>
+                )}
+                {canAccess && !isBeaconModuleEnabled(activity, "experiences") && memoryHistory.length > 0 && (
+                  <ReadOnlyHistoryCard title="Memory history">
+                    {memoryHistory.map((memory) => (
+                      <View key={memory.id} style={{ gap: 3 }}>
+                        <Txt>{memory.caption || "Shared memory"}</Txt>
+                        <Txt muted>{new Date(memory.created_at).toLocaleDateString()}</Txt>
+                      </View>
+                    ))}
+                  </ReadOnlyHistoryCard>
+                )}
+                {canManage && (data.is_demo || data.capabilities?.repeatable_plans) && activity.mode !== "solo" && activity.status !== "cancelled" && (
+                  <View ref={repeatSectionRef} onLayout={focusComments}>
+                  <RepeatBeaconAction onOpenRequestConsumed={() => setRepeatOpenRequest(0)} openRequest={repeatOpenRequest} activity={activity} onEditOccurrence={()=>selectTab("Activity")} />
+                  </View>
+                )}
               </View>
             ) : null}
 
             {visibleTab === "People" ? (
               <View style={{ gap: tokens.space.md }}>
-                <BeaconSupplies activity={activity} />
-                <BeaconOrganizerRoles activity={activity} />
-                <ActivityDetailPeople
-                  going={goingRows}
-                  maybe={maybeRows}
-                  requested={requestRows}
-                  viewerUserId={userId}
-                  canAdmit={canAdmit}
-                  canRemove={(targetId) =>
-                    !!userId &&
-                    canRemoveBeaconParticipant(data, activity, userId, targetId)
-                  }
-                  onProfile={openProfile}
-                  onApprove={(targetId) =>
-                    act("approve_rsvp", {
-                      id: activity.id,
-                      user_id: targetId,
-                    })
-                  }
-                  onDeny={(targetId) => {
-                    const target = requestRows.find(
-                      (row) => row.userId === targetId,
-                    );
-                    if (target) setDenyTarget(target);
-                    return Promise.resolve();
-                  }}
-                  onRemove={(targetId) => {
-                    const target = [...goingRows, ...maybeRows].find(
-                      (row) => row.userId === targetId,
-                    );
-                    if (
-                      target &&
-                      userId &&
-                      canRemoveBeaconParticipant(
-                        data,
-                        activity,
-                        userId,
-                        target.userId,
-                      )
-                    )
-                      setRemoveTarget(target);
-                  }}
-                />
+
+                <ActivityDetailProgress avatars={progressAvatars} count={capacity.count} capacity={capacity.limit}
+                  target={activity.target_count ?? null} joining={joining} />
                 {canAdmit && activity.status === "scheduled" && !isPast ? (
-                  <View style={[styles.card, { gap: 8 }]}>
-                    <Text style={styles.h2}>Invite a friend</Text>
+                  <PlanningDisclosure title="Invite people" summary="Invite or reinvite your friends">
+
                     {data.capabilities?.rsvp_decline || demo
                       ? rsvps
                           .filter((row) => row.status === "declined")
@@ -1506,8 +1501,51 @@ export default function ActivityDetail() {
                           />
                         );
                       })}
-                  </View>
+                  </PlanningDisclosure>
                 ) : null}
+                <ActivityDetailPeople
+                  going={goingRows}
+                  maybe={maybeRows}
+                  requested={requestRows}
+                  viewerUserId={userId}
+                  canAdmit={canAdmit}
+                  canRemove={(targetId) =>
+                    !!userId &&
+                    canRemoveBeaconParticipant(data, activity, userId, targetId)
+                  }
+                  onProfile={openProfile}
+                  onApprove={(targetId) =>
+                    act("approve_rsvp", {
+                      id: activity.id,
+                      user_id: targetId,
+                    })
+                  }
+                  onDeny={(targetId) => {
+                    const target = requestRows.find(
+                      (row) => row.userId === targetId,
+                    );
+                    if (target) setDenyTarget(target);
+                    return Promise.resolve();
+                  }}
+                  onRemove={(targetId) => {
+                    const target = [...goingRows, ...maybeRows].find(
+                      (row) => row.userId === targetId,
+                    );
+                    if (
+                      target &&
+                      userId &&
+                      canRemoveBeaconParticipant(
+                        data,
+                        activity,
+                        userId,
+                        target.userId,
+                      )
+                    )
+                      setRemoveTarget(target);
+                  }}
+                />
+                <BeaconOrganizerRoles activity={activity} />
+                <BeaconSupplies activity={activity} />
               </View>
             ) : null}
 
@@ -1777,7 +1815,7 @@ export default function ActivityDetail() {
               }}
             >
               {canManage ? (
-                <Button title="Manage" onPress={() => setManage(true)} />
+                <Button title="Manage Beacon" icon={<SlidersHorizontal size={18} color={colors.onPrimary} />} onPress={() => setManage(true)} />
               ) : mine ? (
                 <Button title="You're hosting" disabled onPress={() => {}} />
               ) : activity.mode === "solo" ? (
@@ -1900,8 +1938,9 @@ export default function ActivityDetail() {
           ...(mine && activity.status === "scheduled"
             ? [
                 {
-                  label: "Edit title or time",
-                  icon: <Pencil size={17} />,
+                  label: "Edit Beacon",
+                  icon: <Pencil size={20} color={colors.green} />,
+                  description: "Update the activity, location, or schedule.",
                   onPress: () => {
                     setTitle(activity.title);
                     setStarts(activity.starts_at);
@@ -1912,11 +1951,17 @@ export default function ActivityDetail() {
               ]
             : []),
           {
-            label: "Attendance and requests",
+            label: "People & invitations",
+            icon: <UsersRound size={20} color={colors.green} />,
+            description: "See who’s going and review join requests.",
             onPress: () => selectTab("People"),
           },
-          { label: "Tools and settings", onPress: () => selectTab("Activity") },
-          { label: "Invite people", onPress: () => selectTab("People") },
+          { label: "Tools & appearance", icon: <Wrench size={20} color={colors.green} />, description: "Manage tools, appearance, and host options.", onPress: () => selectTab("Activity") },
+          ...((data.is_demo || data.capabilities?.repeatable_plans) && activity.mode !== "solo" && activity.status !== "cancelled"
+            ? [{ label: "Repeat settings", icon: <Repeat2 size={20} color={colors.green} />,
+                description: "Set or adjust the schedule for future Beacons.",
+                onPress: () => { selectTab("Overview"); setRepeatOpenRequest(Date.now()); } }]
+            : []),
         ]}
       />
 
@@ -2057,8 +2102,13 @@ function DescriptionCard({ description }: { description: string }) {
   const [expanded, setExpanded] = useState(false);
   const long = description.trim().split(/\s+/).length > 34;
   return (
-    <View style={[styles.card, { gap: 7 }]}>
-      <Text style={styles.h2}>About this Beacon</Text>
+    <View style={[styles.card, { gap: 10, padding: 16 }]}>
+      <View style={styles.row}>
+        <View style={{ padding: 8, borderRadius: 11, backgroundColor: colors.lime }}>
+          <Info size={18} color={colors.green} />
+        </View>
+        <Text style={styles.h2}>About this Beacon</Text>
+      </View>
       <Text
         style={styles.body}
         numberOfLines={expanded ? undefined : 3}
@@ -2264,7 +2314,7 @@ function SlidingTabBar({
           <Pressable
             key={tab}
             accessibilityRole="tab"
-            accessibilityLabel={tab}
+            accessibilityLabel={tab === "Activity" ? "Tools" : tab}
             accessibilityState={{ selected }}
             aria-selected={selected}
             onPress={() => onSelect(tab)}
@@ -2287,7 +2337,7 @@ function SlidingTabBar({
                 fontWeight: "700",
               }}
             >
-              {tab}
+              {tab === "Activity" ? "Tools" : tab}
             </Text>
           </Pressable>
         );

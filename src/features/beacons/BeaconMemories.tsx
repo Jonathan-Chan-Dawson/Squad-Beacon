@@ -1,8 +1,9 @@
+import { PlanningDisclosure } from "@/src/features/planning/PlanningControls";
 import {MemoryCollections} from "./components/MemoryCollections";
 import { useConfirmation } from "@/src/shared/Dialogs";
 import React, { useEffect, useMemo, useState } from "react";
 import { Image, Linking, Pressable, Text, View } from "react-native";
-import { Pencil, Play, Trash } from "lucide-react-native";
+import { Camera, Pencil, Play, Trash } from "lucide-react-native";
 import { useBeacon } from "@/src/shared/store";
 import { Button, Field, Txt, useTheme } from "@/src/shared/ui";
 import { canUseBeaconModules } from "@/src/features/beacons/beaconModules";
@@ -29,6 +30,7 @@ export function BeaconMemories({ activity }: { activity: Activity }) {
   const { data, userId, act } = useBeacon();
   const { requestConfirmation, confirmationDialog } = useConfirmation();
   const [albumIds,setAlbumIds]=useState<string[]|null>(null);
+  const [showAll, setShowAll] = useState(false);
   const [caption, setCaption] = useState("");
   const [editId, setEditId] = useState<string | null>(null);
   const [editCaption, setEditCaption] = useState("");
@@ -203,7 +205,72 @@ export function BeaconMemories({ activity }: { activity: Activity }) {
   return (
     <View style={{ gap: 12 }}>
       <Text style={styles.h2}>Beacon Memories</Text>
-      {canRead&&<MemoryCollections activity={activity} onFilter={setAlbumIds}/>}
+      <View style={[styles.card, { padding: 14, gap: 8 }]}>
+        <View style={styles.row}>
+          <Camera size={22} color={colors.green} />
+          <View style={{ flex: 1, gap: 3 }}>
+            <Text style={styles.h2}>Save a moment</Text>
+            <Text style={styles.muted}>Choose a photo or short video to share with this Beacon.</Text>
+          </View>
+        </View>
+        <PlanningDisclosure title="Add a caption" summary={caption.trim() || "Optional"}>
+      <Field
+        label="Caption (optional)"
+        value={caption}
+        onChangeText={setCaption}
+        maxLength={MAX_MEMORY_CAPTION_LENGTH}
+        multiline
+        editable={canWrite && !draft}
+      />
+        </PlanningDisclosure>
+      {error ? (
+        <Text accessibilityRole="alert" style={styles.error}>
+          {error}
+        </Text>
+      ) : null}
+      {cleanupPath && (
+        <Button
+          title="Retry media cleanup"
+          secondary
+          disabled={busy}
+          onPress={() => {
+            setBusy(true);
+            void removeBeaconMedia(cleanupPath)
+              .then(() => {
+                setCleanupPath(null);
+                setError("");
+              })
+              .catch((failure) =>
+                setError(
+                  failure instanceof Error
+                    ? failure.message
+                    : "Media cleanup is still pending.",
+                ),
+              )
+              .finally(() => setBusy(false));
+          }}
+        />
+      )}
+      <Button
+        title={
+          busy
+            ? "Adding memory…"
+            : draft
+              ? "Retry saving memory"
+              : "Add a memory"
+        }
+        disabled={
+          busy ||
+          !canWrite ||
+          (!draft && memories.length >= MAX_BEACON_MEMORIES)
+        }
+        icon={<Camera size={18} color={colors.onPrimary} />}
+        onPress={() => void saveMemory()}
+      />
+      </View>
+      {canRead && <PlanningDisclosure title="Albums & Afterglow" summary="Organize your memories">
+        <MemoryCollections activity={activity} onFilter={(ids) => { setAlbumIds(ids); setShowAll(false); }} />
+      </PlanningDisclosure>}
       <Txt muted>
         Photos and short videos connected to this Beacon, up to{" "}
         {MAX_BEACON_MEMORIES}.
@@ -215,7 +282,7 @@ export function BeaconMemories({ activity }: { activity: Activity }) {
       {!memories.length && (
         <Txt muted>No memories yet. Add a photo or short video.</Txt>
       )}
-      {memories.filter(m=>!albumIds||albumIds.includes(m.id)).map((memory) => {
+      {memories.filter(m=>!albumIds||albumIds.includes(m.id)).slice(0, showAll ? undefined : 3).map((memory) => {
         const url = localPreviews[memory.id] ?? urls[memory.id];
         const editable = canManageMemory(data, memory, userId!);
         const editing = editId === memory.id;
@@ -342,58 +409,9 @@ export function BeaconMemories({ activity }: { activity: Activity }) {
           </View>
         );
       })}
-      <Field
-        label="Caption (optional)"
-        value={caption}
-        onChangeText={setCaption}
-        maxLength={MAX_MEMORY_CAPTION_LENGTH}
-        multiline
-        editable={canWrite && !draft}
-      />
-      {error ? (
-        <Text accessibilityRole="alert" style={styles.error}>
-          {error}
-        </Text>
-      ) : null}
-      {cleanupPath && (
-        <Button
-          title="Retry media cleanup"
-          secondary
-          disabled={busy}
-          onPress={() => {
-            setBusy(true);
-            void removeBeaconMedia(cleanupPath)
-              .then(() => {
-                setCleanupPath(null);
-                setError("");
-              })
-              .catch((failure) =>
-                setError(
-                  failure instanceof Error
-                    ? failure.message
-                    : "Media cleanup is still pending.",
-                ),
-              )
-              .finally(() => setBusy(false));
-          }}
-        />
+      {memories.filter(m => !albumIds || albumIds.includes(m.id)).length > 3 && (
+        <Button compact secondary title={showAll ? "Show fewer memories" : "View all memories"} onPress={() => setShowAll((value) => !value)} />
       )}
-      <Button
-        title={
-          busy
-            ? "Adding memory…"
-            : draft
-              ? "Retry saving memory"
-              : "Add photo or video"
-        }
-        disabled={
-          busy ||
-          !canWrite ||
-          (!draft && memories.length >= MAX_BEACON_MEMORIES)
-        }
-        secondary
-        onPress={() => void saveMemory()}
-      />
       {confirmationDialog}
     </View>
   );

@@ -100,7 +100,7 @@ function InlineRoutine({
         .filter((s) => s.approval === "approved")
         .map((s) => stopActivity(data, s, userId))
         .filter((a): a is Activity => !!a && a.status !== "cancelled");
-  const unresolved = stops.length - confirmed.length;
+  const unresolved = Math.max(0, stops.length - confirmed.length);
   const rule: RecurrenceSchedule = {
     frequency,
     interval_count: Number(interval),

@@ -271,7 +271,7 @@ for (const preset of ["Grocery Run", "General Hangout"]) {
     await success.getByRole("button", { name: "Not Now", exact: true }).click();
     await expect(page.getByTestId("activity-detail-hero")).toBeVisible();
     const panel = page;
-    await panel.getByRole("tab", { name: "Activity", exact: true }).click();
+    await panel.getByRole("tab", { name: "Tools", exact: true }).click();
     if (preset === "Grocery Run") {
       await panel.getByRole("tab", { name: "Checklist", exact: true }).click();
       await expect(

@@ -1849,6 +1849,7 @@ function CreateEditor({ templateBrowser = false }: { templateBrowser?: boolean }
           maxLength={80}
         />
       ) : null}
+      <View style={[styles.card, { padding: 14, gap: 6 }]} >
       <View style={{ flexDirection: "row", alignItems: "flex-end", gap: 12 }}>
         <Pressable
           accessibilityRole="button"
@@ -1912,6 +1913,7 @@ function CreateEditor({ templateBrowser = false }: { templateBrowser?: boolean }
       >
         <Txt muted>{category} · Change category</Txt>
       </Pressable>
+      </View>
       <View style={{ flexDirection: "row", gap: 8 }}>
         <View style={{ flex: 1 }}>
           <CreationRow

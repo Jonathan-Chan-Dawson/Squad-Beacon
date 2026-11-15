@@ -8,6 +8,10 @@ import { Pressable, Text, View } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams, type Href } from "expo-router";
 import {
   Eye,
+  Radio,
+  Vote,
+  Dices,
+  CalendarClock,
   Pencil,
   ChevronRight,
   Sparkles,
@@ -654,10 +658,21 @@ export function CreateHome({
       eyebrow="MAKE TIME TOGETHER"
       create={false}
     >
-      <View style={[styles.card, { padding: 16, gap: 10 }]}>
-        <Text style={styles.h2}>Create a Beacon</Text>
+      <View style={[styles.card, { padding: 16, gap: 10, marginTop: 16 }]}>
+        <View style={styles.row}>
+          <View style={{ padding: 10, borderRadius: 14, backgroundColor: colors.lime }}>
+            <Radio size={24} color={colors.green} />
+          </View>
+          <View style={{ flex: 1, gap: 3 }}>
+            <Text style={styles.h2}>Create a Beacon</Text>
+            <Text style={styles.label}>Your people. A real plan.</Text>
+          </View>
+        </View>
         <Txt muted>Bring people together for an activity.</Txt>
-        <Button title="+ Create Blank Beacon" onPress={onBlank} />
+        <Button compact title="+ Create Blank Beacon" onPress={onBlank} />
+        <Button compact secondary title="Create Ping" icon={<Radio size={18} color={colors.green} />}
+          onPress={() => router.push({ pathname: "/planning/create", params: { ...context, kind: "ping", sessionId: randomUUID() } })} />
+        <Text style={styles.label}>Have an idea? Send a Ping to see who is interested.</Text>
       </View>
       {selectedFriends.length ||
       context.statusSourceId ||
@@ -699,6 +714,21 @@ export function CreateHome({
           onPress={() => onClearStatusSource?.()}
         />
       ) : null}
+      <View style={{ flexDirection: "row", gap: 6, flexWrap: "wrap" }}>
+        {[
+          { key: "vote", title: "Voting", Icon: Vote },
+          { key: "draw", title: "Draw", Icon: Dices },
+          ...(data.is_demo || data.capabilities?.connected_planning ? [{ key: "time", title: "Find time", Icon: CalendarClock }] : []),
+          { key: "note", title: "Activity note", Icon: Pencil },
+        ].map(({ key, title, Icon }) => (
+          <Pressable key={key} accessibilityRole="button" accessibilityLabel={key === "vote" ? "Vote Council" : key === "draw" ? "Draw Council" : key === "time" ? "Find a Time" : "Activity Note"}
+            onPress={() => key === "note" ? router.push("/activity-note") : router.push({ pathname: "/planning/create", params: { ...context, kind: key, sessionId: randomUUID() } })}
+            style={({ pressed }) => [styles.card, { flex: 1, minWidth: 60, minHeight: 60, padding: 5, alignItems: "center", justifyContent: "center", gap: 4, opacity: pressed ? 0.7 : 1 }]}>
+            <Icon size={18} color={colors.green} />
+            <Text style={[styles.label, { textAlign: "center" }]}>{title}</Text>
+          </Pressable>
+        ))}
+      </View>
       <Text style={styles.h2}>Quick Access</Text>
       <CreationSavedDrafts key={userId} savedToken={routeContext.savedDraft} />
       <Field
@@ -798,45 +828,6 @@ export function CreateHome({
           />
         </View>
       </View>
-      <Text style={styles.h2}>More ways to create</Text>
-      <Text style={styles.label}>Plan with Others</Text>
-      {card("ping", "Ping", "See who's interested", () =>
-        router.push({
-          pathname: "/planning/create",
-          params: { ...context, kind: "ping", sessionId: randomUUID() },
-        }),
-      )}
-      {card("vote", "Vote Council", "Compare options together", () =>
-        router.push({
-          pathname: "/planning/create",
-          params: { ...context, kind: "vote", sessionId: randomUUID() },
-        }),
-      )}
-      {card("draw", "Draw Council", "Let chance choose", () =>
-        router.push({
-          pathname: "/planning/create",
-          params: {
-            ...context,
-            kind: "draw",
-            sessionId: randomUUID(),
-          },
-        }),
-      )}
-      {(data.is_demo === true ||
-        data.capabilities?.connected_planning === true) &&
-        card("time", "Find a Time", "When works?", () =>
-          router.push({
-            pathname: "/planning/create",
-            params: { ...context, kind: "time", sessionId: randomUUID() },
-          }),
-        )}
-      {card(
-        "note",
-        "Activity Note",
-        "Share what you're doing",
-        () => router.push("/activity-note"),
-        <Pencil size={20} color={colors.muted} />,
-      )}
       {card("plan", "Create Plan", "Organize multiple Beacons", () =>
         router.push({ pathname: data.is_demo || data.capabilities?.plan_editor ? "/plan-editor" : "/plans", params: data.is_demo || data.capabilities?.plan_editor ? {} : { create: "yes" } } as Href),
       )}

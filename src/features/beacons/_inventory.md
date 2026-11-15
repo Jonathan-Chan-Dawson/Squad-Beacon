@@ -51,3 +51,4 @@ Beacons feature
 
 - premiumTools.ts and components/PremiumToolSettings.tsx: validated configuration-only presets and inline Focus, appearance, Teams and Council advanced tools. focusPersistence.ts stores per-account/Beacon absolute-deadline sessions through chunked draft adapters.
 - useChecklistPages.ts: viewer-guarded incremental Checklist reads beyond the bounded snapshot. components/JournalEnhancements.tsx and MemoryCollections.tsx preserve note/media authorization and reference-only collections/Afterglow.
+- Full Beacon detail uses Overview, People, Tools and Chat. Overview combines host/attendance and places Repeat below Memories and owns the bounded Memories gallery. Legacy activity/tools/memories links retain their destinations; Map sheet navigation stays independent.

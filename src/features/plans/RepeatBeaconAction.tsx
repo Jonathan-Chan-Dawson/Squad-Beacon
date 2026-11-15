@@ -10,15 +10,24 @@ import { PlanChoice } from "./PlanPresentation";
 import { RoutineScheduleSheet } from "./RoutineScheduleSheet";
 
 export function RepeatBeaconAction({
+  openRequest = 0,
+  onOpenRequestConsumed,
   activity,
   onEditOccurrence,
 }: {
+  openRequest?: number;
+  onOpenRequestConsumed?: () => void;
   activity: Activity;
   onEditOccurrence?: () => void;
 }) {
   const { repeat } = useLocalSearchParams<{ repeat?: string }>();
   const { data, userId, act } = useBeacon();
   const [open, setOpen] = useState(repeat === "yes");
+  const visible = open || openRequest > 0;
+  const close = () => {
+    setOpen(false);
+    onOpenRequestConsumed?.();
+  };
   if (
     !userId ||
     data.viewer_id !== userId ||
@@ -50,6 +59,21 @@ export function RepeatBeaconAction({
         ),
     );
   const savedPlan = data.plans.find((p) => p.id === savedRoutine?.plan_id);
+  const frequency = savedRoutine?.frequency ?? "weekly";
+  const interval = savedRoutine?.interval_count ?? savedRoutine?.interval_weeks ?? 1;
+  const unit = frequency === "daily" ? "day" : frequency === "monthly" ? "month" : "week";
+  const scheduleLabel = interval === 1
+    ? frequency === "daily" ? "Daily" : frequency === "monthly" ? "Monthly" : "Weekly"
+    : `Every ${interval} ${unit}s`;
+  const repeatSummary = savedRoutine
+    ? [
+        savedRoutine.status === "paused" ? "Paused" : null,
+        scheduleLabel,
+        frequency === "weekly"
+          ? savedRoutine.weekdays.map((day) => ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][day - 1]).join(", ")
+          : frequency === "monthly" ? `Day ${savedRoutine.month_day ?? Number(savedRoutine.anchor_date.slice(8))}` : null,
+      ].filter(Boolean).join(" · ")
+    : "Set a schedule for future Beacons";
   const source: Plan = {
     id: `repeat:${activity.id}`,
     owner_id: userId,
@@ -80,22 +104,20 @@ export function RepeatBeaconAction({
       <PlanChoice
         title={savedRoutine ? "Repeat settings" : "Repeat this Beacon"}
         detail={
-          savedRoutine
-            ? "Manage the schedule for future dates"
-            : "Set a schedule for future Beacons"
+          repeatSummary
         }
         icon={Repeat2}
-        expanded={open}
-        onPress={() => setOpen(!open)}
+        expanded={visible}
+        onPress={() => visible ? close() : setOpen(true)}
       />
       <RoutineScheduleSheet
         plan={savedPlan ?? source}
         routine={savedRoutine}
         repeatBeacon={savedRoutine ? undefined : activity}
-        visible={open}
+        visible={visible}
         stepSchedule={[activity.title]}
         act={act}
-        onClose={() => setOpen(false)}
+        onClose={close}
       />
     </>
   );

@@ -5,6 +5,7 @@ import { Card, useDesignTheme } from "@/src/shared/design-system";
 import { radius, space, type } from "@/src/theme/data";
 
 export type ActivityDetailInfoProps = {
+  footer?: ReactNode;
   startsAt: string;
   endsAt: string;
   timezone?: string | null;
@@ -113,6 +114,7 @@ function validCoordinates(place: ActivityDetailInfoProps["place"]) {
 }
 
 export function ActivityDetailInfoContent({
+  footer,
   startsAt,
   endsAt,
   timezone,
@@ -291,6 +293,7 @@ export function ActivityDetailInfoContent({
           </View>
         )
       )}
+      {footer}
     </Card>
   );
 }

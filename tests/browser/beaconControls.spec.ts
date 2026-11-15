@@ -32,14 +32,12 @@ test("advanced beacon settings save and the host can manually mark arrival", asy
     await store.act("read_notices");
   });
   await expect(
-    page.getByText("Arrival · manual", { exact: true }),
+    page.getByText("Your arrival", { exact: true }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Here now" }).click();
-  await expect(
-    page.getByRole("button", { name: "Here now · selected" }),
-  ).toBeVisible();
+  await page.getByRole("button", { name: "I’m here" }).click();
+  await expect(page.getByRole("button", { name: "I’m here", exact: true })).toContainText("✓");
 
-  await page.getByRole("tab", { name: "Activity", exact: true }).click();
+  await page.getByRole("tab", { name: "Tools", exact: true }).click();
   await page
     .getByRole("button", { name: "Advanced options", exact: true })
     .click();
@@ -73,7 +71,7 @@ test("disabled modules preserve authorized shared history", async ({
 }) => {
   await detail(page, "demo-tools");
   await page.getByRole("tab", { name: "Tools", exact: true }).click();
-  await page.getByRole("button", { name: /^Checklist,/ }).click();
+  await page.getByRole("tab", { name: "Checklist", exact: true }).click();
   await expect(
     page.getByText("Bring a water bottle", { exact: true }),
   ).toBeVisible();
@@ -124,3 +122,48 @@ test("Map admission uses Join, Going and explicit Leave", async ({ page }) => {
     preview.getByRole("button", { name: "Join", exact: true }),
   ).toBeVisible();
 });
+for (const [width, theme] of [[320, "dark"], [390, "light"], [1100, "dark"]] as const) {
+  test(`organized overview at ${width}px ${theme}`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.addInitScript((mode) => localStorage.setItem("beacon.appearance", mode), theme);
+    await detail(page, "demo-tools");
+    await expect(page.getByRole("tab", { name: "Memories", exact: true })).toHaveCount(0);
+    const hostCard = page.getByRole("button", { name: "View host profile", exact: true }).locator("..").locator("..");
+    await expect(hostCard.getByTestId("activity-detail-progress")).toBeVisible();
+    await expect(hostCard.getByRole("button", { name: "Repeat this Beacon", exact: true })).toHaveCount(0);
+    await page.screenshot({ path: `.expo/natural-beacon-overview-${width}.png` });
+    await expect(page.getByTestId("beacon-comments-section")).toHaveCount(0);
+    await page.getByRole("button", { name: /^Comments ·/ }).click();
+    await expect(page.getByLabel("Add a comment", { exact: true })).toBeVisible();
+    await page.getByLabel("Add a comment", { exact: true }).fill("See you there!");
+    await page.getByRole("button", { name: "Comments", exact: true }).click();
+    await page.getByRole("button", { name: /^Comments ·/ }).click();
+    await expect(page.getByLabel("Add a comment", { exact: true })).toHaveValue("See you there!");
+    await page.getByRole("button", { name: "Comments", exact: true }).click();
+    await page.getByRole("button", { name: "Manage Beacon", exact: true }).click();
+    await page.getByRole("button", { name: "Repeat settings", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Close repeat settings", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Close repeat settings", exact: true }).click();
+    await page.getByRole("tab", { name: "Tools", exact: true }).click();
+    await expect(page.getByRole("tab", { name: "Checklist", exact: true })).toBeVisible();
+    await page.screenshot({ path: `.expo/natural-beacon-tools-${width}.png` });
+    await page.getByRole("tab", { name: "Overview", exact: true }).click();
+    await page.getByTestId("activity-detail-hero").evaluate(async (node) => {
+      let fiber = (node as any)[Object.keys(node).find((key) => key.startsWith("__reactFiber"))!];
+      while (fiber && !fiber.memoizedProps?.value?.data?.is_demo) fiber = fiber.return;
+      const store = fiber.memoizedProps.value;
+      for (let i = 0; i < 5; i++) await store.act("create_beacon_memory", {
+        activity_id: "demo-tools", id: `overview-memory-${i}`,
+        object_path: `demo://demo-tools/${store.userId}/overview-memory-${i}`,
+        media_type: "image", caption: `Overview test memory ${i}`,
+      });
+    });
+    await page.getByRole("button", { name: "View all memories", exact: true }).scrollIntoViewIfNeeded();
+    await expect(page.getByText(/^Overview test memory/)).toHaveCount(3);
+    await page.getByRole("button", { name: "View all memories", exact: true }).click();
+    await expect(page.getByText(/^Overview test memory/)).toHaveCount(5);
+    await page.screenshot({ path: `.expo/organized-overview-${width}.png` });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  });
+}
