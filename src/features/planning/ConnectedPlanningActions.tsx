@@ -1,5 +1,6 @@
 import {
   ChevronRight,
+  SlidersHorizontal,
   Clock3,
   MessageSquare,
   CheckCircle2,
@@ -99,6 +100,9 @@ export function LinkedPlanningBeacon({
         }
         style={{
           minHeight: 64,
+          backgroundColor: colors.lime,
+          borderRadius: 14,
+          paddingHorizontal: 12,
           flexDirection: "row",
           alignItems: "center",
           gap: 10,
@@ -295,6 +299,17 @@ export function ConnectedPlanningActions({
       <OriginPlanningLink thread={thread} />
       {thread.kind === "time" && (
         <>
+      {manages && (
+        <PlanningDisclosure title="Compare times" summary={`${summary.respondents} people answered · Unanswered is not No`}>
+          {summary.slots.map((slot) => (
+            <View key={slot.id} style={{ gap: 3, paddingVertical: 8, borderTopWidth: 1, borderTopColor: colors.line }}>
+              <Text style={styles.body}>{slotLabel(slot)}</Text>
+              <Text style={styles.label}>{slot.yes} Yes · {slot.maybe} Maybe · {slot.no} No{summary.recommended.includes(slot.id) ? " · Best availability so far" : ""}</Text>
+            </View>
+          ))}
+        </PlanningDisclosure>
+      )}
+
           {!token && (
             <TimeFinalization thread={thread} onBeforeAction={onBeforeAction} />
           )}
@@ -392,13 +407,13 @@ export function ConnectedPlanningActions({
         )}
       {owner && thread.kind === "ping" && thread.status === "open" && (
         <Button
-          title="Review & Create Beacon"
+          title="Review Beacon"
           onPress={() => openPlanningReview(data, userId, thread, {returnPlanId})}
         />
       )}
       {owner && thread.kind === "time" && thread.selected_slot_id && (
         <Button
-          title="Review & Create Beacon"
+          title="Review Beacon"
           onPress={() => openPlanningReview(data, userId, thread, {returnPlanId})}
         />
       )}
@@ -517,6 +532,7 @@ export function ConnectedPlanningActions({
       {manages && (
         <PlanningDisclosure
           title="Organizer options"
+          icon={<SlidersHorizontal size={18} color={colors.green} />}
           summary={
             owner
               ? `Backup hosting ${thread.allow_backup_hosting ? "on" : "off"}`

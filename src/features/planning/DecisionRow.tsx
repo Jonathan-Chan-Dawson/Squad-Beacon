@@ -10,6 +10,8 @@ import { Animated, Pressable, Text, View } from "react-native";
 import { useReducedMotion } from "@/src/shared/design-system";
 import {
   ChevronDown,
+  SlidersHorizontal,
+  Info,
   ChevronRight,
   CircleHelp,
   Dices,
@@ -192,6 +194,7 @@ export function DecisionRow({
           threadId={thread.id}
           showDeadline={false}
           compactPing
+          compactOptions
           expanded={expanded}
           onBeforeRespond={onBeforeRespond}
           onOpen={onExpand}
@@ -244,7 +247,11 @@ export function DecisionRow({
         />
       )}
       {expanded ? (
-        <Animated.View style={{ gap: 8, opacity: reveal }}>
+        <Animated.View style={{ gap: 8, opacity: reveal, marginTop: 8, paddingTop: 12, borderTopWidth: 1, borderTopColor: colors.line }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 7 }}>
+            {manages ? <SlidersHorizontal size={16} color={colors.green} /> : <Info size={16} color={colors.muted} />}
+            <Text style={[styles.label, { color: manages ? colors.green : colors.muted, fontWeight: "700", fontSize: 11, letterSpacing: 1, textTransform: "uppercase" }]}>{manages ? "Organizer controls" : "Details & next steps"}</Text>
+          </View>
           {thread.body ? <Txt>{thread.body}</Txt> : null}
           {canOpenSquadPing(data, thread, userId) && (
             <PlanningLink

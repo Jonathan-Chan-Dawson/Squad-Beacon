@@ -113,12 +113,12 @@ test("Ping creation uses the focused composer and preserves conversion managemen
   await expect(
     page.getByLabel("What are you thinking?", { exact: true }),
   ).toHaveValue("Trail after work?");
-  await page.getByRole("button", { name: "Create Ping", exact: true }).click();
+  await page.getByRole("button", { name: "Send Ping", exact: true }).click();
   await expect(page).toHaveURL(/activity-created/);
   await page.getByRole("button", { name: "Not Now", exact: true }).click();
   await page
     .getByRole("button", {
-      name: "Review & Create Beacon",
+      name: "Review Beacon",
       exact: true,
     })
     .click();
@@ -197,5 +197,59 @@ for (const width of [320, 390, 430]) {
     await page.screenshot({
       path: test.info().outputPath(`inbox-${width}.png`),
     });
+  });
+}
+
+for (const [width, theme] of [[320, "dark"], [390, "light"], [430, "dark"]] as const) {
+  test(`Ping essentials and starter preservation at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.addInitScript((mode) => localStorage.setItem("beacon.appearance", mode), theme);
+    await openPlanning(page);
+    await page.getByRole("button", { name: "+ New", exact: true }).click();
+    await page.getByRole("button", { name: "Ping", exact: true }).click();
+    const title = page.getByLabel("What are you thinking?", { exact: true });
+    await title.fill("Coffee after work");
+    const starter = page.getByRole("button", { name: "Anyone Free?", exact: true });
+    await starter.click();
+    await expect(starter).toHaveAttribute("aria-pressed", "true");
+    await expect(title).toHaveValue("Coffee after work");
+    await expect(page.getByText(/Starter applied:/)).toBeVisible();
+    await expect(page.getByText(/Ping uses this audience/)).toBeVisible();
+    await expect(page.getByRole("button", { name: "Send Ping", exact: true })).toHaveCount(1);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: `.expo/ping-composer-${width}.png`, animations: "disabled" });
+  });
+}
+
+for (const [width, theme] of [[320, "dark"], [390, "light"]] as const) {
+  test(`compact type selector restores drafts and Back at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.addInitScript((value) => localStorage.setItem("beacon.appearance", value), theme);
+    await openPlanning(page);
+    await page.getByRole("button", { name: "+ New", exact: true }).click();
+    await page.getByRole("button", { name: "Ping", exact: true }).click();
+    const modes = page.getByRole("tablist", { name: "Planning type", exact: true });
+    await expect(modes.getByRole("tab")).toHaveCount(4);
+    await page.getByLabel("What are you thinking?", { exact: true }).fill("Coffee together");
+    await modes.getByRole("tab", { name: "Find a time", exact: true }).click();
+    await expect(page.getByLabel("Activity title", { exact: true })).toHaveValue("Coffee together");
+    await page.getByLabel("Activity title", { exact: true }).fill("Time draft");
+    await modes.getByRole("tab", { name: "Vote", exact: true }).click();
+    await expect(page.getByLabel("What are we deciding?", { exact: true })).toHaveValue("Time draft");
+    await page.getByLabel("Activity option", { exact: true }).first().fill("Bowling");
+    await modes.getByRole("tab", { name: "Draw", exact: true }).click();
+    await expect(page.getByLabel("Activity option", { exact: true }).first()).not.toHaveValue("Bowling");
+    await modes.getByRole("tab", { name: "Vote", exact: true }).click();
+    await expect(page.getByLabel("Activity option", { exact: true }).first()).toHaveValue("Bowling");
+    await modes.getByRole("tab", { name: "Find a time", exact: true }).click();
+    await expect(page.getByLabel("Activity title", { exact: true })).toHaveValue("Time draft");
+    await modes.getByRole("tab", { name: "Ping", exact: true }).click();
+    await expect(page.getByLabel("What are you thinking?", { exact: true })).toHaveValue("Coffee together");
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: `.expo/compact-planning-create-${width}.png`, animations: "disabled" });
+    await page.getByRole("button", { name: "Back", exact: true }).click();
+    await expect(page).toHaveURL(/responses/);
   });
 }

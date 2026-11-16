@@ -52,3 +52,7 @@ Beacons feature
 - premiumTools.ts and components/PremiumToolSettings.tsx: validated configuration-only presets and inline Focus, appearance, Teams and Council advanced tools. focusPersistence.ts stores per-account/Beacon absolute-deadline sessions through chunked draft adapters.
 - useChecklistPages.ts: viewer-guarded incremental Checklist reads beyond the bounded snapshot. components/JournalEnhancements.tsx and MemoryCollections.tsx preserve note/media authorization and reference-only collections/Afterglow.
 - Full Beacon detail uses Overview, People, Tools and Chat. Overview combines host/attendance and places Repeat below Memories and owns the bounded Memories gallery. Legacy activity/tools/memories links retain their destinations; Map sheet navigation stays independent.
+
+- Phase F: agenda.ts, hosting.ts, taskCoordination.ts, roundScoring.ts and activityPremiumPresets.ts extend canonical Premium tools; components/BeaconAgenda, BeaconHosting, TaskCoordination and RoundScoring own inline workspace controls. See docs/SB_BEACON_PLUS_2_VALIDATION_2026-11-15.md for delivery boundaries.
+
+- BeaconSection.tsx supplies section and action-row presentation. ActivityDetailTools uses grouped tool selection and a wide-screen contextual sidebar. BeaconAgenda presents Activity schedule; settings and drafts keep canonical action/revision checks. See docs/BEACON_UI_REDESIGN_PLAN.md.

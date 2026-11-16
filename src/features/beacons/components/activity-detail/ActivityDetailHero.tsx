@@ -58,7 +58,7 @@ export function ActivityDetailHero({
   const categoryToken = categories[category];
   const CategoryIcon = categoryToken.icon;
   const compact = screenWidth <= 375 || screenHeight <= 667;
-  const expandedHeight = 212;
+  const expandedHeight = 176;
   const collapseDistance = expandedHeight - 56;
   useEffect(() => {
     const listener = scrollY.addListener(({ value }) => {
@@ -367,8 +367,8 @@ export function ActivityDetailHero({
           numberOfLines={2}
           style={{
             color: heroText,
-            fontSize: compact ? 22 : 30,
-            lineHeight: compact ? 28 : 36,
+            fontSize: compact ? 22 : 26,
+            lineHeight: compact ? 28 : 32,
             fontWeight: type.weight.bold,
             letterSpacing: -0.4,
           }}

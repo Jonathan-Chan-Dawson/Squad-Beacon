@@ -1,4 +1,7 @@
-import { BeaconCardArtwork, type BeaconArtworkStyle } from "@/src/features/beacons/components/BeaconCardArtwork";
+import {
+  BeaconCardArtwork,
+  type BeaconArtworkStyle,
+} from "@/src/features/beacons/components/BeaconCardArtwork";
 import React from "react";
 import { Pressable, Text, View } from "react-native";
 import {
@@ -98,7 +101,9 @@ export function DiscoveryBeaconCard({
   const contextBlockStyle = {
     minWidth: 0,
     maxWidth: "100%" as const,
-    alignSelf: hasLinkedContext ? ("stretch" as const) : ("flex-start" as const),
+    alignSelf: hasLinkedContext
+      ? ("stretch" as const)
+      : ("flex-start" as const),
     flexShrink: 0,
     backgroundColor: colors.surfaceRaised,
     borderRadius: 10,
@@ -354,25 +359,30 @@ export function DiscoveryBeaconCard({
     <Card
       testID={`discovery-beacon-card-${activityId}`}
       style={{
-        padding: 12,
-        gap: 6,
+        padding: 16,
+        gap: 12,
         borderWidth: 1,
         borderColor: colors.border,
         borderRadius: 14,
         backgroundColor: colors.surface,
       }}
     >
-      <BeaconCardArtwork category={category} accent={decorationAccent} variant={artworkVariant} radius={14} />
+      <BeaconCardArtwork
+        category={category}
+        accent={decorationAccent}
+        variant={artworkVariant}
+        radius={14}
+      />
       <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12 }}>
-        <View style={{ width: 64, alignItems: "center", gap: 5 }}>
+        <View style={{ width: 48, alignItems: "center", gap: 5 }}>
           <View
             testID="beacon-category-artwork"
             style={{
-              width: 64,
-              height: 68,
+              width: 48,
+              height: 48,
               borderRadius: 12,
               overflow: "hidden",
-              backgroundColor: categoryToken.tint,
+              backgroundColor: colors.surfaceRaised,
               justifyContent: "center",
               alignItems: "center",
             }}
@@ -385,7 +395,7 @@ export function DiscoveryBeaconCard({
                 borderRadius: 35,
                 borderWidth: 1,
                 borderColor: categoryToken.color,
-                opacity: 0.18,
+                opacity: 0.08,
                 top: -24,
                 right: -22,
               }}
@@ -398,17 +408,17 @@ export function DiscoveryBeaconCard({
                 borderRadius: 23,
                 borderWidth: 1,
                 borderColor: categoryToken.color,
-                opacity: 0.18,
+                opacity: 0.08,
                 bottom: -16,
                 left: -12,
               }}
             />
-            <BeaconIcon emoji={decorationEmoji} category={category} size={38} />
+            <BeaconIcon emoji={decorationEmoji} category={category} size={30} />
           </View>
           <Text
             style={{
-              color: categoryToken.color,
-              fontSize: 10,
+              color: colors.textSecondary,
+              fontSize: 12,
               lineHeight: 14,
               textAlign: "center",
               fontWeight: "500",
@@ -452,7 +462,7 @@ export function DiscoveryBeaconCard({
                     paddingHorizontal: 6,
                     paddingVertical: 3,
                     borderRadius: 8,
-                    backgroundColor: categoryToken.tint,
+                    backgroundColor: colors.surfaceRaised,
                   }}
                 >
                   <Clock3

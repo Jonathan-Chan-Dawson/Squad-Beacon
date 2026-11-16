@@ -7,7 +7,7 @@ import { planningInteraction } from "./planningInteraction";
 import { useNow } from "@/src/shared/useNow";
 import { submitPlanning } from "./submission";
 import { ProposalEditor } from "./ProposalEditor";
-import { PlanningLink } from "./PlanningControls";
+import { PlanningActionRow, PlanningLink } from "./PlanningControls";
 import {
   canReadPlanningThread,
   validateCouncilProposal,
@@ -124,12 +124,14 @@ export function CouncilProposalReview({
 
 export function CouncilChoices({
   threadId,
+  compact = false,
   expanded,
   onExpand,
   onBeforeRespond,
   onOpenBeaconEditor,
 }: {
   threadId: string;
+  compact?: boolean;
   expanded: boolean;
   onExpand: () => void;
   onBeforeRespond?: () => void;
@@ -217,7 +219,7 @@ export function CouncilChoices({
   const visible = expanded ? options : options.slice(0, 3);
   const updated = ballot?.updated_at ?? vote?.updated_at ?? vote?.created_at;
   return (
-    <View style={{ gap: 8 }}>
+    <View style={{ gap: compact ? 0 : 8 }}>
       {visible.map((option) => {
         const selected = approval
           ? choices.includes(option.id)
@@ -254,15 +256,16 @@ export function CouncilChoices({
               alignItems: "center",
               paddingVertical: 8,
               paddingHorizontal: 10,
-              borderRadius: 9,
-              borderWidth: 1,
+              borderRadius: compact ? 0 : 9,
+              borderWidth: compact ? 0 : 1,
+              borderBottomWidth: 1,
               borderColor: selected ? colors.green : colors.line,
-              backgroundColor: colors.bg,
+              backgroundColor: compact ? selected ? colors.lime : "transparent" : colors.bg,
             }}
           >
             <BeaconIcon category={option.payload.category} size={32} />
             <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-              <Text style={styles.body}>{option.payload.title}</Text>
+              <Text numberOfLines={compact ? 2 : undefined} style={styles.body}>{option.payload.title}</Text>
               <Text numberOfLines={1} style={styles.muted}>
                 {new Date(option.payload.starts_at).toLocaleString([], {
                   month: "short",
@@ -288,20 +291,20 @@ export function CouncilChoices({
       )}
       {approval && eligible && (
         <>
-          <Button
-            compact
-            secondary
-            title={none ? "None work for me ✓" : "None work for me"}
-            onPress={() => {
-              setChoices([]);
-              setNone(true);
-            }}
-          />
-          <Button
+          <Pressable accessibilityRole="checkbox" accessibilityLabel="None work for me"
+            accessibilityState={{ checked: none, disabled: busy }} disabled={busy}
+            onPress={() => { setChoices([]); setNone(!none); }}
+            style={{ minHeight: 44, flexDirection: "row", alignItems: "center", gap: 8 }}>
+            <Text style={[styles.body, { color: none ? colors.green : colors.muted }]}>{none ? "☑" : "□"}</Text>
+            <Text style={styles.label}>None work for me</Text>
+          </Pressable>
+          <PlanningActionRow primary={
+          <Button compact
             title={ballot ? "Update Choices" : "Save Choices"}
             disabled={busy || (!none && !choices.length)}
             onPress={() => void save(choices, none)}
           />
+          } />
         </>
       )}
       {expanded &&

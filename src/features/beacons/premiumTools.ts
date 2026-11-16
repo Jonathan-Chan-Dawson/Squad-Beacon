@@ -1,3 +1,14 @@
+import {
+  validateHosting,
+  validateHostingLinks,
+  type HostingSettings,
+} from "./hosting";
+import {
+  validateAgenda,
+  agendaNeedsPro,
+  validateAgendaLinks,
+  type AgendaSettings,
+} from "./agenda";
 import type { Activity, Data, Payload } from "@/src/shared/types";
 import {
   requirePremiumFeature,
@@ -14,8 +25,17 @@ import {
 } from "@/src/features/planning/domain";
 
 export type ToolKind =
-  "focus" | "appearance" | "teams" | "memories" | "council" | "journal";
+  | "focus"
+  | "appearance"
+  | "teams"
+  | "memories"
+  | "council"
+  | "journal"
+  | "agenda"
+  | "hosting";
 export type ToolSettings = {
+  agenda?: AgendaSettings;
+  hosting?: HostingSettings;
   body?: string;
   heading?: string;
   format?: "plain" | "markdown";
@@ -26,7 +46,10 @@ export type ToolSettings = {
   style?: "standard" | "sunrise" | "ocean";
   layout?: "standard" | "preparation" | "session";
   module_order?: string[];
+  sections?: { id: string; title: string; body: string }[];
   team_names?: string[];
+  round_names?: string[];
+  workflow?: { thread_id: string; label: string }[];
   score_steps?: { label: string; points: number }[];
   rotation?: boolean;
   groups?: string[];
@@ -58,6 +81,8 @@ export type JournalDetails = {
   linked_note_ids: string[];
 };
 export type MemoryRecap = {
+  layout?: "album" | "timeline" | "story";
+  participant_ids?: string[];
   id: string;
   activity_id: string;
   title: string;
@@ -78,26 +103,38 @@ export function toolFeature(
   kind: ToolKind,
   settings: ToolSettings,
 ): PremiumFeature {
-  return kind === "journal"
-    ? "journal_templates"
-    : kind === "focus"
-      ? settings.group || settings.summary
-        ? "focus_groups"
-        : "focus_sequences"
-      : kind === "appearance"
-        ? (settings.layout && settings.layout !== "standard") ||
-          settings.module_order?.length
-          ? "layouts"
-          : "appearance"
-        : kind === "teams"
-          ? settings.rotation
-            ? "team_rotation"
-            : "team_presets"
-          : kind === "council"
-            ? settings.readiness
-              ? "council_readiness"
-              : "council_presets"
-            : "memory_collections";
+  return kind === "hosting"
+    ? settings.hosting?.check_in || settings.hosting?.coordinators.length
+      ? "hosting_coordination"
+      : "hosting"
+    : kind === "agenda"
+      ? settings.agenda && agendaNeedsPro(settings.agenda)
+        ? "agenda_coordination"
+        : "agendas"
+      : kind === "journal"
+        ? "journal_templates"
+        : kind === "focus"
+          ? settings.group || settings.summary
+            ? "focus_groups"
+            : "focus_sequences"
+          : kind === "appearance"
+            ? (settings.layout && settings.layout !== "standard") ||
+              settings.sections?.length
+              ? "layouts"
+              : "appearance"
+            : kind === "teams"
+              ? settings.round_names?.length
+                ? "score_rounds"
+                : settings.rotation
+                  ? "team_rotation"
+                  : "team_presets"
+              : kind === "council"
+                ? settings.workflow?.length
+                  ? "council_workflows"
+                  : settings.readiness
+                    ? "council_readiness"
+                    : "council_presets"
+                : "memory_collections";
 }
 export function validateToolSettings(
   kind: ToolKind,
@@ -111,13 +148,25 @@ export function validateToolSettings(
   )
     throw new Error("Choose a compact tool configuration.");
   const s = value as ToolSettings;
+  if (kind === "hosting") {
+    if (Object.keys(s).some((k) => k !== "hosting"))
+      throw new Error("Unsupported hosting options.");
+    return { hosting: validateHosting(s.hosting) };
+  }
+  if (kind === "agenda") {
+    if (Object.keys(s).some((k) => k !== "agenda"))
+      throw new Error("Unsupported agenda options.");
+    return { agenda: validateAgenda(s.agenda) };
+  }
   const keys: Record<ToolKind, string[]> = {
+    hosting: ["hosting"],
+    agenda: ["agenda"],
     journal: ["body", "heading", "format", "tags"],
     focus: ["steps", "group", "summary"],
-    appearance: ["style", "layout", "module_order"],
-    teams: ["team_names", "score_steps", "rotation"],
+    appearance: ["style", "layout", "module_order", "sections"],
+    teams: ["team_names", "score_steps", "rotation", "round_names"],
     memories: ["title", "memory_ids", "highlights"],
-    council: ["groups", "explanations", "readiness"],
+    council: ["groups", "explanations", "readiness", "workflow"],
   };
   if (!keys[kind] || Object.keys(s).some((k) => !keys[kind].includes(k)))
     throw new Error("Unsupported tool configuration.");
@@ -188,6 +237,30 @@ export function validateToolSettings(
       ))
   )
     throw new Error("Use up to eight team names and six scoring increments.");
+  if (
+    kind === "teams" &&
+    s.round_names !== undefined &&
+    !texts(s.round_names, 12, 60)
+  )
+    throw new Error("Use up to twelve named scoring rounds.");
+  if (
+    kind === "council" &&
+    s.workflow !== undefined &&
+    (!Array.isArray(s.workflow) ||
+      s.workflow.length > 8 ||
+      s.workflow.some(
+        (w) =>
+          !w ||
+          Object.keys(w).some((k) => !["thread_id", "label"].includes(k)) ||
+          typeof w.thread_id !== "string" ||
+          !w.thread_id ||
+          typeof w.label !== "string" ||
+          !w.label.trim() ||
+          w.label.length > 60,
+      ) ||
+      new Set(s.workflow.map((w) => w.thread_id)).size !== s.workflow.length)
+  )
+    throw new Error("Link up to eight distinct Council decisions.");
   if (kind === "council" && !texts(s.groups ?? [], 12, 60))
     throw new Error("Use up to twelve distinct option groups.");
   if (
@@ -200,6 +273,26 @@ export function validateToolSettings(
     throw new Error(
       "Choose existing photos for this album and its highlights.",
     );
+  if (
+    kind === "appearance" &&
+    s.sections !== undefined &&
+    (!Array.isArray(s.sections) ||
+      s.sections.length > 6 ||
+      s.sections.some(
+        (row) =>
+          !row ||
+          Object.keys(row).some((k) => !["id", "title", "body"].includes(k)) ||
+          typeof row.id !== "string" ||
+          !row.id ||
+          typeof row.title !== "string" ||
+          !row.title.trim() ||
+          row.title.length > 80 ||
+          typeof row.body !== "string" ||
+          row.body.length > 1000,
+      ) ||
+      new Set(s.sections.map((row) => row.id)).size !== s.sections.length)
+  )
+    throw new Error("Use up to six compact activity sections.");
   for (const key of [
     "summary",
     "rotation",
@@ -379,6 +472,28 @@ export function applyDemoPremiumTools(
     requirePremiumFeature(data, "afterglow", activity);
     const ids = p.memory_ids as string[];
     if (
+      p.layout !== undefined &&
+      !["album", "timeline", "story"].includes(String(p.layout))
+    )
+      throw new Error("Choose a recap layout.");
+    const people = p.participant_ids as string[] | undefined;
+    if (
+      people !== undefined &&
+      (!Array.isArray(people) ||
+        people.length > 50 ||
+        new Set(people).size !== people.length ||
+        people.some(
+          (id) =>
+            !data.recap_consents?.some(
+              (c) =>
+                c.activity_id === activity.id && c.user_id === id && c.allowed,
+            ) || !canUseBeaconModules(data, activity, id),
+        ))
+    )
+      throw new Error(
+        "Only consenting current participants can appear in recaps.",
+      );
+    if (
       !Array.isArray(ids) ||
       ids.length > 50 ||
       authorizedMemoryIds(data, ids, viewer).length !== ids.length ||
@@ -400,6 +515,10 @@ export function applyDemoPremiumTools(
         introduction: String(p.introduction ?? ""),
         memory_ids: ids,
         revision: (old?.revision ?? -1) + 1,
+        layout: (p.layout ?? old?.layout ?? "album") as MemoryRecap["layout"],
+        participant_ids: (p.participant_ids ??
+          old?.participant_ids ??
+          []) as string[],
       },
     ];
     return true;
@@ -445,9 +564,25 @@ export function applyDemoPremiumTools(
         kind,
         title: p.title,
         settings:
-          kind === "memories"
-            ? { title: settings.title, memory_ids: [], highlights: [] }
-            : settings,
+          kind === "council"
+            ? { ...settings, workflow: [] }
+            : kind === "hosting"
+              ? { hosting: { ...settings.hosting!, coordinators: [] } }
+              : kind === "agenda"
+                ? {
+                    agenda: {
+                      ...settings.agenda!,
+                      steps: settings.agenda!.steps.map((s) => ({
+                        ...s,
+                        organizer: null,
+                        tasks: [],
+                        state: "planned" as const,
+                      })),
+                    },
+                  }
+                : kind === "memories"
+                  ? { title: settings.title, memory_ids: [], highlights: [] }
+                  : settings,
       },
     ];
     return true;
@@ -467,6 +602,22 @@ export function applyDemoPremiumTools(
       audience_id: thread.audience_id,
     } as Activity;
     requirePremiumFeature(data, toolFeature(kind, settings), decision);
+    if (
+      settings.workflow?.some((w) => {
+        const target = data.planning_threads.find((t) => t.id === w.thread_id);
+        return (
+          !target ||
+          target.kind === "ping" ||
+          target.audience !== thread.audience ||
+          target.audience_id !== thread.audience_id ||
+          !canReadPlanningThread(data, target, viewer) ||
+          !canManagePlanningThread(target, viewer)
+        );
+      })
+    )
+      throw new Error(
+        "Link readable Councils you organize for the same audience.",
+      );
   } else {
     if (
       !activity ||
@@ -478,6 +629,10 @@ export function applyDemoPremiumTools(
         "Only current Beacon organizers can configure this tool.",
       );
     requirePremiumFeature(data, toolFeature(kind, settings), activity);
+    if (kind === "agenda" && settings.agenda)
+      validateAgendaLinks(data, activity, settings.agenda);
+    if (kind === "hosting" && settings.hosting)
+      validateHostingLinks(data, activity, settings.hosting, viewer);
     if (
       kind === "memories" &&
       authorizedMemoryIds(data, settings.memory_ids ?? [], viewer).length !==

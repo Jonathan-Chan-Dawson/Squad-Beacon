@@ -206,7 +206,7 @@ export function ActivityDetailInfoContent({
             accessibilityHint={`Opens ${new URL(onlineUrl).hostname}`}
             onPress={() => onOpenOnline(onlineUrl)}
             style={({ pressed }) => ({
-              minHeight: 72,
+              minHeight: 60,
               flexDirection: "row",
               alignItems: "center",
               gap: 10,
@@ -228,7 +228,7 @@ export function ActivityDetailInfoContent({
             <ArrowUpRight size={16} color={colors.textSecondary} />
           </Pressable>
         ) : (
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 10, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 10 }}>
             {hasCoordinates && mapPreview ? (
               <View style={{ width: 72, height: 72, overflow: "hidden", borderRadius: radius.md }}>
                 {mapPreview}

@@ -1,3 +1,5 @@
+import { makeBeaconDraft } from "./domain";
+import { suggestedSlots } from "./connected";
 import type { BeaconDraft } from "./types";
 import type { PlanningCreationSession } from "./creationSession";
 import type { Audience } from "@/src/shared/types";
@@ -122,4 +124,36 @@ export function composerMapCoordinate(latitude?: string, longitude?: string) {
     Math.abs(lng) <= 180
     ? { latitude: lat, longitude: lng }
     : undefined;
+}
+
+// A creation flow owns independent drafts for each type. Publication data is never copied.
+type CreationKind = "ping" | "time" | "vote" | "draw";
+const modeSessions = new Map<string, Partial<Record<CreationKind, string>>>();
+export function switchComposerKind(viewer: string, flow: string, current: CreationKind, sessionId: string, target: CreationKind, newId: () => string, timezone?: string) {
+  const source = sessions.get(`${viewer}:${sessionId}`);
+  if (!source || source.publication.attempt) throw new Error("Finish or verify this publication before switching types.");
+  const key = `${viewer}:${flow}`;
+  const modes = modeSessions.get(key) ?? {};
+  modes[current] = sessionId;
+  modeSessions.set(key, modes);
+  const existing = modes[target];
+  if (existing && sessions.has(`${viewer}:${existing}`)) return existing;
+  const id = newId();
+  const payload = {
+    ...makeBeaconDraft(new Date(source.startsAt), Number(source.minutes) || 60),
+    title: source.title, description: source.body, category: source.category,
+    audience: source.audience, audience_id: source.audienceId, label: source.place,
+    latitude: source.coordinate?.latitude ?? null, longitude: source.coordinate?.longitude ?? null,
+    timezone: timezone ?? source.timeSlots?.[0]?.timezone ?? source.options[0]?.payload.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
+  };
+  const draft: ComposerDraft = {
+    ...structuredClone(source), publication: {}, recoveryToken: undefined,
+    options: target === "vote" || target === "draw" ? [0, 1].map((index) => ({ id: newId(), payload: { ...payload, title: index === 0 ? source.title : "" } })) : [],
+    timeSlots: target === "time" ? suggestedSlots(Math.max(Date.now(), Date.parse(source.deadline)), newId, payload) : undefined,
+    interestTarget: target === "ping" ? source.interestTarget : undefined,
+    voteMethod: undefined,
+  };
+  storeComposerSession(viewer, id, draft);
+  modes[target] = id;
+  return id;
 }

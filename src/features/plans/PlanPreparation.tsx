@@ -53,7 +53,7 @@ export function PlanPreparation({ plan }: { plan: Plan }) {
       ),
   );
   const shown = tasks.filter((t) =>
-    filter === "Unassigned"
+    filter === "High priority" ? t.priority === "high" : filter === "Waiting" ? !!t.prerequisite_id && !data.beacon_checklist_items.find(row=>row.id===t.prerequisite_id)?.completed : filter === "Unassigned"
       ? !t.assignee_id
       : filter === "Overdue"
         ? !!(t.due_at || t.due_on) &&
@@ -75,13 +75,13 @@ export function PlanPreparation({ plan }: { plan: Plan }) {
             Beacon for its complete Checklist.
           </Txt>
           <Chips
-            options={["Open tasks", "Overdue", "Unassigned"]}
+            options={["Open tasks", "Overdue", "Unassigned", "High priority", "Waiting"]}
             value={filter}
             onChange={setFilter}
           />
           {shown.slice(0, limit).map((t) => (
             <View key={t.id} style={{ gap: 4 }}>
-              <Txt>{t.text}</Txt>
+              <Txt>{t.text}{t.priority === "high" ? " · High priority" : ""}</Txt>
               <Button
                 compact
                 secondary

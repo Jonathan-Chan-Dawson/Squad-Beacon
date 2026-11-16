@@ -85,23 +85,52 @@ export function resetFocusTimer(timer: FocusTimerState): FocusTimerState {
 }
 
 /** Event-time boundary for starting a local sequence. */
-export function startFocusSequenceTimer(durationSeconds:number) {return startFocusTimer(createFocusTimer(durationSeconds),Date.now());}
+export function startFocusSequenceTimer(durationSeconds: number) {
+  return startFocusTimer(createFocusTimer(durationSeconds), Date.now());
+}
 
+export type FocusSessionRecord = {
+  id: string;
+  ended_at: string;
+  minutes: number;
+  goal: string;
+};
 export type PersistedFocus = {
+  goal?: string;
+  history?: FocusSessionRecord[];
   timer: FocusTimerState;
   mode: "Standard" | "Pomodoro";
   pomodoro: "Focus" | "Break";
   minutes: string;
-  steps: {label:string;minutes:number}[];
+  steps: { label: string; minutes: number }[];
   index: number;
   summary: boolean;
   completed: number;
 };
-export function decodeFocus(value: string | null,now=Date.now()): PersistedFocus | null {
+export function decodeFocus(
+  value: string | null,
+  now = Date.now(),
+): PersistedFocus | null {
   try {
     const s = JSON.parse(value ?? "null") as PersistedFocus;
     if (
       !s ||
+      (s.goal !== undefined &&
+        (typeof s.goal !== "string" || s.goal.length > 160)) ||
+      (s.history !== undefined &&
+        (!Array.isArray(s.history) ||
+          s.history.length > 50 ||
+          s.history.some(
+            (h) =>
+              !h ||
+              typeof h.id !== "string" ||
+              !Number.isFinite(Date.parse(h.ended_at)) ||
+              !Number.isFinite(h.minutes) ||
+              h.minutes < 0 ||
+              h.minutes > 17280 ||
+              typeof h.goal !== "string" ||
+              h.goal.length > 160,
+          ))) ||
       !["Standard", "Pomodoro"].includes(s.mode) ||
       !["Focus", "Break"].includes(s.pomodoro) ||
       !s.timer ||
@@ -114,7 +143,17 @@ export function decodeFocus(value: string | null,now=Date.now()): PersistedFocus
       s.timer.remainingSeconds > s.timer.durationSeconds ||
       (s.timer.phase === "running" && !Number.isFinite(s.timer.deadline)) ||
       !Array.isArray(s.steps) ||
-      s.steps.length > 12 || s.steps.some(p=>!p||typeof p.label!=="string"||!p.label.trim()||p.label.length>36||!Number.isInteger(p.minutes)||p.minutes<1||p.minutes>1440) ||
+      s.steps.length > 12 ||
+      s.steps.some(
+        (p) =>
+          !p ||
+          typeof p.label !== "string" ||
+          !p.label.trim() ||
+          p.label.length > 36 ||
+          !Number.isInteger(p.minutes) ||
+          p.minutes < 1 ||
+          p.minutes > 1440,
+      ) ||
       !Number.isInteger(s.index) ||
       s.index < 0 ||
       s.index >= Math.max(1, s.steps.length) ||

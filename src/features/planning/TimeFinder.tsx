@@ -1,4 +1,6 @@
+import { PlanningKindSelector } from "./PlanningKindSelector";
 import {
+  PlanningActionRow,
   PlanningChoiceRow,
   PlanningDisclosure,
   PlanningLink,
@@ -7,12 +9,12 @@ import {
 import React, { useState } from "react";
 import {
   CalendarClock,
-  Check,
+  ThumbsUp,
   CircleHelp,
   Sparkles,
-  X,
+  ThumbsDown,
 } from "lucide-react-native";
-import { PingIntro, TimeSlotHeading } from "./PingPresentation";
+import { TimeSlotHeading } from "./PingPresentation";
 import { View, Text, Pressable } from "react-native";
 import { randomUUID } from "expo-crypto";
 import { router, useLocalSearchParams } from "expo-router";
@@ -100,7 +102,7 @@ export function SlotFields({
       </Text>
       {slots.map((slot, index) => (
         <View
-          key={index}
+          key={slot.id}
           style={{
             padding: 12,
             gap: 8,
@@ -426,7 +428,7 @@ export function TimeFinderComposer({ sessionId }: { sessionId: string }) {
     );
   return (
     <Screen title="Find a Time" eyebrow="" compactHeader>
-      <PingIntro time />
+      <PlanningKindSelector kind="time" sessionId={sessionId} disabled={frozen} />
       <View pointerEvents={frozen ? "none" : "auto"} style={{ gap: 12 }}>
         <Field
           label="Activity title"
@@ -434,10 +436,6 @@ export function TimeFinderComposer({ sessionId }: { sessionId: string }) {
           value={draft.title}
           maxLength={120}
           onChangeText={(title) => update({ title })}
-        />
-        <SlotFields
-          slots={draft.timeSlots ?? []}
-          onChange={(timeSlots) => update({ timeSlots })}
         />
         <View style={[styles.card, { gap: 16, padding: 16 }]}>
           <View style={styles.row}>
@@ -474,6 +472,10 @@ export function TimeFinderComposer({ sessionId }: { sessionId: string }) {
             onChange={(deadline) => update({ deadline })}
           />
         </View>
+        <SlotFields
+          slots={draft.timeSlots ?? []}
+          onChange={(timeSlots) => update({ timeSlots })}
+        />
         <PlanningDisclosure
           title="Activity details"
           summary="Description, category and place · Optional"
@@ -502,7 +504,7 @@ export function TimeFinderComposer({ sessionId }: { sessionId: string }) {
             label="Place · Optional"
             value={draft.place}
             maxLength={160}
-            onChangeText={(place) => update({ place })}
+            onChangeText={(place) => update({ place, coordinate: undefined })}
           />
         </PlanningDisclosure>
         <PlanningDisclosure
@@ -542,14 +544,14 @@ export function TimeFinderComposer({ sessionId }: { sessionId: string }) {
             description: draft.body,
             category: draft.category,
             label: draft.place,
-            latitude:
+            latitude: draft.coordinate?.latitude ?? (
               draft.place === (source?.payload?.label ?? recovery?.label ?? "")
                 ? (source?.payload?.latitude ?? recovery?.latitude ?? null)
-                : null,
-            longitude:
+                : null),
+            longitude: draft.coordinate?.longitude ?? (
               draft.place === (source?.payload?.label ?? recovery?.label ?? "")
                 ? (source?.payload?.longitude ?? recovery?.longitude ?? null)
-                : null,
+                : null),
             audience: draft.audience,
             audience_id: draft.audienceId,
             starts_at:
@@ -666,12 +668,14 @@ export function TimeFinderComposer({ sessionId }: { sessionId: string }) {
 
 export function AvailabilityControls({
   thread,
+  compact = false,
   expanded,
   onExpand,
   onBeforeRespond,
 }: {
   onBeforeRespond?: () => void;
   thread: PlanningThread;
+  compact?: boolean;
   expanded: boolean;
   onExpand: () => void;
 }) {
@@ -735,7 +739,7 @@ export function AvailabilityControls({
     slots.some((s) => answers[s.id] !== saved.answers[s.id]) ||
     none !== saved.none_work;
   return (
-    <View style={{ gap: 14 }}>
+    <View style={{ gap: compact ? 4 : 14 }}>
       <View style={{ gap: 4 }}>
         <Text style={styles.h2}>What works for you?</Text>
         <Text style={styles.muted}>
@@ -751,52 +755,66 @@ export function AvailabilityControls({
       {summary.slots.map((s, index) => (
         <View
           key={s.id}
+          testID={`time-option-${s.id}`}
           style={{
-            gap: 10,
-            padding: 12,
-            borderRadius: 16,
-            borderWidth: 1,
-            borderColor: answers[s.id] === "yes" ? colors.green : colors.line,
-            backgroundColor: semanticColors.surface,
+            gap: compact ? 6 : 10,
+            padding: compact ? 0 : 12,
+            paddingVertical: compact ? 8 : 12,
+            flexDirection: "column",
+            alignItems: "stretch",
+            borderRadius: compact ? 0 : 16,
+            borderWidth: compact ? 0 : 1,
+            borderBottomWidth: 1,
+            borderColor: compact ? colors.line : answers[s.id] === "yes" ? colors.green : colors.line,
+            backgroundColor: compact ? "transparent" : semanticColors.surface,
           }}
         >
-          <TimeSlotHeading slot={s} index={index} />
+          <View style={{ minWidth: 0, gap: compact ? 3 : 8 }}>
+          <TimeSlotHeading slot={s} index={index} compact={compact} />
           {summary.recommended.includes(s.id) && (
             <View style={styles.row}>
               <Sparkles size={13} color={colors.green} />
               <Text style={[styles.label, { color: colors.green }]}>
-                Best availability
+                {compact ? "Best so far" : "Best availability so far"}
               </Text>
             </View>
           )}
-          <Text style={styles.muted}>
+          {(!compact || closed || s.yes + s.maybe + s.no > 0) && <Text style={compact ? styles.label : styles.muted}>
             {s.yes} Yes · {s.maybe} Maybe · {s.no} No
-          </Text>
-          {closed ? (
+          </Text>}
+          {closed && (
             <Text style={styles.muted}>
               Your answer: {saved?.answers[s.id] ?? "Unanswered"}
             </Text>
-          ) : (
+          )}
+          </View>
+          {!closed && (
             <View
               accessibilityRole="radiogroup"
               accessibilityLabel={`Availability for ${slotLabel(s)}`}
               style={{
                 flexDirection: "row",
+                width: compact ? "100%" : undefined,
+                maxWidth: compact ? 360 : undefined,
+                alignSelf: compact ? "center" : undefined,
+                flexShrink: 0,
                 borderRadius: 10,
-                borderWidth: 1,
+                borderWidth: 0,
+                gap: 4,
                 borderColor: colors.line,
                 overflow: "hidden",
               }}
             >
-              {(["yes", "maybe", "no"] as const).map((v, index) => {
+              {(["yes", "maybe", "no"] as const).map((v) => {
                 const ChoiceIcon =
-                  v === "yes" ? Check : v === "maybe" ? CircleHelp : X;
+                  v === "yes" ? ThumbsUp : v === "maybe" ? CircleHelp : ThumbsDown;
                 const selected = answers[s.id] === v;
                 return (
                   <Pressable
                     key={v}
                     accessibilityRole="radio"
                     accessibilityLabel={v[0].toUpperCase() + v.slice(1)}
+                    aria-checked={selected}
                     accessibilityState={{
                       checked: answers[s.id] === v,
                       disabled: busy,
@@ -809,23 +827,27 @@ export function AvailabilityControls({
                     }}
                     style={{
                       flex: 1,
-                      minHeight: 48,
-                      paddingVertical: 8,
+                      minHeight: compact ? 44 : 48,
+                      minWidth: compact ? 44 : undefined,
+                      paddingVertical: 5,
+                      paddingHorizontal: 4,
+                      borderRadius: 10,
+                      borderWidth: 1,
+                      borderColor: selected ? semanticColors.accent : semanticColors.border,
                       flexDirection: "row",
                       flexWrap: "wrap",
                       gap: 4,
                       alignItems: "center",
                       justifyContent: "center",
                       backgroundColor: selected
-                        ? semanticColors.primaryContainer
-                        : "transparent",
-                      borderLeftWidth: index ? 1 : 0,
-                      borderLeftColor: colors.line,
+                        ? semanticColors.accent
+                        : semanticColors.surfaceRaised,
+                      opacity: busy ? 0.65 : 1,
                     }}
                   >
                     <ChoiceIcon
-                      size={15}
-                      color={selected ? colors.green : colors.muted}
+                      size={16}
+                      color={selected ? semanticColors.onAccent : semanticColors.textSecondary}
                       accessible={false}
                     />
                     <Text
@@ -833,8 +855,13 @@ export function AvailabilityControls({
                         styles.body,
                         {
                           fontSize: 14,
+                          lineHeight: 20,
+                          includeFontPadding: false,
+                          textAlignVertical: "center",
+                          textAlign: "center",
+                          paddingVertical: 0,
                           fontWeight: answers[s.id] === v ? "700" : "400",
-                          color: selected ? colors.green : colors.ink,
+                          color: selected ? semanticColors.onAccent : semanticColors.textSecondary,
                         },
                       ]}
                     >
@@ -855,8 +882,8 @@ export function AvailabilityControls({
             accessibilityState={{ checked: none, disabled: busy }}
             disabled={busy}
             onPress={() => {
-              setAnswers(noneAvailability(slots));
-              setNone(true);
+              setAnswers(none ? {} : noneAvailability(slots));
+              setNone(!none);
               setStatus("");
             }}
             style={{
@@ -864,6 +891,13 @@ export function AvailabilityControls({
               flexDirection: "row",
               alignItems: "center",
               gap: 9,
+              justifyContent: "center",
+              paddingHorizontal: 12,
+              marginTop: 8,
+              borderWidth: 1,
+              borderRadius: 10,
+              borderColor: none ? colors.green : colors.line,
+              backgroundColor: none ? colors.lime : colors.white,
             }}
           >
             <Text
@@ -874,11 +908,12 @@ export function AvailabilityControls({
             >
               {none ? "☑" : "□"}
             </Text>
-            <Text style={[styles.body, { fontSize: 14 }]}>
+            <Text style={[styles.body, { fontSize: 14, fontWeight: "600", textAlign: "center", flexShrink: 1 }]}>
               None of these work
             </Text>
           </Pressable>
-          <Action
+          <PlanningActionRow primary={
+          <Action compact
             title={saved ? "Update Availability" : "Save Availability"}
             disabled={!dirty || (!Object.keys(answers).length && !none)}
             run={async () => {
@@ -901,13 +936,23 @@ export function AvailabilityControls({
               }
             }}
           />
+          } secondary={
+      dirty && (Object.keys(answers).length > 0 || none) && (
+        <Button compact secondary title="Discard" accessibilityLabel="Discard changes" disabled={busy} onPress={() => {
+          setAnswers(Object.fromEntries(Object.entries(saved?.answers ?? {}).filter(([id]) => slots.some((slot) => slot.id === id))));
+          setNone(saved?.none_work ?? false);
+          setStatus("");
+        }} />
+      )
+          } />
         </>
       )}
       <Text accessibilityLiveRegion="polite" style={styles.muted}>
-        {status ||
+        {busy ? "Saving availability…" : dirty && (Object.keys(answers).length > 0 || none) && !closed ? "Unsaved changes · Unanswered is not No." : status ||
           (saved ? "Saved · " : "") +
             `${summary.respondents} people answered. Unanswered is not No.`}
       </Text>
+
     </View>
   );
 }
@@ -921,6 +966,7 @@ export function TimeFinalization({
 }) {
   const { data, userId, act } = useBeacon();
   const now = useNow();
+  const { colors } = useTheme();
   const { requestConfirmation, confirmationDialog } = useConfirmation();
   const [selected, setSelected] = useState("");
   const summary = availabilitySummary(data, thread, userId ?? "", now);
@@ -938,6 +984,7 @@ export function TimeFinalization({
   return (
     <PlanningDisclosure
       title="Select final time"
+      icon={<CalendarClock size={18} color={colors.green} />}
       summary={
         summary.respondents
           ? `${summary.respondents} answered · Organizer decision`
@@ -951,7 +998,7 @@ export function TimeFinalization({
             <PlanningChoiceRow
               key={s.id}
               title={slotLabel(s)}
-              description={`${summary.recommended.includes(s.id) ? "Recommended · " : ""}${s.yes} Yes · ${s.maybe} Maybe · ${s.no} No`}
+              description={`${selected === s.id ? "Selected time · " : summary.recommended.includes(s.id) ? "Best availability so far · " : ""}${s.yes} Yes · ${s.maybe} Maybe · ${s.no} No`}
               selected={selected === s.id}
               onSelect={() => setSelected(s.id)}
             />

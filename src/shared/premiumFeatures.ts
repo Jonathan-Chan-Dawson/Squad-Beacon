@@ -2,6 +2,54 @@ import type { PremiumTier } from "./entitlements";
 
 /** Stable identifiers shared by configuration writers and contextual UI. */
 export const premiumFeatures = {
+  score_rounds: {
+    tier: "pro",
+    status: "available",
+    scope: "shared",
+    label: "Multi-round scoring",
+  },
+  council_workflows: {
+    tier: "pro",
+    status: "available",
+    scope: "shared",
+    label: "Linked Council decision workflows",
+  },
+  hosting: {
+    tier: "plus",
+    status: "available",
+    scope: "shared",
+    label: "Custom RSVP questions and organizer notes",
+  },
+  hosting_coordination: {
+    tier: "pro",
+    status: "available",
+    scope: "shared",
+    label: "Check-in and delegated hosting",
+  },
+  agendas: {
+    tier: "plus",
+    status: "available",
+    scope: "shared",
+    label: "Agendas and preparation timelines",
+  },
+  agenda_coordination: {
+    tier: "pro",
+    status: "available",
+    scope: "shared",
+    label: "Agenda responsibilities and live stages",
+  },
+  checklist_organization: {
+    tier: "plus",
+    status: "available",
+    scope: "shared",
+    label: "Task priorities and preparation filters",
+  },
+  checklist_dependencies: {
+    tier: "pro",
+    status: "available",
+    scope: "shared",
+    label: "Task prerequisites",
+  },
   checklist_details: {
     tier: "plus",
     status: "available",

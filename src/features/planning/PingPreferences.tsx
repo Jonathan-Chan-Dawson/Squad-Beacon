@@ -61,10 +61,11 @@ export function PingPreferences({
           run={() => save(response?.available_after ?? null)}
         />
       ) : null}
+      <Txt muted>Auto-RSVP is optional. If a Beacon requires approval, this submits a request; Interested alone never means Going.</Txt>
       <Button
         compact
         secondary
-        title="Interested After…"
+        title="Available after…"
         onPress={() => setEditing(!editing)}
       />
       {editing ? (

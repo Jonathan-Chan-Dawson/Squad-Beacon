@@ -34,10 +34,10 @@ export function CreationDisclosure({
   return (
     <View
       style={{
-        borderWidth: 1,
+        borderBottomWidth: 1,
         borderColor: colors.line,
-        borderRadius: 12,
-        backgroundColor: open ? colors.lime : colors.white,
+        borderRadius: open ? 12 : 0,
+        backgroundColor: open ? colors.white : "transparent",
         paddingHorizontal: 10,
         paddingTop: compact ? 2 : 4,
         paddingBottom: open ? 10 : 2,

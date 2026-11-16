@@ -250,7 +250,9 @@ function PersonRow({
         gap: space.xs,
         paddingHorizontal: space.xs,
         borderRadius: radius.md,
-        backgroundColor: colors.surfaceRaised,
+        backgroundColor: "transparent",
+        borderBottomWidth: 1,
+        borderBottomColor: colors.border,
       }}
     >
       <Pressable

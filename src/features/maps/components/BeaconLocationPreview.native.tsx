@@ -27,8 +27,8 @@ export function BeaconLocationPreview({
       onPress={onPress}
       disabled={!onPress}
       style={{
-        height: 72,
-        width: compact ? 72 : "100%",
+        height: compact ? 130 : 72,
+        width: compact ? 96 : "100%",
         borderRadius: 16,
         backgroundColor: colors.surfaceRaised,
         overflow: "hidden",

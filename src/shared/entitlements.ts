@@ -205,14 +205,25 @@ export function resolvePremiumFeature(
   const definition = premiumFeatures[feature];
   const supported =
     data.is_demo === true ||
-    ([
-      "checklist_details",
-      "checklist_presets",
-      "library_organization",
-      "preparation",
-    ].includes(feature)
-      ? data.capabilities?.premium_tools === true
-      : data.capabilities?.advanced_beacon_tools === true);
+    (["score_rounds", "council_workflows"].includes(feature)
+      ? data.capabilities?.beacon_specialized === true
+      : ["hosting", "hosting_coordination"].includes(feature)
+        ? data.capabilities?.beacon_hosting === true
+        : [
+              "agendas",
+              "agenda_coordination",
+              "checklist_organization",
+              "checklist_dependencies",
+            ].includes(feature)
+          ? data.capabilities?.beacon_expansion === true
+          : [
+                "checklist_details",
+                "checklist_presets",
+                "library_organization",
+                "preparation",
+              ].includes(feature)
+            ? data.capabilities?.premium_tools === true
+            : data.capabilities?.advanced_beacon_tools === true);
   const entitlement =
     definition.scope === "personal" || personalOnly || !activity
       ? resolvePersonalEntitlements(data, data.viewer_id ?? null)

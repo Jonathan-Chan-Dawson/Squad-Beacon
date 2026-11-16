@@ -50,3 +50,4 @@ Maps feature
 - Plan Focus reuses contextFilters authorization, numbered physical stops and static paths; MapScreen isolates markers, fits on entry/explicit action and restores the prior camera/valid selection. Small clusters use MapNearbyPanel compact selection; quiet-map result feedback follows deliberate actions only.
 
 - Map Beacon cards place compact reaction and action controls above a full-size bottom action; ordinary 320px previews fit without scrolling while preserving the bounded fallback for larger content.
+- BeaconLocationPreview.web.tsx adds a compact, noninteractive CARTO mini map for authorized physical meeting locations beside arrival. Tapping opens the canonical Map; other web preview sizes retain their existing presentation.

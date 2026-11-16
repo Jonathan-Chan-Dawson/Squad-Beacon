@@ -49,3 +49,7 @@ Documentation guide
 - CARD_CONTEXT_SOCIAL_CHAT_POLISH_2026-10-31.md: linked-context sizing, shared social rows, tab-aligned list utilities, compact chat creation and responsive evidence.
 
 - BEACON_MAP_UI_HOTFIXES_2026-10-31.md: compact context, inline Tools counts, Map social actions, dedicated Details Chat access, centered fade motion, scrollbar polish and verification evidence.
+
+- SB_BEACON_PLUS_2_VALIDATION_2026-11-15.md: Phase F implementation scope, local validation, additive migrations and deferred extensions.
+
+- BEACON_UI_REDESIGN_PLAN.md and BEACON_UI_REDESIGN_VALIDATION.md: approved 120-item presentation checklist, implementation scope and responsive/behavioral verification.

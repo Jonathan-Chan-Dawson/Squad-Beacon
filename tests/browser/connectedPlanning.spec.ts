@@ -5,9 +5,11 @@ test.beforeEach(async ({ page }) => {
   await page.getByRole("button", { name: /Explore the demo/ }).click();
 });
 
-test("Find a Time saves independent answers and finalizes without publishing", async ({
+for (const width of [320, 390, 1100]) {
+test(`Find a Time saves independent answers and finalizes without publishing at ${width}px`, async ({
   page,
 }) => {
+  await page.setViewportSize({ width, height: 844 });
   await page.getByRole("tab", { name: "Squads", exact: true }).click();
   await page
     .getByRole("button", { name: /Responses & Invitations, \d+ pending/ })
@@ -34,6 +36,26 @@ test("Find a Time saves independent answers and finalizes without publishing", a
     await row
       .getByRole("button", { name: "Choose Times", exact: true })
       .click();
+  const option = row.getByTestId(/^time-option-/).first();
+  const group = option.getByRole("radiogroup");
+  const optionBox = await option.boundingBox();
+  const groupBox = await group.boundingBox();
+  expect(Math.abs(groupBox!.x + groupBox!.width / 2 - optionBox!.x - optionBox!.width / 2)).toBeLessThan(2);
+  expect(groupBox!.width).toBeLessThanOrEqual(360);
+  expect(optionBox!.height).toBeLessThan(160);
+  for (const name of ["Yes", "Maybe", "No"]) {
+    const box = await group.getByRole("radio", { name, exact: true }).boundingBox();
+    await expect(group.getByRole("radio", { name, exact: true }).getByText(name, { exact: true })).toBeVisible();
+    expect(box!.height).toBeGreaterThanOrEqual(44);
+    expect(box!.width).toBeGreaterThanOrEqual(44);
+    expect(Math.abs(box!.y - groupBox!.y)).toBeLessThan(3);
+  }
+  await row.screenshot({ path: `.expo/time-responses-${width}.png`, animations: "disabled" });
+  await row.getByRole("radio", { name: "Yes", exact: true }).first().click();
+  const discard = row.getByRole("button", { name: "Discard changes", exact: true });
+  await expect(discard).toBeVisible();
+  await discard.click();
+  await expect(row.getByRole("radio", { name: "Yes", exact: true }).first()).toHaveAttribute("aria-checked", "false");
   await row.getByRole("radio", { name: "Yes", exact: true }).first().click();
   await row.getByRole("radio", { name: "Maybe", exact: true }).nth(1).click();
   await row
@@ -58,20 +80,22 @@ test("Find a Time saves independent answers and finalizes without publishing", a
     .getByRole("button", { name: "Use this time", exact: true })
     .click();
   await expect(
-    row.getByRole("button", { name: "Review & Create Beacon", exact: true }),
+    row.getByRole("button", { name: "Review Beacon", exact: true }),
   ).toBeVisible();
   await expect(
     row.getByRole("button", { name: "View Beacon", exact: true }),
   ).toHaveCount(0);
   await page.screenshot({ path: ".expo/connected-time-selected.png" });
   await row
-    .getByRole("button", { name: "Review & Create Beacon", exact: true })
+    .getByRole("button", { name: "Review Beacon", exact: true })
     .click();
   await expect(page).toHaveURL(/create/);
   await expect(page.getByRole("textbox").first()).toHaveValue(
     "Find a court time",
   );
 });
+
+}
 
 test("approval choices require Save and retain multiple saved choices", async ({
   page,

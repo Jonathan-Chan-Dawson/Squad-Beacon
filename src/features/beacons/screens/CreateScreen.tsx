@@ -2275,9 +2275,6 @@ function CreateEditor({ templateBrowser = false }: { templateBrowser?: boolean }
         title="Appearance"
         visible={appearanceOpen}
         onClose={() => setAppearanceOpen(false)}
-        footer={
-          <Button title="Done" onPress={() => setAppearanceOpen(false)} />
-        }
       >
         <Text style={styles.h2}>Category</Text>
         <ActivityCategoryChoices value={category} onChange={(value, idea) => {
@@ -2290,6 +2287,7 @@ function CreateEditor({ templateBrowser = false }: { templateBrowser?: boolean }
           value={beaconControls}
           onChange={setBeaconControls}
         />
+      <Button title="Done" onPress={() => setAppearanceOpen(false)} />
       </Sheet>
       <Sheet
         title="Choose aspirations"

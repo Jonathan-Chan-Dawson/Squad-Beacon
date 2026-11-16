@@ -336,6 +336,9 @@ export interface Message {
   created_at: string;
 }
 export interface BeaconChecklistItem {
+  priority?: "normal" | "high";
+  prerequisite_id?: string | null;
+  coordination_revision?: number;
   due_on?: string | null;
   due_at?: string | null;
   due_timezone?: string | null;
@@ -441,6 +444,9 @@ export interface ProfileVisibilityGrant {
   target_id: ID;
 }
 export interface Data {
+  round_scores?: {activity_id:string;team_id:string;round_name:string;score:number;revision:number}[];
+  recap_consents?: {activity_id:string;user_id:string;allowed:boolean}[];
+  attendee_details?: import("@/src/features/beacons/hosting").AttendeeDetails[];
   council_option_groups?: {proposal_id:string;group_label:string}[];
   council_explanations?: {thread_id:string;user_id:string;body:string}[];
   premium_tool_configs?: import("@/src/features/beacons/premiumTools").ToolConfiguration[];
@@ -542,7 +548,7 @@ export interface Data {
   rsvps: RSVP[];
   resolved_beacon_responses?: RSVP[];
   presence?: Presence[];
-  capabilities?: { advanced_beacon_tools?:boolean; premium_tools?: boolean; squad_boosts?: boolean; premium?: boolean; plan_editor?: boolean; recurrence_v2?: boolean; guest_sharing?: boolean; guest_planning?: boolean; living_plans?: boolean; collaborative_plans?: boolean; repeatable_plans?: boolean; connected_planning?: boolean; living_activity?: boolean; rsvp_decline?: boolean; beacon_supplies?: boolean; status_privacy?: boolean; status_attachments?: boolean; status_current_beacon?: boolean };
+  capabilities?: { beacon_expansion?: boolean; beacon_hosting?:boolean; beacon_stories?:boolean; beacon_specialized?:boolean; advanced_beacon_tools?:boolean; premium_tools?: boolean; squad_boosts?: boolean; premium?: boolean; plan_editor?: boolean; recurrence_v2?: boolean; guest_sharing?: boolean; guest_planning?: boolean; living_plans?: boolean; collaborative_plans?: boolean; repeatable_plans?: boolean; connected_planning?: boolean; living_activity?: boolean; rsvp_decline?: boolean; beacon_supplies?: boolean; status_privacy?: boolean; status_attachments?: boolean; status_current_beacon?: boolean };
   comments: Comment[];
   reactions: Reaction[];
   locations: LocationSession[];
@@ -653,6 +659,10 @@ export function normalizeData(value: Partial<Data> | null | undefined): Data {
   data.capabilities = { connected_planning: data.is_demo === true || data.capabilities?.connected_planning === true, living_activity: data.is_demo === true || data.capabilities?.living_activity === true, status_attachments: data.is_demo === true || data.capabilities?.status_attachments === true, beacon_supplies: data.is_demo === true || data.capabilities?.beacon_supplies === true, status_privacy: data.is_demo === true || data.capabilities?.status_privacy === true, status_current_beacon: data.is_demo === true || data.capabilities?.status_current_beacon === true, rsvp_decline: data.is_demo === true || data.capabilities?.rsvp_decline === true };
   data.dm_message_reads = Array.isArray(data.dm_message_reads) ? data.dm_message_reads : [];
   data.plan_stops = Array.isArray(data.plan_stops) ? data.plan_stops : [];
+  data.capabilities.beacon_hosting = data.is_demo === true || value?.capabilities?.beacon_hosting === true;
+  data.capabilities.beacon_stories = data.is_demo === true || value?.capabilities?.beacon_stories === true;
+  data.capabilities.beacon_specialized = data.is_demo === true || value?.capabilities?.beacon_specialized === true;
+  data.capabilities.beacon_expansion = data.is_demo === true || value?.capabilities?.beacon_expansion === true;
   data.capabilities.plan_editor = data.is_demo === true || value?.capabilities?.plan_editor === true;
   data.capabilities.recurrence_v2 = data.is_demo === true || value?.capabilities?.recurrence_v2 === true;
   data.capabilities.advanced_beacon_tools = data.is_demo === true || value?.capabilities?.advanced_beacon_tools === true;

@@ -61,8 +61,9 @@ test("Interested After saves availability independently and allows removal", asy
     .getByRole("button", { name: /^Open / })
     .first()
     .click();
+  await page.getByRole("button", { name: "Interested", exact: true }).first().click();
   await page
-    .getByRole("button", { name: "Interested After…", exact: true })
+    .getByRole("button", { name: "Available after…", exact: true })
     .click();
   await page.getByRole("button", { name: "In one hour", exact: true }).click();
   await page
@@ -73,10 +74,10 @@ test("Interested After saves availability independently and allows removal", asy
     page.getByRole("checkbox", { name: /Auto-RSVP/ }),
   ).toHaveAttribute("aria-checked", "false");
   await page
-    .getByRole("button", { name: "Interested After…", exact: true })
+    .getByRole("button", { name: "Available after…", exact: true })
     .click();
   await page
-    .getByRole("button", { name: "Interested now", exact: true })
+    .getByRole("button", { name: "No restriction", exact: true })
     .click();
   await page
     .getByRole("button", { name: "Save Interested", exact: true })

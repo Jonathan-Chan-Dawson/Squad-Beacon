@@ -26,7 +26,7 @@ import {
   type ToolSettings,
 } from "../premiumTools";
 const defaults: Record<
-  Exclude<ToolKind, "memories" | "journal">,
+  Exclude<ToolKind, "memories" | "journal" | "agenda" | "hosting">,
   ToolSettings
 > = {
   focus: {
@@ -50,7 +50,7 @@ export function PremiumToolSettings({
 }: {
   activity: Activity;
   threadId?: string;
-  kind: Exclude<ToolKind, "memories" | "journal">;
+  kind: Exclude<ToolKind, "memories" | "journal" | "agenda" | "hosting">;
   onStart?: (settings: ToolSettings) => void;
 }) {
   const { data, userId } = useBeacon();
@@ -137,7 +137,7 @@ function Editor({
 }: {
   activity: Activity;
   threadId?: string;
-  kind: Exclude<ToolKind, "memories" | "journal">;
+  kind: Exclude<ToolKind, "memories" | "journal" | "agenda" | "hosting">;
   initial: ToolSettings;
   revision: number;
   close: () => void;
@@ -310,47 +310,108 @@ function Editor({
                 }
               />
               {pro && (
+                <Chips
+                  options={["standard", "preparation", "session"]}
+                  value={s.layout ?? "standard"}
+                  onChange={(layout) =>
+                    set({ ...s, layout: layout as ToolSettings["layout"] })
+                  }
+                />
+              )}
+              <Txt muted>
+                Tool order ·{" "}
+                {(s.module_order?.length
+                  ? s.module_order
+                  : enabledTools.map((t) => t.id)
+                )
+                  .map((id) => enabledTools.find((t) => t.id === id)?.label)
+                  .filter(Boolean)
+                  .join(" → ")}
+              </Txt>
+              <Chips
+                accessibilityPrefix="Lead with"
+                options={enabledTools.map((t) => t.label)}
+                value={
+                  enabledTools.find((t) => t.id === s.module_order?.[0])
+                    ?.label ?? ""
+                }
+                onChange={(label) => {
+                  const id = enabledTools.find((t) => t.label === label)?.id;
+                  if (id)
+                    set({
+                      ...s,
+                      module_order: [
+                        id,
+                        ...(s.module_order?.length
+                          ? s.module_order
+                          : enabledTools.map((t) => t.id)
+                        ).filter((k) => k !== id),
+                      ],
+                    });
+                }}
+              />
+              {pro && (data.is_demo || data.capabilities?.beacon_stories) && (
                 <>
-                  <Chips
-                    options={["standard", "preparation", "session"]}
-                    value={s.layout ?? "standard"}
-                    onChange={(layout) =>
-                      set({ ...s, layout: layout as ToolSettings["layout"] })
+                  {(s.sections ?? []).map((section) => (
+                    <View key={section.id} style={{ gap: 8 }}>
+                      <Field
+                        label="Activity section title"
+                        value={section.title}
+                        maxLength={80}
+                        onChangeText={(title) =>
+                          set({
+                            ...s,
+                            sections: s.sections!.map((row) =>
+                              row.id === section.id ? { ...row, title } : row,
+                            ),
+                          })
+                        }
+                      />
+                      <Field
+                        label="Activity section content"
+                        multiline
+                        value={section.body}
+                        maxLength={1000}
+                        onChangeText={(body) =>
+                          set({
+                            ...s,
+                            sections: s.sections!.map((row) =>
+                              row.id === section.id ? { ...row, body } : row,
+                            ),
+                          })
+                        }
+                      />
+                      <Button
+                        secondary
+                        title={`Remove section ${section.title}`}
+                        onPress={() =>
+                          set({
+                            ...s,
+                            sections: s.sections!.filter(
+                              (row) => row.id !== section.id,
+                            ),
+                          })
+                        }
+                      />
+                    </View>
+                  ))}
+                  <Button
+                    secondary
+                    title="Add activity section"
+                    disabled={(s.sections?.length ?? 0) >= 6}
+                    onPress={() =>
+                      set({
+                        ...s,
+                        sections: [
+                          ...(s.sections ?? []),
+                          {
+                            id: randomUUID(),
+                            title: "Activity notes",
+                            body: "",
+                          },
+                        ],
+                      })
                     }
-                  />
-                  <Txt muted>
-                    Tool order ·{" "}
-                    {(s.module_order?.length
-                      ? s.module_order
-                      : enabledTools.map((t) => t.id)
-                    )
-                      .map((id) => enabledTools.find((t) => t.id === id)?.label)
-                      .filter(Boolean)
-                      .join(" → ")}
-                  </Txt>
-                  <Chips
-                    accessibilityPrefix="Lead with"
-                    options={enabledTools.map((t) => t.label)}
-                    value={
-                      enabledTools.find((t) => t.id === s.module_order?.[0])
-                        ?.label ?? ""
-                    }
-                    onChange={(label) => {
-                      const id = enabledTools.find(
-                        (t) => t.label === label,
-                      )?.id;
-                      if (id)
-                        set({
-                          ...s,
-                          module_order: [
-                            id,
-                            ...(s.module_order?.length
-                              ? s.module_order
-                              : enabledTools.map((t) => t.id)
-                            ).filter((k) => k !== id),
-                          ],
-                        });
-                    }}
                   />
                 </>
               )}

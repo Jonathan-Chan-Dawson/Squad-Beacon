@@ -1,3 +1,4 @@
+import { PlanningDisclosure } from "@/src/features/planning/PlanningControls";
 import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
 import React, { useCallback, useId, useMemo, useRef, useState } from "react";
 import {
@@ -237,24 +238,26 @@ export function CreationInvitees({
                       publish. We recommend 50 or fewer; larger selections can
                       be reviewed before publishing.
                     </Txt>
-                    <Button
-                      compact
-                      secondary
-                      title="Clear selection"
-                      onPress={() => setDraftIds([])}
-                    />
-
-                    {unavailable.map((id) => (
-                      <Button
-                        key={id}
-                        compact
-                        secondary
-                        title="Remove unavailable friend"
-                        onPress={() =>
-                          setDraftIds(draftIds.filter((value) => value !== id))
-                        }
-                      />
-                    ))}
+                    {!!unavailable.length && (
+                      <PlanningDisclosure
+                        title="Unavailable invitations"
+                        summary={`${unavailable.length} people need review`}
+                      >
+                        {unavailable.map((id) => (
+                          <Button
+                            key={id}
+                            compact
+                            secondary
+                            title="Remove unavailable friend"
+                            onPress={() =>
+                              setDraftIds(
+                                draftIds.filter((value) => value !== id),
+                              )
+                            }
+                          />
+                        ))}
+                      </PlanningDisclosure>
+                    )}
                     <SocialSelector
                       groupBehavior="filterFriends"
                       friends={friends}

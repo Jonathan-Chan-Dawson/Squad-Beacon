@@ -9,6 +9,20 @@ import {
 } from "lucide-react-native";
 import { useTheme } from "@/src/shared/ui";
 
+/** Keep response submission and its quieter reset action together. */
+export function PlanningActionRow({ primary, secondary }: {
+  primary: React.ReactNode;
+  secondary?: React.ReactNode;
+}) {
+  const { colors } = useTheme();
+  return (
+    <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "flex-start", gap: 8, paddingTop: 10, marginTop: 6, borderTopWidth: 1, borderTopColor: colors.line }}>
+      {secondary && <View style={{ minWidth: 96 }}>{secondary}</View>}
+      <View style={{ flexGrow: 1, flexBasis: 140, minWidth: 140 }}>{primary}</View>
+    </View>
+  );
+}
+
 export function PlanningLink({
   title,
   onPress,
@@ -51,16 +65,18 @@ export function PlanningDisclosure({
   summary,
   children,
   initialOpen = false,
+  icon,
 }: {
   title: string;
   summary?: string;
   children: React.ReactNode;
   initialOpen?: boolean;
+  icon?: React.ReactNode;
 }) {
   const { colors, styles } = useTheme();
   const [open, setOpen] = useState(initialOpen);
   return (
-    <View style={{ gap: open ? 8 : 0 }}>
+    <View style={{ gap: open ? 8 : 0, borderBottomWidth: 1, borderBottomColor: colors.line, paddingVertical: 4 }}>
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={title}
@@ -74,11 +90,12 @@ export function PlanningDisclosure({
           gap: 10,
         }}
       >
+        {icon}
         <View style={{ flex: 1, gap: 2 }}>
           <Text style={[styles.body, { fontSize: 14, fontWeight: "600" }]}>
             {title}
           </Text>
-          {summary && <Text style={styles.muted}>{summary}</Text>}
+          {summary && <Text style={[styles.label, { fontSize: 12, lineHeight: 17, fontWeight: "400", color: colors.muted }]}>{summary}</Text>}
         </View>
         {open ? (
           <ChevronDown size={17} color={colors.muted} />

@@ -171,7 +171,7 @@ test("Do with others creates an independent Ping and offers featuring without re
     }),
   ).toHaveValue("Shooting hoops");
   await editor
-    .getByRole("button", { name: "Create Ping", exact: true })
+    .getByRole("button", { name: "Send Ping", exact: true })
     .click();
   await expect(
     page.getByRole("button", { name: "Feature on Status", exact: true }),
@@ -197,7 +197,7 @@ test("featuring a newly created Ping asks before replacing the existing feature"
       .getByRole("button", { name: "Ping", exact: true })
       .click();
     await page
-      .getByRole("button", { name: "Create Ping", exact: true })
+      .getByRole("button", { name: "Send Ping", exact: true })
       .click();
     await expect(
       page.getByRole("dialog", { name: "Created successfully", exact: true }),
@@ -452,7 +452,7 @@ test("Featured creation hands off after dismissing the Status editor", async ({
     .click();
   await status.getByRole("button", { name: "Create New", exact: true }).click();
   await status
-    .getByRole("button", { name: "Create Ping", exact: true })
+    .getByRole("button", { name: "Send Ping", exact: true })
     .click();
   await expect(status).toHaveCount(0);
   await expect(

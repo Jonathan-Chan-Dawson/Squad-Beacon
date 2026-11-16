@@ -73,7 +73,7 @@ test("a Plan decision uses the existing Ping composer and returns to its stop", 
   await page
     .getByLabel("What are you thinking?", { exact: true })
     .fill("Cafe or walk?");
-  await page.getByRole("button", { name: "Create Ping", exact: true }).click();
+  await page.getByRole("button", { name: "Send Ping", exact: true }).click();
   await expect(page).toHaveURL(/\/plan\//);
   await expect(
     page.getByRole("button", { name: "1. Cafe or walk?", exact: true }),

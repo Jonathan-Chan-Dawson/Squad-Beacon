@@ -1,3 +1,5 @@
+import { PlanningDisclosure } from "@/src/features/planning/PlanningControls";
+import { TaskCoordination } from "./components/TaskCoordination";
 import { useChecklistPages } from "./useChecklistPages";
 import {
   JournalEntryDetails,
@@ -143,6 +145,7 @@ export function BeaconTools({
   const [taskDetails, setTaskDetails] = useState(false);
   const [taskLimit, setTaskLimit] = useState(50);
   const [taskFilter, setTaskFilter] = useState("All tasks");
+  const [taskQuery, setTaskQuery] = useState("");
   const taskPremium = resolvePremiumFeature(
     data,
     "checklist_details",
@@ -174,6 +177,10 @@ export function BeaconTools({
     [focusIndex, setFocusIndex] = useState(0),
     [focusSummary, setFocusSummary] = useState(false),
     [focusCompleted, setFocusCompleted] = useState(0);
+  const [focusGoal, setFocusGoal] = useState("");
+  const [focusHistory, setFocusHistory] = useState<
+    import("./focusTimer").FocusSessionRecord[]
+  >([]);
   useFocusPersistence(
     `beacon.focus.${userId}.${data.is_demo ? (data.demo_session_id ?? "demo") : "live"}.${activity.id}`,
     {
@@ -185,6 +192,8 @@ export function BeaconTools({
       index: focusIndex,
       summary: focusSummary,
       completed: focusCompleted,
+      goal: focusGoal,
+      history: focusHistory,
     },
     (stored) => {
       setTimer(stored.timer);
@@ -195,6 +204,8 @@ export function BeaconTools({
       setFocusIndex(stored.index);
       setFocusSummary(stored.summary);
       setFocusCompleted(stored.completed);
+      setFocusGoal(stored.goal ?? "");
+      setFocusHistory(stored.history ?? []);
     },
   );
   const startSequence = (settings: ToolSettings) => {
@@ -238,15 +249,25 @@ export function BeaconTools({
         )
         .sort((left, right) => left.created_at.localeCompare(right.created_at))
     : [];
-  const filteredChecklist = allChecklist.filter((item) =>
-    taskFilter === "Unassigned"
-      ? !item.assignee_id
-      : taskFilter === "Overdue"
-        ? !item.completed &&
-          !!(item.due_at || item.due_on) &&
-          Date.parse(item.due_at || `${item.due_on}T23:59:59`) < now
-        : true,
-  );
+  const filteredChecklist = allChecklist
+    .filter((item) => item.text.toLowerCase().includes(taskQuery.toLowerCase()))
+    .filter((item) =>
+      taskFilter === "My tasks"
+        ? item.assignee_id === userId
+        : taskFilter === "Completed"
+          ? item.completed
+          : taskFilter === "High priority"
+            ? item.priority === "high"
+            : taskFilter === "Open tasks"
+              ? !item.completed
+              : taskFilter === "Unassigned"
+                ? !item.assignee_id
+                : taskFilter === "Overdue"
+                  ? !item.completed &&
+                    !!(item.due_at || item.due_on) &&
+                    Date.parse(item.due_at || `${item.due_on}T23:59:59`) < now
+                  : true,
+    );
   const checklist = filteredChecklist.slice(0, taskLimit);
   const notes = allowed
     ? data.beacon_notes
@@ -555,15 +576,33 @@ export function BeaconTools({
               />
             </View>
           )}
-          {taskPro.available && (
-            <Chips
-              options={["All tasks", "Overdue", "Unassigned"]}
-              value={taskFilter}
-              onChange={(value) => {
-                setTaskFilter(value);
-                setTaskLimit(50);
-              }}
-            />
+          <Field
+            label="Find checklist items"
+            value={taskQuery}
+            onChangeText={(value) => {
+              setTaskQuery(value);
+              setTaskLimit(50);
+            }}
+          />
+          {(taskPro.available || taskPremium.available) && (
+            <PlanningDisclosure title="Filter tasks" summary={taskFilter}>
+              <Chips
+                options={[
+                  "All tasks",
+                  "Open tasks",
+                  "My tasks",
+                  "High priority",
+                  "Completed",
+                  "Overdue",
+                  "Unassigned",
+                ]}
+                value={taskFilter}
+                onChange={(value) => {
+                  setTaskFilter(value);
+                  setTaskLimit(50);
+                }}
+              />
+            </PlanningDisclosure>
           )}
           {inlineEditors && checklistEditable && (
             <Button
@@ -1088,11 +1127,99 @@ export function BeaconTools({
           </Pressable>
           {displayedSection === "focus" ? (
             <View style={{ gap: 10, alignItems: "flex-start" }}>
-              <PremiumToolSettings
-                activity={activity}
-                kind="focus"
-                onStart={startSequence}
-              />
+              <PlanningDisclosure
+                title="Focus setup"
+                summary="Goals, presets, saved sequences and history"
+              >
+                {resolvePremiumFeature(data, "focus_sequences", activity)
+                  .available && (
+                  <Field
+                    label="Session goal · optional"
+                    value={focusGoal}
+                    onChangeText={setFocusGoal}
+                    maxLength={160}
+                  />
+                )}
+                {data.premium_tool_configs
+                  ?.filter(
+                    (c) =>
+                      c.activity_id === activity.id &&
+                      c.kind === "agenda" &&
+                      c.settings.agenda?.enabled &&
+                      c.settings.agenda.steps.length &&
+                      c.settings.agenda.steps.length <= 12,
+                  )
+                  .map((c) => (
+                    <Button
+                      key={c.id}
+                      secondary
+                      title="Start agenda as focus sequence"
+                      onPress={() =>
+                        startSequence({
+                          steps: c.settings.agenda!.steps.map((s) => ({
+                            label: s.label.slice(0, 36),
+                            minutes: s.minutes,
+                          })),
+                          summary: resolvePremiumFeature(
+                            data,
+                            "focus_groups",
+                            activity,
+                          ).available,
+                        })
+                      }
+                    />
+                  ))}
+                {focusHistory.length > 0 && (
+                  <PlanningDisclosure
+                    title="Private session history"
+                    summary={`${focusHistory.length} recent completed sessions on this device`}
+                  >
+                    {focusHistory.map((h) => (
+                      <Txt key={h.id}>
+                        {new Date(h.ended_at).toLocaleString()} · {h.minutes}{" "}
+                        min{h.goal ? ` · ${h.goal}` : ""}
+                      </Txt>
+                    ))}
+                  </PlanningDisclosure>
+                )}
+                {resolvePremiumFeature(data, "focus_sequences", activity)
+                  .available && (
+                  <PlanningDisclosure
+                    title="Focus session presets"
+                    summary="Study, deep work and practice intervals"
+                  >
+                    {[
+                      { name: "Study", work: 25, rest: 5 },
+                      { name: "Deep work", work: 50, rest: 10 },
+                      { name: "Practice", work: 15, rest: 3 },
+                    ].map((p) => (
+                      <Button
+                        key={p.name}
+                        secondary
+                        title={`Start ${p.name} session`}
+                        onPress={() =>
+                          startSequence({
+                            steps: [
+                              { label: p.name, minutes: p.work },
+                              { label: "Break", minutes: p.rest },
+                            ],
+                            summary: resolvePremiumFeature(
+                              data,
+                              "focus_groups",
+                              activity,
+                            ).available,
+                          })
+                        }
+                      />
+                    ))}
+                  </PlanningDisclosure>
+                )}
+                <PremiumToolSettings
+                  activity={activity}
+                  kind="focus"
+                  onStart={startSequence}
+                />
+              </PlanningDisclosure>
               {focusSteps.length > 0 && (
                 <>
                   <Txt>
@@ -1126,6 +1253,20 @@ export function BeaconTools({
                         title="Save private session summary"
                         onPress={() => {
                           setFocusCompleted((n) => n + 1);
+                          setFocusHistory((h) =>
+                            [
+                              {
+                                id: Crypto.randomUUID(),
+                                ended_at: new Date().toISOString(),
+                                minutes: focusSteps.reduce(
+                                  (n, s) => n + s.minutes,
+                                  0,
+                                ),
+                                goal: focusGoal,
+                              },
+                              ...h,
+                            ].slice(0, 50),
+                          );
                           setFocusSteps([]);
                         }}
                       />
@@ -1366,6 +1507,16 @@ export function BeaconTools({
         visible={!!editingItem}
         onClose={() => setEditingItem(null)}
       >
+        {editingItem && (
+          <TaskCoordination
+            key={`${editingItem.id}.${editingItem.coordination_revision ?? 0}`}
+            activity={activity}
+            item={
+              allChecklist.find((i) => i.id === editingItem.id) ?? editingItem
+            }
+            tasks={allChecklist}
+          />
+        )}
         <Field
           label="Checklist item"
           value={itemText}
@@ -1607,6 +1758,8 @@ function ChecklistItemRow({
           <Text style={styles.muted}>
             {assignedName ? "For " + assignedName + " · " : ""}
             {authorName}
+            {item.priority === "high" ? " · High priority" : ""}
+            {item.prerequisite_id ? " · Has prerequisite" : ""}
             {item.due_on || item.due_at
               ? ` · Due ${item.due_on || new Date(item.due_at!).toLocaleString([], { timeZone: item.due_timezone ?? activity.timezone })}`
               : ""}

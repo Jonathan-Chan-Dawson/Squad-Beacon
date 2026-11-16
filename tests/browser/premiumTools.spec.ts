@@ -13,6 +13,7 @@ test("focus sequences persist locally and a fresh demo session starts clean", as
     waitUntil: "domcontentloaded",
   });
   await page.getByRole("button", { name: /Explore the demo/ }).click();
+  await page.getByRole("button", { name: "Focus setup", exact: true }).click();
   await page
     .getByRole("button", { name: "Focus sequences", exact: true })
     .click();
@@ -76,6 +77,11 @@ for (const appearance of ["light", "dark"]) {
       .getByRole("button", { name: "Manage Boosts", exact: true })
       .click();
     await page.getByRole("button", { name: squad.name, exact: true }).click();
+    await expect(
+      page
+        .getByTestId("boost-benefits-grid")
+        .getByText("Supported", { exact: true }),
+    ).toBeVisible();
     const contribute = page.getByRole("button", {
       name: "Contribute one Boost",
       exact: true,

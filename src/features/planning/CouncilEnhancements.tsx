@@ -1,3 +1,4 @@
+import { CouncilWorkflow } from "./CouncilWorkflow";
 import React, { useState } from "react";
 import { View } from "react-native";
 import { Action, Button, Chips, Field, Txt } from "@/src/shared/ui";
@@ -42,6 +43,7 @@ export function CouncilEnhancements({ threadId }: { threadId: string }) {
   } as Activity;
   return (
     <View style={{ gap: 8 }}>
+      <CouncilWorkflow key={threadId} threadId={threadId}/>
       <PremiumToolSettings
         activity={activity}
         threadId={threadId}

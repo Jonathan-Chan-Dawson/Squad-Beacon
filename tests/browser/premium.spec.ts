@@ -34,28 +34,41 @@ for (const appearance of ["light", "dark"]) {
     await expect(
       page.getByText("Billing management · Coming soon", { exact: true }),
     ).toBeVisible();
-    const plusDetails = page.getByRole("button", {
-      name: "BEACON+",
-      exact: true,
-    });
-    await plusDetails.focus();
-    await plusDetails.press("Enter");
-    await expect(plusDetails).toHaveAttribute("aria-expanded", "true");
+    const comparison = page.getByTestId("premium-comparison");
+    await expect(comparison.getByText("Free", { exact: true })).toBeVisible();
+    await expect(comparison.getByText("Plus", { exact: true })).toBeVisible();
+    await expect(comparison.getByText("Pro", { exact: true })).toBeVisible();
     await expect(
-      page.getByText("Recurring multi-Beacon Plans included.", { exact: true }),
+      page.getByTestId("premium-benefit-Personal Beacon templates"),
+    ).toContainText("50");
+    await expect(
+      page.getByTestId("premium-benefit-Multi-Beacon repeats"),
     ).toBeVisible();
     expect(
       await page.evaluate(
         () => document.documentElement.scrollWidth <= innerWidth,
       ),
     ).toBe(true);
-    await page
-      .getByText("SIMULATED MEMBERSHIP", { exact: true })
+    await comparison
+      .getByText("Plus", { exact: true })
       .scrollIntoViewIfNeeded();
+    await page
+      .getByText("Compare what comes with Free, BEACON+ and Pro.", {
+        exact: true,
+      })
+      .click();
     await page.screenshot({
       path: `.expo/premium-${appearance}.png`,
       fullPage: true,
     });
+    if (appearance === "light") {
+      await page.setViewportSize({ width: 1200, height: 900 });
+      await page.screenshot({
+        path: ".expo/premium-desktop.png",
+        fullPage: true,
+      });
+      await page.setViewportSize({ width: 320, height: 900 });
+    }
     await page.goBack();
     await page
       .getByRole("button", { name: "Demo Controls", exact: true })

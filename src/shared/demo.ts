@@ -1,3 +1,6 @@
+import { demoRoundScore } from "@/src/features/beacons/roundScoring";
+import { demoHostingAction } from "@/src/features/beacons/hosting";
+import { demoTaskCoordination } from "@/src/features/beacons/taskCoordination";
 import {demoBoostAction,reconcileDemoBoosts} from "@/src/features/people/squadBoosts";
 import {applyDemoPremiumTools,toolFeature,validateToolSettings} from "@/src/features/beacons/premiumTools";
 import { demoPlanEditor } from "@/src/features/plans/demoPlanEditor";
@@ -1720,6 +1723,9 @@ function demoActionInner(previous: Data, action: string, p: Payload): Data {
   const d = structuredClone(previous),
     id = String(p.id ?? ""),
     uid = DEMO_ID;
+  if (demoRoundScore(d,action,p,uid)) return d;
+  if (demoHostingAction(d,action,p,uid)) return d;
+  if (demoTaskCoordination(d,action,p,uid)) return d;
   if (applyDemoPremiumTools(d,action,p,uid,()=>"demo-"+Math.random().toString(36).slice(2))) return d;
   if (applyDemoMessaging(d, uid, action, p, () => "demo-" + Math.random().toString(36).slice(2))) return d;
   if (action === "create_activity_with_invitees" || action === "create_plan_beacon_with_invitees") {
@@ -2806,6 +2812,8 @@ function demoActionInner(previous: Data, action: string, p: Payload): Data {
     }
   }
   if (action === "toggle_checklist_item") {
+    const target=d.beacon_checklist_items.find(t=>t.id===id);
+    if (target?.prerequisite_id && p.completed===true && !d.beacon_checklist_items.find(t=>t.id===target.prerequisite_id)?.completed) throw new Error("Complete the prerequisite task first.");
     const item = d.beacon_checklist_items.find((entry) => entry.id === id),
       activity = d.activities.find((entry) => entry.id === item?.activity_id);
     if (

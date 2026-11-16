@@ -28,7 +28,7 @@ export function PingAvailabilityEditor({
   const [custom, setCustom] = useState(false);
   return (
     <PlanningEditor
-      title="Interested After…"
+      title="Available after…"
       visible
       inline={inline}
       onClose={onClose}
@@ -36,7 +36,7 @@ export function PingAvailabilityEditor({
       <View style={{ gap: 8 }}>
         {(
           [
-            ["now", "Interested now"],
+            ["now", "No restriction"],
             ["hour", "In one hour"],
             ["tomorrow", "Tomorrow at this time"],
           ] as const

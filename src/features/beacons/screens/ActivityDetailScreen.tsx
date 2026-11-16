@@ -1,3 +1,6 @@
+import { BeaconHosting } from "../components/BeaconHosting";
+import { BeaconAgenda, BeaconPreparation } from "../components/BeaconAgenda";
+import { BeaconLocationPreview } from "@/src/features/maps/components/BeaconLocationPreview";
 import { PlanningDisclosure } from "@/src/features/planning/PlanningControls";
 import {PremiumToolSettings} from "../components/PremiumToolSettings";
 import type { Href } from "expo-router";
@@ -78,6 +81,8 @@ import * as ExpoLinking from "expo-linking";
 import { Stack, router, useLocalSearchParams } from "expo-router";
 import {
   Bookmark,
+  CalendarDays,
+  ChevronRight,
   Camera,
   Check,
   ClipboardCheck,
@@ -274,7 +279,7 @@ export default function ActivityDetail() {
     activityId: activityId ?? "",
     tab: entry.tab,
   });
-  const [selectedTool, setSelectedTool] = useState<ToolId | null>(entry.tool);
+  const [selectedTool, setSelectedTool] = useState<ToolId | "agenda" | null>(entry.tool);
   const [appliedToolRoute, setAppliedToolRoute] = useState(
     activity ? toolRouteKey : null,
   );
@@ -370,7 +375,7 @@ export default function ActivityDetail() {
                     maxWidth: "100%",
                     alignSelf: "center",
                     paddingHorizontal: tokens.layout.screenGutter,
-                    paddingTop: 228,
+                    paddingTop: 192,
                     paddingBottom: 112 + insets.bottom,
                     gap: tokens.space.md,
                   }}
@@ -388,35 +393,7 @@ export default function ActivityDetail() {
                   </View>
                   <Skeleton height={116} borderRadius={18} />
                 </View>
-                <GlassBar
-                  style={{
-                    position: "absolute",
-                    left: 0,
-                    right: 0,
-                    bottom: 0,
-                    borderRadius: 0,
-                    paddingHorizontal: tokens.layout.screenGutter,
-                    paddingTop: 9,
-                    paddingBottom: Math.max(insets.bottom, 10),
-                  }}
-                >
-                  <View
-                    style={{
-                      width: Math.min(
-                        width,
-                        tokens.layout.contentMaxWidth ?? width,
-                      ),
-                      maxWidth: "100%",
-                      alignSelf: "center",
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: 8,
-                    }}
-                  >
-                    <Skeleton height={48} style={{ flex: 1 }} />
-                    <Skeleton width={48} height={48} borderRadius={24} />
-                  </View>
-                </GlassBar>
+
               </View>
             ) : error ? (
               <>
@@ -983,7 +960,8 @@ export default function ActivityDetail() {
         ? "Invitation only"
         : "Open to join",
   ];
-  const enabledFor = (tool: ToolId) => {
+  const enabledFor = (tool: ToolId | "agenda") => {
+    if (tool === "agenda") return data.premium_tool_configs?.find(c=>c.activity_id===activity.id&&c.kind==="agenda")?.settings.agenda?.enabled !== false;
     if (tool === "experiences")
       return isBeaconModuleEnabled(activity, "experiences");
     if (tool === "scoreboard")
@@ -1077,12 +1055,13 @@ export default function ActivityDetail() {
           },
         }))
     : [];
+  if (canAccess && (data.is_demo || data.capabilities?.beacon_expansion) && (canManage || data.premium_tool_configs?.some(c=>c.activity_id===activity.id&&c.kind==="agenda"))) tools.push({id:"agenda",icon:<CalendarDays size={20}/>,label:"Activity schedule",status:"Preparation and activity timeline",onPress:()=>setSelectedTool("agenda")});
   const activeTool =
     selectedTool && tools.some((tool) => tool.id === selectedTool)
       ? selectedTool
-      : (tools[0]?.id as ToolId | undefined);
+      : undefined;
   const contentWidth = Math.min(width, tokens.layout.contentMaxWidth ?? width);
-  const bottomClearance = 90 + Math.max(insets.bottom, 8);
+  const bottomClearance = 24 + Math.max(insets.bottom, 8);
 
   return (
     <>
@@ -1111,7 +1090,7 @@ export default function ActivityDetail() {
                 width: contentWidth,
                 maxWidth: "100%",
                 alignSelf: "center",
-                paddingTop: 228,
+                paddingTop: 192,
                 paddingBottom: bottomClearance,
                 gap: tokens.space.md,
               },
@@ -1130,11 +1109,95 @@ export default function ActivityDetail() {
               onSelect={selectTab}
               reducedMotion={reducedMotion}
             />
+          <GlassBar
+            testID="beacon-context-actions"
+            style={{padding:12,gap:12,borderRadius:16}}
+          >
+            {interactionError ? (
+              <View
+                style={{
+                  width: contentWidth,
+                  maxWidth: "100%",
+                  alignSelf: "center",
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 8,
+                }}
+              >
+                <Text
+                  accessibilityRole="alert"
+                  accessibilityLiveRegion="assertive"
+                  style={[styles.error, { flex: 1 }]}
+                >
+                  {interactionError}
+                </Text>
+                {retryAction ? (
+                  <Button
+                    title="Try again"
+                    compact
+                    secondary
+                    onPress={() => retryAction()}
+                  />
+                ) : null}
+              </View>
+            ) : null}
+            <View
+              style={{
+                width: contentWidth,
+                maxWidth: "100%",
+                alignSelf: "center",
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 8,
+              }}
+            >
+              {canManage ? (
+                <Button compact secondary title="Manage Beacon" icon={<SlidersHorizontal size={18} color={colors.onPrimary} />} onPress={() => setManage(true)} />
+              ) : mine ? (
+                <Button title="You're hosting" disabled onPress={() => {}} />
+              ) : activity.mode === "solo" ? (
+                <View style={{ flex: 1 }}>
+                  <Button title="Solo activity" disabled onPress={() => {}} />
+                </View>
+              ) : (
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <ParticipationButtons
+                    controller={participation}
+                    onOpen={() => {}}
+                    stretch
+                  />
+                  {participation.feedback}
+                </View>
+              )}
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={
+                  shareBusy ? "Sharing activity" : "Share activity"
+                }
+                accessibilityState={{ disabled: shareBusy, busy: shareBusy }}
+                disabled={shareBusy}
+                onPress={() => void shareActivity()}
+                style={({ pressed }) => ({
+                  minWidth: 48,
+                  minHeight: 48,
+                  borderRadius: 24,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  backgroundColor: colors.white,
+                  borderColor: colors.line,
+                  borderWidth: 1,
+                  opacity: pressed ? 0.7 : 1,
+                })}
+              >
+                <Share2 size={19} color={colors.ink} />
+              </Pressable>
+            </View>
+          </GlassBar>
+
 
 
             {visibleTab === "Overview" ? (
               <>
-                <View style={{ gap: 0 }}>
                 <ActivityDetailInfo
                   startsAt={activity.starts_at}
                   endsAt={activity.ends_at}
@@ -1158,14 +1221,9 @@ export default function ActivityDetail() {
                   onOpenMap={openMap}
                   onOpenOnline={(url) => void openOnline(url)}
                   onOpenDirections={() => void openDirections()}
-                  footer={plan ? (
-                    <Button compact secondary title={"Part of " + plan.title}
-                      onPress={() => router.push({ pathname: "/plan/[id]", params: { id: plan.id } })} />
-                  ) : undefined}
                 />
 
-                                </View>
-                <View style={[styles.card, { gap: 12, padding: 16 }]}>
+                <View style={[styles.card, { gap: 10, padding: 14 }]}>
                 <View style={[styles.row, { gap: 11 }]}>
                   <Pressable
                     accessibilityRole="button"
@@ -1202,6 +1260,7 @@ export default function ActivityDetail() {
                 </View>
 
                 {activity.mode !== "solo" ? (
+                  <View style={{ borderTopWidth: 1, borderTopColor: colors.line, paddingTop: 8 }}>
                   <ActivityDetailProgress
                     avatars={progressAvatars}
                     count={capacity.count}
@@ -1211,14 +1270,31 @@ export default function ActivityDetail() {
                     embedded
                     onOpenPeople={rosterVisible ? () => selectTab("People") : undefined}
                   />
+                  </View>
                 ) : null}
 
                 </View>
 
-                {canAccess ? <AttendanceControls activity={activity} /> : null}
+                {canAccess ? <AttendanceControls key={activity.id + ":" + userId} activity={activity}
+                  locationPreview={canSeeMeeting && place && !place.online_url &&
+                    place.latitude != null && place.longitude != null ? (
+                      <BeaconLocationPreview compact latitude={place.latitude} longitude={place.longitude}
+                        label={place.label} onPress={openMap} />
+                    ) : undefined} /> : null}
 
-                {activity.description ? (
-                  <DescriptionCard description={activity.description} />
+                {activity.description || plan ? (
+                  <DescriptionCard description={activity.description ?? ""} footer={plan ? (
+                    <Pressable accessibilityRole="button" accessibilityLabel={"Open Plan " + plan.title}
+                      onPress={() => router.push({ pathname: "/plan/[id]", params: { id: plan.id } })}
+                      style={({ pressed }) => ({ padding: 10, borderRadius: 12, backgroundColor: colors.lime, flexDirection: "row", alignItems: "center", gap: 10, opacity: pressed ? 0.7 : 1 })}>
+                      <CalendarDays size={20} color={colors.green} />
+                      <View style={{ flex: 1, gap: 3 }}>
+                        <Text style={[styles.label, { color: colors.green }]}>Part of a Plan</Text>
+                        <Text style={[styles.body, { fontWeight: "600" }]}>{plan.title}</Text>
+                      </View>
+                      <ChevronRight size={17} color={colors.green} />
+                    </Pressable>
+                  ) : undefined} />
                 ) : null}
                 {aspirations.length > 0 ? (
                   <Txt muted>
@@ -1243,16 +1319,10 @@ export default function ActivityDetail() {
                   />
                 ) : null}
 
-                <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 8 }}>
-                  {chatEnabled && canAccess && (
-                    <Pressable accessibilityRole="button" accessibilityLabel="Chat" onPress={() => selectTab("Chat")}
-                      style={[styles.card, { width: 44, height: 44, padding: 0, alignItems: "center", justifyContent: "center" }]}>
-                      <MessagesSquare size={18} color={colors.green} />
-                    </Pressable>
-                  )}
+                <View testID="beacon-social-actions" style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 4, padding: 4, borderRadius: 16, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.white }}>
                   {canReadComments && (
                     <Pressable accessibilityRole="button" accessibilityLabel={`Comments · ${comments.length}`}
-                      style={[styles.card, styles.row, { minHeight: 44, paddingHorizontal: 10, paddingVertical: 8, gap: 5 }]}
+                      style={[styles.card, styles.row, { minHeight: 44, paddingHorizontal: 8, paddingVertical: 8, gap: 5, borderWidth: 0, backgroundColor: "transparent" }]}
                       onPress={() => {
                         setCommentsOpen(true);
                         requestAnimationFrame(() => requestAnimationFrame(scrollToComments));
@@ -1284,15 +1354,11 @@ export default function ActivityDetail() {
                           style={[
                             styles.card,
                             styles.row,
-                            { minHeight: 44, paddingHorizontal: 10, paddingVertical: 8 },
+                            { minHeight: 44, paddingHorizontal: 8, paddingVertical: 8, borderWidth: 0, backgroundColor: selectedReaction ? colors.lime : "transparent" },
                           ]}
                         >
-                          <Text style={styles.body}>
-                            {selectedReaction?.emoji
-                              ? `${selectedReaction.emoji} Reacted`
-                              : "🙌 React"}
-                          </Text>
-                          <Text style={styles.muted}>{reactionCount}</Text>
+                          <Text style={styles.body}>{selectedReaction?.emoji ?? "🙌"}</Text>
+                          <Text style={styles.label}>{reactionCount}</Text>
                           {floatingReaction ? (
                             <Animated.Text
                               pointerEvents="none"
@@ -1324,9 +1390,18 @@ export default function ActivityDetail() {
                       }
                     />
                   ) : null}
+                  {chatEnabled && canAccess && (
+                    <Pressable accessibilityRole="button" accessibilityLabel="Enter chat" onPress={() => selectTab("Chat")}
+                      style={({ pressed }) => ({ marginLeft: "auto", minHeight: 44, paddingHorizontal: 10, borderRadius: 12, backgroundColor: colors.lime, flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, opacity: pressed ? 0.7 : 1 })}>
+                      <MessagesSquare size={17} color={colors.green} accessible={false} />
+                      <Text style={[styles.label, { color: colors.green, fontWeight: "700" }]}>Enter chat</Text>
+                    </Pressable>
+                  )}
                 </View>
 
                 <BeaconReadiness activity={activity} onNavigate={selectTab} />
+                <BeaconPreparation key={activity.id} activity={activity} onOpen={() => {setSelectedTool("agenda");selectTab("Activity");}} />
+                {canAccess && appearance?.sections?.map(section=><View key={section.id} style={styles.card}><Txt>{section.title}</Txt><Txt muted>{section.body}</Txt></View>)}
               </>
             ) : null}
 
@@ -1455,7 +1530,7 @@ export default function ActivityDetail() {
             {visibleTab === "People" ? (
               <View style={{ gap: tokens.space.md }}>
 
-                <ActivityDetailProgress avatars={progressAvatars} count={capacity.count} capacity={capacity.limit}
+                <ActivityDetailProgress embedded avatars={progressAvatars} count={capacity.count} capacity={capacity.limit}
                   target={activity.target_count ?? null} joining={joining} />
                 {canAdmit && activity.status === "scheduled" && !isPast ? (
                   <PlanningDisclosure title="Invite people" summary="Invite or reinvite your friends">
@@ -1545,13 +1620,16 @@ export default function ActivityDetail() {
                   }}
                 />
                 <BeaconOrganizerRoles activity={activity} />
+                <BeaconHosting key={activity.id+":"+userId+":"+(data.demo_session_id??"live")} activity={activity} />
                 <BeaconSupplies activity={activity} />
               </View>
             ) : null}
 
             {visibleTab === "Activity" && canAccess ? (
-              <View style={{ gap: tokens.space.md }}>
-                <ActivityDetailTools tools={tools} selected={activeTool} />
+              <View style={{ gap:24,flexDirection:width>=1024&&activeTool?"row":"column" }}>
+<View style={width>=1024&&activeTool?{width:220}:{width:"100%"}}>                <ActivityDetailTools sidebar={width>=1024&&!!activeTool} onBrowse={()=>setSelectedTool(null)} tools={tools} selected={activeTool} onOpenMemories={isBeaconModuleEnabled(activity,"experiences") ? () => selectTab("Memories") : undefined} /></View>
+<View style={{flex:1,minWidth:0,gap:24}}>
+                {activeTool === "agenda" && <BeaconAgenda key={activity.id+":"+userId+":"+(data.demo_session_id??"live")} activity={activity} />}
                 {activeTool === "checklist" && !enabledFor("checklist") ? (
                   <ReadOnlyHistoryCard title="Checklist history">
                     {checklistHistory.length ? (
@@ -1669,10 +1747,10 @@ export default function ActivityDetail() {
                     section={activeTool as "checklist" | "journal" | "focus"}
                   />
                 ) : null}
-                {canManageSettings ? (
+                {canManageSettings && !activeTool ? (
                   <PremiumToolSettings activity={activity} kind="appearance"/>
                 ) : null}
-                {canManageSettings ? (
+                {canManageSettings && !activeTool ? (
                   <BeaconSettings
                     key={beaconSettingsDraftKey(activity)}
                     activity={activity}
@@ -1684,7 +1762,7 @@ export default function ActivityDetail() {
                     }
                   />
                 ) : null}
-                {mine && activity.status === "scheduled" ? (
+                {mine && !activeTool && activity.status === "scheduled" ? (
                   <View style={[styles.card, { gap: 8 }]}>
                     <Text style={styles.h2}>Host controls</Text>
                     <Button
@@ -1719,6 +1797,7 @@ export default function ActivityDetail() {
                     />
                   </View>
                 ) : null}
+              </View>
               </View>
             ) : null}
 
@@ -1760,102 +1839,7 @@ export default function ActivityDetail() {
             onOverflow={() => setOverflow(true)}
           />
 
-          <GlassBar
-            style={{
-              position: "absolute",
-              left: 0,
-              right: 0,
-              bottom: 0,
-              zIndex: 4,
-              borderRadius: 0,
-              borderLeftWidth: 0,
-              borderRightWidth: 0,
-              borderBottomWidth: 0,
-              paddingHorizontal: tokens.layout.screenGutter,
-              paddingTop: 9,
-              paddingBottom: Math.max(insets.bottom, 10),
-            }}
-          >
-            {interactionError ? (
-              <View
-                style={{
-                  width: contentWidth,
-                  maxWidth: "100%",
-                  alignSelf: "center",
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: 8,
-                }}
-              >
-                <Text
-                  accessibilityRole="alert"
-                  accessibilityLiveRegion="assertive"
-                  style={[styles.error, { flex: 1 }]}
-                >
-                  {interactionError}
-                </Text>
-                {retryAction ? (
-                  <Button
-                    title="Try again"
-                    compact
-                    secondary
-                    onPress={() => retryAction()}
-                  />
-                ) : null}
-              </View>
-            ) : null}
-            <View
-              style={{
-                width: contentWidth,
-                maxWidth: "100%",
-                alignSelf: "center",
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 8,
-              }}
-            >
-              {canManage ? (
-                <Button title="Manage Beacon" icon={<SlidersHorizontal size={18} color={colors.onPrimary} />} onPress={() => setManage(true)} />
-              ) : mine ? (
-                <Button title="You're hosting" disabled onPress={() => {}} />
-              ) : activity.mode === "solo" ? (
-                <View style={{ flex: 1 }}>
-                  <Button title="Solo activity" disabled onPress={() => {}} />
-                </View>
-              ) : (
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <ParticipationButtons
-                    controller={participation}
-                    onOpen={() => {}}
-                    stretch
-                  />
-                  {participation.feedback}
-                </View>
-              )}
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={
-                  shareBusy ? "Sharing activity" : "Share activity"
-                }
-                accessibilityState={{ disabled: shareBusy, busy: shareBusy }}
-                disabled={shareBusy}
-                onPress={() => void shareActivity()}
-                style={({ pressed }) => ({
-                  minWidth: 48,
-                  minHeight: 48,
-                  borderRadius: 24,
-                  alignItems: "center",
-                  justifyContent: "center",
-                  backgroundColor: colors.white,
-                  borderColor: colors.line,
-                  borderWidth: 1,
-                  opacity: pressed ? 0.7 : 1,
-                })}
-              >
-                <Share2 size={19} color={colors.ink} />
-              </Pressable>
-            </View>
-          </GlassBar>
+
         </View>
       </SafeAreaView>
 
@@ -2097,25 +2081,25 @@ export default function ActivityDetail() {
   );
 }
 
-function DescriptionCard({ description }: { description: string }) {
+function DescriptionCard({ description, footer }: { description: string; footer?: React.ReactNode }) {
   const { colors, styles } = useTheme();
   const [expanded, setExpanded] = useState(false);
   const long = description.trim().split(/\s+/).length > 34;
   return (
-    <View style={[styles.card, { gap: 10, padding: 16 }]}>
+    <View style={[styles.card, { gap: 10, padding: 14 }]}>
       <View style={styles.row}>
-        <View style={{ padding: 8, borderRadius: 11, backgroundColor: colors.lime }}>
+        <View style={{ padding: 6, borderRadius: 9, backgroundColor: colors.lime }}>
           <Info size={18} color={colors.green} />
         </View>
         <Text style={styles.h2}>About this Beacon</Text>
       </View>
-      <Text
+      {!!description && <Text
         style={styles.body}
         numberOfLines={expanded ? undefined : 3}
         ellipsizeMode="tail"
       >
         {description}
-      </Text>
+      </Text>}
       {long ? (
         <Pressable
           accessibilityRole="button"
@@ -2128,6 +2112,7 @@ function DescriptionCard({ description }: { description: string }) {
           </Text>
         </Pressable>
       ) : null}
+      {footer}
     </View>
   );
 }

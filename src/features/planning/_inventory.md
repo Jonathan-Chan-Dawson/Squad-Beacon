@@ -23,3 +23,5 @@ Planning feature
 - PlanningTimeField and ZonedTimeField platform adapters use the shared DateField ISO-instant boundary with explicit timezone; wall-time conversion is owned by shared/dateTime.ts.
 
 - CouncilEnhancements.tsx: contextual saved Council configuration, option groups, preparation checks and optional response explanations; existing responses remain Free.
+
+- CouncilWorkflow.tsx links authorized existing Councils in order, preserving each decision's canonical ballots/results and filtering unavailable references.

@@ -1,3 +1,6 @@
+import { BeaconActionRow } from "./BeaconSection";
+import { useConfirmation } from "@/src/shared/Dialogs";
+import { canViewProfile } from "@/src/features/profile/privacy";
 import { Images, Image as ImageIcon, Star } from "lucide-react-native";
 import { PlanChoice } from "@/src/features/plans/PlanPresentation";
 import React, { useEffect, useState } from "react";
@@ -28,7 +31,11 @@ export function MemoryCollections({
 }) {
   const { data, userId, act } = useBeacon();
   const { colors } = useTheme();
+  const { requestConfirmation, confirmationDialog } = useConfirmation();
   const [filter, setFilter] = useState("All memories");
+  const [layout, setLayout] = useState<"album" | "timeline" | "story">("album");
+  const [participants, setParticipants] = useState<string[]>([]);
+  const [recapLimit, setRecapLimit] = useState(10);
   const [open, setOpen] = useState(false),
     [mode, setMode] = useState("Album"),
     [title, setTitle] = useState(""),
@@ -72,6 +79,20 @@ export function MemoryCollections({
   const recaps = (data.memory_recaps ?? []).filter(
     (r) => r.activity_id === activity.id,
   );
+  const expansion = data.is_demo || data.capabilities?.beacon_stories;
+  const consent =
+    data.recap_consents?.find(
+      (c) => c.activity_id === activity.id && c.user_id === userId,
+    )?.allowed === true;
+  const consenting = (data.recap_consents ?? []).filter(
+    (c) => c.activity_id === activity.id && c.allowed,
+  );
+  const personName = (id: string) => {
+    const p = data.profiles.find((p) => p.id === id);
+    return p && canViewProfile(data, p, userId)
+      ? p.name
+      : "Consenting participant";
+  };
   const begin = () => {
     setOpen(!open);
     setEditing(null);
@@ -82,7 +103,24 @@ export function MemoryCollections({
     setRevision(album?.revision ?? -1);
   };
   return (
-    <View style={{ gap: 10 }}>
+    <View style={{ gap: 16 }}>
+      {confirmationDialog}
+      {expansion && (
+        <Action
+          secondary
+          title={
+            consent
+              ? "Remove my recap consent"
+              : "Allow my name in activity recaps"
+          }
+          run={() =>
+            act("set_recap_consent", {
+              activity_id: activity.id,
+              allowed: !consent,
+            })
+          }
+        />
+      )}
       {album && (
         <>
           <Txt>{album.settings.title || "Album"}</Txt>
@@ -108,7 +146,7 @@ export function MemoryCollections({
       )}
       {manager && (
         <PlanChoice
-          title="Albums & Afterglow"
+          title="Create album or recap"
           detail="Collect photos and build a recap"
           icon={Images}
           expanded={open}
@@ -130,6 +168,8 @@ export function MemoryCollections({
                     setRevision(v === "Album" ? (album?.revision ?? -1) : -1);
                     setSelected([]);
                     setHighlights([]);
+                    setLayout("album");
+                    setParticipants([]);
                   }}
                 />
               )}
@@ -143,6 +183,48 @@ export function MemoryCollections({
                   }
                   onChange={setTitle}
                 />
+              )}
+              {mode === "Afterglow" && expansion && (
+                <>
+                  <Chips
+                    options={["Album", "Timeline", "Story"] as const}
+                    value={
+                      layout === "timeline"
+                        ? "Timeline"
+                        : layout === "story"
+                          ? "Story"
+                          : "Album"
+                    }
+                    onChange={(v) =>
+                      setLayout(
+                        v === "Timeline"
+                          ? "timeline"
+                          : v === "Story"
+                            ? "story"
+                            : "album",
+                      )
+                    }
+                    accessibilityPrefix="Recap layout"
+                  />
+                  <Txt muted>
+                    Optional participant credits · consent can be withdrawn at
+                    any time
+                  </Txt>
+                  {consenting.map((c) => (
+                    <Button
+                      key={c.user_id}
+                      secondary
+                      title={`${participants.includes(c.user_id) ? "Remove credit for" : "Credit"} ${personName(c.user_id)}`}
+                      onPress={() =>
+                        setParticipants((ids) =>
+                          ids.includes(c.user_id)
+                            ? ids.filter((id) => id !== c.user_id)
+                            : [...ids, c.user_id],
+                        )
+                      }
+                    />
+                  ))}
+                </>
               )}
               <Field
                 label={mode === "Album" ? "Album title" : "Recap title"}
@@ -255,6 +337,9 @@ export function MemoryCollections({
                       activity_id: activity.id,
                       title,
                       introduction: intro,
+                      ...(expansion
+                        ? { layout, participant_ids: participants }
+                        : {}),
                       memory_ids: selected,
                       revision,
                     });
@@ -269,13 +354,42 @@ export function MemoryCollections({
         <View key={r.id} style={{ gap: 8 }}>
           <Txt>{r.title}</Txt>
           {r.introduction && <Txt muted>{r.introduction}</Txt>}
+          {!!r.participant_ids?.some((id) =>
+            consenting.some((c) => c.user_id === id),
+          ) && (
+            <Txt muted>
+              With{" "}
+              {r.participant_ids
+                .filter((id) => consenting.some((c) => c.user_id === id))
+                .map(personName)
+                .join(", ")}
+            </Txt>
+          )}
           {authorizedMemoryIds(data, r.memory_ids, userId)
-            .slice(0, 10)
+            .sort((a, b) =>
+              r.layout === "timeline"
+                ? (
+                    data.beacon_memories.find((m) => m.id === a)?.created_at ??
+                    ""
+                  ).localeCompare(
+                    data.beacon_memories.find((m) => m.id === b)?.created_at ??
+                      "",
+                  )
+                : 0,
+            )
+            .slice(0, recapLimit)
             .map((id) => (
-              <RecapMemory key={id} id={id} />
+              <RecapMemory key={id} id={id} layout={r.layout} />
             ))}
+          {r.memory_ids.length > recapLimit && (
+            <Button
+              secondary
+              title={`Show more of ${r.title}`}
+              onPress={() => setRecapLimit((n) => n + 10)}
+            />
+          )}
           {manager && (
-            <>
+            <BeaconActionRow>
               <Button
                 compact
                 secondary
@@ -287,22 +401,43 @@ export function MemoryCollections({
                   setRevision(r.revision);
                   setTitle(r.title);
                   setIntro(r.introduction);
+                  setLayout(r.layout ?? "album");
+                  setParticipants(
+                    (r.participant_ids ?? []).filter((id) =>
+                      consenting.some((c) => c.user_id === id),
+                    ),
+                  );
                   setSelected(r.memory_ids);
                 }}
               />
               <Action
                 secondary
                 title="Remove recap"
-                run={() => act("delete_memory_recap", { id: r.id })}
+                compact
+                run={async () =>
+                  requestConfirmation({
+                    title: "Remove recap?",
+                    message: "The original memories will be kept.",
+                    confirmLabel: "Remove recap",
+                    destructive: true,
+                    onConfirm: () => act("delete_memory_recap", { id: r.id }),
+                  })
+                }
               />
-            </>
+            </BeaconActionRow>
           )}
         </View>
       ))}
     </View>
   );
 }
-function RecapMemory({ id }: { id: string }) {
+function RecapMemory({
+  id,
+  layout,
+}: {
+  id: string;
+  layout?: "album" | "timeline" | "story";
+}) {
   const { data, userId } = useBeacon();
   const [url, setUrl] = useState<string | null>(null);
   const memory = data.beacon_memories.find((m) => m.id === id);
@@ -326,8 +461,17 @@ function RecapMemory({ id }: { id: string }) {
       {url && memory.media_type === "image" && (
         <Image
           source={{ uri: url }}
-          style={{ width: "100%", height: 180, borderRadius: 12 }}
+          accessibilityLabel={memory.caption || "Activity memory"}
+          style={{
+            width: "100%",
+            height:
+              layout === "story" ? 280 : layout === "timeline" ? 140 : 180,
+            borderRadius: 12,
+          }}
         />
+      )}
+      {layout === "timeline" && (
+        <Txt muted>{new Date(memory.created_at).toLocaleString()}</Txt>
       )}
       <Txt muted>{memory.caption || "A shared memory"}</Txt>
     </View>

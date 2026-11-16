@@ -300,7 +300,7 @@ export function FriendFilterSelector({
           Choose up to {maxSelected} friends. Remove someone to add another.
         </Text>
       )}
-      {bulk && bulkPeople.length > 0 && <View style={{ gap: 4 }}>
+      {bulk && (bulkPeople.length > 0 || selectedIds.length > 0) && <View style={{ gap: 4 }}>
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
           <Button compact secondary title={`Select all filtered (${filteredIds.size})`} disabled={disabled || bulkOverLimit} onPress={() => { if (bulkSelection.allowed) onChange(bulkSelection.ids.map((id) => ({ kind: "friend", id }))); }} />
           <Button compact secondary title="Deselect filtered" disabled={disabled} onPress={() => onChange(selected.filter((row) => !filteredIds.has(row.id)))} />

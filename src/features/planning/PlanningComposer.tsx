@@ -1,8 +1,5 @@
-import { ContextTip } from "@/src/features/onboarding/OnboardingUI";
-import { PingIntro } from "./PingPresentation";
+import { PlanningKindSelector } from "./PlanningKindSelector";
 import {
-  CalendarClock,
-  ChevronRight,
   Clock3,
   MapPin,
   Sparkles,
@@ -11,7 +8,7 @@ import ZonedTimeField from "./ZonedTimeField";
 import { interestTarget } from "./connected";
 import { PlanningDisclosure, PlanningToggle } from "./PlanningControls";
 import React, { useCallback, useRef, useState } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, Text, View, type TextInput } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { randomUUID } from "expo-crypto";
 import {
@@ -88,6 +85,9 @@ export function PlanningComposer({ sessionId }: { sessionId: string }) {
         : "Draw Council";
   const now = useNow();
   const [details, setDetails] = useState(false);
+  const [starterId, setStarterId] = useState("");
+  const [starterNotice, setStarterNotice] = useState("");
+  const titleInput = useRef<TextInput>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const lock = useRef(false);
@@ -280,6 +280,10 @@ export function PlanningComposer({ sessionId }: { sessionId: string }) {
       let options: BeaconDraft[] = [];
       if (publication.attempt) payload = publication.attempt.payload;
       else {
+        if (!draft.title.trim()) {
+          titleInput.current?.focus();
+          throw new Error("Add an activity title.");
+        }
         if (params.activityNoteId && !source)
           throw new Error(
             "This Activity Note is no longer available. Return and start a new decision.",
@@ -426,68 +430,47 @@ export function PlanningComposer({ sessionId }: { sessionId: string }) {
       title={`Create ${name}`}
       eyebrow=""
       showDemoNotice={false}
-      compactHeader={kind === "ping"}
+      compactHeader
     >
-      {kind === "ping" ? <PingIntro /> : null}
-      {kind === "vote" ? <ContextTip name={kind} /> : null}
-      {kind !== "ping" && (
-        <Txt muted>
-          {kind === "vote"
-            ? "Choose one activity together. Votes can change until responses close."
-            : "Gather alternatives. The organizer draws the result after responses close; participants do not vote."}
-        </Txt>
-      )}
+      <PlanningKindSelector kind={kind} sessionId={sessionId} disabled={frozen || busy} />
       <View
         pointerEvents={frozen || busy ? "none" : "auto"}
         style={{ gap: 14, opacity: frozen ? 0.65 : 1 }}
       >
+        <Field inputRef={titleInput} label={kind === "ping" ? "What are you thinking?" : "What are we deciding?"}
+          value={draft.title} maxLength={120} editable={!frozen && !busy}
+          onChangeText={(value) => update("title", value)} />
+        {params.returnPlanId ? (
+          <Txt muted>
+            For{" "}
+            {data.plans.find((p) => p.id === params.returnPlanId)?.title ??
+              "your Plan"}{" "}
+            ·{" "}
+            {params.squadId
+              ? (data.squads.find((s) => s.id === params.squadId)?.name ??
+                "Squad")
+              : "Personal"}
+          </Txt>
+        ) : (
+          <AudiencePicker
+            value={draft.audience}
+            id={draft.audienceId}
+            onChange={(audience, id) => {
+              if (frozen || busy) return;
+              change((next) => {
+                next.audience = audience;
+                next.audienceId = id;
+                next.coownerIds = [];
+                if (!next.touched.includes("audience"))
+                  next.touched.push("audience");
+              });
+            }}
+          />
+        )}
+        {error === "Add an activity title." && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
+        {kind === "ping" && <Txt muted>Ping uses this audience, not selected individual friends. Anyone nearby does not track people or expand sharing.</Txt>}
         {kind === "ping" ? (
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
-            {(data.is_demo === true ||
-              data.capabilities?.connected_planning === true) && (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="When Works?"
-                disabled={frozen || busy}
-                style={({ pressed }) => [
-                  styles.card,
-                  {
-                    width: "100%",
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 12,
-                    padding: 14,
-                    opacity: pressed ? 0.7 : 1,
-                  },
-                ]}
-                onPress={() =>
-                  router.push({
-                    pathname: "/planning/create",
-                    params: {
-                      kind: "time",
-                      sessionId,
-                      activityNoteId: params.activityNoteId,
-                      returnPlanId: params.returnPlanId,
-                      planStopId: params.planStopId,
-                      planAfterStopId: params.planAfterStopId,
-                      squadId: params.squadId,
-                      planAudience: params.planAudience,
-                    },
-                  })
-                }
-              >
-                <CalendarClock size={24} color={colors.green} />
-                <View style={{ flex: 1, gap: 3 }}>
-                  <Text style={[styles.body, { fontWeight: "600" }]}>
-                    When works for everyone?
-                  </Text>
-                  <Text style={styles.muted}>
-                    Propose a few times and compare availability.
-                  </Text>
-                </View>
-                <ChevronRight size={18} color={colors.muted} />
-              </Pressable>
-            )}
             <View style={{ width: "100%", flexDirection: "row", gap: 6 }}>
               {pingStarters.map((starter) => {
                 const Icon =
@@ -501,12 +484,15 @@ export function PlanningComposer({ sessionId }: { sessionId: string }) {
                     key={starter.id}
                     accessibilityRole="button"
                     accessibilityLabel={starter.label}
+                    accessibilityState={{ selected: starterId === starter.id }}
+                    aria-pressed={starterId === starter.id}
                     style={({ pressed }) => [
                       styles.card,
                       {
                         flex: 1,
                         minWidth: 0,
-                        minHeight: 66,
+                        minHeight: 56,
+                        backgroundColor: starterId === starter.id ? colors.lime : colors.white,
                         paddingHorizontal: 3,
                         paddingVertical: 9,
                         alignItems: "center",
@@ -517,6 +503,9 @@ export function PlanningComposer({ sessionId }: { sessionId: string }) {
                     ]}
                     disabled={frozen || busy}
                     onPress={() => {
+                      setStarterId(starter.id);
+                      const changed = [!draft.touched.includes("title") && "title", !draft.touched.includes("startsAt") && "activity time", !draft.touched.includes("deadline") && "response deadline"].filter(Boolean);
+                      setStarterNotice(changed.length ? `Starter applied: ${changed.join(", ")}. Your edited fields were kept.` : "Your edited fields were kept.");
                       change((next) =>
                         applyPingStarter(next, starter.id, Date.now()),
                       );
@@ -540,28 +529,20 @@ export function PlanningComposer({ sessionId }: { sessionId: string }) {
                 );
               })}
             </View>
+            {!!starterNotice && <Text accessibilityLiveRegion="polite" style={styles.label}>{starterNotice}</Text>}
           </View>
         ) : null}
-        <Field
-          label={
-            kind === "ping" ? "What are you thinking?" : "What are we deciding?"
-          }
-          value={draft.title}
-          maxLength={120}
-          editable={!frozen && !busy}
-          onChangeText={(value) => update("title", value)}
-        />
         {kind === "ping" ? (
           planContext ? (
             <ZonedTimeField
-              label="When?"
+              label="Proposed activity time"
               value={draft.startsAt}
               timezone={planContext.timezone}
               onChange={(value) => update("startsAt", value)}
             />
           ) : (
             <DateField
-              label="When?"
+              label="Proposed activity time"
               value={draft.startsAt}
               onChange={(value) => update("startsAt", value)}
             />
@@ -664,6 +645,11 @@ export function PlanningComposer({ sessionId }: { sessionId: string }) {
               />
             </View>
           )}
+        <DateField
+          label="Response deadline"
+          value={draft.deadline}
+          onChange={(value) => update("deadline", value)}
+        />
         {(data.is_demo === true ||
           data.capabilities?.connected_planning === true) && (
           <PlanningDisclosure
@@ -687,42 +673,10 @@ export function PlanningComposer({ sessionId }: { sessionId: string }) {
             />
           </PlanningDisclosure>
         )}
-        {params.returnPlanId ? (
-          <Txt muted>
-            For{" "}
-            {data.plans.find((p) => p.id === params.returnPlanId)?.title ??
-              "your Plan"}{" "}
-            ·{" "}
-            {params.squadId
-              ? (data.squads.find((s) => s.id === params.squadId)?.name ??
-                "Squad")
-              : "Personal"}
-          </Txt>
-        ) : (
-          <AudiencePicker
-            value={draft.audience}
-            id={draft.audienceId}
-            onChange={(audience, id) => {
-              if (frozen || busy) return;
-              change((next) => {
-                next.audience = audience;
-                next.audienceId = id;
-                next.coownerIds = [];
-                if (!next.touched.includes("audience"))
-                  next.touched.push("audience");
-              });
-            }}
-          />
-        )}
-        <DateField
-          label="Responses close"
-          value={draft.deadline}
-          onChange={(value) => update("deadline", value)}
-        />
         <Button
           compact
           secondary
-          title={details ? "Fewer details" : "More details"}
+          title={details ? "Hide activity details" : "Activity details · Optional"}
           disabled={frozen || busy}
           onPress={() => setDetails(!details)}
         />
@@ -804,7 +758,7 @@ export function PlanningComposer({ sessionId }: { sessionId: string }) {
             ? "Publishing…"
             : frozen
               ? "Verify / finish publication"
-              : `Create ${name}`
+              : kind === "ping" ? "Send Ping" : `Create ${name}`
         }
         disabled={busy}
         run={publish}

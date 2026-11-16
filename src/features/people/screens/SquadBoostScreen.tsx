@@ -10,9 +10,9 @@ import {
   FlaskConical,
   Eye,
   Clock3,
-  Shield,
   Zap,
-  Crown,
+  Check,
+  Minus,
 } from "lucide-react-native";
 import { useBeacon } from "@/src/shared/store";
 import { Action, Button, Field, Screen, Txt, useTheme } from "@/src/shared/ui";
@@ -140,9 +140,7 @@ function BoostManagement({ squadId }: { squadId: string }) {
   );
   return (
     <View style={{ gap: 14 }}>
-      <View
-        style={[styles.card, e.total > 0 && { borderColor: colors.primary }]}
-      >
+      <View style={{ gap: 12, paddingVertical: 12 }}>
         <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
           <Zap size={23} color={colors.primary} />
           <Text style={styles.h2}>{level(e.total, e.tier)}</Text>
@@ -186,38 +184,99 @@ function BoostManagement({ squadId }: { squadId: string }) {
           </View>
         )}
       </View>
-      <View style={styles.card}>
+      <View
+        style={{
+          gap: 14,
+          borderTopWidth: 1,
+          borderTopColor: colors.border,
+          paddingTop: 24,
+        }}
+      >
         <Text style={styles.h2}>Shared benefits</Text>
-        {[
-          {
-            icon: Shield,
-            title: "Supported · 1 Boost",
-            detail: "Recognition and an accent frame",
-          },
-          {
-            icon: Zap,
-            title: "Plus · 2–3 Boosts",
-            detail: "Shared assignments, deadlines, focus sequences and albums",
-          },
-          {
-            icon: Crown,
-            title: "Pro · 4–5 Boosts",
-            detail: "Preparation overviews, grouped sessions and Afterglow",
-          },
-        ].map(({ icon: Icon, title, detail }) => (
+        <View testID="boost-benefits-grid">
           <View
-            key={title}
-            style={{ flexDirection: "row", alignItems: "center", gap: 10 }}
+            style={{
+              flexDirection: "row",
+              paddingVertical: 12,
+              borderBottomWidth: 1,
+              borderBottomColor: colors.border,
+            }}
           >
-            <Icon size={18} color={colors.primary} />
-            <View style={{ flex: 1 }}>
-              <Txt>{title}</Txt>
-              <Txt muted>{detail}</Txt>
-            </View>
+            <View style={{ flex: 1.7 }} />
+            {[
+              { title: "Supported", count: "1" },
+              { title: "Plus", count: "2–3" },
+              { title: "Pro", count: "4–5" },
+            ].map(({ title, count }) => (
+              <View
+                key={title}
+                style={{ flex: 1, alignItems: "center", gap: 4 }}
+              >
+                <Text
+                  style={[
+                    styles.label,
+                    { fontSize: 11, color: colors.primary },
+                  ]}
+                >
+                  {title}
+                </Text>
+                <Text style={[styles.body, { fontSize: 12 }]}>{count}</Text>
+              </View>
+            ))}
           </View>
-        ))}
+          {[
+            { name: "Recognition", minimum: 0 },
+            { name: "Assignments & deadlines", minimum: 1 },
+            { name: "Focus sequences & albums", minimum: 1 },
+            { name: "Preparation & grouped sessions", minimum: 2 },
+            { name: "Afterglow recaps", minimum: 2 },
+          ].map(({ name, minimum }) => (
+            <View
+              key={name}
+              style={{
+                flexDirection: "row",
+                minHeight: 50,
+                paddingVertical: 12,
+                borderBottomWidth: 1,
+                borderBottomColor: colors.border,
+              }}
+            >
+              <View style={{ flex: 1.7, paddingRight: 8 }}>
+                <Text style={[styles.body, { fontSize: 13, lineHeight: 19 }]}>
+                  {name}
+                </Text>
+              </View>
+              {["Supported", "Plus", "Pro"].map((tier, index) => (
+                <View
+                  key={tier}
+                  accessible
+                  accessibilityLabel={`${tier} · ${name} · ${index >= minimum ? "Included" : "Not included"}`}
+                  style={{
+                    flex: 1,
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  {index >= minimum ? (
+                    <Check size={18} color={colors.primary} />
+                  ) : (
+                    <Minus size={16} color={colors.muted} />
+                  )}
+                </View>
+              ))}
+            </View>
+          ))}
+          <Txt muted>Boosts needed for each level</Txt>
+        </View>
       </View>
-      <View style={styles.card}>
+      <View
+        style={{
+          gap: 14,
+          borderTopWidth: 1,
+          borderTopColor: colors.border,
+          paddingTop: 24,
+        }}
+      >
         <Txt>Your contributions · {own.length}</Txt>
         <Txt muted>
           {balance.available} available · {balance.allocated} allocated ·{" "}
@@ -312,7 +371,14 @@ function BoostManagement({ squadId }: { squadId: string }) {
         ))}
       </View>
       {grouped.size > 0 && (
-        <View style={styles.card}>
+        <View
+          style={{
+            gap: 14,
+            borderTopWidth: 1,
+            borderTopColor: colors.border,
+            paddingTop: 24,
+          }}
+        >
           <Txt>Contributors</Txt>
           {[...grouped].map(([id, count]) => {
             const person = data.profiles.find((p) => p.id === id);
@@ -336,13 +402,20 @@ function BoostManagement({ squadId }: { squadId: string }) {
 }
 export function PremiumBoostSummary() {
   const { data, userId } = useBeacon();
-  const { styles } = useTheme();
+  const { colors } = useTheme();
   const b = boostBalance(data, userId);
   const active = (data.boost_allocations ?? []).filter(
     (b) => b.owner_id === userId && !b.released_at,
   );
   return (
-    <View style={styles.card}>
+    <View
+      style={{
+        gap: 14,
+        borderTopWidth: 1,
+        borderTopColor: colors.border,
+        paddingTop: 24,
+      }}
+    >
       <Txt>Squad Boosts · {b.allowance} included</Txt>
       <Txt muted>
         {b.allocated} allocated · {b.available} available · {b.cooling} cooling

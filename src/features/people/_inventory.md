@@ -40,4 +40,4 @@ People feature
 
 - Messaging utilities align with the primary tabs; the compact Conversations heading owns New chat. Friends aligns Private Lists with its category tabs and keeps active-list clearing in its filter row.
 
-- squadBoosts.ts: isolated demo allocation ledger, allowance reconciliation, transfer waits, non-extending grace and simulated totals. screens/SquadBoostScreen.tsx serves /squad-boosts, Overview shortcuts, Premium summaries and demo controls.
+- squadBoosts.ts: isolated demo allocation ledger, allowance reconciliation, transfer waits, non-extending grace and simulated totals. screens/SquadBoostScreen.tsx serves /squad-boosts with flat progress, a Supported/Plus/Pro benefit grid, contribution and contributor sections, plus Overview shortcuts, Premium summaries and demo controls.

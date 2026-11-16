@@ -1,4 +1,4 @@
-import { CalendarClock, Check, Radio, UsersRound } from "lucide-react-native";
+import { CalendarClock, Radio } from "lucide-react-native";
 import { Text, View } from "react-native";
 import { useTheme } from "@/src/shared/ui";
 import type { PlanningSlot } from "./types";
@@ -9,17 +9,17 @@ export function PingIntro({ time = false }: { time?: boolean }) {
   return (
     <View
       style={{
-        padding: 16,
+        padding: 12,
         borderRadius: 18,
         backgroundColor: colors.lime,
-        gap: 12,
+        gap: 8,
       }}
     >
-      <View style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
+      <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
         <View
           style={{
-            width: 44,
-            height: 44,
+            width: 36,
+            height: 36,
             borderRadius: 14,
             backgroundColor: semanticColors.surface,
             alignItems: "center",
@@ -39,23 +39,6 @@ export function PingIntro({ time = false }: { time?: boolean }) {
           </Text>
         </View>
       </View>
-      {time && (
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
-          {[
-            { label: "Propose times", Icon: CalendarClock },
-            { label: "Collect availability", Icon: UsersRound },
-            { label: "Choose a time", Icon: Check },
-          ].map(({ label, Icon: StepIcon }) => (
-            <View
-              key={label}
-              style={{ flexDirection: "row", alignItems: "center", gap: 5 }}
-            >
-              <StepIcon size={13} color={colors.green} />
-              <Text style={styles.label}>{label}</Text>
-            </View>
-          ))}
-        </View>
-      )}
       <Text style={styles.label}>
         {time
           ? "Sharing availability keeps the final commitment for later."
@@ -69,9 +52,11 @@ export function PingIntro({ time = false }: { time?: boolean }) {
 export function TimeSlotHeading({
   slot,
   index,
+  compact = false,
 }: {
   slot: PlanningSlot;
   index: number;
+  compact?: boolean;
 }) {
   const { styles, colors } = useTheme();
   const date = new Date(slot.starts_at);
@@ -83,6 +68,13 @@ export function TimeSlotHeading({
       minute: "2-digit",
       timeZone: slot.timezone,
     });
+  if (compact) return (
+    <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", minWidth: 0, gap: 4 }}>
+      <Text style={[styles.label, { fontWeight: "600", fontSize: 14 }]}>{format({ weekday: "short", month: "short", day: "numeric" })}</Text>
+      <Text style={styles.label}>{time(slot.starts_at)} – {time(slot.ends_at)}</Text>
+      {format({ year: "numeric", month: "short", day: "numeric" }) !== new Date(slot.ends_at).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric", timeZone: slot.timezone }) && <Text style={styles.label}>Ends {new Date(slot.ends_at).toLocaleDateString(undefined, { month: "short", day: "numeric", timeZone: slot.timezone })}</Text>}
+    </View>
+  );
   return (
     <View
       style={{
@@ -111,13 +103,21 @@ export function TimeSlotHeading({
           {format({ day: "numeric" })}
         </Text>
       </View>
-      <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", minWidth: 0, gap: 4 }}>
         <Text style={styles.label}>
           Option {index + 1} · {format({ weekday: "long" })}
         </Text>
         <Text style={[styles.body, { fontWeight: "600" }]}>
           {time(slot.starts_at)} – {time(slot.ends_at)}
         </Text>
+        <Text style={styles.label}>
+          {Math.round((Date.parse(slot.ends_at) - Date.parse(slot.starts_at)) / 60000)} min
+        </Text>
+        {slot.timezone !== Intl.DateTimeFormat().resolvedOptions().timeZone && (
+          <Text style={styles.label}>
+            Your time: {new Date(slot.starts_at).toLocaleString(undefined, { weekday: "short", hour: "numeric", minute: "2-digit", timeZoneName: "short" })}
+          </Text>
+        )}
         {format({ year: "numeric", month: "short", day: "numeric" }) !==
           new Date(slot.ends_at).toLocaleDateString(undefined, {
             year: "numeric",

@@ -61,3 +61,7 @@ Tests should exercise product flows through public routes/actions and preserve e
 
 - premiumTools.test.ts and premiumTools.database.test.ts: all-tier configuration permissions, former Checklist ceilings, paging, reminder replay, private Journal/media authorization, private allocation writes, pooled shared access, transfer waits, grace and explicit Routine resume. Run npm run test:premium-tools; ordered history runs in PGlite.
 - browser/premiumTools.spec.ts: compact Checklist details/downgrade continuity, Boost contribution/withdrawal and separated demo totals at narrow width in both appearances.
+
+- beaconExpansion.test.ts, beaconExpansion.database.test.ts and browser/beaconExpansion.spec.ts cover Phase F agendas, prerequisites, hosting privacy, reminders, consent, round totals and workflow references. Run npm run test:beacon-expansion; database checks are local PGlite.
+
+- browser/beaconRedesign.spec.ts covers readable tool selection, phone/desktop workspace navigation and saved schedule preservation on cancellation. Existing creationMobilePolish, beaconControls, beaconExpansion and premiumTools journeys cover affected flows.

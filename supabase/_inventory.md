@@ -41,3 +41,5 @@ No remote deployment is performed by local source changes.
 - 20261107011114_premium_tools_checklists.sql: unlimited incremental Checklist reads, paid details/presets, Free Bring Items canonical writes, revision-safe task notices and push revalidation.
 - 20261107012458_premium_beacon_tools.sql: private typed tool settings/presets, Journal metadata, authorized media-reference collections/Afterglow, Council extras, configured scoring and Plan team rotation.
 - 20261107014652_squad_boost_lifecycle.sql: private atomic allocations, verified allowances, transfer waits, expiry-based non-extending grace, authorized projections and shared Routine eligibility. All three are source-only until separate hosted rollout; PGlite does not establish multi-connection locking.
+
+- 20261115232046_beacon_expansion_planning.sql through 20261115234237_beacon_expansion_specialized.sql: additive Phase F settings, private attendee details/consent/round scores, reminders and capability projections; source-only pending ordered hosted rollout.

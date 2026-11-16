@@ -1,3 +1,4 @@
+import { RoundScoring } from "./components/RoundScoring";
 import {planStops,stopActivity} from "@/src/features/plans/livingPlans";
 import {PremiumToolSettings} from "./components/PremiumToolSettings";
 import {resolvePremiumFeature} from "@/src/shared/entitlements";
@@ -129,6 +130,7 @@ export function BeaconScoreboard({
   return (
     <View style={{ gap: 12 }}>
       <PremiumToolSettings activity={activity} kind="teams"/>
+      <RoundScoring key={activity.id} activity={activity}/>
       {manager&&savedSettings?.team_names?.length&&!teams.length?<Button compact secondary title="Create teams from saved names" onPress={()=>{void (async()=>{for(const name of savedSettings.team_names??[])if(!await run("create_beacon_team",{activity_id:activity.id,id:Crypto.randomUUID(),name}))break;})();}}/>:null}
       {manager&&savedSettings?.rotation&&rotationPlan&&nextSession&&resolvePremiumFeature(data,"team_rotation",activity).available&&<View style={{gap:6}}><Txt muted>Next session · {nextSession.title} · {teamsForActivity(data,nextSession.id).length?"Teams ready":"Needs team setup"}</Txt>{!teamsForActivity(data,nextSession.id).length&&<Button compact secondary title="Prepare next session teams" onPress={()=>void run("prepare_plan_teams",{activity_id:activity.id,target_activity_id:nextSession.id,plan_id:rotationPlan.id,revision:teamConfig?.revision})}/>}</View>}
       {compact ? (
@@ -176,7 +178,7 @@ export function BeaconScoreboard({
           gap: 8,
         }}
       >
-        {teams.map((team, index) => {
+        {teams.map((team,index) => {
           const members = membersForTeam(data, team.id).filter((member) => {
             if (member.user_id === userId) return true;
             const rsvp = data.rsvps.find(
@@ -238,7 +240,7 @@ export function BeaconScoreboard({
                       compact && {
                         fontSize: 15,
                         textAlign: "center",
-                        color: index % 2 === 0 ? colors.green : colors.red,
+                        color: colors.ink,
                       },
                     ]}
                   >
@@ -289,7 +291,7 @@ export function BeaconScoreboard({
                         compact && {
                           fontSize: 32,
                           fontVariant: ["tabular-nums"],
-                          color: index % 2 === 0 ? colors.green : colors.red,
+                          color: colors.ink,
                         },
                       ]}
                     >

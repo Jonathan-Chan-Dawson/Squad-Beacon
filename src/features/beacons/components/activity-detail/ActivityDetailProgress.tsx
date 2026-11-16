@@ -69,7 +69,7 @@ export function ActivityDetailProgress({
   return (
     <Container
       testID="activity-detail-progress"
-      style={{ gap: 10, padding: embedded ? 0 : space.md }}
+      style={{ gap: embedded ? 4 : 10, padding: embedded ? 0 : space.md }}
     >
       <View
         style={{
@@ -89,9 +89,14 @@ export function ActivityDetailProgress({
             onPress={onOpenPeople}
             style={{ minHeight: 44, justifyContent: "center" }}
           >
-            <Text style={{ color: colors.textPrimary, ...type.headline }}>
+            <Text style={{ color: colors.textPrimary, ...(embedded ? type.secondary : type.headline), fontWeight: type.weight.semibold }}>
               {safeCount} going{onOpenPeople ? " →" : ""}
             </Text>
+            {embedded && safeCapacity != null && safeTarget == null && (
+              <Text style={{ color: colors.textSecondary, ...type.caption }}>
+                {Math.max(0, safeCapacity - safeCount)} spots left
+              </Text>
+            )}
           </Pressable>
         </View>
         {embedded && people.length > 0 && (
@@ -123,7 +128,7 @@ export function ActivityDetailProgress({
         </Animated.View>
       )}
 
-      {(safeTarget != null || safeCapacity != null) && (
+      {(safeTarget != null || (!embedded && safeCapacity != null)) && (
         <View style={{ gap: 8 }}>
           <View
             style={{

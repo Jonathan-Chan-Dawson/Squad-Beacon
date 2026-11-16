@@ -6,7 +6,7 @@ import React from "react";
 import { View } from "react-native";
 import { useBeacon } from "@/src/shared/store";
 import { useNow } from "@/src/shared/useNow";
-import { Txt } from "@/src/shared/ui";
+import { Txt, useTheme } from "@/src/shared/ui";
 import { PlanningResponseCard } from "@/src/features/people/components/PlanningResponseCard";
 import {
   planningInteraction,
@@ -20,6 +20,7 @@ function PlanningResponseControlsBody({
   showDeadline = true,
   expanded = true,
   compactPing = false,
+  compactOptions = false,
   onResponded,
   onOpenBeaconEditor,
   onBeforeRespond,
@@ -29,12 +30,14 @@ function PlanningResponseControlsBody({
   showDeadline?: boolean;
   expanded?: boolean;
   compactPing?: boolean;
+  compactOptions?: boolean;
   onResponded?: () => void;
   onOpenBeaconEditor?: () => void;
   onBeforeRespond?: () => void;
 }) {
   const { data, userId, act, getViewerEpoch } = useBeacon();
   const now = useNow();
+  const { colors } = useTheme();
   const state = planningInteraction(data, userId, threadId, now);
   if (!state) return <Txt muted>This activity is no longer available.</Txt>;
   const { thread, eligible, options, responses } = state;
@@ -97,7 +100,7 @@ function PlanningResponseControlsBody({
             return true;
           }}
         />
-        {expanded && !closed && thread.payload && thread.owner_id !== userId ? (
+        {expanded && !closed && selected?.response === "interested" && thread.payload && thread.owner_id !== userId ? (
           <PingPreferences
             key={`${userId}:${selected?.response ?? "none"}`}
             threadId={threadId}
@@ -112,6 +115,7 @@ function PlanningResponseControlsBody({
       <AvailabilityControls
         key={`${userId}:${thread.id}:${thread.slots_revision}:${data.planning_availability?.find((a) => a.thread_id === thread.id && a.user_id === userId)?.updated_at ?? ""}`}
         thread={thread}
+        compact={compactOptions}
         expanded={expanded}
         onExpand={onOpen}
         onBeforeRespond={onBeforeRespond}
@@ -122,6 +126,7 @@ function PlanningResponseControlsBody({
       <CouncilChoices
         key={`${userId}:${thread.id}:${data.planning_approval_ballots?.find((b) => b.thread_id === thread.id && b.user_id === userId)?.updated_at ?? ""}`}
         threadId={thread.id}
+        compact={compactOptions}
         expanded={expanded}
         onExpand={onOpen}
         onBeforeRespond={onBeforeRespond}
@@ -129,9 +134,9 @@ function PlanningResponseControlsBody({
       />
     );
   return (
-    <View style={{ gap: 8 }}>
+    <View style={{ gap: compactOptions ? 0 : 8 }}>
       {(expanded ? options : options.slice(0, 3)).map((option) => (
-        <Txt key={option.id}>{option.payload.title}</Txt>
+        <View key={option.id} style={compactOptions ? { minHeight: 48, justifyContent: "center", paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.line } : undefined}><Txt>{option.payload.title}</Txt></View>
       ))}
       <Txt muted>
         {thread.status === "resolved"

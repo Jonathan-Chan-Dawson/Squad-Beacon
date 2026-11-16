@@ -14,11 +14,11 @@ import {
 
 export function DemoTierSelector() {
   const { data, demo, setDemoTier } = useBeacon();
-  const { styles, colors } = useTheme();
+  const { colors } = useTheme();
   if (!demo) return null;
   const labels = { free: "Free", plus: "Plus", pro: "Pro" } as const;
   return (
-    <View style={[styles.card, { gap: 10 }]}>
+    <View style={{ gap: 10 }}>
       <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
         <FlaskConical size={17} color={colors.primary} />
         <Txt>Simulated entitlement</Txt>

@@ -1,6 +1,12 @@
 import { ThemedSwitch } from "@/src/shared/ThemedSwitch";
 import React from "react";
-import { Pressable, Text, View, type TextInput } from "react-native";
+import {
+  Pressable,
+  Text,
+  View,
+  type TextInput,
+  useWindowDimensions,
+} from "react-native";
 import { ChevronRight } from "lucide-react-native";
 import { Button, Field, Txt, useTheme } from "@/src/shared/ui";
 import type { BeaconControlValues } from "../controls";
@@ -30,8 +36,8 @@ export function CreationRow({
         minHeight: 58,
         paddingVertical: 10,
         paddingHorizontal: 12,
-        borderRadius: 14,
-        borderWidth: 1,
+        borderRadius: 0,
+        borderBottomWidth: 1,
         borderColor: colors.line,
         flexDirection: "row",
         alignItems: "center",
@@ -41,7 +47,7 @@ export function CreationRow({
     >
       {icon}
       <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
-        <Text style={[styles.body, { fontWeight: "700", fontSize: 14 }]}>
+        <Text style={[styles.body, { fontWeight: "600", fontSize: 14 }]}>
           {title}
         </Text>
         {detail ? (
@@ -100,9 +106,17 @@ export function CreationModuleControls({
 }) {
   const { styles, colors } = useTheme();
   const recommendations = recommendedCreationModules(category);
+  const { width } = useWindowDimensions();
   return (
-    <View style={{ gap: 12 }}>
-      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+    <View style={{ gap: 16, flexDirection: "row", flexWrap: "wrap" }}>
+      <View
+        style={{
+          flexBasis: "100%",
+          flexDirection: "row",
+          alignItems: "center",
+          gap: 8,
+        }}
+      >
         <View style={{ flex: 1 }}>
           <Txt muted>
             Suggested for {category}:{" "}
@@ -128,7 +142,14 @@ export function CreationModuleControls({
         />
       </View>
       {(["Social", "Tools", "Media"] as const).map((family) => (
-        <View key={family} style={{ gap: 5 }}>
+        <View
+          key={family}
+          style={{
+            gap: 12,
+            flexBasis: width >= 768 ? "30%" : "100%",
+            flexGrow: 1,
+          }}
+        >
           <Text style={styles.label}>{family}</Text>
           {creationModules
             .filter((row) => row.family === family)

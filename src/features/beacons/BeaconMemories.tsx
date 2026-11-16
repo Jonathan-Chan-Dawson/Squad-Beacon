@@ -269,7 +269,7 @@ export function BeaconMemories({ activity }: { activity: Activity }) {
       />
       </View>
       {canRead && <PlanningDisclosure title="Albums & Afterglow" summary="Organize your memories">
-        <MemoryCollections activity={activity} onFilter={(ids) => { setAlbumIds(ids); setShowAll(false); }} />
+        <MemoryCollections key={`${activity.id}.${userId}.${data.demo_session_id??"live"}`} activity={activity} onFilter={(ids) => { setAlbumIds(ids); setShowAll(false); }} />
       </PlanningDisclosure>}
       <Txt muted>
         Photos and short videos connected to this Beacon, up to{" "}

@@ -52,7 +52,7 @@ export function BeaconOrganizerRoles({ activity }: { activity: Activity }) {
   }
   return (
     <>
-      <Button title="Organizer roles" secondary onPress={() => setOpen(true)} />
+      <Button title="Organizer roles" compact secondary onPress={() => setOpen(true)} />
       <Sheet
         title="Organizer roles"
         visible={open}

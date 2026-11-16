@@ -261,7 +261,31 @@ export function JournalTemplates({
         p.kind === "journal" &&
         p.title.toLowerCase().includes(query.toLowerCase()),
     ) ?? [];
-  if (!templates.length || activity.status === "cancelled") return null;
+  const builtins = resolvePremiumFeature(data, "journal_formatting", activity)
+    .available
+    ? [
+        {
+          title: "Study reflection",
+          body: "What I learned\n\nQuestions to revisit\n\nNext session",
+          heading: "Study reflection",
+        },
+        {
+          title: "Outdoor highlights",
+          body: "Route and conditions\n\nFavorite moments\n\nWhat to prepare next time",
+          heading: "Outdoor highlights",
+        },
+        {
+          title: "Activity retrospective",
+          body: "Highlights\n\nWhat worked\n\nNext time",
+          heading: "Activity retrospective",
+        },
+      ].filter((t) => t.title.toLowerCase().includes(query.toLowerCase()))
+    : [];
+  if (
+    (!templates.length && !builtins.length) ||
+    activity.status === "cancelled"
+  )
+    return null;
   return (
     <View style={{ gap: 8 }}>
       <PlanChoice
@@ -278,6 +302,18 @@ export function JournalTemplates({
             value={query}
             onChangeText={setQuery}
           />
+          {builtins.map((t) => (
+            <PlanChoice
+              key={t.title}
+              title={t.title}
+              detail="Activity reflection template"
+              icon={FileText}
+              onPress={() => {
+                onApply(t.body, t.heading);
+                setOpen(false);
+              }}
+            />
+          ))}
           {templates.slice(0, 8).map((p) => (
             <PlanChoice
               key={p.id}
