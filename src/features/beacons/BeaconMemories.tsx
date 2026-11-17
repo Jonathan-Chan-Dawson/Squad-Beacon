@@ -1,9 +1,11 @@
+import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
+import { SafeAreaView } from "react-native-safe-area-context";
 import { PlanningDisclosure } from "@/src/features/planning/PlanningControls";
 import {MemoryCollections} from "./components/MemoryCollections";
 import { useConfirmation } from "@/src/shared/Dialogs";
-import React, { useEffect, useMemo, useState } from "react";
-import { Image, Linking, Pressable, Text, View } from "react-native";
-import { Camera, Pencil, Play, Trash } from "lucide-react-native";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Image, Linking, Modal, Pressable, ScrollView, Text, View } from "react-native";
+import { ArrowLeft, ArrowRight, Camera, Pencil, Play, Trash } from "lucide-react-native";
 import { useBeacon } from "@/src/shared/store";
 import { Button, Field, Txt, useTheme } from "@/src/shared/ui";
 import { canUseBeaconModules } from "@/src/features/beacons/beaconModules";
@@ -25,9 +27,9 @@ import {
 } from "./beaconMedia";
 import type { Activity } from "@/src/shared/types";
 
-export function BeaconMemories({ activity }: { activity: Activity }) {
+function BeaconMemoriesContent({ activity }: { activity: Activity }) {
   const { colors, styles } = useTheme();
-  const { data, userId, act } = useBeacon();
+  const { data, userId, act, getViewerEpoch } = useBeacon();
   const { requestConfirmation, confirmationDialog } = useConfirmation();
   const [albumIds,setAlbumIds]=useState<string[]|null>(null);
   const [showAll, setShowAll] = useState(false);
@@ -44,6 +46,7 @@ export function BeaconMemories({ activity }: { activity: Activity }) {
     caption: string;
     uploaded: boolean;
   } | null>(null);
+  const lock = useRef(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [cleanupPath, setCleanupPath] = useState<string | null>(null);
@@ -95,29 +98,20 @@ export function BeaconMemories({ activity }: { activity: Activity }) {
   const canWrite = activity.status !== "cancelled";
 
   const saveMemory = async () => {
-    if (!userId) return;
+    if (!userId || lock.current) return;
+    const epoch = getViewerEpoch();
+    lock.current = true;
     setBusy(true);
     setError("");
     try {
       let currentDraft = draft;
-      if (!currentDraft) {
-        const picked = await pickBeaconMedia();
-        if (!picked) return;
-        currentDraft = {
-          media: picked,
-          path: data.is_demo
-            ? `demo://${activity.id}/${userId}/${picked.id}`
-            : memoryObjectPath(activity.id, userId, picked),
-          caption: caption.trim(),
-          uploaded: false,
-        };
-        setDraft(currentDraft);
-      }
+      if (!currentDraft) throw new Error("Choose a photo or video first.");
       if (!data.is_demo && !currentDraft.uploaded) {
         await uploadBeaconMedia(currentDraft.path, currentDraft.media);
         currentDraft = { ...currentDraft, uploaded: true };
         setDraft(currentDraft);
       }
+      if (epoch !== getViewerEpoch()) return;
       await act("create_beacon_memory", {
         id: currentDraft.media.id,
         activity_id: activity.id,
@@ -126,6 +120,7 @@ export function BeaconMemories({ activity }: { activity: Activity }) {
         duration_seconds: currentDraft.media.durationSeconds,
         caption: currentDraft.caption,
       });
+      if (epoch !== getViewerEpoch()) return;
       if (data.is_demo)
         setLocalPreviews((previous) => ({
           ...previous,
@@ -134,13 +129,33 @@ export function BeaconMemories({ activity }: { activity: Activity }) {
       setDraft(null);
       setCaption("");
     } catch (failure) {
+      if (epoch !== getViewerEpoch()) return;
       setError(
         failure instanceof Error
           ? failure.message
           : "Could not save this memory.",
       );
     } finally {
-      setBusy(false);
+      lock.current = false;
+      if (epoch === getViewerEpoch()) setBusy(false);
+    }
+  };
+
+  const chooseMemory = async () => {
+    if (!userId || lock.current) return;
+    const epoch = getViewerEpoch();
+    lock.current = true;
+    setBusy(true);
+    setError("");
+    try {
+      const picked = await pickBeaconMedia();
+      if (!picked || epoch !== getViewerEpoch()) return;
+      setDraft({ media: picked, path: data.is_demo ? `demo://${activity.id}/${userId}/${picked.id}` : memoryObjectPath(activity.id, userId, picked), caption: caption.trim(), uploaded: false });
+    } catch (failure) {
+      if (epoch === getViewerEpoch()) setError(failure instanceof Error ? failure.message : "Could not choose media.");
+    } finally {
+      lock.current = false;
+      if (epoch === getViewerEpoch()) setBusy(false);
     }
   };
 
@@ -202,27 +217,34 @@ export function BeaconMemories({ activity }: { activity: Activity }) {
     }
   };
 
-  return (
+  const content = (
     <View style={{ gap: 12 }}>
-      <Text style={styles.h2}>Beacon Memories</Text>
+      {!showAll && <View style={[styles.row, { justifyContent: "space-between", flexWrap: "wrap" }]}>
+        <Text style={styles.h2}>Beacon Memories</Text>
+        {memories.length > 0 && <Pressable accessibilityRole="button" accessibilityLabel="See all memories" onPress={() => setShowAll(true)} style={[styles.row, { minHeight: 44, gap: 5 }]}>
+          <Text style={[styles.label, { color: colors.green }]}>See all memories</Text><ArrowRight size={16} color={colors.green} />
+        </Pressable>}
+      </View>}
       <View style={[styles.card, { padding: 14, gap: 8 }]}>
         <View style={styles.row}>
           <Camera size={22} color={colors.green} />
           <View style={{ flex: 1, gap: 3 }}>
-            <Text style={styles.h2}>Save a moment</Text>
+            <Text style={styles.h2}>{draft ? "Ready to post?" : "Add a memory"}</Text>
             <Text style={styles.muted}>Choose a photo or short video to share with this Beacon.</Text>
           </View>
         </View>
-        <PlanningDisclosure title="Add a caption" summary={caption.trim() || "Optional"}>
+        {draft && <View style={{ gap: 8 }}>
+          {draft.media.mediaType === "image" ? <Image accessibilityLabel="Selected memory preview" source={{ uri: draft.media.uri }} resizeMode="contain" style={{ width: "100%", height: 220, borderRadius: 12, backgroundColor: colors.bg }} /> : <View style={[styles.row, { padding: 16 }]}><Play size={24} color={colors.green} /><Text style={styles.body}>Video selected · {draft.media.durationSeconds}s</Text></View>}
+
       <Field
         label="Caption (optional)"
         value={caption}
-        onChangeText={setCaption}
+        onChangeText={(value) => { setCaption(value); setDraft((previous) => previous && !previous.uploaded ? { ...previous, caption: value.trim() } : previous); }}
         maxLength={MAX_MEMORY_CAPTION_LENGTH}
         multiline
-        editable={canWrite && !draft}
+        editable={canWrite && !busy && !draft?.uploaded}
       />
-        </PlanningDisclosure>
+        </View>}
       {error ? (
         <Text accessibilityRole="alert" style={styles.error}>
           {error}
@@ -254,10 +276,10 @@ export function BeaconMemories({ activity }: { activity: Activity }) {
       <Button
         title={
           busy
-            ? "Adding memory…"
+            ? "Working…"
             : draft
-              ? "Retry saving memory"
-              : "Add a memory"
+              ? draft.uploaded ? "Retry posting memory" : "Post memory"
+              : "Choose photo or video"
         }
         disabled={
           busy ||
@@ -265,11 +287,12 @@ export function BeaconMemories({ activity }: { activity: Activity }) {
           (!draft && memories.length >= MAX_BEACON_MEMORIES)
         }
         icon={<Camera size={18} color={colors.onPrimary} />}
-        onPress={() => void saveMemory()}
+        onPress={() => void (draft ? saveMemory() : chooseMemory())}
       />
+        {draft && !draft.uploaded && <Button compact secondary title="Cancel memory" disabled={busy} onPress={() => { setDraft(null); setCaption(""); setError(""); }} />}
       </View>
-      {canRead && <PlanningDisclosure title="Albums & Afterglow" summary="Organize your memories">
-        <MemoryCollections key={`${activity.id}.${userId}.${data.demo_session_id??"live"}`} activity={activity} onFilter={(ids) => { setAlbumIds(ids); setShowAll(false); }} />
+      {showAll && canRead && <PlanningDisclosure title="Albums & Afterglow" summary="Organize your memories">
+        <MemoryCollections key={`${activity.id}.${userId}.${data.demo_session_id??"live"}`} activity={activity} onFilter={(ids) => { setAlbumIds(ids); }} />
       </PlanningDisclosure>}
       <Txt muted>
         Photos and short videos connected to this Beacon, up to{" "}
@@ -288,6 +311,10 @@ export function BeaconMemories({ activity }: { activity: Activity }) {
         const editing = editId === memory.id;
         return (
           <View key={memory.id} style={[styles.card, { gap: 8, padding: 12 }]}>
+            <View style={[styles.row, { gap: 8 }]}>
+              <ProfileAvatar profile={data.profiles.find((person) => person.id === memory.author_id)} />
+              <View style={{ flex: 1, gap: 2 }}><Text style={[styles.body, { fontWeight: "600" }]}>{data.profiles.find((person) => person.id === memory.author_id)?.name ?? "Beacon member"}</Text><Text style={styles.label}>{new Date(memory.created_at).toLocaleDateString()}</Text></View>
+            </View>
             {memory.media_type === "image" && url ? (
               <Image
                 accessibilityLabel="Beacon memory photo"
@@ -409,10 +436,23 @@ export function BeaconMemories({ activity }: { activity: Activity }) {
           </View>
         );
       })}
-      {memories.filter(m => !albumIds || albumIds.includes(m.id)).length > 3 && (
-        <Button compact secondary title={showAll ? "Show fewer memories" : "View all memories"} onPress={() => setShowAll((value) => !value)} />
-      )}
+
       {confirmationDialog}
     </View>
   );
+  if (!showAll) return content;
+  return <Modal visible animationType="none" onRequestClose={() => setShowAll(false)}>
+    <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }}>
+      <View style={[styles.row, { paddingHorizontal: 16, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.line }]}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Back to Beacon" onPress={() => setShowAll(false)} style={[styles.row, { minHeight: 44, gap: 6 }]}><ArrowLeft size={20} color={colors.green} /><Text style={styles.body}>Back</Text></Pressable>
+        <View style={{ flex: 1, paddingLeft: 12 }}><Text style={styles.h2}>Memories</Text><Text numberOfLines={1} style={styles.label}>{activity.title}</Text></View>
+      </View>
+      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 16, gap: 12, maxWidth: 680, width: "100%", alignSelf: "center", paddingBottom: 40 }}>{content}</ScrollView>
+    </SafeAreaView>
+  </Modal>;
+}
+
+export function BeaconMemories({ activity }: { activity: Activity }) {
+  const { userId, data } = useBeacon();
+  return <BeaconMemoriesContent key={`${userId}:${activity.id}:${data.demo_session_id ?? "live"}`} activity={activity} />;
 }

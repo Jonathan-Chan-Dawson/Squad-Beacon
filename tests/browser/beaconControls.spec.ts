@@ -210,11 +210,11 @@ for (const [width, theme] of [
         });
     });
     await page
-      .getByRole("button", { name: "View all memories", exact: true })
+      .getByRole("button", { name: "See all memories", exact: true })
       .scrollIntoViewIfNeeded();
     await expect(page.getByText(/^Overview test memory/)).toHaveCount(3);
     await page
-      .getByRole("button", { name: "View all memories", exact: true })
+      .getByRole("button", { name: "See all memories", exact: true })
       .click();
     await expect(page.getByText(/^Overview test memory/)).toHaveCount(5);
     await page.screenshot({ path: `.expo/organized-overview-${width}.png` });
@@ -301,3 +301,27 @@ for (const [width, theme] of [
     await expect(page).toHaveURL(/\/plan\//);
   });
 }
+
+test("memory media is reviewed before posting and gallery returns to Beacon", async ({ page }) => {
+  test.setTimeout(60000);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await detail(page, "demo-tools");
+  const image = await page.screenshot();
+  await expect(page.getByRole("button", { name: "Post memory", exact: true })).toHaveCount(0);
+  const chooser = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: "Choose photo or video", exact: true }).click();
+  await (await chooser).setFiles({ name: "memory.png", mimeType: "image/png", buffer: image });
+  await expect(page.getByLabel("Selected memory preview", { exact: true })).toBeVisible();
+  await page.getByLabel("Caption (optional)", { exact: true }).fill("Our Beacon memory");
+  await expect(page.getByLabel("Beacon memory photo", { exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Post memory", exact: true }).click();
+  await expect(page.getByText("Our Beacon memory", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Beacon memory photo", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Choose photo or video", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "See all memories", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Back to Beacon", exact: true })).toBeVisible();
+  await expect(page.getByText("Our Beacon memory", { exact: true })).toBeVisible();
+  await page.screenshot({ path: ".expo/memory-gallery-phone.png" });
+  await page.getByRole("button", { name: "Back to Beacon", exact: true }).click();
+  await expect(page.getByRole("button", { name: "See all memories", exact: true })).toBeVisible();
+});
