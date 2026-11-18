@@ -424,6 +424,11 @@ export default function BeaconMap(props: MapProps) {
       removeGestureListeners.current = null;
       markerCache.clear();
       decorationCache.clear();
+      // Leaflet 1.9 leaves a zoom-end timeout pending after remove(). Prevent
+      // that callback from touching a disposed pane during an account change.
+      const disposed = map.current as (Leaflet.Map & { _animatingZoom?: boolean }) | null;
+      disposed?.stop();
+      if (disposed) disposed._animatingZoom = false;
       map.current?.remove();
       map.current = null;
     };

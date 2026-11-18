@@ -9,6 +9,7 @@ import { Text, View } from "react-native";
 import { router } from "expo-router";
 import { useBeacon } from "@/src/shared/store";
 import { useNow } from "@/src/shared/useNow";
+import { requestSignIn } from "@/src/features/auth/navigation";
 import { useDesignTheme } from "@/src/shared/design-system";
 import { ProfileSonarCard } from "@/src/features/profile/components/ProfileSonarCard";
 import { StatusPanel } from "./StatusPanel";
@@ -273,7 +274,8 @@ function SharedStatusContent({
     setSetup(true);
   };
   const publish = async (confirm: boolean, available = nextAvailable) => {
-    if (control.saving || !userId) return;
+    if (!userId) { requestSignIn(); return; }
+    if (control.saving) return;
     if (!confirm && !validQuickStatus(data, userId, saved)) {
       configure(control.liveStatus, false, "current");
       return;

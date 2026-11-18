@@ -102,7 +102,9 @@ export async function rpc(
     explicitRequestId ?? (previous?.fingerprint === fingerprint ? previous.id : randomUUID());
   if (retryable) pendingRequests.set(key, { fingerprint, id: requestId });
   const discoveryParams =
-    action === "join_public_beacon"
+    action === "set_beacon_guest_visibility"
+      ? { p_activity_id: payload.activity_id, p_enabled: payload.enabled }
+      : action === "join_public_beacon"
       ? { p_activity_id: payload.activity_id }
       : action === "publish_beacon_discovery" ||
           action === "unpublish_beacon_discovery"
@@ -116,7 +118,9 @@ export async function rpc(
         : null;
   const { data, error, status } = await supabase.rpc(
     discoveryParams
-      ? action === "join_public_beacon"
+      ? action === "set_beacon_guest_visibility"
+        ? "set_beacon_guest_visibility"
+        : action === "join_public_beacon"
         ? "join_public_beacon"
         : "set_beacon_discovery"
       : "beacon_action",

@@ -31,7 +31,7 @@ import { ResendAuthEmail } from "./ResendAuthEmail";
 
 const entryModes = ["Sign in", "Create account"] as const;
 
-export function Auth() {
+export function Auth({ onExplore }: { onExplore?: () => void } = {}) {
   const { colors, semanticColors, styles } = useTheme();
   const { width, fontScale } = useWindowDimensions();
   const wide = width >= 840 && fontScale <= 1.3;
@@ -339,6 +339,9 @@ export function Auth() {
                 </View>
               )}
               <View style={entryStyles.footer}>
+                {onExplore ? (
+                  <Button title="Keep exploring" secondary compact onPress={onExplore} />
+                ) : null}
                 <Button
                   secondary
                   compact

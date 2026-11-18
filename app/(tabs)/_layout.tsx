@@ -15,6 +15,13 @@ import { useBeacon } from "@/src/shared/store";
 import { useNow } from "@/src/shared/useNow";
 import { pendingSocialCount } from "@/src/features/people/communication";
 import { useReducedMotion } from "react-native-reanimated";
+import { AccountGate } from "@/src/features/auth/AccountGate";
+
+const tabScreenLayout: NonNullable<
+  React.ComponentProps<typeof Tabs>["screenLayout"]
+> = ({ route, children }) => (
+  <AccountGate name={route.name}>{children}</AccountGate>
+);
 
 let createPulseConsumedThisSession = false;
 
@@ -72,6 +79,7 @@ export default function TabLayout() {
   return (
     <>
       <Tabs
+        screenLayout={tabScreenLayout}
         screenOptions={{ headerShown: false }}
         tabBar={({ state, navigation, insets }) => (
           <View style={{ position: "relative" }}>

@@ -2,7 +2,7 @@ import { useNotificationHandling } from "@/src/platform/notifications";
 import React, { useEffect } from "react";
 import { setCreationDraftAccount } from "@/src/features/beacons/socialPlanningSession";
 import { PreferencesProvider } from "@/src/shared/preferences";
-import { useSegments, usePathname, useGlobalSearchParams } from "expo-router";
+import { usePathname, useGlobalSearchParams } from "expo-router";
 import { rememberEntryIntent } from "@/src/features/auth/entryIntent";
 import { Platform } from "react-native";
 import { AppSystemBars, SystemBarsProvider } from "@/src/shared/SystemBars";
@@ -14,9 +14,10 @@ import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
 import "react-native-reanimated";
 import "@/src/platform/device";
 import { BeaconProvider, useBeacon } from "@/src/shared/store";
-import { Auth, Onboard } from "@/src/features/auth/Auth";
+import { AccountGate } from "@/src/features/auth/AccountGate";
+import "@/src/features/auth/entryIntentStorage";
 import { accountReadiness } from "@/src/shared/accountReadiness";
-import { Loading, Screen, Action, SheetIsolation, Txt } from "@/src/shared/ui";
+import { SheetIsolation } from "@/src/shared/ui";
 import { WidgetPreferencesProvider } from "@/src/features/widgets/preferences";
 import { WidgetSync } from "@/src/features/widgets/WidgetRuntime";
 import { ExplorationProvider } from "@/src/shared/exploration";
@@ -30,9 +31,8 @@ const DeveloperLab = __DEV__
   : () => null;
 export { ErrorBoundary } from "expo-router";
 function Navigation() {
-  const account = useBeacon(),
-    segments = useSegments();
-  const { userId, viewerEpoch, error, refresh } = account;
+  const account = useBeacon();
+  const { refresh } = account;
   const readiness = accountReadiness(account);
   const pathname = usePathname();
   const query = JSON.stringify(useGlobalSearchParams());
@@ -41,28 +41,15 @@ function Navigation() {
     rememberEntryIntent(pathname, JSON.parse(query));
   }, [pathname, query]);
   useNotificationHandling(readiness.state === "ready", refresh);
-  const publicRoute =
-    segments[0] === "auth" ||
-    segments[0] === "legal" ||
-    pathname.startsWith("/g/") ||
-    segments[0] === "invite";
-  if (!publicRoute) {
-    if (readiness.state === "loading") return <Loading />;
-    if (readiness.state === "signed-out") return <Auth />;
-    if (readiness.state === "unavailable")
-      return (
-        <Screen title="Let’s reconnect." eyebrow="CONNECTION" create={false}>
-          <Txt>
-            {error ??
-              "Your account is not ready yet. Retry to load your profile."}
-          </Txt>
-          <Action title="Retry" run={refresh} />
-        </Screen>
-      );
-    if (readiness.state === "needs-profile")
-      return <Onboard key={`${userId}:${viewerEpoch}`} />;
-  }
-  return <AppNavigation />;
+  return <AppNavigation renderScreen={renderAccountScreen} />;
+}
+function renderAccountScreen(name: string, children: React.ReactNode) {
+  // Initialize tab routes before gating their individual screens.
+  return name === "(tabs)" ? (
+    <>{children}</>
+  ) : (
+    <AccountGate name={name}>{children}</AccountGate>
+  );
 }
 function AppRuntime() {
   const { userId, demo, viewerEpoch } = useBeacon();

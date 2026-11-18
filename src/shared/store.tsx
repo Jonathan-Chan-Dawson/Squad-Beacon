@@ -20,6 +20,7 @@ import type { DemoScenario } from "@/src/features/onboarding/scenarios";
 import { firstSuccessCandidate } from "@/src/features/onboarding/presentation";
 import { reportOnboardingSuccess } from "@/src/features/onboarding/progress";
 import { clearEntryIntent } from "@/src/features/auth/entryIntent";
+import { requestSignIn } from "@/src/features/auth/navigation";
 import { clearAuthLink } from "@/src/features/auth/authLink";
 import {
   normalizeActivityHistoryQuery,
@@ -581,7 +582,7 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
         }
         return {};
       }
-      if (!session) throw new Error("Sign in to continue.");
+      if (!session) { requestSignIn(); throw new Error("Sign in to continue."); }
       const generation = epoch.current;
       const viewer = session.user.id;
       const beforeAction = dataRef.current;

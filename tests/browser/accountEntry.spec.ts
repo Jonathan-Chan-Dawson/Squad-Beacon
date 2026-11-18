@@ -14,6 +14,9 @@ async function basics(page: Page) {
     .fill("2000-01-31");
 }
 async function signIn(page: Page) {
+  if (!(await page.getByLabel("Email", { exact: true }).isVisible())) {
+    await page.getByRole("tab", { name: "Profile", exact: true }).click();
+  }
   await page
     .getByLabel("Email", { exact: true })
     .fill("  fixture@example.invalid  ");
@@ -56,6 +59,7 @@ test("new signed-out account signs in, completes only required setup and enters 
   await page
     .getByRole("button", { name: "Enter Squad Beacon", exact: true })
     .click();
+  await page.getByRole("tab", { name: "Beacons", exact: true }).click();
   await expect(page.getByTestId("onboarding-welcome")).toBeVisible();
   await expect(survey(page)).toHaveCount(0);
   await expect(
@@ -99,7 +103,7 @@ test("an authenticated account without a profile can sign out safely", async ({
   await page.goto("/activities");
   await expect(page.getByLabel("Your name", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Sign out", exact: true }).click();
-  await expect(page.getByLabel("Email", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("beacons-home-scroll")).toBeVisible();
   expect(
     account.actions.filter((a) => a.action === "stop_location"),
   ).toHaveLength(0);
@@ -377,7 +381,11 @@ test("authentication modes clear errors and password reset uses neutral confirma
   page,
 }) => {
   await mockOnboardingAccount(page, { signedOut: true });
-  await page.goto("/activities");
+  await page.goto("/auth/sign-in");
+  await page
+    .getByRole("button", { name: "Sign in", exact: true })
+    .first()
+    .click();
   await page
     .getByRole("button", { name: "Sign in", exact: true })
     .last()
@@ -475,7 +483,11 @@ for (const appearance of ["light", "dark"] as const) {
           animations: "disabled",
         });
       };
-      await page.goto("/activities");
+      await page.goto("/auth/sign-in");
+      await page
+        .getByRole("button", { name: "Sign in", exact: true })
+        .first()
+        .click();
       await expect(page.getByLabel("Email", { exact: true })).toBeVisible();
       await capture("signin");
       await page
@@ -492,6 +504,7 @@ for (const appearance of ["light", "dark"] as const) {
       await page
         .getByRole("button", { name: "Enter Squad Beacon", exact: true })
         .click();
+      await page.getByRole("tab", { name: "Beacons", exact: true }).click();
       await expect(page.getByTestId("onboarding-welcome")).toBeVisible();
       await capture("first-entry");
       await page.getByRole("tab", { name: "Profile", exact: true }).click();

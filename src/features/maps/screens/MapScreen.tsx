@@ -99,6 +99,7 @@ import { friendIds, locationIsFresh } from "@/src/shared/domain";
 import { canViewProfile } from "@/src/features/profile/privacy";
 import { publicMapBeacons } from "../publicMapDiscovery";
 import { usePublicBeacons } from "@/src/features/discovery/usePublicBeacons";
+import { requestSignIn } from "@/src/features/auth/navigation";
 import { PublicBeaconPreview } from "@/src/features/discovery/PublicBeaconPreview";
 import { rankPublicBeaconSummaries } from "@/src/features/discovery/domain";
 import { discoverBeacons, personDiscoveryReason } from "../discoveryRanking";
@@ -2776,6 +2777,7 @@ export default function MapScreen() {
         icon={Radio}
         onPress={() => {
           closePopovers();
+          if (!userId) { requestSignIn(); return; }
           setMyBeaconsOpen(true);
         }}
       />
@@ -3165,6 +3167,7 @@ export default function MapScreen() {
               onQuerySubmit={searchSubmit}
               calm={calm}
               onQuickFilter={(value) => {
+                if (!userId && value === "Friends") { requestSignIn(); return; }
                 setFeedbackAction((n) => n + 1);
                 chooseQuickFilter(value);
               }}
@@ -3174,6 +3177,7 @@ export default function MapScreen() {
               hasProfileInterests={profileInterests.length > 0}
               menu={quickMenu}
               onMenuChange={(next) => {
+                if (!userId && next === "friends") { requestSignIn(); return; }
                 closePopovers();
                 setQuickMenu(next);
               }}
@@ -3189,12 +3193,13 @@ export default function MapScreen() {
                 setFeedbackAction((n) => n + 1);
                 setSelectedCategories(next);
               }}
-              onPersonalizedChange={(value) =>
+              onPersonalizedChange={(value) => {
+                if (!userId) { requestSignIn(); return; }
                 exploration.setFilters({
                   ...exploration.filters,
                   personalizedRanking: value,
-                })
-              }
+                });
+              }}
               onSurprise={pickSurprise}
               surpriseBusy={!!surprise?.pending}
               surpriseDisabled={

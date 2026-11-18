@@ -1,0 +1,227 @@
+import { test, expect, type Page } from "@playwright/test";
+import { mockOnboardingAccount } from "./onboardingAccount";
+
+const beaconId = "73333333-3333-4333-8333-333333333333";
+const summary = () => ({
+  activity_id: beaconId,
+  title: "Coffee in the neighborhood",
+  category: "Social",
+  interest_tags: ["Social"],
+  starts_at: new Date(Date.now() + 3600000).toISOString(),
+  ends_at: new Date(Date.now() + 7200000).toISOString(),
+  area_label: "Chicago",
+  coarse_lat: 41.88,
+  coarse_lng: -87.63,
+  requires_approval: true,
+  capacity_limit: 6,
+  capacity_policy: "strict",
+  accepted_seat_count: 3,
+  closed: false,
+  viewer_response: null,
+});
+
+async function guest(
+  page: Page,
+  options: { empty?: boolean; fail?: boolean; noProfile?: boolean } = {},
+) {
+  const account = await mockOnboardingAccount(page, {
+    signedOut: true,
+    noProfile: options.noProfile,
+  });
+  let joins = 0;
+  let searches = 0;
+  let withdrawn = false;
+  await page.route("**/rest/v1/rpc/browse_guest_beacons", async (route) => {
+    searches++;
+    await route.fulfill({
+      status: options.fail ? 503 : 200,
+      contentType: "application/json",
+      body: JSON.stringify(
+        options.fail
+          ? { message: "Unavailable" }
+          : options.empty || withdrawn
+            ? []
+            : [summary()],
+      ),
+    });
+  });
+  await page.route("**/rest/v1/rpc/join_public_beacon", async (route) => {
+    joins++;
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ status: "requested" }),
+    });
+  });
+  return {
+    account,
+    get joins() {
+      return joins;
+    },
+    get searches() {
+      return searches;
+    },
+    withdraw() {
+      withdrawn = true;
+    },
+  };
+}
+
+async function enterAccount(page: Page) {
+  await page
+    .getByLabel("Email", { exact: true })
+    .fill("fixture@example.invalid");
+  await page.getByLabel("Password", { exact: true }).fill("long-password-123");
+  await page
+    .getByRole("button", { name: "Sign in", exact: true })
+    .last()
+    .click();
+}
+
+test.beforeEach(async ({ page }) => {
+  page.on("pageerror", (error) => {
+    throw error;
+  });
+  await page.routeWebSocket("**/hot", () => {});
+  await page.routeWebSocket("**/message", () => {});
+  await page.route(/.*(?:cartocdn\.com|basemaps\.carto\.com).*/, (route) =>
+    route.abort(),
+  );
+});
+
+test("signed-out visitors see the original Map, tabs and Create button", async ({
+  page,
+}) => {
+  const runtime = await guest(page);
+  await page.goto("/");
+  await expect(page.getByTestId("full-map-screen")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Create", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("tab", { name: "Profile", exact: true }),
+  ).toBeVisible();
+  expect(runtime.account.snapshotReads).toBe(0);
+  expect(runtime.account.reads).toBe(0);
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await expect(page.getByLabel("Email", { exact: true })).toBeVisible();
+  await page
+    .getByRole("button", { name: "Keep exploring", exact: true })
+    .click();
+  await expect(page.getByTestId("full-map-screen")).toBeVisible();
+  await page.getByRole("tab", { name: "Profile", exact: true }).click();
+  await expect(page.getByLabel("Email", { exact: true })).toBeVisible();
+});
+
+test("the original Beacons home and Browse work signed out", async ({
+  page,
+}) => {
+  const runtime = await guest(page);
+  await page.goto("/activities");
+  await expect(page.getByTestId("beacons-home-scroll")).toBeVisible();
+  await page
+    .getByRole("button", { name: "Explore Beacons", exact: true })
+    .click();
+  await expect(page.getByTestId("browse-beacons-screen")).toBeVisible();
+  await expect(
+    page.getByText("Coffee in the neighborhood", { exact: true }),
+  ).toBeVisible();
+  expect(runtime.account.snapshotReads).toBe(0);
+  await page
+    .getByRole("button", { name: "Saved Beacons", exact: true })
+    .click();
+  await expect(page.getByLabel("Email", { exact: true })).toBeVisible();
+});
+
+test("joining uses existing login and returns to the existing Browse preview for confirmation", async ({
+  page,
+}) => {
+  const runtime = await guest(page, { noProfile: true });
+  await page.goto(`/discover/${beaconId}`);
+  const preview = page
+    .getByRole("dialog")
+    .filter({ has: page.getByTestId("map-public-preview") });
+  await expect(preview).toBeVisible();
+  await preview
+    .getByRole("button", { name: "Request to Join", exact: true })
+    .click();
+  await enterAccount(page);
+  await page.getByLabel("Your name", { exact: true }).fill("Guest Explorer");
+  await page.getByLabel("Username", { exact: true }).fill("guest_explorer");
+  await page
+    .getByLabel("Date of birth · YYYY-MM-DD", { exact: true })
+    .fill("2000-01-31");
+  await page
+    .getByRole("button", { name: "Enter Squad Beacon", exact: true })
+    .click();
+  await expect(page).toHaveURL(/browse-beacons/);
+  await expect(preview).toBeVisible();
+  expect(runtime.joins).toBe(0);
+  await preview
+    .getByRole("button", { name: "Request to Join", exact: true })
+    .click();
+  await expect(
+    preview.getByRole("button", { name: "Requested ✓", exact: true }),
+  ).toBeVisible();
+  expect(runtime.joins).toBe(1);
+});
+
+test("protected direct links show existing authentication without reading private data", async ({
+  page,
+}) => {
+  const runtime = await guest(page);
+  for (const path of [
+    "/profile",
+    "/squads",
+    "/create",
+    `/activity/${beaconId}/chat`,
+  ]) {
+    await page.goto(path);
+    await expect(page.getByLabel("Email", { exact: true })).toBeVisible();
+  }
+  expect(runtime.account.snapshotReads).toBe(0);
+  expect(runtime.joins).toBe(0);
+});
+
+test("demo is already signed in and its Create and Profile work without real login", async ({
+  page,
+}) => {
+  await guest(page);
+  await page.goto("/auth/sign-in");
+  await page.getByRole("button", { name: /Explore the demo/ }).click();
+  await expect(page.getByTestId("full-map-screen")).toBeVisible();
+  await page.getByRole("tab", { name: "Profile", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Edit profile", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Email", { exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await expect(page.getByLabel("Email", { exact: true })).toHaveCount(0);
+});
+
+for (const width of [320, 390]) {
+  test(`original guest Map fits ${width}px in both appearances`, async ({
+    page,
+  }) => {
+    await guest(page);
+    await page.setViewportSize({ width, height: 844 });
+    for (const mode of ["light", "dark"]) {
+      await page.addInitScript(
+        (value) => localStorage.setItem("beacon.appearance", value),
+        mode,
+      );
+      await page.goto("/");
+      await expect(page.getByTestId("full-map-screen")).toBeVisible();
+      await expect(
+        page.getByRole("button", { name: "Create", exact: true }),
+      ).toBeVisible();
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+      ).toBe(true);
+      await page.screenshot({
+        path: `test-results/onboarding3-existing-ui-${width}-${mode}.png`,
+      });
+    }
+  });
+}

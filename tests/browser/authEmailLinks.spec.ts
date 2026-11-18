@@ -23,7 +23,9 @@ for (const host of ["127.0.0.1", "localhost", "sb-auth-preview.example"]) {
       });
     }
     await page.goto(
-      preview ? `https://${host}/activities` : `http://${host}:4189/activities`,
+      preview
+        ? `https://${host}/auth/sign-in`
+        : `http://${host}:4189/auth/sign-in`,
     );
     await page
       .getByRole("button", { name: "Create account", exact: true })

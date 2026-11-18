@@ -22,6 +22,8 @@ export interface PublicBeaconSummary {
   closed: boolean;
   /** Only the current viewer's response, never a public attendee list. */
   viewer_response?: "going" | "requested" | null;
+  /** Demo host setting only; live host metadata uses its owner-only RPC. */
+  guest_visible?: boolean;
 }
 
 export interface PublicDiscoveryFilters {

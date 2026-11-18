@@ -1,5 +1,7 @@
 Test map
 
+- guestDiscovery.test.ts, guestDiscovery.database.test.ts and browser/guestDiscovery.spec.ts: existing Map/Beacons UI signed out, unchanged Create/tab controls, login gates, signed-in demo behavior, expiring public-only continuation, host opt-in, anonymous permissions and explicit joining after account setup. Included in the onboarding commands; database coverage uses ordered migrations in local PGlite.
+
 - sonarSelection.test.ts and sonarRecipients.database.test.ts: uncapped Sonar recipients, start/save/extension, request replay, accepted-friend/block checks and sharing expiry through the ordered migrations.
 
 - browser/authEmailLinks.spec.ts: canonical signup/reset/resend destinations, explicit confirmation with no prefetch exchange, cross-browser token-hash entry, recovery and expired-link handling. Uses playwright.auth.config.ts and the separate auth-email preview.

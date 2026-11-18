@@ -1798,6 +1798,15 @@ function demoActionInner(previous: Data, action: string, p: Payload): Data {
     if (starts <= now) for (const item of current.filter((item) => !editable || item.id !== source.id)) next = demoAction(next, "activity_status", { id: item.id, status: "cancelled" });
     return next;
   }
+  if (action === "set_beacon_guest_visibility") {
+    const activity = d.activities.find(row => row.id === String(p.activity_id));
+    if (!activity || activity.owner_id !== uid) throw new Error("Only the host can change guest visibility.");
+    const summary = d.public_beacons.find(row => row.activity_id === activity.id);
+    if (!summary) throw new Error("Publish a public preview first.");
+    if (typeof p.enabled !== "boolean") throw new Error("Choose whether guests can see this Beacon.");
+    summary.guest_visible = p.enabled;
+    return d;
+  }
   if (action === "publish_beacon_discovery" || action === "unpublish_beacon_discovery" || action === "join_public_beacon") {
     const activity = d.activities.find(row => row.id === String(p.activity_id));
     if (!activity || d.viewer_id !== uid) throw new Error("Beacon unavailable.");

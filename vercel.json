@@ -14,6 +14,8 @@
     { "source": "/api/guest", "destination": "/api/guest" },
     { "source": "/auth/confirm", "destination": "/auth/confirm.html" },
     { "source": "/auth/callback", "destination": "/auth/callback.html" },
+    { "source": "/auth/sign-in", "destination": "/auth/sign-in.html" },
+    { "source": "/discover/:id", "destination": "/discover/[id].html" },
     { "source": "/(.*)", "destination": "/" }
   ]
 }

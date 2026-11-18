@@ -13,7 +13,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 async function enter(page: Page) {
-  await page.goto("/");
+  await page.goto("/auth/sign-in");
   await page.getByRole("button", { name: /Explore the demo/ }).click();
 }
 function visibleId(page: Page, id: string) {

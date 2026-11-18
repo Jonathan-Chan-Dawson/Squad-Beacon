@@ -205,7 +205,7 @@ function AuthCallbackBody({
             secondary
             compact
             title={ready ? "Cancel password reset" : "Return to sign in"}
-            onPress={() => router.replace(consumeEntryIntent() as Href)}
+            onPress={() => router.replace((ready ? consumeEntryIntent() : "/auth/sign-in") as Href)}
           />
         )}
       </Screen>

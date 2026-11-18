@@ -19,6 +19,7 @@ import { MoreHorizontal } from "lucide-react-native";
 import { ContextMenu } from "@/src/shared/ContextMenu";
 import { MapTooltipControl } from "@/src/features/maps/MapTooltipShell";
 import type { PublicBeaconSummary } from "./types";
+import { requestSignIn } from "@/src/features/auth/navigation";
 
 export type PublicBeaconPreviewProps = {
   summary: PublicBeaconSummary;
@@ -180,6 +181,10 @@ export function PublicBeaconPreview({
 
   const joinPublicBeacon = async () => {
     if (disabled) return;
+    if (!userId) {
+      requestSignIn(`/discover/${summary.activity_id}`);
+      return;
+    }
     const key = viewerKey;
     const activityId = summary.activity_id;
     const viewerId = userId;

@@ -31,6 +31,8 @@ export function homePresentation(
   loading: boolean,
   error: unknown,
 ) {
+  if (!viewer && !loading && !error)
+    return { kind: "compact", pending: 0, friends: false } as const;
   const available = !!viewer && data.viewer_id === viewer;
   const state = contentState({ error, loading, available, count: 0 });
   const pending = available ? pendingSocialCount(data, viewer, now) : 0;

@@ -24,7 +24,12 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
+import {
+  router,
+  useFocusEffect,
+  useLocalSearchParams,
+  useIsFocused,
+} from "expo-router";
 import { shareBeaconInvitation } from "@/src/features/sharing/shareBeacon";
 import {
   ArrowLeft,
@@ -56,6 +61,7 @@ import {
   type BrowseDiscoveryEntry,
 } from "@/src/features/discovery/domain";
 import { usePublicBeacons } from "@/src/features/discovery/usePublicBeacons";
+import { requestSignIn } from "@/src/features/auth/navigation";
 import { useBeaconCommunities } from "@/src/features/discovery/useBeaconCommunities";
 import {
   BeaconCommunitiesProvider,
@@ -97,7 +103,11 @@ export default function BrowseBeaconsScreen() {
   const { colors, tokens } = useDesignTheme();
   const insets = useSafeAreaInsets();
   const now = useNow();
-  const params = useLocalSearchParams<{ section?: string }>();
+  const screenFocused = useIsFocused();
+  const params = useLocalSearchParams<{
+    section?: string;
+    publicBeacon?: string;
+  }>();
   const { data, userId, act, loading, error, refresh, demo, demoScenario } =
     useBeacon();
   const simulatedError = __DEV__ && demo && demoScenario === "offline";
@@ -260,6 +270,7 @@ export default function BrowseBeaconsScreen() {
   const publicDirectory = usePublicBeacons(
     exploration.query,
     exploration.area?.coordinate,
+    params.publicBeacon,
   );
   const publicNow = useMemo(
     () =>
@@ -328,16 +339,20 @@ export default function BrowseBeaconsScreen() {
   );
   const selectedPublicSummary = useMemo(() => {
     if (
+      !screenFocused ||
       !publicPreviewSelection ||
       publicPreviewSelection.scopeKey !== publicDetailScopeKey ||
-      !userId ||
-      data.viewer_id !== userId
+      (!!userId && data.viewer_id !== userId)
     )
       return null;
     return (
       [...publicNow, ...publicUpcoming].find(
         (summary) => summary.activity_id === publicPreviewSelection.activityId,
-      ) ?? null
+      ) ??
+      (publicDirectory.focused?.activity_id ===
+      publicPreviewSelection.activityId
+        ? publicDirectory.focused
+        : null)
     );
   }, [
     data.viewer_id,
@@ -346,8 +361,37 @@ export default function BrowseBeaconsScreen() {
     publicPreviewSelection,
     publicUpcoming,
     userId,
+    publicDirectory.focused,
+    screenFocused,
   ]);
-  if (publicPreviewSelection && !selectedPublicSummary)
+  const continuedPublic = useRef<string | null>(null);
+  useEffect(() => {
+    if (
+      !screenFocused ||
+      !params.publicBeacon ||
+      !publicDirectory.ready ||
+      !publicDirectory.focused
+    )
+      return;
+    const key = `${userId}:${params.publicBeacon}`;
+    if (continuedPublic.current === key) return;
+    const frame = requestAnimationFrame(() => {
+      continuedPublic.current = key;
+      setPublicPreviewSelection({
+        activityId: params.publicBeacon!,
+        scopeKey: publicDetailScopeKey,
+      });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [
+    params.publicBeacon,
+    publicDirectory.ready,
+    publicDirectory.focused,
+    publicDetailScopeKey,
+    userId,
+    screenFocused,
+  ]);
+  if (publicPreviewSelection && !selectedPublicSummary && publicDirectory.ready && screenFocused)
     setPublicPreviewSelection(null);
   const unrankedNow = useMemo(
     () => mergeBrowseEntries(nowActivities, publicNow),
@@ -603,13 +647,21 @@ export default function BrowseBeaconsScreen() {
         ? "associated community"
         : undefined,
     });
-    const contextDetail = visibleContextLabel === "Friend hosting"
-      ? feedProps.hostName
-      : visibleContextLabel === "Matches your interest"
-        ? data.profiles.find((profile) => profile.id === userId)?.interests.find(
-            (interest) => matchesSearch(interest, activity.title, activity.category, activity.description),
-          )
-        : undefined;
+    const contextDetail =
+      visibleContextLabel === "Friend hosting"
+        ? feedProps.hostName
+        : visibleContextLabel === "Matches your interest"
+          ? data.profiles
+              .find((profile) => profile.id === userId)
+              ?.interests.find((interest) =>
+                matchesSearch(
+                  interest,
+                  activity.title,
+                  activity.category,
+                  activity.description,
+                ),
+              )
+          : undefined;
     return (
       <View key={activity.id} style={{ gap: tokens.space.xs }}>
         <BeaconFeedCard
@@ -623,7 +675,10 @@ export default function BrowseBeaconsScreen() {
             ) ? (
               <View style={{ gap: tokens.space.xs }}>
                 {visibleContextLabel ? (
-                  <DiscoveryContextNote label={visibleContextLabel} detail={contextDetail} />
+                  <DiscoveryContextNote
+                    label={visibleContextLabel}
+                    detail={contextDetail}
+                  />
                 ) : null}
                 <BeaconCommunityRow activityId={activity.id} compact />
               </View>
@@ -865,7 +920,9 @@ export default function BrowseBeaconsScreen() {
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel="Saved Beacons"
-                    onPress={() => setSavedOpen(true)}
+                    onPress={() =>
+                      userId ? setSavedOpen(true) : requestSignIn()
+                    }
                     style={{
                       minWidth: 44,
                       minHeight: 44,

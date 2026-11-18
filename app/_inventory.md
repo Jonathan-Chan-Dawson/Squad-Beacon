@@ -7,6 +7,7 @@ Expo Router map
 - space/[id].tsx: independent Space overview, people and privacy-preserving Squad links.
 
 - _layout.tsx, +html.tsx, +not-found.tsx: root app shell, web HTML wrapper, and fallback route.
+- auth/sign-in.tsx: explicit account entry and required-profile completion; discover/[id].tsx: sanitized public Beacon continuation. The root keeps navigation mounted while gating each private screen, so guests can navigate without mounting personal implementations.
 - auth/confirm.tsx: explicit, non-consuming-on-load email confirmation around the shared auth link service. auth/callback.tsx retains legacy PKCE/signup/recovery links.
 - (tabs)/: persistent Map, Beacons, Squads, and Profile tabs; screen implementations live in src/features.
 - activity/[id].tsx, create.tsx: thin exports of the feature-owned ActivityDetailScreen and CreateScreen; route paths and parameters stay stable.
