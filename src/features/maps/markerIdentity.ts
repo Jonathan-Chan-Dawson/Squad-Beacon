@@ -50,7 +50,7 @@ export function beaconPinEmphasis(
   if (state?.friendHosted)
     return { level: 4, color: "#6DAFE5", core: "#CBEAFF", beamHeight: compact ? 0 : 12, beamWidth: 11, coreWidth: 2, beamOpacity: 0.59, glowOpacity: compact ? 0.1 : 0.26 };
   if (state?.squadHosted)
-    return { level: 5, color: "#67C49B", core: "#C9F5E0", beamHeight: compact ? 0 : 11, beamWidth: 10, coreWidth: 2, beamOpacity: 0.57, glowOpacity: compact ? 0.09 : 0.25 };
+    return { level: 5, color: "#67C49B", core: "#C9F5E0", beamHeight: compact ? 8 : 13, beamWidth: 10, coreWidth: 2, beamOpacity: 0.57, glowOpacity: compact ? 0.09 : 0.25 };
   if (!compact && state?.saved)
     return { level: 0, color: categoryColor, core: categoryColor, beamHeight: 0, beamWidth: 0, coreWidth: 0, beamOpacity: 0, glowOpacity: 0.18 };
   return null;
