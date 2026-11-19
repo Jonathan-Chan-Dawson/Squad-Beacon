@@ -21,7 +21,12 @@ import type { Category } from "@/src/shared/types";
 import type { FriendAvailabilityState } from "@/src/shared/domain";
 import type { ClusterPoint } from "../cluster";
 import type { ClusterMemberArtwork } from "../clusterArtwork";
-import { mapIdentityColors, friendLocationLabel } from "../markerIdentity";
+import {
+  beaconPinEmphasis,
+  COMPACT_BEACON_PIN_RADIUS,
+  mapIdentityColors,
+  friendLocationLabel,
+} from "../markerIdentity";
 import {
   CLUSTER_COUNT_PATHS,
   clusterCountWidth,
@@ -40,6 +45,8 @@ import {
 } from "../nativeMapPresentation";
 import {
   BeaconMarkerArtwork,
+  BeaconPinLight,
+  BeaconPinTip,
   SavedBookmark,
   FriendMapAvatar,
   useMarkerTracking,
@@ -90,6 +97,9 @@ const MemberArtwork = React.memo(function MemberArtwork({
     model.kind === "beacon"
       ? categoryColors[model.category]
       : availabilityColors[model.availability];
+  const lighting = model.kind === "beacon"
+    ? beaconPinEmphasis(model.markerState, false, color, true)
+    : null;
   return (
     <View
       style={{
@@ -98,11 +108,13 @@ const MemberArtwork = React.memo(function MemberArtwork({
         alignItems: "center",
       }}
     >
+      {lighting && <BeaconPinLight lighting={lighting} compact />}
+      {model.kind === "beacon" && <BeaconPinTip color={color} faceBottom={size} compact />}
       <View
         style={{
           width: size,
           height: size,
-          borderRadius: model.kind === "beacon" ? 9 : size / 2,
+          borderRadius: model.kind === "beacon" ? COMPACT_BEACON_PIN_RADIUS : size / 2,
           borderWidth: 2,
           borderColor: color,
           backgroundColor: colors.surface,
@@ -128,7 +140,7 @@ const MemberArtwork = React.memo(function MemberArtwork({
               inset: 0,
               borderWidth: 1.5,
               borderColor: colors.success,
-              borderRadius: model.kind === "beacon" ? 9 : size / 2,
+              borderRadius: COMPACT_BEACON_PIN_RADIUS,
             }}
           />
         )}

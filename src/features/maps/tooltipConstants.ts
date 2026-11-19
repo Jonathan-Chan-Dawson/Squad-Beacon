@@ -11,6 +11,7 @@ export const mapTooltip = {
   detailSize: 12,
   avatarSize: 36,
   markerGap: 34,
+  beaconMarkerClearance: { above: 104, below: 18 },
   pointerSize: 12,
   duration: 180,
   actionHeight: 44,

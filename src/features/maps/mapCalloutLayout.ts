@@ -14,6 +14,7 @@ export function mapCalloutLayout(
   requestedHeight?: number,
   gutter = 16,
   maximumWidth = 420,
+  markerClearance?: { above: number; below: number },
 ) {
   let width = Math.min(
     maximumWidth,
@@ -28,9 +29,11 @@ export function mapCalloutLayout(
     x: bounds.width / 2,
     y: bounds.top + availableHeight / 2,
   };
-  const aboveSpace = point.y - mapTooltip.markerGap - bounds.top;
+  const aboveGap = markerClearance?.above ?? mapTooltip.markerGap;
+  const belowGap = markerClearance?.below ?? mapTooltip.markerGap;
+  const aboveSpace = point.y - aboveGap - bounds.top;
   const belowSpace =
-    bounds.height - bounds.bottom - point.y - mapTooltip.markerGap;
+    bounds.height - bounds.bottom - point.y - belowGap;
   const naturalHeight = requestedHeight
     ? desiredHeight
     : Math.min(measuredHeight, desiredHeight);
@@ -63,8 +66,8 @@ export function mapCalloutLayout(
         Math.min(
           bounds.height - bounds.bottom - cardHeight,
           above
-            ? point.y - cardHeight - mapTooltip.markerGap
-            : point.y + mapTooltip.markerGap,
+            ? point.y - cardHeight - aboveGap
+            : point.y + belowGap,
         ),
       )
     : bounds.top + Math.max(0, (availableHeight - cardHeight) / 2);
@@ -86,8 +89,8 @@ export function mapCalloutLayout(
     point.x <= bounds.width &&
     Math.abs(
       (above
-        ? top + cardHeight + mapTooltip.markerGap
-        : top - mapTooltip.markerGap) - point.y,
+        ? top + cardHeight + aboveGap
+        : top - belowGap) - point.y,
     ) < 3;
   return {
     width,

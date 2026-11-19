@@ -26,6 +26,7 @@ export function MapCallout({
   height,
   testID,
   maxWidth,
+  markerClearance,
   maxContentHeight = mapTooltip.maxHeight,
   onDismiss,
   compact = false,
@@ -45,6 +46,7 @@ export function MapCallout({
   height?: number;
   testID?: string;
   maxWidth?: number;
+  markerClearance?: { above: number; below: number };
   maxContentHeight?: number;
   compact?: boolean;
   motion?: "default" | "place";
@@ -72,6 +74,7 @@ export function MapCallout({
     height,
     tokens.layout.screenGutter,
     maxWidth,
+    markerClearance,
   );
   useEffect(() => {
     if (!onDismiss) return;

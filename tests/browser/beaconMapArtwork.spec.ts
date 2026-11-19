@@ -32,6 +32,14 @@ for (const appearance of ["light", "dark"] as const) {
       .click();
 
     const card = page.getByTestId("map-tooltip-card");
+    const map = page.getByLabel("Beacon map", { exact: true });
+    const selectedPin = map.locator('button[aria-label^="Map: Plan stop 1: Coffee together"]');
+    await expect(selectedPin).toHaveAttribute("aria-current", "true");
+    await expect(selectedPin.getByTestId("beacon-marker-beam")).toHaveCSS("height", "32px");
+    await expect(selectedPin.getByTestId("beacon-marker-beam")).toHaveCSS("background-image", /linear-gradient.*255, 254, 244/);
+    await expect(selectedPin.getByTestId("beacon-marker-glow")).toHaveCSS("box-shadow", /0px 0px 36px/);
+    await expect(selectedPin.getByTestId("beacon-marker-glow")).toHaveAttribute("data-lighting-level", "1");
+    await expect(selectedPin.getByTestId("beacon-marker-glow")).toHaveCSS("border-radius", "13px");
     const identity = card.getByTestId("map-beacon-identity");
     const attendance = card.getByTestId("discovery-going-count");
     const actions = card.getByTestId("discovery-card-actions");
@@ -57,6 +65,10 @@ for (const appearance of ["light", "dark"] as const) {
     const bookmark = identity.getByRole("button", { name: "Save Beacon", exact: true });
     await expect(close).toBeInViewport({ ratio: 0.9 });
     await expect(bookmark).toBeInViewport({ ratio: 0.9 });
+    const beamBox = (await selectedPin.getByTestId("beacon-marker-beam").boundingBox())!;
+    const cardBox = (await card.boundingBox())!;
+    expect(Math.min(beamBox.y + beamBox.height, cardBox.y + cardBox.height) -
+      Math.max(beamBox.y, cardBox.y)).toBeLessThan(2);
     const timing = (await card.getByTestId("discovery-timing").boundingBox())!;
     const hostControls = (await hosting.boundingBox())!;
     expect(timing.x + timing.width).toBeLessThanOrEqual(hostControls.x);
@@ -83,21 +95,33 @@ for (const appearance of ["light", "dark"] as const) {
     await expect(planFocus).toContainText("3 stops");
     await expect(planFocus.getByTestId("map-plan-filter-name")).toHaveCSS("text-overflow", "ellipsis");
     await expect(planFocus.getByRole("button", { name: "Fit Plan", exact: true })).toBeInViewport();
-    const map = page.getByLabel("Beacon map", { exact: true });
+    const tipColors = new Set<string>();
     for (const stop of [1, 2, 3]) {
       const pin = map.getByRole("button", { name: new RegExp(`^Plan stop ${stop}:`, "i") });
       await expect(pin).toBeInViewport();
-      await expect(pin.getByTestId("beacon-pin-tip")).toBeVisible();
+      const tip = pin.getByTestId("beacon-pin-tip");
+      await expect(tip).toBeVisible();
+      const tipBox = (await tip.boundingBox())!;
+      const faceBox = (await pin.locator("[data-cluster-face]").boundingBox())!;
+      expect(tipBox.y + tipBox.height - faceBox.y - faceBox.height).toBeGreaterThan(8);
+      tipColors.add(await tip.evaluate(node => getComputedStyle(node).borderTopColor));
       await expect(pin.getByTestId("map-plan-stop-badge")).toHaveText(String(stop));
     }
+    expect(tipColors.size).toBeGreaterThan(1);
     const directions = page.getByTestId("map-plan-direction");
     await expect(directions).toHaveCount(2);
     expect(await directions.nth(0).getAttribute("stroke")).not.toBe(await directions.nth(1).getAttribute("stroke"));
     await page.screenshot({ path: testInfo.outputPath(`beacon-plan-focus-${appearance}.png`), animations: "disabled" });
-    await planFocus.getByRole("button", { name: "Exit Plan Focus" }).click();
-    await expect(card).toBeVisible();
+    const artStop = map.getByRole("button", { name: /^Plan stop 2:/i });
+    await expect(artStop.getByTestId("beacon-marker-glow")).toHaveAttribute("data-lighting-level", "3");
+    await artStop.getByTestId("beacon-marker-glow").click();
+    await expect(artStop.getByTestId("beacon-marker-beam")).toHaveCSS("height", "32px");
+    await expect(artStop).toHaveAttribute("aria-current", "true");
+    await expect(directions).toHaveCount(2);
     await close.click();
-    await expect(card).toHaveCount(0);
+    await expect(artStop.getByTestId("beacon-marker-beam")).toHaveCSS("height", "15px");
+    await planFocus.getByRole("button", { name: "Exit Plan Focus" }).click();
+    await expect(planFocus).toHaveCount(0);
   });
 }
 

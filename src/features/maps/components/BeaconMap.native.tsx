@@ -4,7 +4,9 @@ import {
   visibleFriendLabels,
   ownsMapBeacon,
   prepareMapIdentity,
-  beaconMarkerState,
+  mapBeaconMarkerStates,
+  beaconPulseStyle,
+  BEACON_SELECTED_SCALE,
 } from "../markerIdentity";
 import { isBeaconLive } from "@/src/features/beacons/beaconLive";
 import Svg, { Path as CountPath } from "react-native-svg";
@@ -69,6 +71,7 @@ import {
   BeaconMapPin,
   FriendMapPin,
   NowBeaconHalo,
+  BEACON_FACE_TO_TIP,
 } from "@/src/features/maps/components/BeaconMapMarkers.native";
 import { pulseLayerPolicy } from "@/src/features/pulse/pulseLayerPolicy";
 import {
@@ -249,14 +252,8 @@ export default function BeaconMap({
     [identityData, identityViewer],
   );
   const markerStates = useMemo(
-    () =>
-      new Map(
-        activities.map((a) => [
-          a.id,
-          beaconMarkerState(identityData, a, identityLookup, now),
-        ]),
-      ),
-    [activities, identityData, identityLookup, now],
+    () => mapBeaconMarkerStates(identityData, activities, contextPoints, identityLookup, now),
+    [activities, contextPoints, identityData, identityLookup, now],
   );
   const reducedMotion = useReducedMotion();
   const categoryColors = useMemo(
@@ -856,41 +853,37 @@ export default function BeaconMap({
     0,
     MAX_RENDERED_MAP_FEATURES - nativeFeatureCount - reservedFeatures,
   );
-  const nowHaloIds = new Set(
-    pins
-      .filter((place) =>
-        renderedSingletonIds.has(`beacon:${place.activity_id}`),
-      )
-      .filter((place) => {
-        const activity = activities.find(
-          (item) => item.id === place.activity_id,
-        );
-        return (
-          !!activity &&
-          markerStates.get(activity.id)?.live === true &&
-          (!selectedActivityId || selectedActivityId === activity.id) &&
-          (!contextPoints.some((p) => p.activityId) ||
-            contextPoints.some((p) => p.activityId === activity.id))
-        );
-      })
-      .sort((a, b) => a.activity_id.localeCompare(b.activity_id))
-      .slice(0, availableHaloSlots)
-      .map((place) => `beacon:${place.activity_id}`),
-  );
+  const contextActivityIds = new Set(contextPoints.map((point) => point.activityId).filter(Boolean));
+  const haloCandidates = new Map<string, { latitude: number; longitude: number; category: Category }>();
+  for (const place of pins) {
+    const id = place.activity_id;
+    if (!renderedSingletonIds.has(`beacon:${id}`) || !markerStates.get(id)?.live ||
+        (selectedActivityId && selectedActivityId !== id) ||
+        (contextActivityIds.size && !contextActivityIds.has(id))) continue;
+    const activity = activities.find((row) => row.id === id);
+    if (activity) haloCandidates.set(id, {
+      latitude: place.latitude!, longitude: place.longitude!, category: activity.category,
+    });
+  }
+  for (const point of contextPoints) {
+    if (point.stopNumber && point.activityId && markerStates.get(point.activityId)?.live)
+      haloCandidates.set(point.activityId, {
+        latitude: point.latitude, longitude: point.longitude, category: point.category ?? "Other",
+      });
+  }
+  const liveHaloPins = [...haloCandidates]
+    .sort(([left], [right]) =>
+      Number(right === selectedActivityId) - Number(left === selectedActivityId) ||
+      Number(markerStates.get(right)?.participatingLive) - Number(markerStates.get(left)?.participatingLive) ||
+      left.localeCompare(right))
+    .slice(0, availableHaloSlots);
   const haloRevision = JSON.stringify([
     identityViewer,
     zoom,
     region,
     mapSize,
     selectedActivityId,
-    [...nowHaloIds],
-    pins
-      .filter((p) => nowHaloIds.has(`beacon:${p.activity_id}`))
-      .map((p) => [p.activity_id, p.latitude, p.longitude])
-      .sort((a, b) => String(a[0]).localeCompare(String(b[0]))),
-    contextPoints
-      .map((p) => [p.activityId, p.suggestion])
-      .sort((a, b) => String(a[0]).localeCompare(String(b[0]))),
+    liveHaloPins,
   ]);
   const [haloProjection, setHaloProjection] = useState<{
     revision: string;
@@ -901,26 +894,15 @@ export default function BeaconMap({
     let active = true;
     const view = map.current;
     void Promise.all(
-      pins
-        .filter((p) => nowHaloIds.has(`beacon:${p.activity_id}`))
-        .map(async (place) => {
-          const coordinate = {
-            latitude: place.latitude!,
-            longitude: place.longitude!,
-          };
+      liveHaloPins.map(async ([id, { latitude, longitude }]) => {
+          const coordinate = { latitude, longitude };
           const point = await view.pointForCoordinate(coordinate);
-          const hasChip =
-            zoom >= 15 ||
-            contextPoints.some((p) => p.activityId === place.activity_id);
-          const isSelected = selectedActivityId === place.activity_id;
-          // Keep the ripple centered on the face above the tip of the pin.
-          const height = hasChip ? 83 : 69;
-          const faceY = height / 2 + (33 - height / 2) * (isSelected ? 1.25 : 1);
+          const scale = selectedActivityId === id ? BEACON_SELECTED_SCALE : 1;
           const center = await view.coordinateForPoint({
             x: point.x,
-            y: point.y + faceY - 58,
+            y: point.y - BEACON_FACE_TO_TIP * scale,
           });
-          return [place.activity_id, center] as const;
+          return [id, center] as const;
         }),
     )
       .then((entries) => {
@@ -1178,7 +1160,6 @@ export default function BeaconMap({
           .map((point) => {
             if (point.stopNumber) {
               const category = point.category ?? "Other";
-              const activity = identityData.activities.find((row) => row.id === point.activityId);
               return (
                 <BeaconMapPin
                   key={point.id}
@@ -1192,7 +1173,7 @@ export default function BeaconMap({
                   selected={selectedActivityId === point.activityId}
                   dimmed={false}
                   appearanceKey={appearanceKey}
-                  markerState={activity ? beaconMarkerState(identityData, activity, identityLookup, now) : EMPTY_MARKER_STATE}
+                  markerState={(point.activityId && markerStates.get(point.activityId)) || EMPTY_MARKER_STATE}
                   disabled={!!onPick}
                   onPress={() => onContextPoint?.(point)}
                 />
@@ -1261,27 +1242,18 @@ export default function BeaconMap({
               </Marker>
             );
           })}
-        {pins
-          .filter((place) => nowHaloIds.has(`beacon:${place.activity_id}`))
-          .map((place) => {
-            const activity = activities.find(
-              (item) => item.id === place.activity_id,
-            );
-            if (
-              !activity ||
-              !markerStates.get(activity.id)?.live ||
-              haloProjection.revision !== haloRevision ||
-              !haloProjection.centers[activity.id]
-            )
-              return null;
+        {haloProjection.revision === haloRevision && liveHaloPins.map(([id, { category }]) => {
+            const center = haloProjection.centers[id];
+            if (!center) return null;
+            const selectedPin = selectedActivityId === id;
             return (
               <NowBeaconHalo
-                key={`now-halo:${activity.id}`}
-                coordinate={haloProjection.centers[activity.id]}
+                key={`now-halo:${id}`}
+                coordinate={center}
                 zoom={zoom}
-                selected={selectedActivityId === activity.id}
+                selected={selectedPin}
                 paused={cameraMoving || !!onPick}
-                color={categoryColors[activity.category]}
+                {...beaconPulseStyle(markerStates.get(id), selectedPin, categoryColors[category])}
               />
             );
           })}

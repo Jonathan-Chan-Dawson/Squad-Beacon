@@ -4052,6 +4052,7 @@ export default function MapScreen() {
               setDetailTab(null);
             }}
             maxWidth={person ? mapTooltip.width : mapTooltip.beaconWidth}
+            markerClearance={person ? undefined : mapTooltip.beaconMarkerClearance}
             maxContentHeight={person ? mapTooltip.maxHeight : mapTooltip.beaconMaxHeight}
             anchor={mapAnchor}
             bounds={{

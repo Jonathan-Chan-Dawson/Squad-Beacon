@@ -2,7 +2,7 @@ Maps feature
 
 - MyBeaconsSheet.tsx: underlined Hosting/Joined count tabs, category icons and time/location rows inside a scrolling 70% sheet.
 - myBeacons.ts: authorized unexpired Hosting/Joined navigation; explicit Beacon context preserves discovery filters and restores the prior camera on removal.
-- markerIdentity.ts: viewer-authorized ownership/saved/friend/live marker state, shared pulse metrics, first-name freshness labels and deterministic label collision suppression. Beacon markers retain category artwork, ownership stars or saved Bookmarks, and quiet friend rims; centered inner rims remain visible on compact petals and far-zoom individual dots. Live pulses run only on individual undimmed markers and stop during gestures; reduced motion uses a static ring.
+- markerIdentity.ts: viewer-authorized marker state, shared lighting precedence (selected, live participation, owned, friend, Squad), pulse metrics, and friend freshness labels. Category artwork and location tips remain separate from the lighting. Live pulses run on individual undimmed pins and visible Plan stops, stop during gestures, and use a static ring with reduced motion.
 
 - screens/MapScreen.tsx: full-map tab; coordinates search, safe area/context, inline discovery, area/compass, previews, and map options.
 - MapPlaceActions.tsx: shared pin-anchored actions for long-press, place selection and bottom-right Choose a place. MapScreen owns selected-place source/phase, search replacement and query restoration; editor picking retains Use This Location. Search and Close stay in the header; a separate compact Get directions footer identifies Google Maps as its external destination. Place activity reuses PulsePlacePreview details-only confirmation/reporting controls.

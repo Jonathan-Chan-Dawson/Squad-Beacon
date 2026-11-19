@@ -1,7 +1,13 @@
 import {
   EMPTY_MARKER_STATE,
   markerStateLabel,
-  BEACON_PULSE_DURATION,
+  beaconPinEmphasis,
+  BEACON_LIVE_BEAM_HEIGHT,
+  BEACON_SELECTED_BEAM_HEIGHT,
+  BEACON_PIN_RADIUS,
+  BEACON_PIN_TIP,
+  COMPACT_BEACON_PIN_TIP,
+  BEACON_SELECTED_SCALE,
   BEACON_PULSE_SCALE,
   type BeaconMarkerState,
   ownsMapBeacon,
@@ -19,6 +25,7 @@ import { BeaconPinGlyph } from "./BeaconPinGlyph";
 import { Bookmark } from "lucide-react-native";
 import { Image, Text, View } from "react-native";
 import { Circle as MapCircle, Marker } from "react-native-maps";
+import Svg, { Circle, Defs, LinearGradient, RadialGradient, Rect, Stop } from "react-native-svg";
 import Animated, {
   cancelAnimation,
   interpolate,
@@ -77,40 +84,49 @@ function MarkerContent({
   children,
   selected,
   dimmed,
+  tipY,
 }: {
   children: React.ReactNode;
   selected?: boolean;
   dimmed?: boolean;
+  tipY: number;
 }) {
   const reducedMotion = useReducedMotion();
-  const scale = useSharedValue(selected ? 1.25 : 1);
+  const scale = useSharedValue(selected ? BEACON_SELECTED_SCALE : 1);
   useEffect(() => {
-    const target = selected ? 1.25 : 1;
+    const target = selected ? BEACON_SELECTED_SCALE : 1;
     if (scale.value === target) return;
-    scale.value = reducedMotion
-      ? selected
-        ? 1.25
-        : 1
-      : withSpring(selected ? 1.25 : 1, { damping: 16, stiffness: 240 });
+    scale.value = reducedMotion ? target : withSpring(target, { damping: 16, stiffness: 240 });
     return () => cancelAnimation(scale);
   }, [selected, reducedMotion, scale]);
   const animatedStyle = useAnimatedStyle(() => ({
     opacity: dimmed ? 0.7 : 1,
     transform: [{ scale: scale.value }],
   }));
-  return <Animated.View style={animatedStyle}>{children}</Animated.View>;
+  return <Animated.View style={[{ transformOrigin: ["50%", tipY, 0] }, animatedStyle]}>{children}</Animated.View>;
 }
+
+export const BEACON_FACE_TO_TIP =
+  markerVisualSize("beacon") / 2 + BEACON_PIN_TIP.height - BEACON_PIN_TIP.overlap;
+const NATIVE_BEACON_LIGHT_INSET = BEACON_LIVE_BEAM_HEIGHT;
+const NATIVE_SELECTED_LIGHT_INSET = Math.ceil(
+  (BEACON_SELECTED_BEAM_HEIGHT + markerVisualSize("beacon") / 2 + BEACON_FACE_TO_TIP - 2) * BEACON_SELECTED_SCALE,
+) - markerVisualSize("beacon") / 2 - BEACON_FACE_TO_TIP + 2;
 
 /** Screen-sized native overlay; only the animation driver changes per frame. */
 export function NowBeaconHalo({
   coordinate,
   color,
+  opacity,
+  duration,
   zoom,
   selected = false,
   paused = false,
 }: {
   coordinate: { latitude: number; longitude: number };
   color: string;
+  opacity: number;
+  duration: number;
   zoom: number;
   selected?: boolean;
   paused?: boolean;
@@ -121,24 +137,24 @@ export function NowBeaconHalo({
     (156543.03392 * Math.cos((coordinate.latitude * Math.PI) / 180)) /
     2 ** zoom;
   const radius =
-    (markerVisualSize("beacon") / 2) * (selected ? 1.25 : 1) * metersPerPixel;
+    (markerVisualSize("beacon") / 2) * (selected ? BEACON_SELECTED_SCALE : 1) * metersPerPixel;
   useEffect(() => {
     cancelAnimation(progress);
     progress.value = 0;
     if (!reducedMotion && !paused)
       progress.value = withRepeat(
         withTiming(1, {
-          duration: BEACON_PULSE_DURATION,
+          duration,
           easing: Easing.out(Easing.quad),
         }),
         -1,
         false,
       );
     return () => cancelAnimation(progress);
-  }, [progress, reducedMotion, paused]);
+  }, [progress, reducedMotion, paused, duration]);
   const transparent = rgba(color, 0);
-  const stroke = rgba(color, 0.24);
-  const fill = rgba(color, 0.035);
+  const stroke = rgba(color, opacity);
+  const fill = rgba(color, opacity * 0.15);
   const animatedProps = useAnimatedProps(() => ({
     radius:
       radius *
@@ -239,6 +255,83 @@ export function FriendMapAvatar({
   );
 }
 
+export function BeaconPinTip({
+  color,
+  faceBottom,
+  compact = false,
+}: {
+  color: string;
+  faceBottom: number;
+  compact?: boolean;
+}) {
+  const size = compact ? COMPACT_BEACON_PIN_TIP : BEACON_PIN_TIP;
+  return (
+    <View
+      testID="beacon-pin-tip"
+      pointerEvents="none"
+      accessible={false}
+      style={{
+        position: "absolute",
+        top: faceBottom - size.overlap,
+        width: 0,
+        height: 0,
+        borderLeftWidth: size.halfWidth,
+        borderRightWidth: size.halfWidth,
+        borderTopWidth: size.height,
+        borderLeftColor: "transparent",
+        borderRightColor: "transparent",
+        borderTopColor: color,
+      }}
+    />
+  );
+}
+
+export function BeaconPinLight({
+  lighting,
+  inset = 0,
+  compact = false,
+}: {
+  lighting: NonNullable<ReturnType<typeof beaconPinEmphasis>>;
+  inset?: number;
+  compact?: boolean;
+}) {
+  const { level, color, core, beamHeight, beamWidth, coreWidth, beamOpacity, glowOpacity } = lighting;
+  const spread = compact ? 20 : level === 1 ? 46 : level === 2 ? 33 : level === 3 ? 29 : 27;
+  return (
+    <>
+      <Svg pointerEvents="none" width={spread * 2} height={spread * 2} style={{ position: "absolute", top: inset + (compact ? 16 : 20) - spread }}>
+        <Defs>
+          <RadialGradient id="beaconGlow">
+            <Stop offset="62%" stopColor={color} stopOpacity={glowOpacity} />
+            <Stop offset="78%" stopColor={color} stopOpacity={glowOpacity * 0.45} />
+            <Stop offset="100%" stopColor={color} stopOpacity={0} />
+          </RadialGradient>
+        </Defs>
+        <Circle cx={spread} cy={spread} r={spread} fill="url(#beaconGlow)" />
+      </Svg>
+      {beamHeight > 0 && (
+        <Svg testID="beacon-marker-beam" pointerEvents="none" width={beamWidth} height={beamHeight} style={{ position: "absolute", top: inset - beamHeight + 2 }}>
+          <Defs>
+            <LinearGradient id="beaconBeam" x1="0%" y1="0%" x2="0%" y2="100%">
+              <Stop offset="0%" stopColor={color} stopOpacity={0} />
+              <Stop offset="34%" stopColor={color} stopOpacity={0.33} />
+              <Stop offset="66%" stopColor={color} stopOpacity={0.73} />
+              <Stop offset="100%" stopColor={core} />
+            </LinearGradient>
+            <RadialGradient id="beaconBeamAura" cy="100%">
+              <Stop offset="0%" stopColor={color} stopOpacity={0.53} />
+              <Stop offset="42%" stopColor={color} stopOpacity={0.19} />
+              <Stop offset="78%" stopColor={color} stopOpacity={0} />
+            </RadialGradient>
+          </Defs>
+          <Rect width={beamWidth} height={beamHeight} fill="url(#beaconBeamAura)" opacity={beamOpacity} />
+          <Rect x={(beamWidth - coreWidth) / 2} width={coreWidth} height={beamHeight} rx={2} fill="url(#beaconBeam)" opacity={beamOpacity} />
+        </Svg>
+      )}
+    </>
+  );
+}
+
 /** Original Beacon artwork shared by singleton pins and native constellation stacks. */
 export function BeaconMarkerArtwork({
   category,
@@ -249,12 +342,12 @@ export function BeaconMarkerArtwork({
   markerState = EMPTY_MARKER_STATE,
   showSaved = true,
   icon,
-  beam = false,
+  lightEnabled = true,
   raisedPin = false,
   stopNumber,
 }: {
   id: string;
-  beam?: boolean;
+  lightEnabled?: boolean;
   raisedPin?: boolean;
   stopNumber?: number;
   category: Category;
@@ -269,22 +362,28 @@ export function BeaconMarkerArtwork({
   const { colors } = useTheme();
   const owned = markerState.owned;
   const visualSize = markerVisualSize("beacon");
+  const pinInset = raisedPin ? (selected ? NATIVE_SELECTED_LIGHT_INSET : NATIVE_BEACON_LIGHT_INSET) : 0;
+  const tipY = pinInset + visualSize / 2 + BEACON_FACE_TO_TIP;
+  const lighting = lightEnabled && !dimmed
+    ? beaconPinEmphasis(markerState, selected, categoryColor)
+    : null;
   return (
-    <MarkerContent selected={selected} dimmed={dimmed}>
+    <MarkerContent selected={selected} dimmed={dimmed} tipY={tipY}>
       <View
         style={{
-          width: 58,
-          height: (streetTime ? 70 : 56) + (raisedPin ? 13 : 0),
-          paddingTop: raisedPin ? 13 : 0,
+          width: raisedPin && selected ? 116 : raisedPin && lighting?.level === 2 ? 66 : 58,
+          height: (streetTime ? 70 : 56) + pinInset,
+          paddingTop: pinInset,
           alignItems: "center",
         }}
       >
-        {beam && <View testID="beacon-marker-beam" pointerEvents="none" style={{ position: "absolute", top: 0, width: 2, height: 15, borderRadius: 2, backgroundColor: categoryColor, shadowColor: categoryColor, shadowOpacity: 0.8, shadowRadius: 5, shadowOffset: { width: 0, height: 0 } }} />}
+        {lighting && <BeaconPinLight lighting={lighting} inset={pinInset} />}
+        <BeaconPinTip color={categoryColor} faceBottom={pinInset + visualSize} />
         <View
           style={{
             width: visualSize,
             height: visualSize,
-            borderRadius: 13,
+            borderRadius: BEACON_PIN_RADIUS,
             borderWidth: 2,
             borderColor: categoryColor,
             backgroundColor: colors.surface,
@@ -292,8 +391,8 @@ export function BeaconMarkerArtwork({
             justifyContent: "center",
             elevation: 5,
             shadowColor: "#182A32",
-            shadowOpacity: 0.22,
-            shadowRadius: 5,
+            shadowOpacity: selected ? 0.4 : markerState.participatingLive ? 0.32 : 0.22,
+            shadowRadius: selected ? 9 : markerState.participatingLive ? 7 : 5,
             shadowOffset: { width: 0, height: 3 },
           }}
         >
@@ -307,7 +406,7 @@ export function BeaconMarkerArtwork({
                 borderWidth: 2.5,
                 borderColor: colors.success,
                 opacity: 0.95,
-                borderRadius: 11,
+                borderRadius: BEACON_PIN_RADIUS - 2,
               }}
             />
           )}
@@ -317,26 +416,19 @@ export function BeaconMarkerArtwork({
               <Text style={{ color: colors.ink, fontSize: 9, fontWeight: "700" }}>{stopNumber}</Text>
             </View>
           ) : null}
-          {selected && <View pointerEvents="none" style={{ position: "absolute", inset: -5, borderRadius: 16, borderWidth: 2, borderColor: colors.ink }} />}
+          {lighting?.level === 1 && (
+            <>
+              <View pointerEvents="none" style={{ position: "absolute", inset: -4, borderRadius: BEACON_PIN_RADIUS + 2, borderWidth: 2, borderColor: colors.ink }} />
+              <View pointerEvents="none" style={{ position: "absolute", inset: -6, borderRadius: BEACON_PIN_RADIUS + 4, borderWidth: 2, borderColor: lighting.core }} />
+            </>
+          )}
           {showSaved && markerState.saved && !owned && <SavedBookmark />}
           {owned && <OwnershipStar />}
         </View>
-        <View
-          style={{
-            position: "absolute",
-            top: raisedPin ? 47 : 34,
-            width: 12,
-            height: 12,
-            backgroundColor: categoryColor,
-            borderRadius: 2,
-            transform: [{ rotate: "45deg" }],
-            zIndex: -1,
-          }}
-        />
         {streetTime ? (
           <View
             style={{
-              marginTop: 5,
+              marginTop: BEACON_PIN_TIP.height,
               paddingHorizontal: 7,
               paddingVertical: 2,
               borderRadius: 9,
@@ -393,6 +485,8 @@ function BeaconMapPinComponent({
 }) {
   const { colors } = useTheme();
   const stateLabel = markerStateLabel(markerState);
+  const pinInset = selected ? NATIVE_SELECTED_LIGHT_INSET : NATIVE_BEACON_LIGHT_INSET;
+  const tipBottom = pinInset + markerVisualSize("beacon") / 2 + BEACON_FACE_TO_TIP;
   const label = `${stopNumber ? `Plan stop ${stopNumber}` : "Map"}: ${title}${stateLabel ? `, ${stateLabel}` : ""}`;
   const tracking = useMarkerTracking(
     `${JSON.stringify(markerState)}:${id}:${categoryColor}:${selected}:${dimmed}:${streetTime ?? ""}:${appearanceKey}:${dot}:${icon ?? ""}:${stopNumber ?? ""}`,
@@ -436,10 +530,11 @@ function BeaconMapPinComponent({
     <Marker
       key={id}
       coordinate={coordinate}
-      anchor={{ x: 0.5, y: streetTime ? 58 / 83 : 58 / 69 }}
+      anchor={{ x: 0.5, y: tipBottom / ((streetTime ? 70 : 56) + pinInset) }}
       tracksViewChanges={tracking}
       accessibilityLabel={label}
-      zIndex={stopNumber ? (selected ? 3 : 2) : undefined}
+      accessibilityState={{ selected }}
+      zIndex={selected ? 1000 : stopNumber ? 2 : undefined}
       onPress={(event) => {
         event.stopPropagation();
         if (!disabled) onPress(id);
@@ -449,7 +544,7 @@ function BeaconMapPinComponent({
         id={id}
         category={category}
         icon={icon}
-        beam={selected || (markerState.live && markerState.owned)}
+        lightEnabled={!disabled}
         raisedPin
         categoryColor={categoryColor}
         selected={selected}
