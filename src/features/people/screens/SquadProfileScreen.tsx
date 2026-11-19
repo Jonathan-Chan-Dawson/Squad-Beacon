@@ -1,10 +1,12 @@
-import {SquadBoostLink} from "./SquadBoostScreen";
-import { ActivityCard } from "@/src/features/beacons/ActivityCard";
+import { CommunityActivityRow } from "@/src/features/social/CommunityActivityRow";
+import { CommunityInCommon } from "@/src/features/social/CommunityInCommon";
+import { SquadBoostLink } from "./SquadBoostScreen";
 import { CommunityPublicBeacons } from "@/src/features/discovery/CommunityPublicBeacons";
 import { CommunityPublicProfile } from "@/src/features/discovery/CommunityPublicProfile";
 import { communityProfileMode } from "@/src/features/discovery/communityPublicProfileAccess";
 import {
   ProfileActions,
+  CommunitySettingsRow,
   ProfileLink,
   ProfileSection,
 } from "@/src/features/people/components/ProfilePrimitives";
@@ -96,7 +98,7 @@ const settingsCategoryLabels: Record<SettingsCategory, string> = {
 
 export default function SquadProfileScreen() {
   const pingSeed = useId();
-  const { styles, colors } = useTheme();
+  const { styles, colors, semanticColors: c } = useTheme();
   const router = useRouter();
   const navigation = useNavigation();
   const {
@@ -527,9 +529,18 @@ export default function SquadProfileScreen() {
           params: { id: preview.plan.id },
         });
     };
+    if (preview.kind === "beacon")
+      return (
+        <CommunityActivityRow
+          key={preview.activity.id}
+          activity={preview.activity}
+          communityName={squad?.name}
+          testID="squad-activity-preview"
+        />
+      );
     return (
       <Pressable
-        key={`${preview.kind}:${isDecision ? preview.decision.id : isBeacon ? preview.activity.id : preview.plan.id}`}
+        key={`${preview.kind}:${isDecision ? preview.decision.id : preview.plan.id}`}
         testID="squad-activity-preview"
         accessibilityRole="button"
         accessibilityLabel={`Open ${detail}: ${title}`}
@@ -695,7 +706,6 @@ export default function SquadProfileScreen() {
             )}
           />
 
-          <SquadBoostLink squadId={activeSquadId}/>
           <ProfileSection
             title={`Members · ${members.length}`}
             action={
@@ -744,6 +754,8 @@ export default function SquadProfileScreen() {
               ))}
             </ScrollView>
           </ProfileSection>
+          <CommunityInCommon type="squad" id={activeSquadId} />
+          <SquadBoostLink squadId={activeSquadId} />
           {relationshipSection()}
           {squad.description ? (
             <ProfileSection title="About">
@@ -787,7 +799,14 @@ export default function SquadProfileScreen() {
                 </View>
               ) : null}
               {canReviewRequests && joinRequests.length ? (
-                <View style={[styles.card, { gap: 9 }]}>
+                <View
+                  style={{
+                    gap: 9,
+                    paddingVertical: 12,
+                    borderBottomWidth: 1,
+                    borderBottomColor: colors.line,
+                  }}
+                >
                   <Text style={styles.h2}>Join requests</Text>
                   {joinRequests.map((request) => {
                     const profile = data.profiles.find(
@@ -835,7 +854,7 @@ export default function SquadProfileScreen() {
                   })}
                 </View>
               ) : null}
-              {members.length > 8 ? (
+              {members.length > 0 ? (
                 <Field
                   label="Search Squad members"
                   value={memberSearch}
@@ -872,19 +891,25 @@ export default function SquadProfileScreen() {
                   SOCIAL_ROLE_RANK[candidate as SocialMemberRole],
               );
             return (
-              <View style={[styles.card, { gap: 9 }]}>
+              <View
+                style={{
+                  gap: 8,
+                  padding: 12,
+                  backgroundColor: c.surfaceRaised,
+                  borderWidth: 1,
+                  borderColor: c.border,
+                  borderRadius: 14,
+                }}
+              >
                 <View style={styles.row}>
-                  <ProfileAvatar profile={profile} size={42} />
+                  <ProfileAvatar profile={profile} size={44} />
                   <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
                     <Text style={styles.body} numberOfLines={1}>
                       {memberName}
                     </Text>
                     <Text style={styles.muted}>
-                      {member.role === "owner"
-                        ? "Owner"
-                        : member.role === "admin"
-                          ? "Admin"
-                          : "Member"}
+                      {member.role.charAt(0).toUpperCase() +
+                        member.role.slice(1)}
                     </Text>
                   </View>
                   {profile && !isSelf ? (
@@ -901,31 +926,35 @@ export default function SquadProfileScreen() {
                     />
                   ) : null}
                 </View>
-                {canManageRole ? (
-                  <Button
-                    compact
-                    secondary
-                    title="Manage role"
-                    onPress={() => {
-                      setMemberToManage(member.user_id);
-                      setMemberRole(member.role as SocialMemberRole);
-                    }}
-                  />
-                ) : null}
-                {canRemove ? (
-                  <Button
-                    compact
-                    secondary
-                    title={isSelf ? "Leave" : "Remove"}
-                    onPress={() =>
-                      setPendingMemberAction({
-                        kind: isSelf ? "leave" : "remove",
-                        userId: member.user_id,
-                        name: memberName,
-                      })
-                    }
-                  />
-                ) : null}
+                <View
+                  style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}
+                >
+                  {canManageRole ? (
+                    <Button
+                      compact
+                      secondary
+                      title="Manage role"
+                      onPress={() => {
+                        setMemberToManage(member.user_id);
+                        setMemberRole(member.role as SocialMemberRole);
+                      }}
+                    />
+                  ) : null}
+                  {canRemove ? (
+                    <Button
+                      compact
+                      secondary
+                      title={isSelf ? "Leave" : "Remove"}
+                      onPress={() =>
+                        setPendingMemberAction({
+                          kind: isSelf ? "leave" : "remove",
+                          userId: member.user_id,
+                          name: memberName,
+                        })
+                      }
+                    />
+                  ) : null}
+                </View>
               </View>
             );
           }}
@@ -957,21 +986,35 @@ export default function SquadProfileScreen() {
               return (
                 <View
                   key={profile.id}
-                  style={[styles.row, { justifyContent: "space-between" }]}
+                  style={[
+                    styles.row,
+                    {
+                      justifyContent: "space-between",
+                      padding: 12,
+                      backgroundColor: c.surfaceRaised,
+                      borderWidth: 1,
+                      borderColor: c.border,
+                      borderRadius: 14,
+                    },
+                  ]}
                 >
                   <View style={[styles.row, { flex: 1 }]}>
                     <ProfileAvatar
                       profile={visible ? profile : undefined}
-                      size={34}
+                      size={44}
                     />
-                    <Text style={styles.body}>
+                    <Text
+                      numberOfLines={2}
+                      style={[styles.body, { flex: 1, minWidth: 0 }]}
+                    >
                       {visible ? profile.name : "Friend"}
                     </Text>
                   </View>
                   <Action
                     compact
                     secondary
-                    title={`Invite ${visible ? profile.name : "friend"}`}
+                    title="Invite"
+                    accessibilityLabel={`Invite ${visible ? profile.name : "friend"}`}
                     run={async () => {
                       try {
                         await act("invite_squad", {
@@ -1010,7 +1053,11 @@ export default function SquadProfileScreen() {
             />
           ) : (
             activities.map((activity) => (
-              <ActivityCard key={activity.id} activity={activity} />
+              <CommunityActivityRow
+                key={activity.id}
+                activity={activity}
+                communityName={squad.name}
+              />
             ))
           )}
           <ProfileLink title="Beacon Plans" onPress={openPlans} />
@@ -1032,8 +1079,9 @@ export default function SquadProfileScreen() {
             </Txt>
           </View>
           {settingsCategories.map((category) => (
-            <ProfileLink
+            <CommunitySettingsRow
               key={category}
+              category={category}
               title={settingsCategoryLabels[category]}
               detail={
                 category === "appearance"

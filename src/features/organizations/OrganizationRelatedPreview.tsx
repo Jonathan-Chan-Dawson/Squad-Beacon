@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState } from "react";
+import { canOpenSquadProfile } from "@/src/features/people/squadProfile";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { router } from "expo-router";
 import { useBeacon } from "@/src/shared/store";
 import { canReadOrganization } from "./domain";
@@ -19,7 +20,23 @@ export function OrganizationRelatedPreview({
   organizationId: string;
   entityType: "space" | "squad";
 }) {
-  const { data, userId, viewerEpoch, act, searchDirectory, loadCommunitySummary } = useBeacon();
+  const {
+    data,
+    userId,
+    viewerEpoch,
+    act,
+    searchDirectory,
+    loadCommunitySummary,
+  } = useBeacon();
+  const squadIcons = useMemo(
+    () =>
+      new Map(
+        data.squads
+          .filter((s) => canOpenSquadProfile(data, s.id, userId))
+          .map((s) => [s.id, s.icon_key]),
+      ),
+    [data, userId],
+  );
   const liveContext = useRef({ data, userId, viewerEpoch });
   useEffect(() => {
     liveContext.current = { data, userId, viewerEpoch };
@@ -44,8 +61,13 @@ export function OrganizationRelatedPreview({
     const epoch = viewerEpoch;
     const isCurrent = () => {
       const context = liveContext.current;
-      return active && request === generation.current && context.data === snapshot &&
-        context.userId === viewer && context.viewerEpoch === epoch;
+      return (
+        active &&
+        request === generation.current &&
+        context.data === snapshot &&
+        context.userId === viewer &&
+        context.viewerEpoch === epoch
+      );
     };
     void (async () => {
       const rows = new Map<string, SocialDirectorySummary>();
@@ -60,20 +82,38 @@ export function OrganizationRelatedPreview({
         });
         if (!isCurrent()) return;
         for (const summary of page) {
-          if (summary.entity_type === "space") rows.set(summary.entity_id, summary);
+          if (summary.entity_type === "space")
+            rows.set(summary.entity_id, summary);
         }
-      } else if (userId && data.viewer_id === userId && canReadOrganization(data, organizationId, userId) &&
-        data.organization_squads.some((link) => link.organization_id === organizationId)) {
-        const orderedIds = [...new Set(data.organization_squads
-          .filter((link) => link.organization_id === organizationId)
-          .map((link) => link.squad_id))].sort((a, b) => a.localeCompare(b));
-        for (let offset = 0; offset < Math.min(orderedIds.length, 20) && rows.size < PREVIEW_SIZE; offset += 5) {
+      } else if (
+        userId &&
+        data.viewer_id === userId &&
+        canReadOrganization(data, organizationId, userId) &&
+        data.organization_squads.some(
+          (link) => link.organization_id === organizationId,
+        )
+      ) {
+        const orderedIds = [
+          ...new Set(
+            data.organization_squads
+              .filter((link) => link.organization_id === organizationId)
+              .map((link) => link.squad_id),
+          ),
+        ].sort((a, b) => a.localeCompare(b));
+        for (
+          let offset = 0;
+          offset < Math.min(orderedIds.length, 20) && rows.size < PREVIEW_SIZE;
+          offset += 5
+        ) {
           const summaries = await Promise.all(
-            orderedIds.slice(offset, offset + 5).map((directId) => loadCommunitySummary("squad", directId)),
+            orderedIds
+              .slice(offset, offset + 5)
+              .map((directId) => loadCommunitySummary("squad", directId)),
           );
           if (!isCurrent()) return;
           for (const summary of summaries) {
-            if (summary?.entity_type === "squad") rows.set(summary.entity_id, summary);
+            if (summary?.entity_type === "squad")
+              rows.set(summary.entity_id, summary);
           }
         }
       }
@@ -84,49 +124,90 @@ export function OrganizationRelatedPreview({
         userId: viewer,
         viewerEpoch: epoch,
         rows: [...rows.values()]
-          .sort((a, b) => Number(b.membership_status === "active") - Number(a.membership_status === "active") ||
-            a.name.localeCompare(b.name) || a.entity_id.localeCompare(b.entity_id))
+          .sort(
+            (a, b) =>
+              Number(b.membership_status === "active") -
+                Number(a.membership_status === "active") ||
+              a.name.localeCompare(b.name) ||
+              a.entity_id.localeCompare(b.entity_id),
+          )
           .slice(0, PREVIEW_SIZE),
         error: false,
       });
     })().catch(() => {
-      if (isCurrent()) setResult({
-        key,
-        snapshot,
-        userId: viewer,
-        viewerEpoch: epoch,
-        rows: [],
-        error: true,
-      });
+      if (isCurrent())
+        setResult({
+          key,
+          snapshot,
+          userId: viewer,
+          viewerEpoch: epoch,
+          rows: [],
+          error: true,
+        });
     });
     return () => {
       active = false;
       generation.current += 1;
     };
-  }, [data, entityType, key, loadCommunitySummary, organizationId, searchDirectory, userId, viewerEpoch]);
+  }, [
+    data,
+    entityType,
+    key,
+    loadCommunitySummary,
+    organizationId,
+    searchDirectory,
+    userId,
+    viewerEpoch,
+  ]);
 
-  const current = result?.key === key && result.snapshot === data &&
-    result.userId === userId && result.viewerEpoch === viewerEpoch
-    ? result
-    : null;
+  const current =
+    result?.key === key &&
+    result.snapshot === data &&
+    result.userId === userId &&
+    result.viewerEpoch === viewerEpoch
+      ? result
+      : null;
   async function takeAction(summary: SocialDirectorySummary) {
-    if (!userId || data.viewer_id !== userId || liveContext.current.data !== data ||
-      liveContext.current.userId !== userId || liveContext.current.viewerEpoch !== viewerEpoch ||
-      !current?.rows.some((row) => row.entity_type === summary.entity_type && row.entity_id === summary.entity_id))
+    if (
+      !userId ||
+      data.viewer_id !== userId ||
+      liveContext.current.data !== data ||
+      liveContext.current.userId !== userId ||
+      liveContext.current.viewerEpoch !== viewerEpoch ||
+      !current?.rows.some(
+        (row) =>
+          row.entity_type === summary.entity_type &&
+          row.entity_id === summary.entity_id,
+      )
+    )
       throw new Error("Refresh this profile to continue.");
     setPendingId(summary.entity_id);
     try {
       await performDirectoryAction(summary, data, userId, act);
-      if (liveContext.current.data === data && liveContext.current.userId === userId &&
-        liveContext.current.viewerEpoch === viewerEpoch) setRevision((value) => value + 1);
+      if (
+        liveContext.current.data === data &&
+        liveContext.current.userId === userId &&
+        liveContext.current.viewerEpoch === viewerEpoch
+      )
+        setRevision((value) => value + 1);
     } finally {
-      if (liveContext.current.data === data && liveContext.current.userId === userId &&
-        liveContext.current.viewerEpoch === viewerEpoch) setPendingId(null);
+      if (
+        liveContext.current.data === data &&
+        liveContext.current.userId === userId &&
+        liveContext.current.viewerEpoch === viewerEpoch
+      )
+        setPendingId(null);
     }
   }
 
   if (!current) return <Txt muted>Loading linked {LABELS[entityType]}s...</Txt>;
-  if (current?.error) return <Empty title={`Linked ${LABELS[entityType]}s are unavailable`} body="Open the full directory to try again." />;
+  if (current?.error)
+    return (
+      <Empty
+        title={`Linked ${LABELS[entityType]}s are unavailable`}
+        body="Open the full directory to try again."
+      />
+    );
   if (!current?.rows.length) return null;
   return (
     <>
@@ -134,13 +215,26 @@ export function OrganizationRelatedPreview({
         <SocialDirectorySummaryCard
           key={`${summary.entity_type}:${summary.entity_id}`}
           summary={summary}
+          squadIconKey={
+            summary.entity_type === "squad"
+              ? squadIcons.get(summary.entity_id)
+              : undefined
+          }
           compact
           showJoinedStatus
           previewLabel="Open profile"
           pending={pendingId === summary.entity_id}
           onPreview={() => {
-            if (summary.entity_type === "space") router.push({ pathname: "/space/[id]", params: { id: summary.entity_id } });
-            else if (summary.entity_type === "squad") router.push({ pathname: "/squad/[id]", params: { id: summary.entity_id } });
+            if (summary.entity_type === "space")
+              router.push({
+                pathname: "/space/[id]",
+                params: { id: summary.entity_id },
+              });
+            else if (summary.entity_type === "squad")
+              router.push({
+                pathname: "/squad/[id]",
+                params: { id: summary.entity_id },
+              });
           }}
           onAction={() => takeAction(summary)}
         />

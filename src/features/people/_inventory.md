@@ -41,3 +41,5 @@ People feature
 - Messaging utilities align with the primary tabs; the compact Conversations heading owns New chat. Friends aligns Private Lists with its category tabs and keeps active-list clearing in its filter row.
 
 - squadBoosts.ts: isolated demo allocation ledger, allowance reconciliation, transfer waits, non-extending grace and simulated totals. screens/SquadBoostScreen.tsx serves /squad-boosts with flat progress, a Supported/Plus/Pro benefit grid, contribution and contributor sections, plus Overview shortcuts, Premium summaries and demo controls.
+
+- Front End 4A: ProfilePrimitives supports quiet surfaced rows and icon-led management categories. Community directories retain virtualization and independent access while reusing authorized icons; member/invitation rows and compact Beacon previews share the same hierarchy.

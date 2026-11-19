@@ -1,5 +1,12 @@
+import { canOpenSquadProfile } from "./squadProfile";
 import { FlashList } from "@shopify/flash-list";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { View } from "react-native";
 import { performDirectoryAction } from "@/src/features/social/directoryActions";
 import type { SocialDirectoryQuery } from "@/src/features/social/directory";
@@ -47,7 +54,14 @@ export function VirtualizedCommunityDirectory({
   allowedEntityIds?: readonly string[];
   onOpen: (summary: SocialDirectorySummary) => void;
 }) {
-  const { data, userId, viewerEpoch, loading: snapshotLoading, act, searchDirectory } = useBeacon();
+  const {
+    data,
+    userId,
+    viewerEpoch,
+    loading: snapshotLoading,
+    act,
+    searchDirectory,
+  } = useBeacon();
   const [revision, setRevision] = useState(0);
   const [result, setResult] = useState<DirectoryResult | null>(null);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
@@ -61,22 +75,37 @@ export function VirtualizedCommunityDirectory({
     liveContext.current = { data, userId, viewerEpoch };
   }, [data, userId, viewerEpoch]);
 
+  const squadIcons = useMemo(
+    () =>
+      new Map(
+        data.squads
+          .filter((s) => canOpenSquadProfile(data, s.id, userId))
+          .map((s) => [s.id, s.icon_key]),
+      ),
+    [data, userId],
+  );
   const normalizedQuery = query.trim();
   const queryTooShort = normalizedQuery.length === 1;
   const parentScope = parentType && parentId ? `${parentType}:${parentId}` : "";
   const key = `${userId ?? "signed-out"}|${data.viewer_id ?? "no-snapshot"}|${viewerEpoch}|${normalizedQuery}|${entityType}|${parentScope}|${revision}`;
   const contextCurrent = !!userId && data.viewer_id === userId;
-  const current = result?.key === key && result.snapshot === data &&
-    result.viewerId === userId && result.viewerEpoch === viewerEpoch
-    ? result
-    : null;
+  const current =
+    result?.key === key &&
+    result.snapshot === data &&
+    result.viewerId === userId &&
+    result.viewerEpoch === viewerEpoch
+      ? result
+      : null;
   const loadingMore = loadingMoreFor === key;
   const loadMoreError = loadMoreErrorFor === key;
   const allowedIds = useMemo(
-    () => allowedEntityIds === undefined ? null : new Set(allowedEntityIds),
+    () => (allowedEntityIds === undefined ? null : new Set(allowedEntityIds)),
     [allowedEntityIds],
   );
-  const visibleRows = current?.rows.filter((row) => !allowedIds || allowedIds.has(row.entity_id)) ?? [];
+  const visibleRows =
+    current?.rows.filter(
+      (row) => !allowedIds || allowedIds.has(row.entity_id),
+    ) ?? [];
 
   useEffect(() => {
     if (!contextCurrent || queryTooShort) return;
@@ -89,43 +118,71 @@ export function VirtualizedCommunityDirectory({
       entityType,
       pageSize: PAGE_SIZE,
       pageOffset: 0,
-      ...(parentScope && parentType && parentId ? { parentType, parentId } : {}),
+      ...(parentScope && parentType && parentId
+        ? { parentType, parentId }
+        : {}),
     };
-    void searchDirectory(input).then((rows) => {
-      const context = liveContext.current;
-      if (
-        !live ||
-        generation.current !== request ||
-        context.data !== snapshot ||
-        context.userId !== viewer ||
-        context.viewerEpoch !== viewerEpoch
-      ) return;
-      setResult({
-        key,
-        snapshot,
-        viewerId: viewer,
-        viewerEpoch,
-        rows,
-        nextOffset: rows.length,
-        hasMore: rows.length === PAGE_SIZE,
-        error: false,
+    void searchDirectory(input)
+      .then((rows) => {
+        const context = liveContext.current;
+        if (
+          !live ||
+          generation.current !== request ||
+          context.data !== snapshot ||
+          context.userId !== viewer ||
+          context.viewerEpoch !== viewerEpoch
+        )
+          return;
+        setResult({
+          key,
+          snapshot,
+          viewerId: viewer,
+          viewerEpoch,
+          rows,
+          nextOffset: rows.length,
+          hasMore: rows.length === PAGE_SIZE,
+          error: false,
+        });
+      })
+      .catch(() => {
+        const context = liveContext.current;
+        if (
+          !live ||
+          generation.current !== request ||
+          context.data !== snapshot ||
+          context.userId !== viewer ||
+          context.viewerEpoch !== viewerEpoch
+        )
+          return;
+        setResult({
+          key,
+          snapshot,
+          viewerId: viewer,
+          viewerEpoch,
+          rows: [],
+          nextOffset: 0,
+          hasMore: false,
+          error: true,
+        });
       });
-    }).catch(() => {
-      const context = liveContext.current;
-      if (
-        !live ||
-        generation.current !== request ||
-        context.data !== snapshot ||
-        context.userId !== viewer ||
-        context.viewerEpoch !== viewerEpoch
-      ) return;
-      setResult({ key, snapshot, viewerId: viewer, viewerEpoch, rows: [], nextOffset: 0, hasMore: false, error: true });
-    });
     return () => {
       live = false;
       if (generation.current === request) generation.current += 1;
     };
-  }, [contextCurrent, data, entityType, key, normalizedQuery, parentId, parentScope, parentType, queryTooShort, searchDirectory, userId, viewerEpoch]);
+  }, [
+    contextCurrent,
+    data,
+    entityType,
+    key,
+    normalizedQuery,
+    parentId,
+    parentScope,
+    parentType,
+    queryTooShort,
+    searchDirectory,
+    userId,
+    viewerEpoch,
+  ]);
 
   const loadMore = useCallback(async () => {
     if (!current || !current.hasMore || loadingMoreKey.current === key) return;
@@ -143,7 +200,9 @@ export function VirtualizedCommunityDirectory({
         entityType,
         pageSize: PAGE_SIZE,
         pageOffset: offset,
-        ...(parentScope && parentType && parentId ? { parentType, parentId } : {}),
+        ...(parentScope && parentType && parentId
+          ? { parentType, parentId }
+          : {}),
       });
       const context = liveContext.current;
       if (
@@ -151,10 +210,14 @@ export function VirtualizedCommunityDirectory({
         context.data !== snapshot ||
         context.userId !== viewer ||
         context.viewerEpoch !== viewerEpoch
-      ) return;
+      )
+        return;
       setResult((previous) => {
-        if (previous?.key !== key || previous.snapshot !== snapshot) return previous;
-        const seen = new Set(previous.rows.map((row) => `${row.entity_type}:${row.entity_id}`));
+        if (previous?.key !== key || previous.snapshot !== snapshot)
+          return previous;
+        const seen = new Set(
+          previous.rows.map((row) => `${row.entity_type}:${row.entity_id}`),
+        );
         const uniqueNext = next.filter((row) => {
           const rowKey = `${row.entity_type}:${row.entity_id}`;
           if (seen.has(rowKey)) return false;
@@ -170,49 +233,98 @@ export function VirtualizedCommunityDirectory({
         };
       });
     } catch {
-      if (liveContext.current.data === snapshot && liveContext.current.userId === viewer)
+      if (
+        liveContext.current.data === snapshot &&
+        liveContext.current.userId === viewer
+      )
         setLoadMoreErrorFor(key);
     } finally {
       if (loadingMoreKey.current === key) loadingMoreKey.current = null;
-      setLoadingMoreFor((active) => active === key ? null : active);
+      setLoadingMoreFor((active) => (active === key ? null : active));
     }
-  }, [current, data, entityType, key, normalizedQuery, parentId, parentScope, parentType, searchDirectory, userId, viewerEpoch]);
+  }, [
+    current,
+    data,
+    entityType,
+    key,
+    normalizedQuery,
+    parentId,
+    parentScope,
+    parentType,
+    searchDirectory,
+    userId,
+    viewerEpoch,
+  ]);
 
-  const runAction = useCallback(async (summary: SocialDirectorySummary) => {
-    if (!userId || data.viewer_id !== userId || liveContext.current.data !== data ||
-      liveContext.current.userId !== userId || liveContext.current.viewerEpoch !== viewerEpoch ||
-      (allowedIds && !allowedIds.has(summary.entity_id)) || !current?.rows.some(
-      (row) => row.entity_type === summary.entity_type && row.entity_id === summary.entity_id,
-      )) throw new Error("Refresh discovery to continue.");
-    const actionKey = `${summary.entity_type}:${summary.entity_id}`;
-    setPendingAction(actionKey);
-    try {
-      await performDirectoryAction(summary, data, userId, act);
-      if (liveContext.current.data === data && liveContext.current.userId === userId && liveContext.current.viewerEpoch === viewerEpoch)
-        setRevision((value) => value + 1);
-    } finally {
-      if (liveContext.current.data === data && liveContext.current.userId === userId && liveContext.current.viewerEpoch === viewerEpoch)
-        setPendingAction(null);
-    }
-  }, [act, allowedIds, current, data, userId, viewerEpoch]);
+  const runAction = useCallback(
+    async (summary: SocialDirectorySummary) => {
+      if (
+        !userId ||
+        data.viewer_id !== userId ||
+        liveContext.current.data !== data ||
+        liveContext.current.userId !== userId ||
+        liveContext.current.viewerEpoch !== viewerEpoch ||
+        (allowedIds && !allowedIds.has(summary.entity_id)) ||
+        !current?.rows.some(
+          (row) =>
+            row.entity_type === summary.entity_type &&
+            row.entity_id === summary.entity_id,
+        )
+      )
+        throw new Error("Refresh discovery to continue.");
+      const actionKey = `${summary.entity_type}:${summary.entity_id}`;
+      setPendingAction(actionKey);
+      try {
+        await performDirectoryAction(summary, data, userId, act);
+        if (
+          liveContext.current.data === data &&
+          liveContext.current.userId === userId &&
+          liveContext.current.viewerEpoch === viewerEpoch
+        )
+          setRevision((value) => value + 1);
+      } finally {
+        if (
+          liveContext.current.data === data &&
+          liveContext.current.userId === userId &&
+          liveContext.current.viewerEpoch === viewerEpoch
+        )
+          setPendingAction(null);
+      }
+    },
+    [act, allowedIds, current, data, userId, viewerEpoch],
+  );
 
-  const renderItem = useCallback(({ item }: { item: SocialDirectorySummary }) => {
-    const rowKey = `${item.entity_type}:${item.entity_id}`;
-    const unavailableSquadInvite = item.action === "invited" && item.entity_type === "squad" &&
-      !data.squad_invites.some((invite) => invite.squad_id === item.entity_id && invite.recipient_id === userId);
-    return (
-      <SocialDirectorySummaryCard
-        summary={item}
-        compact
-        previewLabel="Open profile"
-        showJoinedStatus
-        actionDisabled={unavailableSquadInvite}
-        pending={pendingAction === rowKey}
-        onPreview={() => onOpen(item)}
-        onAction={() => runAction(item)}
-      />
-    );
-  }, [data.squad_invites, onOpen, pendingAction, runAction, userId]);
+  const renderItem = useCallback(
+    ({ item }: { item: SocialDirectorySummary }) => {
+      const rowKey = `${item.entity_type}:${item.entity_id}`;
+      const unavailableSquadInvite =
+        item.action === "invited" &&
+        item.entity_type === "squad" &&
+        !data.squad_invites.some(
+          (invite) =>
+            invite.squad_id === item.entity_id &&
+            invite.recipient_id === userId,
+        );
+      return (
+        <SocialDirectorySummaryCard
+          summary={item}
+          squadIconKey={
+            item.entity_type === "squad"
+              ? squadIcons.get(item.entity_id)
+              : undefined
+          }
+          compact
+          previewLabel="Open profile"
+          showJoinedStatus
+          actionDisabled={unavailableSquadInvite}
+          pending={pendingAction === rowKey}
+          onPreview={() => onOpen(item)}
+          onAction={() => runAction(item)}
+        />
+      );
+    },
+    [data.squad_invites, onOpen, pendingAction, runAction, squadIcons, userId],
+  );
 
   const listHeader = queryLabel ? (
     <View style={{ paddingBottom: 8 }}>
@@ -220,20 +332,39 @@ export function VirtualizedCommunityDirectory({
     </View>
   ) : null;
   const emptyComponent = queryTooShort ? (
-    <Empty title="Add another character" body="Community search starts with two characters." />
+    <Empty
+      title="Add another character"
+      body="Community search starts with two characters."
+    />
   ) : !userId ? (
-    <Empty title="Sign in to browse" body="Community discovery is available to signed-in accounts." />
+    <Empty
+      title="Sign in to browse"
+      body="Community discovery is available to signed-in accounts."
+    />
   ) : !contextCurrent ? (
-    <Txt muted>{snapshotLoading ? "Loading community access..." : "Refresh your profile to browse communities."}</Txt>
+    <Txt muted>
+      {snapshotLoading
+        ? "Loading community access..."
+        : "Refresh your profile to browse communities."}
+    </Txt>
   ) : !current ? (
     <Txt muted>Loading communities...</Txt>
   ) : current.error ? (
     <View style={{ gap: 12, padding: 16 }}>
-      <Empty title="Couldn't load communities" body="Try the directory again." />
-      <Button title="Try again" onPress={() => setRevision((value) => value + 1)} />
+      <Empty
+        title="Couldn't load communities"
+        body="Try the directory again."
+      />
+      <Button
+        title="Try again"
+        onPress={() => setRevision((value) => value + 1)}
+      />
     </View>
   ) : (
-    <Empty title="No matching communities" body="Try another name or description." />
+    <Empty
+      title="No matching communities"
+      body="Try another name or description."
+    />
   );
 
   return (
@@ -247,18 +378,28 @@ export function VirtualizedCommunityDirectory({
         extraData={{ pendingAction, revision }}
         ListHeaderComponent={listHeader}
         ListEmptyComponent={emptyComponent}
-        ListFooterComponent={current?.hasMore ? (
-          <View style={{ gap: 8, paddingVertical: 10 }}>
-            {loadMoreError ? <Txt muted>Couldn&apos;t load more results. Try again.</Txt> : null}
-            <Button
-              compact
-              secondary
-              title={loadingMore ? "Loading..." : loadMoreError ? "Try again" : "Load more"}
-              disabled={loadingMore}
-              onPress={() => void loadMore()}
-            />
-          </View>
-        ) : null}
+        ListFooterComponent={
+          current?.hasMore ? (
+            <View style={{ gap: 8, paddingVertical: 10 }}>
+              {loadMoreError ? (
+                <Txt muted>Couldn&apos;t load more results. Try again.</Txt>
+              ) : null}
+              <Button
+                compact
+                secondary
+                title={
+                  loadingMore
+                    ? "Loading..."
+                    : loadMoreError
+                      ? "Try again"
+                      : "Load more"
+                }
+                disabled={loadingMore}
+                onPress={() => void loadMore()}
+              />
+            </View>
+          ) : null
+        }
         onEndReached={() => void loadMore()}
         onEndReachedThreshold={0.5}
         onRefresh={() => setRevision((value) => value + 1)}

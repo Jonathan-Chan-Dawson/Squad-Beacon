@@ -1,3 +1,4 @@
+import { startDemoFromEntry } from "./demoEntry";
 import { expect, test, type Page } from "@playwright/test";
 
 async function enter(page: Page, width: number, appearance: "light" | "dark") {
@@ -8,7 +9,7 @@ async function enter(page: Page, width: number, appearance: "light" | "dark") {
     appearance,
   );
   await page.goto("/activity/demo-tools?tab=tools");
-  await page.getByRole("button", { name: /Explore the demo/ }).click();
+  await startDemoFromEntry(page);
   await expect(page.getByTestId("beacon-tool-picker")).toBeVisible();
 }
 for (const [width, appearance] of [

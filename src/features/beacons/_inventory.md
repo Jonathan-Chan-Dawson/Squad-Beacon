@@ -56,3 +56,5 @@ Beacons feature
 - Phase F: agenda.ts, hosting.ts, taskCoordination.ts, roundScoring.ts and activityPremiumPresets.ts extend canonical Premium tools; components/BeaconAgenda, BeaconHosting, TaskCoordination and RoundScoring own inline workspace controls. See docs/SB_BEACON_PLUS_2_VALIDATION_2026-11-15.md for delivery boundaries.
 
 - BeaconSection.tsx supplies section and action-row presentation. ActivityDetailTools uses grouped tool selection and a wide-screen contextual sidebar. BeaconAgenda presents Activity schedule; settings and drafts keep canonical action/revision checks. See docs/BEACON_UI_REDESIGN_PLAN.md.
+
+- Front End 4A: Home has a compact labeled BEACON+ entry; advanced settings use shared capability/access hints without locking whole Free tools. Community previews reuse actual Beacon icons and existing RSVP/privacy selectors.

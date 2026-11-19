@@ -1,3 +1,4 @@
+import { startDemoFromEntry } from "./demoEntry";
 import { expect, test } from "@playwright/test";
 import { DEMO_ID, makeDemo } from "../../src/shared/demo";
 const fixture = makeDemo(),
@@ -12,14 +13,14 @@ test("focus sequences persist locally and a fresh demo session starts clean", as
   await page.goto("/activity/demo-tools?tab=activity&tool=focus", {
     waitUntil: "domcontentloaded",
   });
-  await page.getByRole("button", { name: /Explore the demo/ }).click();
+  await startDemoFromEntry(page);
   await page.getByRole("button", { name: "Focus setup", exact: true }).click();
   await page
     .getByRole("button", { name: "Focus sequences", exact: true })
     .click();
   await page
     .getByRole("button", {
-      name: "BEACON+ \u00b7 Explore Premium",
+      name: "Explore BEACON+ benefits",
       exact: true,
     })
     .click();
@@ -53,7 +54,7 @@ test("focus sequences persist locally and a fresh demo session starts clean", as
     fullPage: true,
   });
   await page.reload();
-  await page.getByRole("button", { name: /Explore the demo/ }).click();
+  await startDemoFromEntry(page);
   await expect(page.getByText("Focus \u00b7 1/2", { exact: true })).toHaveCount(
     0,
   );
@@ -69,7 +70,7 @@ for (const appearance of ["light", "dark"]) {
     );
     await page.setViewportSize({ width: 320, height: 900 });
     await page.goto("/settings/premium", { waitUntil: "domcontentloaded" });
-    await page.getByRole("button", { name: /Explore the demo/ }).click();
+    await startDemoFromEntry(page);
     await page
       .getByRole("button", { name: "Demo tier: Plus", exact: true })
       .click();
@@ -142,7 +143,7 @@ test("checklist advanced details unlock inline and stay readable after switching
   await page.goto("/activity/demo-tools?tab=activity&tool=checklist", {
     waitUntil: "domcontentloaded",
   });
-  await page.getByRole("button", { name: /Explore the demo/ }).click();
+  await startDemoFromEntry(page);
   await page
     .getByLabel("Add a checklist item", { exact: true })
     .fill("Pack the map");
@@ -157,7 +158,7 @@ test("checklist advanced details unlock inline and stay readable after switching
     .getByRole("button", { name: "Assignment & deadline", exact: true })
     .click();
   await page
-    .getByRole("button", { name: "BEACON+ · Explore Premium", exact: true })
+    .getByRole("button", { name: "Explore BEACON+ benefits", exact: true })
     .click();
   await page
     .getByRole("button", { name: "Demo tier: Plus", exact: true })
@@ -183,7 +184,7 @@ test("checklist advanced details unlock inline and stay readable after switching
     .getByRole("button", { name: "Assignment & deadline", exact: true })
     .click();
   await page
-    .getByRole("button", { name: "Premium settings", exact: true })
+    .getByRole("button", { name: "Membership details", exact: true })
     .click();
   await page
     .getByRole("button", { name: "Demo tier: Free", exact: true })

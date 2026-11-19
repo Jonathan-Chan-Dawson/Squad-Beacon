@@ -1,3 +1,4 @@
+import { PremiumFeatureHint } from "@/src/features/profile/components/PremiumFeatureHint";
 import React, { useState } from "react";
 import { View } from "react-native";
 import type { Activity } from "@/src/shared/types";
@@ -14,19 +15,21 @@ export function RoundScoring({ activity }: { activity: Activity }) {
   );
   const [edit, setEdit] = useState(false);
   const [round, setRound] = useState("");
-  if (!(data.is_demo || data.capabilities?.beacon_specialized)) return null;
   const pro = resolvePremiumFeature(data, "score_rounds", activity).available;
   const manager = !!userId && canManageBeacon(data, activity, userId);
   const names = config?.settings.round_names ?? [];
   const history =
     data.round_scores?.filter((r) => r.activity_id === activity.id) ?? [];
-  if (!names.length && !history.length && !(pro && manager)) return null;
+  if (!names.length && !history.length && !manager) return null;
   const selected = names.includes(round) ? round : names[0];
   return (
     <PlanningDisclosure
       title="Live Activity · Scoring rounds"
-      summary={`${names.length} configured rounds`}
+      summary={`Pro · ${names.length ? `${names.length} configured rounds` : "Track scores round by round"}`}
     >
+      {manager && (
+        <PremiumFeatureHint feature="score_rounds" activity={activity} />
+      )}
       <Txt muted>
         Round scores contribute to the team totals. Totals also include regular
         score adjustments.

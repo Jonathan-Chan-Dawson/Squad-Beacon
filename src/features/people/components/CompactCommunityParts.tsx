@@ -1,3 +1,4 @@
+import { BeaconIcon } from "@/src/features/beacons/components/BeaconIcon";
 import React from "react";
 import { Pressable, Text, View } from "react-native";
 import { ArrowUpRight, ChevronRight } from "lucide-react-native";
@@ -117,6 +118,11 @@ export function CompactBeaconCard({
       onPress={onPress}
       style={[styles.card, styles.row, { minHeight: 76 }]}
     >
+      <BeaconIcon
+        category={activity.category}
+        emoji={activity.decoration_emoji}
+        size={44}
+      />
       <View style={{ flex: 1, minWidth: 0, gap: 5 }}>
         <View style={styles.row}>
           <Text style={styles.label}>{label}</Text>
@@ -137,7 +143,7 @@ export function CompactBeaconCard({
             </Text>
           ) : null}
         </View>
-        <Text style={[styles.body, { fontWeight: "700" }]} numberOfLines={1}>
+        <Text style={[styles.body, { fontWeight: "600" }]} numberOfLines={2}>
           {activity.title}
         </Text>
         <Text style={styles.muted}>

@@ -18,7 +18,8 @@ import {
   resolvePremiumFeature,
   resolveBeaconEntitlements,
 } from "@/src/shared/entitlements";
-import { PremiumPreview } from "@/src/features/profile/settings/PremiumUI";
+import { PremiumFeatureHint } from "@/src/features/profile/components/PremiumFeatureHint";
+import { premiumAccessPresentation } from "@/src/features/profile/premiumPresentation";
 import {
   toolFeature,
   validateToolSettings,
@@ -55,8 +56,7 @@ export function PremiumToolSettings({
 }) {
   const { data, userId } = useBeacon();
   const [open, setOpen] = useState(false);
-  if (!userId || !(data.is_demo || data.capabilities?.advanced_beacon_tools))
-    return null;
+  if (!userId) return null;
   const config = data.premium_tool_configs?.find(
     (t) =>
       t.kind === kind &&
@@ -66,7 +66,11 @@ export function PremiumToolSettings({
   const manager = thread
     ? thread.owner_id === userId || thread.coowner_ids.includes(userId)
     : canManageBeacon(data, activity, userId);
-  const entitlement = resolveBeaconEntitlements(data, activity);
+  const access = premiumAccessPresentation(
+    data,
+    toolFeature(kind, config?.settings ?? defaults[kind]),
+    activity,
+  );
   const section = {
     focus: {
       title: "Focus sequences",
@@ -91,28 +95,27 @@ export function PremiumToolSettings({
   }[kind];
   return (
     <View style={{ gap: 8, alignSelf: "stretch" }}>
-      {kind === "focus" && config?.settings.steps && onStart && (
-        <PlanChoice
-          title={`Start ${config.settings.group || "saved focus sequence"}`}
-          detail={`${config.settings.steps.length} intervals · ${config.settings.steps.reduce((total, step) => total + step.minutes, 0)} min`}
-          icon={Play}
-          onPress={() => onStart(config.settings)}
-        />
-      )}
+      {kind === "focus" &&
+        access.status === "available" &&
+        config?.settings.steps &&
+        onStart && (
+          <PlanChoice
+            title={`Start ${config.settings.group || "saved focus sequence"}`}
+            detail={`${config.settings.steps.length} intervals · ${config.settings.steps.reduce((total, step) => total + step.minutes, 0)} min`}
+            icon={Play}
+            onPress={() => onStart(config.settings)}
+          />
+        )}
       {manager && (
         <PlanChoice
           {...section}
+          detail={`${section.detail} · ${access.tierLabel}${access.status !== "available" ? " · Coming soon" : access.available ? " · Included" : ""}`}
           expanded={open}
           onPress={() => setOpen(!open)}
         />
       )}
       {open && (
         <>
-          <Txt muted>
-            {entitlement.source === "squad" || entitlement.source === "grace"
-              ? `Unlocked by ${data.squads.find((s) => s.id === activity.audience_id)?.name ?? "your Squad"}${entitlement.grace_until ? " · grace period" : ""}`
-              : "Advanced settings"}
-          </Txt>
           <Editor
             key={`${activity.id}:${kind}`}
             activity={activity}
@@ -214,7 +217,7 @@ function Editor({
   };
   return (
     <View style={{ gap: 10 }}>
-      {!decision.available && <PremiumPreview />}
+      <PremiumFeatureHint feature={toolFeature(kind, s)} activity={activity} />
       {decision.available && (
         <>
           {kind === "focus" && (

@@ -53,3 +53,5 @@ Documentation guide
 - SB_BEACON_PLUS_2_VALIDATION_2026-11-15.md: Phase F implementation scope, local validation, additive migrations and deferred extensions.
 
 - BEACON_UI_REDESIGN_PLAN.md and BEACON_UI_REDESIGN_VALIDATION.md: approved 120-item presentation checklist, implementation scope and responsive/behavioral verification.
+
+- FRONTEND_4A_2026-11-17.md: Premium discovery and comprehensive community sub-screen presentation changes, authorized In Common behavior, touched surfaces and local verification boundaries.

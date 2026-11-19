@@ -1,9 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
 import { openConversation } from "./chatHelpers";
+import { startDemoFromEntry } from "./demoEntry";
 
 async function communities(page: Page) {
   await page.goto("/");
-  await page.getByRole("button", { name: /Explore the demo/ }).click();
+  await startDemoFromEntry(page);
   await page.getByRole("tab", { name: "Squads", exact: true }).click();
   await page.getByRole("button", { name: "Communities", exact: true }).click();
 }

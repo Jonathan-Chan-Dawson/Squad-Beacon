@@ -1,3 +1,7 @@
+import {
+  PremiumHeaderButton,
+  PersonalMembershipSummary,
+} from "../components/PremiumEntry";
 import React, { useCallback, useState } from "react";
 import { Modal, Share, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
@@ -19,12 +23,10 @@ import {
   ProfileExperience,
   type ProfileTab,
 } from "../components/ProfileExperience";
-
 export default function ProfileScreen() {
   const { userId, viewerEpoch, demo } = useBeacon();
   return <ProfileScreenBody key={`${userId}:${viewerEpoch}:${demo}`} />;
 }
-
 function ProfileScreenBody() {
   const { data, userId, loading, refresh } = useBeacon();
   const { semanticColors: colors, styles } = useTheme();
@@ -38,10 +40,23 @@ function ProfileScreenBody() {
   const [saved, setSaved] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const params = useLocalSearchParams<{ section?: string }>();
-  const [tab, setTab] = useState<ProfileTab>(params.section === "aspirations" ? "About" : "Overview");
-  const [sectionScroll, setSectionScroll] = useState<{ y: number; sequence: number }>();
+  const [tab, setTab] = useState<ProfileTab>(
+    params.section === "aspirations" ? "About" : "Overview",
+  );
+  const [sectionScroll, setSectionScroll] = useState<{
+    y: number;
+    sequence: number;
+  }>();
   const displayedTab = params.section === "aspirations" ? "About" : tab;
-  const focusAspirations = useCallback((y: number) => { if (params.section !== "aspirations") return; setTab("About"); setSectionScroll({ y, sequence: Date.now() }); router.setParams({ section: undefined }); }, [params.section]);
+  const focusAspirations = useCallback(
+    (y: number) => {
+      if (params.section !== "aspirations") return;
+      setTab("About");
+      setSectionScroll({ y, sequence: Date.now() });
+      router.setParams({ section: undefined });
+    },
+    [params.section],
+  );
   const profile =
     data.viewer_id === userId
       ? data.profiles.find((p) => p.id === userId)
@@ -77,9 +92,12 @@ function ProfileScreenBody() {
       scrollStateKey={`${userId}:${tab}`}
       scrollRequest={sectionScroll}
       headerAction={
-        <IconButton label="Settings" onPress={() => router.push("/settings")}>
-          <Settings size={22} color={colors.textPrimary} />
-        </IconButton>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <PremiumHeaderButton />
+          <IconButton label="Settings" onPress={() => router.push("/settings")}>
+            <Settings size={22} color={colors.textPrimary} />
+          </IconButton>
+        </View>
       }
     >
       {profile ? (
@@ -109,6 +127,19 @@ function ProfileScreenBody() {
               >
                 <QrCode size={21} color={colors.textPrimary} />
               </IconButton>
+              <View
+                testID="profile-membership-section"
+                style={{
+                  width: "100%",
+                  marginTop: 8,
+                  paddingVertical: 14,
+                  borderTopWidth: 1,
+                  borderBottomWidth: 1,
+                  borderColor: colors.border,
+                }}
+              >
+                <PersonalMembershipSummary />
+              </View>
               {personalizationEntry && (
                 <View style={{ width: "100%", minWidth: 0 }}>
                   {personalizationEntry}

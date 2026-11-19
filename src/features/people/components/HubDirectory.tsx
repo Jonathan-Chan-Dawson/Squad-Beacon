@@ -1,5 +1,6 @@
+import { CommunityAvatar } from "./CommunityAvatar";
 import { router } from "expo-router";
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { Compass, Lock, ChevronDown, ChevronRight } from "lucide-react-native";
 import { useBeacon } from "@/src/shared/store";
@@ -15,7 +16,10 @@ import {
 } from "@/src/features/organizations/domain";
 import { Button, Txt, useTheme } from "@/src/shared/ui";
 import { EmptyState } from "@/src/shared/design-system";
-import { communityTypePlural } from "@/src/features/social/communityPresentation";
+import {
+  communityTypeLabel,
+  communityTypePlural,
+} from "@/src/features/social/communityPresentation";
 import { CommunitySectionHeading } from "./CommunityCard";
 import {
   SocialDirectorySummaryCard,
@@ -43,7 +47,16 @@ export function HubDirectory({
   onOpen: (type: SocialEntityType, id: string) => void;
 }) {
   const { data, userId, viewerEpoch, act, searchDirectory } = useBeacon();
-  const { styles, colors } = useTheme();
+  const { styles, colors, semanticColors: c } = useTheme();
+  const squadIcons = useMemo(
+    () =>
+      new Map(
+        data.squads
+          .filter((s) => canOpenSquadProfile(data, s.id, userId))
+          .map((s) => [s.id, s.icon_key]),
+      ),
+    [data, userId],
+  );
   const [revision, setRevision] = useState(0);
   const [result, setResult] = useState<{
     key: string;
@@ -143,9 +156,7 @@ export function HubDirectory({
   const exploreSection = explore && entityType !== "all";
   const previewSize = entityType === "organization" ? 1 : 3;
   const showFullSection = !exploreSection || fullList || !!query.trim();
-  const visibleRows = showFullSection
-    ? rows
-    : rows.slice(0, previewSize);
+  const visibleRows = showFullSection ? rows : rows.slice(0, previewSize);
 
   function canOpen(row: SocialDirectorySummary) {
     if (!userId || data.viewer_id !== userId) return false;
@@ -261,8 +272,7 @@ export function HubDirectory({
               : communityTypePlural(entityType)
           }
           onToggle={
-            !query.trim() &&
-            (rows.length > previewSize || current?.hasMore)
+            !query.trim() && (rows.length > previewSize || current?.hasMore)
               ? () =>
                   router.push({
                     pathname: "/community-directory",
@@ -322,7 +332,16 @@ export function HubDirectory({
                 }}
               >
                 <View
-                  style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 8,
+                    padding: 12,
+                    borderRadius: 14,
+                    backgroundColor: c.surfaceRaised,
+                    borderWidth: 1,
+                    borderColor: c.border,
+                  }}
                 >
                   <View
                     style={{
@@ -331,6 +350,15 @@ export function HubDirectory({
                       backgroundColor: colors.line,
                       marginLeft: -14,
                     }}
+                  />
+                  <CommunityAvatar
+                    type={row.entity_type}
+                    iconKey={
+                      row.entity_type === "squad"
+                        ? squadIcons.get(row.entity_id)
+                        : undefined
+                    }
+                    size={44}
                   />
                   {row.entity_type === "squad" && !canOpen(row) ? (
                     <Lock
@@ -345,9 +373,15 @@ export function HubDirectory({
                     onPress={() => preview(row)}
                     style={{ flex: 1, minHeight: 44, justifyContent: "center" }}
                   >
-                    <Text style={styles.body}>{row.name}</Text>
+                    <Text
+                      numberOfLines={2}
+                      style={[styles.body, { fontWeight: "600" }]}
+                    >
+                      {row.name}
+                    </Text>
                     <Text style={styles.label}>
-                      {row.member_count} members · {row.entity_type}
+                      {row.member_count} members ·{" "}
+                      {communityTypeLabel(row.entity_type)}
                     </Text>
                   </Pressable>
                   {row.entity_type === "space" && row.child_count > 0 ? (
@@ -390,6 +424,12 @@ export function HubDirectory({
               <SocialDirectorySummaryCard
                 key={`${row.entity_type}:${row.entity_id}`}
                 summary={row}
+                compact={!exploreSection}
+                squadIconKey={
+                  row.entity_type === "squad"
+                    ? squadIcons.get(row.entity_id)
+                    : undefined
+                }
                 discoveryCard={exploreSection}
                 onPreview={() => preview(row)}
                 onAction={() => perform(row)}

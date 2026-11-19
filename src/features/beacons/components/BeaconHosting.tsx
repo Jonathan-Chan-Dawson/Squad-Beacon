@@ -1,7 +1,7 @@
 import { useConfirmation } from "@/src/shared/Dialogs";
 import { BeaconSection, BeaconActionRow } from "./BeaconSection";
 import { ThemedSwitch } from "@/src/shared/ThemedSwitch";
-import { PremiumPreview } from "@/src/features/profile/settings/PremiumUI";
+import { PremiumFeatureHint } from "@/src/features/profile/components/PremiumFeatureHint";
 import React, { useState } from "react";
 import { Text, View } from "react-native";
 import { randomUUID } from "expo-crypto";
@@ -458,7 +458,8 @@ function HostingEditor({
   );
   return (
     <View style={{ gap: 10 }}>
-      {!plus && <PremiumPreview />}
+      <PremiumFeatureHint feature="hosting" activity={activity} />
+      <PremiumFeatureHint feature="hosting_coordination" activity={activity} compact />
       {!plus && (
         <Txt muted>
           BEACON+ enables custom hosting. Saved details are retained.

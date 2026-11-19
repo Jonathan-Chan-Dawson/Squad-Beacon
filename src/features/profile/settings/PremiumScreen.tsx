@@ -1,3 +1,8 @@
+import type { PremiumFeature } from "@/src/shared/premiumFeatures";
+import { resolvePremiumFeature } from "@/src/shared/entitlements";
+import { PersonalMembershipSummary } from "../components/PremiumEntry";
+import { PremiumFeatureHint } from "../components/PremiumFeatureHint";
+import { premiumBenefitGroups } from "../premiumPresentation";
 import React from "react";
 import { Text, View } from "react-native";
 import {
@@ -20,15 +25,14 @@ import {
   type PremiumTier,
 } from "@/src/shared/entitlements";
 import { DemoTierSelector } from "./PremiumUI";
-
 type Benefit = {
   name: string;
   values: [boolean | string, boolean | string, boolean | string];
   supported?: boolean;
+  feature?: PremiumFeature;
 };
 type BenefitGroup = { title: string; icon: LucideIcon; rows: Benefit[] };
 const tiers: PremiumTier[] = ["free", "plus", "pro"];
-
 export default function PremiumScreen() {
   const { data, userId, demo } = useBeacon();
   const { styles, colors } = useTheme();
@@ -52,19 +56,44 @@ export default function PremiumScreen() {
         { name: "Checklist items", values: ["∞", "∞", "∞"] },
         { name: "Bring Items", values: [true, true, true] },
         {
+          name: "Activity schedules",
+          values: [false, true, true],
+          feature: "agendas",
+        },
+        {
+          name: "Responsibilities & live stages",
+          values: [false, false, true],
+          feature: "agenda_coordination",
+        },
+        {
+          name: "RSVP questions & organizer notes",
+          values: [false, true, true],
+          feature: "hosting",
+        },
+        {
+          name: "Delegated hosting & check-in",
+          values: [false, false, true],
+          feature: "hosting_coordination",
+        },
+        {
+          name: "Multi-round scoring",
+          values: [false, false, true],
+          feature: "score_rounds",
+        },
+        {
           name: "Assignments, due dates & reminders",
           values: [false, true, true],
-          supported: toolsAvailable,
+          feature: "checklist_details",
         },
         {
           name: "Custom focus & saved presets",
           values: [false, true, true],
-          supported: advancedAvailable,
+          feature: "focus_sequences",
         },
         {
           name: "Grouped focus & private summaries",
           values: [false, false, true],
-          supported: advancedAvailable,
+          feature: "focus_groups",
         },
       ],
     },
@@ -153,6 +182,60 @@ export default function PremiumScreen() {
   };
   return (
     <Screen title="Premium" eyebrow="MORE ROOM FOR TOGETHER" create={false}>
+      <View style={{ gap: 8 }}>
+        <Text style={styles.h2}>Your membership</Text>
+        <PersonalMembershipSummary management />
+      </View>
+      <View testID="premium-benefits-intro" style={{ gap: 18 }}>
+        <Text style={styles.h2}>Plan more together</Text>
+        <Txt muted>
+          Keep the everyday essentials free. Add useful tools when your plans
+          need more detail.
+        </Txt>
+        {premiumBenefitGroups.map((group) => (
+          <View
+            key={group.title}
+            style={{
+              gap: 8,
+              paddingBottom: 16,
+              borderBottomWidth: 1,
+              borderBottomColor: colors.border,
+            }}
+          >
+            <View
+              style={{
+                height: 2,
+                width: 36,
+                borderRadius: 1,
+                backgroundColor: colors.primary,
+                opacity: 0.5,
+              }}
+            />
+            <Text style={styles.label}>{group.title}</Text>
+            <Txt>{group.description}</Txt>
+            {group.features.map((feature) => (
+              <PremiumFeatureHint key={feature} feature={feature} compact />
+            ))}
+          </View>
+        ))}
+        <View style={{ gap: 6 }}>
+          <Text style={styles.label}>Share benefits with your Squad</Text>
+          <Txt>
+            Plus includes 2 Squad Boost slots; Pro includes 5. Pool 2 Boosts for
+            shared Plus or 4 for shared Pro.
+          </Txt>
+          <Txt muted>
+            Free members can use the Squad’s unlocked shared features where
+            supported. Personal templates and private libraries stay personal.
+          </Txt>
+          {entitlement.squadBoostStatus !== "available" && (
+            <Txt muted>Squad Boosts · Coming soon</Txt>
+          )}
+        </View>
+      </View>
+      <Text accessibilityRole="header" style={styles.h2}>
+        Compare memberships
+      </Text>
       <Txt muted>Compare what comes with Free, BEACON+ and Pro.</Txt>
       <View testID="premium-comparison" style={{ gap: 0 }}>
         <View
@@ -174,7 +257,7 @@ export default function PremiumScreen() {
                 {["Free", "Plus", "Pro"][index]}
               </Text>
               <Text style={[styles.body, { fontSize: 13 }]}>
-                {["$0", "$4.99", "$9.99"][index]}
+                {premiumCatalog[tier].price}
               </Text>
             </View>
           ))}
@@ -193,7 +276,7 @@ export default function PremiumScreen() {
               <Icon size={18} color={colors.primary} />
               <Text style={styles.label}>{title}</Text>
             </View>
-            {rows.map(({ name, values, supported }) => (
+            {rows.map(({ name, values, supported, feature }) => (
               <View
                 key={name}
                 testID={`premium-benefit-${name}`}
@@ -212,9 +295,14 @@ export default function PremiumScreen() {
                   </Text>
                 </View>
                 {values.map((value, index) => {
-                  const pending = value === true && supported === false;
+                  const pending =
+                    value === true &&
+                    (feature
+                      ? resolvePremiumFeature(data, feature).status !==
+                        "available"
+                      : supported === false);
                   const label = pending
-                    ? "After backend update"
+                    ? "Coming soon"
                     : value === true
                       ? "Included"
                       : value === false
@@ -260,7 +348,7 @@ export default function PremiumScreen() {
       </Txt>
       <Txt muted>Pool 2 Boosts for shared Plus benefits or 4 for Pro.</Txt>
       <View style={divider}>
-        <Text style={styles.h2}>Your membership</Text>
+        <Text style={styles.h2}>Membership details</Text>
         <Txt muted>
           {demo ? "SIMULATED MEMBERSHIP" : "CURRENT MEMBERSHIP"} ·{" "}
           {entitlement.name}
@@ -275,7 +363,7 @@ export default function PremiumScreen() {
         </Txt>
         {!demo && !data.capabilities?.premium && (
           <Txt muted>
-            Premium enforcement is unavailable until the backend is updated.
+            Membership verification is not available in this version yet.
           </Txt>
         )}
         <PremiumBoostSummary />

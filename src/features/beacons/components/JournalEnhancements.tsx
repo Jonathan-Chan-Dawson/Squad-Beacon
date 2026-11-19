@@ -7,7 +7,7 @@ import { Action, Chips, Field, Txt, useTheme } from "@/src/shared/ui";
 import { useBeacon } from "@/src/shared/store";
 import { resolvePremiumFeature } from "@/src/shared/entitlements";
 import { canReadBeaconNote } from "../beaconModules";
-import { PremiumPreview } from "@/src/features/profile/settings/PremiumUI";
+import { PremiumFeatureHint } from "@/src/features/profile/components/PremiumFeatureHint";
 import type { Activity, BeaconNote } from "@/src/shared/types";
 export function RichNote({ body, rich }: { body: string; rich: boolean }) {
   const { colors, styles } = useTheme();
@@ -101,7 +101,7 @@ export function JournalEntryDetails({
         (data.is_demo || data.capabilities?.advanced_beacon_tools) && (
           <PlanChoice
             title="Formatting & organization"
-            detail="Format this entry, add tags or link reflections"
+            detail="Plus · Format this entry, add tags or link reflections"
             icon={Type}
             expanded={open}
             onPress={() => {
@@ -117,7 +117,10 @@ export function JournalEntryDetails({
       {open && (
         <View style={{ gap: 8 }}>
           {!plus ? (
-            <PremiumPreview />
+            <PremiumFeatureHint
+              feature="journal_formatting"
+              activity={activity}
+            />
           ) : (
             <>
               <Chips

@@ -1,9 +1,13 @@
+import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
+import { CommunityActivityRow } from "@/src/features/social/CommunityActivityRow";
+import { CommunityInCommon } from "@/src/features/social/CommunityInCommon";
 import { canReadBeaconActivity } from "@/src/features/beacons/beaconModules";
 import { CommunityPublicBeacons } from "@/src/features/discovery/CommunityPublicBeacons";
 import { CommunityPublicProfile } from "@/src/features/discovery/CommunityPublicProfile";
 import { communityProfileMode } from "@/src/features/discovery/communityPublicProfileAccess";
 import {
   ProfileActions,
+  CommunitySettingsRow,
   ProfileLink,
   ProfileSection,
 } from "@/src/features/people/components/ProfilePrimitives";
@@ -45,7 +49,7 @@ import {
   usePreventRemove,
   type NavigationAction,
 } from "expo-router/react-navigation";
-import { ArrowUpRight, Building2, Settings2 } from "lucide-react-native";
+import { Building2, Settings2 } from "lucide-react-native";
 import { useRef, useState } from "react";
 import {
   KeyboardAvoidingView,
@@ -104,17 +108,8 @@ const settingsSectionTitles: Record<OrganizationSettingsSection, string> = {
   members: "Members & roles",
   actions: "Actions",
 };
-const shortTime = (value: string) =>
-  new Date(value).toLocaleString([], {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  });
-
 export default function OrganizationScreen() {
-  const { styles, colors } = useTheme();
+  const { styles, colors, semanticColors: c } = useTheme();
   const navigation = useNavigation();
   const {
     id,
@@ -575,9 +570,14 @@ export default function OrganizationScreen() {
             else if (profileVisible) viewPerson(member.user_id);
           }}
           style={({ pressed }) => [
-            styles.card,
             {
               padding: 12,
+              marginBottom: 6,
+              borderRadius: 14,
+              backgroundColor: c.surfaceRaised,
+              minHeight: 64,
+              borderWidth: 1,
+              borderBottomColor: colors.line,
               flexDirection: "row",
               alignItems: "center",
               gap: 10,
@@ -585,8 +585,12 @@ export default function OrganizationScreen() {
             },
           ]}
         >
+          <ProfileAvatar
+            profile={profileVisible ? profile : undefined}
+            size={44}
+          />
           <View style={{ flex: 1, gap: 3 }}>
-            <Text style={styles.h2}>{memberName(member.user_id)}</Text>
+            <Text style={styles.body}>{memberName(member.user_id)}</Text>
             <Text style={styles.muted}>
               {member.user_id === organization.owner_id ? "Owner" : member.role}
             </Text>
@@ -696,10 +700,29 @@ export default function OrganizationScreen() {
             {inviteCandidates.length ? (
               <View style={{ gap: 8 }}>
                 {inviteCandidates.map((profile) => (
-                  <View key={profile.id}>
-                    {selectionButton(profile.name, invitee === profile.id, () =>
-                      setInvitee(profile.id),
-                    )}
+                  <View
+                    key={profile.id}
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 10,
+                    }}
+                  >
+                    <ProfileAvatar
+                      profile={
+                        canViewProfile(data, profile, userId)
+                          ? profile
+                          : undefined
+                      }
+                      size={44}
+                    />
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      {selectionButton(
+                        profile.name,
+                        invitee === profile.id,
+                        () => setInvitee(profile.id),
+                      )}
+                    </View>
                   </View>
                 ))}
               </View>
@@ -832,7 +855,9 @@ export default function OrganizationScreen() {
                 requestConfirmation({
                   title: "Change this member’s role?",
                   message:
-                    "Change this member’s role to " + memberRole + "? This changes their permissions.",
+                    "Change this member’s role to " +
+                    memberRole +
+                    "? This changes their permissions.",
                   confirmLabel: "Save role",
                   destructive: false,
                   onConfirm: async () => {
@@ -1005,16 +1030,10 @@ export default function OrganizationScreen() {
                 )
                 .slice(0, 2)
                 .map((activity) => (
-                  <ProfileLink
+                  <CommunityActivityRow
                     key={activity.id}
-                    title={activity.title}
-                    detail={shortTime(activity.starts_at)}
-                    onPress={() =>
-                      router.push({
-                        pathname: "/activity/[id]",
-                        params: { id: activity.id },
-                      })
-                    }
+                    activity={activity}
+                    communityName={organization.name}
                   />
                 ))}
             </ProfileSection>
@@ -1031,6 +1050,7 @@ export default function OrganizationScreen() {
               }
             />
           ) : null}
+          <CommunityInCommon type="organization" id={organization.id} />
           <ProfileLink
             title="Beacons & Pings"
             onPress={() => selectTab("activity")}
@@ -1082,7 +1102,7 @@ export default function OrganizationScreen() {
                   )}
                 </View>
                 <Field
-                  label="Search visible member names"
+                  label="Search Network members"
                   placeholder="Name"
                   value={memberSearch}
                   onChangeText={setMemberSearch}
@@ -1369,29 +1389,11 @@ export default function OrganizationScreen() {
             </Pressable>
           ))}
           {visibleActivities.map((activity) => (
-            <Pressable
+            <CommunityActivityRow
               key={activity.id}
-              onPress={() =>
-                router.push({
-                  pathname: "/activity/[id]",
-                  params: { id: activity.id },
-                })
-              }
-              style={styles.card}
-            >
-              <View style={styles.between}>
-                <View style={{ flex: 1, gap: 4 }}>
-                  <Text style={styles.h2}>{activity.title}</Text>
-                  <Text style={styles.muted}>
-                    Network Beacon · {shortTime(activity.starts_at)}
-                  </Text>
-                </View>
-                <ArrowUpRight size={18} color={colors.green} />
-              </View>
-              {!!activity.description && (
-                <Txt muted>{activity.description}</Txt>
-              )}
-            </Pressable>
+              activity={activity}
+              communityName={organization.name}
+            />
           ))}
           {!organizationActivities.length && !orgThreads.length ? (
             <Empty
@@ -1633,8 +1635,9 @@ export default function OrganizationScreen() {
                       : canLeaveNetwork,
               )
               .map((section) => (
-                <ProfileLink
+                <CommunitySettingsRow
                   key={section}
+                  category={section}
                   title={settingsSectionTitles[section]}
                   onPress={() => requestSettings(section)}
                 />

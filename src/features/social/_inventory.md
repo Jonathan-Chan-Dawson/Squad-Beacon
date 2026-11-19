@@ -9,3 +9,5 @@
 - Prompt 2: CommunityProfileAccess provides exact-ID safe summaries and authorized relationship disclosures; directory.ts shares safe summary projection across Demo search and direct retrieval. community_profile_summary is an additive read-only RPC.
 
 - communityPresentation.ts centralizes legacy entity display names; communityNavigation.ts opens canonical profile routes. CommunityProfileAccess refreshes exact summaries on focus and retains independent member authorization.
+
+- inCommon.ts and CommunityInCommon.tsx: current-viewer authorized overlap, grouped/searchable people/community/hosted-or-approved-Going Beacon results, and account-keyed disclosure state. CommunityActivityRow.tsx reuses safe participation selectors and existing Beacon navigation without per-row queries.

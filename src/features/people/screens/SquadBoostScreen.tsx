@@ -1,3 +1,4 @@
+import { squadBenefitProgress } from "@/src/features/profile/premiumPresentation";
 import { SegmentedControl } from "@/src/shared/design-system";
 import { ThemedSwitch } from "@/src/shared/ThemedSwitch";
 import { useNow } from "@/src/shared/useNow";
@@ -36,28 +37,80 @@ export function SquadBoostLink({
   showSquadName?: boolean;
 }) {
   const { data, userId } = useBeacon();
+  const { semanticColors: colors, styles } = useTheme();
   if (
     !data.squad_members.some(
       (m) => m.squad_id === squadId && m.user_id === userId,
     )
   )
     return null;
-  const e = resolveSquadEntitlements(data, squadId);
+  const e = squadBenefitProgress(data, squadId);
   return (
-    <PlanChoice
-      title={
-        showSquadName
-          ? (data.squads.find((s) => s.id === squadId)?.name ?? "Squad")
-          : "Boost Squad"
-      }
-      detail={`${level(e.total, e.tier)} · ${e.total}/5 active Boosts`}
-      icon={Sparkles}
-      onPress={() =>
-        router.push(
-          `/squad-boosts?squadId=${encodeURIComponent(squadId)}` as Href,
-        )
-      }
-    />
+    <View
+      testID="squad-benefits-summary"
+      style={{ gap: 8, paddingVertical: 12 }}
+    >
+      <PlanChoice
+        title={
+          showSquadName
+            ? (data.squads.find((s) => s.id === squadId)?.name ?? "Squad")
+            : `Squad Benefits · ${e.tier === "free" ? "Free" : e.tier === "plus" ? "BEACON+ Shared · Plus" : "BEACON+ Shared · Pro"}`
+        }
+        detail={
+          e.supported ? e.progressLabel : "Shared Squad benefits · Coming soon"
+        }
+        icon={Sparkles}
+        onPress={() =>
+          router.push(
+            `/squad-boosts?squadId=${encodeURIComponent(squadId)}` as Href,
+          )
+        }
+      />
+      {e.supported && (
+        <View
+          accessible
+          accessibilityRole="progressbar"
+          accessibilityLabel="Squad Boost progress"
+          accessibilityValue={{
+            min: 0,
+            max: e.target,
+            now: Math.min(e.total, e.target),
+            text: e.progressLabel,
+          }}
+          style={{
+            height: 5,
+            borderRadius: 3,
+            backgroundColor: colors.border,
+            overflow: "hidden",
+          }}
+        >
+          <View
+            style={{
+              height: 5,
+              width: `${e.fraction * 100}%`,
+              backgroundColor: colors.accent,
+            }}
+          />
+        </View>
+      )}
+      <Text style={styles.muted}>
+        {e.tier === "free"
+          ? "Pool Boosts to share advanced tools with your Squad."
+          : e.tier === "plus"
+            ? "Shared Plus tools are included for eligible Squad Beacons."
+            : "Shared Pro coordination is included for eligible Squad Beacons."}
+      </Text>
+      {e.grace_until && (
+        <Txt muted>
+          Grace period · current {e.tier === "pro" ? "Pro" : "Plus"} benefits
+          remain until {new Date(e.grace_until).toLocaleString()}.{" "}
+          {e.progressLabel}.
+        </Txt>
+      )}
+      {e.simulated && (
+        <Txt muted>Demo simulation · no real Boost allocation</Txt>
+      )}
+    </View>
   );
 }
 export default function SquadBoostScreen() {

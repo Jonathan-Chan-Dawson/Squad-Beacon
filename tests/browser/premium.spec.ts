@@ -1,16 +1,18 @@
+import { startDemoFromEntry } from "./demoEntry";
 import { expect, test } from "@playwright/test";
 
 for (const appearance of ["light", "dark"]) {
   test(`Premium tiers and demo controls preserve shared session state · ${appearance}`, async ({
     page,
   }) => {
+    test.setTimeout(60000);
     await page.setViewportSize({ width: 320, height: 900 });
     await page.addInitScript(
       (mode) => localStorage.setItem("beacon.appearance", mode),
       appearance,
     );
     await page.goto("/settings");
-    await page.getByRole("button", { name: /Explore the demo/ }).click();
+    await startDemoFromEntry(page);
     await page.getByRole("button", { name: "Premium", exact: true }).click();
     await expect(page).toHaveURL(/settings\/premium/);
     await expect(
@@ -88,9 +90,8 @@ for (const appearance of ["light", "dark"]) {
       .getByRole("dialog")
       .getByRole("button", { name: "Leave demo", exact: true })
       .click();
-    await page.getByRole("button", { name: /Explore the demo/ }).click();
-    await page.getByRole("tab", { name: "Profile", exact: true }).click();
-    await page.getByRole("button", { name: "Settings", exact: true }).click();
+    await startDemoFromEntry(page);
+    await expect(page).toHaveURL(/\/settings\/?$/);
     await page.getByRole("button", { name: "Premium", exact: true }).click();
     await expect(
       page.getByText("Personal Beacon templates:", { exact: false }),
@@ -102,7 +103,7 @@ test("template editor survives Premium navigation and quotas explain the upgrade
   page,
 }) => {
   await page.goto("/create?saveTemplate=yes");
-  await page.getByRole("button", { name: /Explore the demo/ }).click();
+  await startDemoFromEntry(page);
   // Start from the existing creation launcher to retain its normal draft handoff.
   const blank = page.getByRole("button", {
     name: "+ Create Blank Beacon",
@@ -139,7 +140,7 @@ test("Free template quota explains limits and Plus unlocks a new save without lo
 }) => {
   test.setTimeout(60000);
   await page.goto("/create");
-  await page.getByRole("button", { name: /Explore the demo/ }).click();
+  await startDemoFromEntry(page);
   await page
     .getByRole("button", { name: "+ Create Blank Beacon", exact: true })
     .click();

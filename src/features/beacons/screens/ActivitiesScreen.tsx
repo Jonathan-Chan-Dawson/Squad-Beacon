@@ -1,3 +1,4 @@
+import { PremiumHeaderButton } from "@/src/features/profile/components/PremiumEntry";
 import { LivingActivityHighlights } from "../components/feed/LivingActivitySection";
 import { homePresentation } from "@/src/features/onboarding/presentation";
 import { useOnboarding } from "@/src/features/onboarding/runtime";
@@ -67,7 +68,6 @@ import {
   confirmedHubActivities,
   personalHubPreview,
 } from "@/src/features/beacons/hubSelectors";
-
 export default function ActivitiesScreen() {
   const { colors: designColors, tokens } = useDesignTheme();
   const {
@@ -111,7 +111,6 @@ export default function ActivitiesScreen() {
   const [rsvpActivityId, setRsvpActivityId] = useState<string | null>(null);
   const [rsvpBusy, setRsvpBusy] = useState(false);
   const { showAvatars } = usePreferences();
-
   useFocusEffect(
     useCallback(() => {
       if (params.filter === "Past") {
@@ -132,13 +131,11 @@ export default function ActivitiesScreen() {
       }
     }, [params.confirmed, params.filter, params.participation]),
   );
-
   const confirmedActivities = useMemo(
     () => confirmedHubActivities(data, userId),
     [data, userId],
   );
   const personalPreview = personalHubPreview(confirmedActivities, now);
-
   const goToActivity = useCallback((id: string) => {
     router.push({ pathname: "/activity/[id]", params: { id } });
   }, []);
@@ -164,14 +161,12 @@ export default function ActivitiesScreen() {
       setRefreshing(false);
     }
   }, [refresh, simulatedError, switchDemoScenario]);
-
   const shareActivity = useCallback(
     async (activity: Activity) => {
       await shareBeaconInvitation(data, userId, activity);
     },
     [data, userId],
   );
-
   const respond = useCallback(
     async (activity: Activity, status: "going" | "interested" | "withdraw") => {
       if (
@@ -187,7 +182,6 @@ export default function ActivitiesScreen() {
     },
     [act, data, userId],
   );
-
   const handleRsvpSheet = useCallback(
     async (status: "going" | "interested" | "withdraw") => {
       const activity = data.activities.find(
@@ -212,7 +206,6 @@ export default function ActivitiesScreen() {
     },
     [data.activities, respond, rsvpActivityId],
   );
-
   const findActivityPlace = useCallback(
     (activity: Activity) => {
       if (
@@ -225,7 +218,6 @@ export default function ActivitiesScreen() {
     },
     [data, userId],
   );
-
   const buildCardProps = useCallback(
     (activity: Activity): BeaconFeedCardProps => {
       const hostCandidate = data.profiles.find(
@@ -371,7 +363,6 @@ export default function ActivitiesScreen() {
       userId,
     ],
   );
-
   const loadBrowseActivities = useCallback(
     (period: "Active" | "Upcoming") =>
       discoveryActivities(
@@ -466,7 +457,6 @@ export default function ActivitiesScreen() {
       setReportBusy(false);
     }
   }
-
   return (
     <View style={{ flex: 1, backgroundColor: designColors.bg }}>
       <View
@@ -504,6 +494,7 @@ export default function ActivitiesScreen() {
             >
               Beacons
             </Text>
+            <PremiumHeaderButton />
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Open calendar"
@@ -521,7 +512,6 @@ export default function ActivitiesScreen() {
           </View>
         </GlassBar>
       </View>
-
       <ScrollView
         testID="beacons-home-scroll"
         refreshControl={
@@ -567,7 +557,6 @@ export default function ActivitiesScreen() {
             />
           </View>
         ) : null}
-
         <SharedStatusControl compact />
         {userId ? (
           <View
@@ -724,7 +713,6 @@ export default function ActivitiesScreen() {
             ))}
           </View>
         ) : null}
-
         {home.kind === "compact" &&
         !nowPreview.length &&
         !upcomingPreview.length &&
@@ -752,7 +740,6 @@ export default function ActivitiesScreen() {
             }}
           />
         ) : null}
-
         <View
           collapsable={false}
           style={{
@@ -810,7 +797,6 @@ export default function ActivitiesScreen() {
           </View>
         </View>
       </ScrollView>
-
       <Sheet
         title="Your response"
         visible={!!rsvpActivityId}
@@ -865,7 +851,6 @@ export default function ActivitiesScreen() {
           />
         ) : null}
       </Sheet>
-
       <Sheet
         title="Report Beacon"
         visible={!!reportActivityId}

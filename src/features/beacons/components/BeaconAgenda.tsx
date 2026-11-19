@@ -4,7 +4,7 @@ import {
   BeaconDisclosure,
 } from "./BeaconSection";
 import { useConfirmation } from "@/src/shared/Dialogs";
-import { PremiumPreview } from "@/src/features/profile/settings/PremiumUI";
+import { PremiumFeatureHint } from "@/src/features/profile/components/PremiumFeatureHint";
 import {
   activityPremiumPresets,
   activityAgendaPreset,
@@ -387,7 +387,8 @@ function AgendaEditor({
   return (
     <View style={{ gap: 10 }}>
       {confirmationDialog}
-      {!plus && <PremiumPreview />}
+      <PremiumFeatureHint feature="agendas" activity={activity} />
+      <PremiumFeatureHint feature="agenda_coordination" activity={activity} compact />
       {!plus && (
         <Txt muted>
           BEACON+ enables new agendas. Saved items remain readable; you can

@@ -11,7 +11,7 @@ import { useFocusPersistence } from "./focusPersistence";
 import { canStartAdvancedFocus, type ToolSettings } from "./premiumTools";
 import { useNow } from "@/src/shared/useNow";
 import { resolvePremiumFeature } from "@/src/shared/entitlements";
-import { PremiumPreview } from "@/src/features/profile/settings/PremiumUI";
+import { PremiumFeatureHint } from "@/src/features/profile/components/PremiumFeatureHint";
 import PlanDateField from "@/src/features/plans/PlanDateField";
 import ZonedTimeField from "@/src/features/planning/ZonedTimeField";
 import {
@@ -1544,24 +1544,16 @@ export function BeaconTools({
         ) : null}
         <PlanChoice
           title="Assignment & deadline"
-          detail="Choose a participant, due date or reminder"
+          detail="Plus · Choose a participant, due date or reminder"
           icon={CalendarClock}
           expanded={taskDetails}
           onPress={() => setTaskDetails(!taskDetails)}
         />
         {taskDetails && (
           <View style={{ gap: 10 }}>
-            {taskPremium.available &&
-              (taskPremium.source === "squad" ||
-                taskPremium.source === "grace") && (
-                <Txt muted>
-                  Unlocked by{" "}
-                  {data.squads.find((s) => s.id === activity.audience_id)
-                    ?.name ?? "your Squad"}
-                </Txt>
-              )}
-            <PremiumPreview
-              label={taskPremium.available ? "Premium settings" : undefined}
+            <PremiumFeatureHint
+              feature="checklist_details"
+              activity={activity}
             />
             {taskPremium.available && (
               <>

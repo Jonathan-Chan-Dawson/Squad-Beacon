@@ -1,9 +1,10 @@
+import { startDemoFromEntry } from "./demoEntry";
 import { expect, test, type Page } from "@playwright/test";
 import { openConversation } from "./chatHelpers";
 
 async function openDemo(page: Page, path = "/") {
   await page.goto(path);
-  await page.getByRole("button", { name: /Explore the demo/ }).click();
+  await startDemoFromEntry(page);
 }
 
 for (const width of [320, 375, 430]) {

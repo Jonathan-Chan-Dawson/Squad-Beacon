@@ -67,3 +67,5 @@ Tests should exercise product flows through public routes/actions and preserve e
 - beaconExpansion.test.ts, beaconExpansion.database.test.ts and browser/beaconExpansion.spec.ts cover Phase F agendas, prerequisites, hosting privacy, reminders, consent, round totals and workflow references. Run npm run test:beacon-expansion; database checks are local PGlite.
 
 - browser/beaconRedesign.spec.ts covers readable tool selection, phone/desktop workspace navigation and saved schedule preservation on cancellation. Existing creationMobilePolish, beaconControls, beaconExpansion and premiumTools journeys cover affected flows.
+
+- premiumPresentation.test.ts and inCommon.test.ts cover access provenance, capability support, Boost thresholds/grace and privacy-safe overlap. Browser frontend4a/communitySubscreens4a journeys cover labeled Premium entry and focused community rows; demoEntry.ts enters through the real guest/sign-in UI while retaining deep links.

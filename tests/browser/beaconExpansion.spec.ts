@@ -1,3 +1,4 @@
+import { startDemoFromEntry } from "./demoEntry";
 import { expect, test } from "@playwright/test";
 
 for (const appearance of ["light", "dark"]) {
@@ -12,7 +13,7 @@ for (const appearance of ["light", "dark"]) {
       appearance,
     );
     await page.goto("/activity/demo-tools?tab=activity&tool=checklist");
-    await page.getByRole("button", { name: /Explore the demo/ }).click();
+    await startDemoFromEntry(page);
     await page.getByRole("button", { name: "All tools", exact: true }).click();
     await page
       .getByRole("tab", { name: "Activity schedule", exact: true })
@@ -24,7 +25,7 @@ for (const appearance of ["light", "dark"]) {
       page.getByRole("button", { name: "Save schedule", exact: true }),
     ).toHaveCount(0);
     await page
-      .getByRole("button", { name: "BEACON+ · Explore Premium", exact: true })
+      .getByRole("button", { name: "Explore BEACON+ benefits", exact: true })
       .click();
     await page
       .getByRole("button", { name: "Demo tier: Pro", exact: true })
@@ -113,6 +114,9 @@ for (const appearance of ["light", "dark"]) {
     ).toBe(true);
     await page.getByRole("tab", { name: "Overview", exact: true }).click();
     await page
+      .getByRole("button", { name: "Open memory collections", exact: true })
+      .click();
+    await page
       .getByRole("button", { name: "Albums & Afterglow", exact: true })
       .click();
     await page
@@ -145,7 +149,7 @@ test("round scoring and a consented timeline recap use the existing tools", asyn
   test.setTimeout(120000);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/activity/demo-tools?tab=activity&tool=checklist");
-  await page.getByRole("button", { name: /Explore the demo/ }).click();
+  await startDemoFromEntry(page);
   await page.getByTestId("activity-detail-hero").evaluate(async (node) => {
     let fiber = (node as any)[
       Object.keys(node).find((k) => k.startsWith("__reactFiber"))!
@@ -192,6 +196,9 @@ test("round scoring and a consented timeline recap use the existing tools", asyn
     fullPage: true,
   });
   await page.getByRole("tab", { name: "Overview", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Open memory collections", exact: true })
+    .click();
   await page
     .getByRole("button", { name: "Albums & Afterglow", exact: true })
     .click();

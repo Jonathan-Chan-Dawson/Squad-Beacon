@@ -1,3 +1,4 @@
+import type { SquadIconKey } from "@/src/shared/types";
 import React from "react";
 import { Pressable, Text, View } from "react-native";
 import { Action, Empty, Sheet, useTheme } from "@/src/shared/ui";
@@ -84,13 +85,14 @@ export function SocialDirectorySummaryCard(
   props: SummaryContentProps & {
     onPreview: () => void;
     compact?: boolean;
+    squadIconKey?: SquadIconKey;
     discoveryCard?: boolean;
     previewLabel?: string;
     showJoinedStatus?: boolean;
     actionDisabled?: boolean;
   },
 ) {
-  const { styles, colors } = useTheme();
+  const { styles, colors, semanticColors: c } = useTheme();
   const { summary } = props;
 
   if (props.compact) {
@@ -100,9 +102,12 @@ export function SocialDirectorySummaryCard(
           flexDirection: "row",
           alignItems: "center",
           gap: 8,
-          paddingVertical: 8,
-          borderBottomWidth: 1,
-          borderBottomColor: colors.line,
+          padding: 12,
+          marginBottom: 8,
+          borderRadius: 14,
+          backgroundColor: c.surfaceRaised,
+          borderWidth: 1,
+          borderColor: c.border,
         }}
       >
         <Pressable
@@ -117,15 +122,19 @@ export function SocialDirectorySummaryCard(
           }}
         >
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            <CommunityAvatar type={summary.entity_type} size={36} />
+            <CommunityAvatar
+              type={summary.entity_type}
+              iconKey={props.squadIconKey}
+              size={44}
+            />
             <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
               <Text
-                numberOfLines={1}
+                numberOfLines={2}
                 style={[styles.body, { fontWeight: "700" }]}
               >
                 {summary.name}
               </Text>
-              <Text numberOfLines={1} style={styles.muted}>
+              <Text numberOfLines={2} style={styles.muted}>
                 {communityTypeLabel(summary.entity_type)} ·{" "}
                 {summary.member_count}{" "}
                 {summary.member_count === 1 ? "member" : "members"}
@@ -138,7 +147,9 @@ export function SocialDirectorySummaryCard(
             </View>
           </View>
         </Pressable>
-        {summary.action !== "joined" || props.showJoinedStatus ? (
+        {summary.action === "joined" && props.showJoinedStatus ? (
+          <Text style={[styles.muted, { flexShrink: 0 }]}>Joined</Text>
+        ) : summary.action !== "joined" ? (
           <View style={{ width: 100, maxWidth: "40%", flexShrink: 0 }}>
             <Action
               compact
@@ -150,8 +161,7 @@ export function SocialDirectorySummaryCard(
               disabled={
                 props.pending ||
                 props.actionDisabled ||
-                summary.action === "invite_required" ||
-                (props.showJoinedStatus && summary.action === "joined")
+                summary.action === "invite_required"
               }
               run={async () => {
                 if ((await props.onAction()) === false)

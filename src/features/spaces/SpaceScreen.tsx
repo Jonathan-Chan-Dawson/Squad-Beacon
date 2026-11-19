@@ -1,3 +1,5 @@
+import { CommunityActivityRow } from "@/src/features/social/CommunityActivityRow";
+import { CommunityInCommon } from "@/src/features/social/CommunityInCommon";
 import { canReadBeaconActivity } from "@/src/features/beacons/beaconModules";
 import { CommunityPublicBeacons } from "@/src/features/discovery/CommunityPublicBeacons";
 import { CommunityPublicProfile } from "@/src/features/discovery/CommunityPublicProfile";
@@ -5,6 +7,7 @@ import { communityProfileMode } from "@/src/features/discovery/communityPublicPr
 import { canReadOrganization } from "@/src/features/organizations/domain";
 import {
   ProfileActions,
+  CommunitySettingsRow,
   ProfileLink,
   ProfileSection,
 } from "@/src/features/people/components/ProfilePrimitives";
@@ -48,12 +51,7 @@ import {
   usePreventRemove,
   type NavigationAction,
 } from "expo-router/react-navigation";
-import {
-  CalendarDays,
-  Layers3,
-  Settings2,
-  UserPlus,
-} from "lucide-react-native";
+import { Layers3, Settings2, UserPlus } from "lucide-react-native";
 import { useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import {
@@ -100,7 +98,7 @@ export default function SpaceScreen() {
     refresh: refreshSummary,
   } = useCommunitySummary("space", id);
   const now = useNow();
-  const { styles, colors } = useTheme();
+  const { styles, colors, semanticColors: c } = useTheme();
   const [menu, setMenu] = useState<"invite" | "squads" | "settings" | null>(
     null,
   );
@@ -498,6 +496,7 @@ export default function SpaceScreen() {
           />
         </View>
       )}
+      {tab === "overview" && <CommunityInCommon type="space" id={id} />}
       {tab === "overview" && parentNetworks.length > 0 ? (
         <RelationshipDisclosure
           contexts={parentNetworks.map((parent) => ({
@@ -543,31 +542,11 @@ export default function SpaceScreen() {
               )
               .slice(0, 2)
               .map((activity) => (
-                <Pressable
+                <CommunityActivityRow
                   key={activity.id}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Open Beacon ${activity.title}`}
-                  onPress={() =>
-                    router.push({
-                      pathname: "/activity/[id]",
-                      params: { id: activity.id },
-                    })
-                  }
-                  style={styles.card}
-                >
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: 9,
-                    }}
-                  >
-                    <CalendarDays size={18} color={colors.green} />
-                    <Text style={[styles.body, { flex: 1 }]}>
-                      {activity.title}
-                    </Text>
-                  </View>
-                </Pressable>
+                  activity={activity}
+                  communityName={space.name}
+                />
               ))}
             {!spaceActivities.length && (
               <Empty
@@ -625,8 +604,9 @@ export default function SpaceScreen() {
                     : !!viewerRole && space.owner_id !== userId,
             )
             .map((section) => (
-              <ProfileLink
+              <CommunitySettingsRow
                 key={section}
+                category={section}
                 title={settingsSectionTitles[section]}
                 onPress={() => requestSettings(section)}
               />
@@ -823,31 +803,11 @@ export default function SpaceScreen() {
             ) : null}
           </View>
           {spaceActivities.map((activity) => (
-            <Pressable
+            <CommunityActivityRow
               key={activity.id}
-              accessibilityRole="button"
-              accessibilityLabel={`Open Beacon ${activity.title}`}
-              onPress={() =>
-                router.push({
-                  pathname: "/activity/[id]",
-                  params: { id: activity.id },
-                })
-              }
-              style={styles.card}
-            >
-              <View
-                style={{ flexDirection: "row", alignItems: "center", gap: 9 }}
-              >
-                <CalendarDays size={18} color={colors.green} />
-                <View style={{ flex: 1, gap: 2 }}>
-                  <Text style={styles.body}>{activity.title}</Text>
-                  <Text style={styles.muted}>
-                    {activity.category} ·{" "}
-                    {new Date(activity.starts_at).toLocaleString()}
-                  </Text>
-                </View>
-              </View>
-            </Pressable>
+              activity={activity}
+              communityName={space.name}
+            />
           ))}
           {!spaceActivities.length && (
             <Empty
@@ -932,7 +892,7 @@ export default function SpaceScreen() {
                   })}
                 </View>
               ) : null}
-              {members.length > 5 ? (
+              {members.length > 0 ? (
                 <Field
                   label="Search Organization members"
                   value={memberSearch}
@@ -952,9 +912,20 @@ export default function SpaceScreen() {
                   params: { id: profile.id },
                 })
               }
-              style={[styles.row, { minHeight: 54 }]}
+              style={[
+                styles.row,
+                {
+                  minHeight: 64,
+                  padding: 12,
+                  marginBottom: 6,
+                  borderRadius: 14,
+                  backgroundColor: c.surfaceRaised,
+                  borderWidth: 1,
+                  borderColor: c.border,
+                },
+              ]}
             >
-              <ProfileAvatar profile={profile} size={38} />
+              <ProfileAvatar profile={profile} size={44} />
               <Text style={[styles.body, { flex: 1 }]}>{profile.name}</Text>
               <Text style={styles.muted}>
                 {member.role === "owner"
@@ -987,14 +958,44 @@ export default function SpaceScreen() {
           them to any Squad.
         </Txt>
         {invitees.map((profile) => (
-          <Action
+          <View
             key={profile.id}
-            secondary
-            title={`Invite ${profile.name}`}
-            run={() =>
-              act("invite_space_member", { space_id: id, user_id: profile.id })
-            }
-          />
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 10,
+              padding: 12,
+              borderRadius: 14,
+              backgroundColor: c.surfaceRaised,
+              borderWidth: 1,
+              borderColor: c.border,
+            }}
+          >
+            <ProfileAvatar
+              profile={
+                canViewProfile(data, profile, userId) ? profile : undefined
+              }
+              size={44}
+            />
+            <Text
+              numberOfLines={2}
+              style={[styles.body, { flex: 1, minWidth: 0 }]}
+            >
+              {profile.name}
+            </Text>
+            <Action
+              compact
+              secondary
+              title="Invite"
+              accessibilityLabel={`Invite ${profile.name}`}
+              run={() =>
+                act("invite_space_member", {
+                  space_id: id,
+                  user_id: profile.id,
+                })
+              }
+            />
+          </View>
         ))}
         {!invitees.length && (
           <Txt muted>
@@ -1123,7 +1124,9 @@ export default function SpaceScreen() {
                             requestConfirmation({
                               title: "Change this member’s role?",
                               message:
-                                "Change this member’s role to " + editingMemberRole + "? This changes their permissions.",
+                                "Change this member’s role to " +
+                                editingMemberRole +
+                                "? This changes their permissions.",
                               confirmLabel: "Save role",
                               destructive: false,
                               onConfirm: async () => {

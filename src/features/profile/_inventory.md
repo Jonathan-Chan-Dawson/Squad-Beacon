@@ -15,3 +15,5 @@ Profile feature
 - ProfileSonarCard stages Choose People then Review Sharing before the existing permission/start sequence. ProfileScreen consumes section=aspirations and positions the About content.
 
 - settings/PremiumScreen.tsx and PremiumUI.tsx: flat Free/Plus/Pro benefit grid, capability-aware benefit sections, personal template usage, Boost management summaries and separate shared demo controls. Settings exposes Premium and demo-only Demo Controls. Billing remains unavailable.
+
+- Front End 4A: components/PremiumEntry and PremiumFeatureHint provide labeled Home/Profile membership discovery and contextual capability-aware access. premiumPresentation.ts derives benefit/progress labels from canonical entitlements; PremiumScreen leads with practical benefits before comparison.

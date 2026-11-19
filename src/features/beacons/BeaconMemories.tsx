@@ -221,8 +221,8 @@ function BeaconMemoriesContent({ activity }: { activity: Activity }) {
     <View style={{ gap: 12 }}>
       {!showAll && <View style={[styles.row, { justifyContent: "space-between", flexWrap: "wrap" }]}>
         <Text style={styles.h2}>Beacon Memories</Text>
-        {memories.length > 0 && <Pressable accessibilityRole="button" accessibilityLabel="See all memories" onPress={() => setShowAll(true)} style={[styles.row, { minHeight: 44, gap: 5 }]}>
-          <Text style={[styles.label, { color: colors.green }]}>See all memories</Text><ArrowRight size={16} color={colors.green} />
+        {canRead && <Pressable accessibilityRole="button" accessibilityLabel={memories.length > 0 ? "See all memories" : "Open memory collections"} onPress={() => setShowAll(true)} style={[styles.row, { minHeight: 44, gap: 5 }]}>
+          <Text style={[styles.label, { color: colors.green }]}>{memories.length > 0 ? "See all memories" : "Albums & recaps"}</Text><ArrowRight size={16} color={colors.green} />
         </Pressable>}
       </View>}
       <View style={[styles.card, { padding: 14, gap: 8 }]}>
