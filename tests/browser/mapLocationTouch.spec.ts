@@ -234,7 +234,7 @@ test("closing a temporary selection preserves filters, Plan context and the came
   }
   await page.goto("/?mapPlan=held-place-plan");
   const context = page.getByTestId("map-plan-focus");
-  await expect(context).toContainText("2 visible physical stops");
+  await expect(context).toContainText("2 stops");
   const session = await page.context().newCDPSession(page);
   await page.getByTestId("map-filter-toggle").tap();
   const filters = page.getByRole("dialog", { name: "Filters", exact: true });

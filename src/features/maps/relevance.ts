@@ -1,3 +1,4 @@
+import { followedBeaconIds } from "@/src/features/discovery/beaconTopics";
 import { beaconDiscoveryTier, beaconInterestMatch } from "./discoveryRanking";
 import type { Data } from "@/src/shared/types";
 import type { MapPointPriority } from "@/src/features/maps/cluster";
@@ -12,6 +13,7 @@ export function deriveMapPointPriorities(
   personalized = true,
 ): Record<string, MapPointPriority> {
   const priorities: Record<string, MapPointPriority> = {};
+  const following = followedBeaconIds(data, viewerId, true);
   for (const activityId of activityIds) {
     const activity = data.activities.find((item) => item.id === activityId);
     if (!activity) continue;
@@ -24,7 +26,7 @@ export function deriveMapPointPriorities(
       tier: beaconDiscoveryTier(data, activity, viewerId, now, personalized),
       affinity:
         Number(personalized && beaconInterestMatch(data, activity, viewerId)) +
-        (activity.owner_id === viewerId ? 100 : 0),
+        (activity.owner_id === viewerId ? 100 : 0) + Number(following.has(activity.id)) * 0.5,
       attendance,
     };
   }

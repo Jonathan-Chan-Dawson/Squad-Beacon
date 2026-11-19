@@ -42,7 +42,7 @@ export interface MapProps {
   /** Friends filter increases presence prominence without changing attendance or coordinates. */
   friendsProminent?: boolean;
   contextPoints?: readonly import("../contextFilters").MapContextPoint[];
-  contextPaths?: readonly (readonly import("@/src/shared/exploration").Coordinate[])[];
+  contextPaths?: readonly (readonly import("../contextFilters").MapRoutePoint[])[];
   onContextPoint?: (point: import("../contextFilters").MapContextPoint) => void;
   anchorCoordinate?: { latitude: number; longitude: number } | null;
   onAnchor?: (point: { x: number; y: number } | null) => void;

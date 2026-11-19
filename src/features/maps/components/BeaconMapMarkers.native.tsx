@@ -15,6 +15,7 @@ import {
 import { useNow } from "@/src/shared/useNow";
 import { CLUSTER_PREVIEW_LIMIT } from "../mapClusterPolicy";
 import React, { useEffect, useRef, useState } from "react";
+import { BeaconPinGlyph } from "./BeaconPinGlyph";
 import { Bookmark } from "lucide-react-native";
 import { Image, Text, View } from "react-native";
 import { Circle as MapCircle, Marker } from "react-native-maps";
@@ -247,8 +248,15 @@ export function BeaconMarkerArtwork({
   streetTime,
   markerState = EMPTY_MARKER_STATE,
   showSaved = true,
+  icon,
+  beam = false,
+  raisedPin = false,
+  stopNumber,
 }: {
   id: string;
+  beam?: boolean;
+  raisedPin?: boolean;
+  stopNumber?: number;
   category: Category;
   categoryColor: string;
   selected?: boolean;
@@ -256,6 +264,7 @@ export function BeaconMarkerArtwork({
   streetTime?: string;
   markerState?: BeaconMarkerState;
   showSaved?: boolean;
+  icon?: string | null;
 }) {
   const { colors } = useTheme();
   const owned = markerState.owned;
@@ -265,16 +274,18 @@ export function BeaconMarkerArtwork({
       <View
         style={{
           width: 58,
-          height: streetTime ? 70 : 56,
+          height: (streetTime ? 70 : 56) + (raisedPin ? 13 : 0),
+          paddingTop: raisedPin ? 13 : 0,
           alignItems: "center",
         }}
       >
+        {beam && <View testID="beacon-marker-beam" pointerEvents="none" style={{ position: "absolute", top: 0, width: 2, height: 15, borderRadius: 2, backgroundColor: categoryColor, shadowColor: categoryColor, shadowOpacity: 0.8, shadowRadius: 5, shadowOffset: { width: 0, height: 0 } }} />}
         <View
           style={{
             width: visualSize,
             height: visualSize,
-            borderRadius: visualSize / 2,
-            borderWidth: 3,
+            borderRadius: 13,
+            borderWidth: 2,
             borderColor: categoryColor,
             backgroundColor: colors.surface,
             alignItems: "center",
@@ -296,18 +307,24 @@ export function BeaconMarkerArtwork({
                 borderWidth: 2.5,
                 borderColor: colors.success,
                 opacity: 0.95,
-                borderRadius: visualSize / 2,
+                borderRadius: 11,
               }}
             />
           )}
-          <ActivityBadge category={category} size={26} />
+          <BeaconPinGlyph category={category} icon={icon} size={22} color={colors.ink} />
+          {stopNumber ? (
+            <View pointerEvents="none" accessible={false} testID="map-plan-stop-badge" style={{ position: "absolute", left: -5, top: -5, minWidth: 16, height: 16, paddingHorizontal: 3, borderRadius: 8, borderWidth: 1, borderColor: categoryColor, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" }}>
+              <Text style={{ color: colors.ink, fontSize: 9, fontWeight: "700" }}>{stopNumber}</Text>
+            </View>
+          ) : null}
+          {selected && <View pointerEvents="none" style={{ position: "absolute", inset: -5, borderRadius: 16, borderWidth: 2, borderColor: colors.ink }} />}
           {showSaved && markerState.saved && !owned && <SavedBookmark />}
           {owned && <OwnershipStar />}
         </View>
         <View
           style={{
             position: "absolute",
-            top: 34,
+            top: raisedPin ? 47 : 34,
             width: 12,
             height: 12,
             backgroundColor: categoryColor,
@@ -355,8 +372,12 @@ function BeaconMapPinComponent({
   disabled = false,
   dot = false,
   markerState,
+  icon,
+  stopNumber,
 }: {
   id: string;
+  icon?: string | null;
+  stopNumber?: number;
   title: string;
   coordinate: { latitude: number; longitude: number };
   category: Category;
@@ -372,8 +393,9 @@ function BeaconMapPinComponent({
 }) {
   const { colors } = useTheme();
   const stateLabel = markerStateLabel(markerState);
+  const label = `${stopNumber ? `Plan stop ${stopNumber}` : "Map"}: ${title}${stateLabel ? `, ${stateLabel}` : ""}`;
   const tracking = useMarkerTracking(
-    `${JSON.stringify(markerState)}:${id}:${categoryColor}:${selected}:${dimmed}:${streetTime ?? ""}:${appearanceKey}:${dot}`,
+    `${JSON.stringify(markerState)}:${id}:${categoryColor}:${selected}:${dimmed}:${streetTime ?? ""}:${appearanceKey}:${dot}:${icon ?? ""}:${stopNumber ?? ""}`,
   );
   if (dot)
     return (
@@ -381,7 +403,7 @@ function BeaconMapPinComponent({
         coordinate={coordinate}
         anchor={{ x: 0.5, y: 0.5 }}
         tracksViewChanges={tracking}
-        accessibilityLabel={`Map: ${title}${stateLabel ? `, ${stateLabel}` : ""}`}
+        accessibilityLabel={label}
         onPress={(event) => {
           event.stopPropagation();
           if (!disabled) onPress(id);
@@ -414,9 +436,10 @@ function BeaconMapPinComponent({
     <Marker
       key={id}
       coordinate={coordinate}
-      anchor={{ x: 0.5, y: streetTime ? 0.82 : 0.92 }}
+      anchor={{ x: 0.5, y: streetTime ? 58 / 83 : 58 / 69 }}
       tracksViewChanges={tracking}
-      accessibilityLabel={`Map: ${title}${stateLabel ? `, ${stateLabel}` : ""}`}
+      accessibilityLabel={label}
+      zIndex={stopNumber ? (selected ? 3 : 2) : undefined}
       onPress={(event) => {
         event.stopPropagation();
         if (!disabled) onPress(id);
@@ -425,11 +448,15 @@ function BeaconMapPinComponent({
       <BeaconMarkerArtwork
         id={id}
         category={category}
+        icon={icon}
+        beam={selected || (markerState.live && markerState.owned)}
+        raisedPin
         categoryColor={categoryColor}
         selected={selected}
         dimmed={dimmed}
         streetTime={streetTime}
         markerState={markerState}
+        stopNumber={stopNumber}
       />
     </Marker>
   );
@@ -444,6 +471,8 @@ export const BeaconMapPin = React.memo(
     left.coordinate.latitude === right.coordinate.latitude &&
     left.coordinate.longitude === right.coordinate.longitude &&
     left.category === right.category &&
+    left.icon === right.icon &&
+    left.stopNumber === right.stopNumber &&
     left.categoryColor === right.categoryColor &&
     left.selected === right.selected &&
     left.dimmed === right.dimmed &&

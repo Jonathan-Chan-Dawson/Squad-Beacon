@@ -15,6 +15,8 @@ import {
   CreationPeople,
   type CreationPeoplePanel,
 } from "../components/CreationPeople";
+import { useCommunityTopics } from "@/src/features/discovery/useCommunityTopics";
+import { BeaconMapIconEditor } from "../components/BeaconMapIconEditor";
 import { CreationAppearance } from "../components/CreationAppearance";
 import { validCreationMeetingLink } from "../creationValidation";
 import { BeaconIdentity } from "../components/BeaconIdentity";
@@ -188,7 +190,7 @@ function CreationKeyboardScreen(props: React.ComponentProps<typeof Screen>) {
 function CreateEditor({ templateBrowser = false }: { templateBrowser?: boolean } = {}) {
   const { styles, colors } = useTheme();
 
-  const { data, userId, act, getViewerEpoch } = useBeacon();
+  const { data, userId, demo, act, getViewerEpoch } = useBeacon();
   const currentTime = useNow();
   const params = useLocalSearchParams<{
     kind?: string;
@@ -896,6 +898,15 @@ function CreateEditor({ templateBrowser = false }: { templateBrowser?: boolean }
           }
         : defaultBeaconControlValues(),
   }));
+  const [mapIcon, setMapIcon] = usePlanningDraftState<string | null>(userId, draftToken, "mapIcon", null);
+  const [mapIconPublic, setMapIconPublic] = usePlanningDraftState(userId, draftToken, "mapIconPublic", false);
+  const mapIconEditor = kind !== "Status" && (demo || data.capabilities?.beacon_map_icons) ? (
+    <BeaconMapIconEditor category={category} value={mapIcon} shared={mapIconPublic}
+      onChange={(value, shared) => { setMapIcon(value); setMapIconPublic(shared); }} />
+  ) : null;
+  const { rows: communityTopics, ready: communityTopicsReady } = useCommunityTopics(selectedAssociationRow?.entity_type, selectedAssociationRow?.entity_id);
+  const [draftTopic, setDraftTopic] = usePlanningDraftState<{ id: string; type: string; community: string } | null>(userId, draftToken, "beaconTopic", null);
+  const scopedTopic = draftTopic?.community === selectedAssociationRow?.entity_id && draftTopic?.type === selectedAssociationRow?.entity_type ? draftTopic : null;
   const beaconControls =
     beaconControlDraft.routeKey === controlsRouteKey
       ? beaconControlDraft.value
@@ -1224,7 +1235,12 @@ function CreateEditor({ templateBrowser = false }: { templateBrowser?: boolean }
       throw new Error(
         `Combined details are ${finalDescription.length}/2000 characters. Shorten the description or template answers before publishing.`,
       );
+    if (kind !== "Status" && scopedTopic && !communityTopicsReady)
+      throw new Error("Wait for the selected community topic to load.");
+    if (kind !== "Status" && scopedTopic && !communityTopics.some(row => row.id === scopedTopic.id))
+      throw new Error("This topic is unavailable. Choose another topic or publish without it.");
     const payload = {
+      ...(kind !== "Status" && scopedTopic ? { beacon_topic_id: scopedTopic.id } : {}),
       template_source_id: saved
         ? `mine:${saved.id}`
         : selectedRecipe?.id
@@ -1256,6 +1272,9 @@ function CreateEditor({ templateBrowser = false }: { templateBrowser?: boolean }
       latitude: placeType === "In person" ? (pin?.latitude ?? null) : null,
       longitude: placeType === "In person" ? (pin?.longitude ?? null) : null,
       ...(controls ?? {}),
+      ...(kind !== "Status" && mapIcon && (demo || data.capabilities?.beacon_map_icons)
+        ? { map_icon: mapIcon, map_icon_public: mapIconPublic }
+        : {}),
       ...(kind!=="Status"&&premiumAppearance&&appearanceAllowed?{premium_appearance:premiumAppearance}:{}),
       ...(params.savedChecklist
         ? { saved_checklist_id: params.savedChecklist }
@@ -2099,9 +2118,11 @@ function CreateEditor({ templateBrowser = false }: { templateBrowser?: boolean }
           }
           communityChoices={associationCandidates}
           selectedCommunity={selectedAssociation}
-          onCommunity={(value) =>
-            setAssociationDraft({ routeKey: associationRouteKey, value })
-          }
+          onCommunity={(value) => {
+            if (value?.entity_id !== selectedAssociation?.entity_id || value?.entity_type !== selectedAssociation?.entity_type)
+              setDraftTopic(null);
+            setAssociationDraft({ routeKey: associationRouteKey, value });
+          }}
           panel={peoplePanel}
           onPanel={setPeoplePanel}
           approval={approval}
@@ -2117,9 +2138,19 @@ function CreateEditor({ templateBrowser = false }: { templateBrowser?: boolean }
                 title="Confirm reused location and access"
                 onPress={() => setReuseReviewed(true)}
               />
+
             ) : undefined
           }
         />
+        {kind !== "Status" && selectedAssociationRow && (communityTopics.length > 0 || scopedTopic) ? (
+          <View style={{ gap: 5 }}>
+            <Text style={styles.label}>Topic (optional)</Text>
+            <View style={[styles.row, { flexWrap: "wrap" }]}>
+              <Button compact secondary={!!scopedTopic} title="No topic" onPress={() => setDraftTopic(null)} />
+              {communityTopics.map(topic => <Button compact key={topic.id} secondary={topic.id !== scopedTopic?.id} title={topic.name} onPress={() => setDraftTopic({ id: topic.id, type: selectedAssociationRow.entity_type, community: selectedAssociationRow.entity_id })} />)}
+            </View>
+          </View>
+        ) : null}
       </View>
       <View
         onLayout={(event) => {
@@ -2193,6 +2224,7 @@ function CreateEditor({ templateBrowser = false }: { templateBrowser?: boolean }
             category={category}
             onChange={setBeaconControls}
           />
+          {mapIconEditor}
           <Text style={styles.h2}>
             Aspirations
             {aspirationIds.length ? ` · ${aspirationIds.length} selected` : ""}
@@ -2287,6 +2319,7 @@ function CreateEditor({ templateBrowser = false }: { templateBrowser?: boolean }
           value={beaconControls}
           onChange={setBeaconControls}
         />
+        {mapIconEditor}
       <Button title="Done" onPress={() => setAppearanceOpen(false)} />
       </Sheet>
       <Sheet

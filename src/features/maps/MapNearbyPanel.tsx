@@ -1,3 +1,4 @@
+import { followedBeaconIds } from "@/src/features/discovery/beaconTopics";
 import type { PublicBeaconSummary } from "@/src/features/discovery/types";
 import React, { useRef, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
@@ -57,6 +58,7 @@ export function MapNearbyPanel({
   const [tab, setTab] = useState<"Beacons" | "Friends">(
     initialSection ?? (beaconIds.length ? "Beacons" : "Friends"),
   );
+  const prioritized = followedBeaconIds(data, userId, true);
   const beacons = userId
     ? data.activities
         .filter(
@@ -68,6 +70,7 @@ export function MapNearbyPanel({
           (a, b) =>
             beaconDiscoveryTier(data, a, userId, now) -
               beaconDiscoveryTier(data, b, userId, now) ||
+            Number(prioritized.has(b.id)) - Number(prioritized.has(a.id)) ||
             Date.parse(a.starts_at) - Date.parse(b.starts_at),
         )
     : [];

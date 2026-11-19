@@ -192,7 +192,7 @@ test("Plan relationship closes the preview and preserves ordinary filters", asyn
     .click();
   await expect(card).toHaveCount(0);
   const context = page.getByRole("button", {
-    name: /^Remove Plan: Friday Night Routine/,
+    name: "Exit Plan Focus",
   });
   await expect(context).toBeVisible();
   await page.getByTestId("map-filter-toggle").click();

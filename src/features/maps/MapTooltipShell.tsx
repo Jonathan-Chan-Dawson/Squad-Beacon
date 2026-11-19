@@ -8,9 +8,13 @@ import { mapTooltip } from "./tooltipConstants";
 export function MapTooltipShell({
   children,
   testID,
+  gap = mapTooltip.gap,
+  paddingTop = mapTooltip.padding,
 }: {
   children: React.ReactNode;
   testID: string;
+  gap?: number;
+  paddingTop?: number;
 }) {
   const { colors } = useTheme();
   const reportNaturalHeight = useContext(MapCalloutNaturalHeight);
@@ -23,7 +27,8 @@ export function MapTooltipShell({
       onTouchStart={(event) => event.stopPropagation()}
       style={{
         padding: mapTooltip.padding,
-        gap: mapTooltip.gap,
+        paddingTop,
+        gap,
         flexShrink: 1,
         minHeight: 0,
         borderRadius: mapTooltip.radius,

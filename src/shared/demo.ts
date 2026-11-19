@@ -1,3 +1,5 @@
+import { demoBeaconTopics, demoSetBeaconTopic } from "@/src/features/discovery/demoBeaconTopics";
+import { beaconPinImage, beaconPinSymbol } from "@/src/features/maps/beaconPinArtwork";
 import { demoRoundScore } from "@/src/features/beacons/roundScoring";
 import { demoHostingAction } from "@/src/features/beacons/hosting";
 import { demoTaskCoordination } from "@/src/features/beacons/taskCoordination";
@@ -3740,9 +3742,39 @@ function demoBaseAction(previous: Data, action: string, payload: Payload): Data 
 }
 export function demoAction(previous: Data, action: string, payload: Payload): Data {
  if (payload.expected_actor_id && payload.expected_actor_id !== DEMO_ID) throw new Error("Your account changed.");
+ const topicChange = demoBeaconTopics(previous, DEMO_ID, action, payload);
+ if (topicChange) return topicChange;
+ if (action === "set_beacon_map_icon") {
+  const beacon = previous.activities.find(row => row.id === payload.id && row.owner_id === DEMO_ID && row.mode !== "solo");
+  if (!beacon) throw new Error("The Beacon is unavailable for editing.");
+  const icon = beaconPinSymbol(payload.map_icon) ?? beaconPinImage(payload.map_icon);
+  if (payload.map_icon != null && !icon) throw new Error("Choose a valid Map icon.");
+  return { ...previous, activities: previous.activities.map(row => row.id === beacon.id
+    ? { ...row, map_icon: icon, map_icon_public: !!icon && payload.map_icon_public === true }
+    : row) };
+ }
  assertTemplateQuota(previous, DEMO_ID, action, payload);
  const changed = demoBoostAction(previous,action,payload,DEMO_ID,()=>"demo-"+Math.random().toString(36).slice(2)) ?? demoPlanEditor(previous,DEMO_ID,action,payload,demoBaseAction) ?? demoRepeatablePlan(previous,DEMO_ID,action,payload,demoBaseAction) ?? demoBaseAction(previous,action,payload);
  const next = connectDemoPlanResults(previous,changed,DEMO_ID,action,payload);
+ if ((payload.map_icon != null || payload.beacon_topic_id != null) && ["create_activity","create_activity_with_invitees","create_plan_beacon","create_plan_beacon_with_invitees","publish_planning_beacon"].includes(action)) {
+  const icon = beaconPinSymbol(payload.map_icon) ?? beaconPinImage(payload.map_icon);
+  if (payload.map_icon != null && !icon) throw new Error("Choose a valid Map icon.");
+  const beacon = next.activities.find(row => row.mode !== "solo" && !previous.activities.some(old => old.id === row.id));
+  if (beacon) {
+   if (icon) {
+    beacon.map_icon = icon;
+    beacon.map_icon_public = payload.map_icon_public === true;
+   }
+   if (payload.beacon_topic_id != null) demoSetBeaconTopic(next, DEMO_ID, beacon.id, payload.beacon_topic_id);
+  }
+ }
  next.beacon_supply_claims = next.beacon_supply_claims.filter(row => eligibleSupplyClaim(next,row));
+ if (action === "set_social_association" || action === "clear_social_association") {
+  const id = payload.activity_id;
+  const before = previous.activity_social_links.find(row => row.activity_id === id);
+  const after = next.activity_social_links.find(row => row.activity_id === id);
+  if (before?.entity_type !== after?.entity_type || before?.entity_id !== after?.entity_id)
+    next.beacon_topic_assignments = next.beacon_topic_assignments?.filter(row => row.activity_id !== id);
+ }
  return pauseDemoPremiumRoutines(reconcileDemoBoosts(next));
 }

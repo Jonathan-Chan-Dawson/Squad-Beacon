@@ -2,6 +2,8 @@
 export const mapTooltip = {
   width: 292,
   maxHeight: 336,
+  beaconWidth: 330,
+  beaconMaxHeight: 440,
   padding: 10,
   gap: 2,
   radius: 18,

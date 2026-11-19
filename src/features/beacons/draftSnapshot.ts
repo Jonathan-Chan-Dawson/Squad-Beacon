@@ -1,3 +1,4 @@
+import { beaconPinImage, beaconPinSymbol } from "@/src/features/maps/beaconPinArtwork";
 import {validateToolSettings} from "./premiumTools";
 import { validateBeaconControlValues } from "./controls";
 import { durationMinutesForLabel } from "./createTiming";
@@ -141,6 +142,14 @@ export function parseCreationSnapshot(
   if (value.fields.duration !== undefined && value.fields.duration !== "Custom")
     durationMinutesForLabel(String(value.fields.duration), "", "");
   if(value.fields.premiumAppearance!=null)validateToolSettings("appearance",value.fields.premiumAppearance);
+  const topic = value.fields.beaconTopic;
+  if (topic != null && (!record(topic) || !["id","type","community"].every(key => typeof topic[key] === "string")))
+    throw new Error("The saved Beacon topic could not be restored.");
+  const mapIcon = value.fields.mapIcon;
+  if (mapIcon != null && !beaconPinSymbol(mapIcon) && !beaconPinImage(mapIcon))
+    throw new Error("The saved Map icon could not be restored.");
+  if (value.fields.mapIconPublic !== undefined && typeof value.fields.mapIconPublic !== "boolean")
+    throw new Error("The saved Map icon visibility could not be restored.");
   const controls = value.fields.beaconControlDraft;
   if (controls !== undefined) {
     if (

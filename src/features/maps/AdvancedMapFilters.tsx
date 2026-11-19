@@ -23,7 +23,8 @@ import {
 } from "lucide-react-native";
 import type { Category } from "@/src/shared/types";
 import type { ExplorationFilters } from "@/src/shared/exploration";
-import { Button, Field, Sheet, useTheme } from "@/src/shared/ui";
+import { useBeacon } from "@/src/shared/store";
+import { Action, Button, Field, Sheet, useTheme } from "@/src/shared/ui";
 import { useDesignTheme } from "@/src/theme";
 import { SecondaryButton, uiHaptics } from "@/src/shared/design-system";
 import { mapAdvancedFilterCount } from "@/src/features/maps/mapUIselectors";
@@ -214,6 +215,9 @@ export function AdvancedMapFilters({
   hasProfileInterests?: boolean;
 }) {
   const { colors, styles } = useTheme();
+  const { data, userId, act } = useBeacon();
+  const follows = userId && data.viewer_id === userId ? data.beacon_topic_follows ?? [] : [];
+  const [showFollows, setShowFollows] = useState(false);
   const { categories: categoryTokens } = useDesignTheme();
   const [moreOpen, setMoreOpen] = useState(false);
   const [audienceQuery, setAudienceQuery] = useState("");
@@ -402,6 +406,23 @@ export function AdvancedMapFilters({
               });
           }}
         />
+        {data.capabilities?.beacon_topics && (follows.length > 0 || filters.onlyFollowing) ? (
+          <ChoiceSection title="Following" icon={Users}>
+            <RowChoice label="Only Following" selected={!!filters.onlyFollowing} onPress={() => patch({ onlyFollowing: !filters.onlyFollowing })} />
+            <Button compact secondary title={showFollows ? "Hide followed topics" : "Manage Following"} onPress={() => setShowFollows(!showFollows)} />
+            {showFollows && follows.map(follow => (
+              <View key={follow.id} style={{ gap: 3, paddingVertical: 6 }}>
+                <Text style={styles.label}>{follow.name ?? "Topic unavailable"}</Text>
+                {follow.topic_id && <Action compact secondary title={follow.prioritize ? "Stop prioritizing on Map" : "Prioritize on Map"} run={async () => {
+                  await act("update_beacon_topic_follow", { follow_id: follow.id, prioritize: !follow.prioritize, expected_actor_id: userId });
+                }} />}
+                <Action compact secondary title="Unfollow" run={async () => {
+                  await act("unfollow_beacon_topic", { follow_id: follow.id, expected_actor_id: userId });
+                }} />
+              </View>
+            ))}
+          </ChoiceSection>
+        ) : null}
         <ChoiceSection title="Join" icon={UserRoundCheck}>
           <View accessibilityRole="radiogroup" accessibilityLabel="Join">
             {joins.map((join) => (

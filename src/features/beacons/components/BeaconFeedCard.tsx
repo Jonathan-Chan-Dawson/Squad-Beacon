@@ -91,6 +91,10 @@ export interface BeaconFeedCardProps {
   adaptiveDiscovery?: boolean;
   /** Opt-in Map preview density and anchored actions; no change to other card surfaces. */
   mapPreview?: boolean;
+  mapIcon?: string | null;
+  mapCommunityName?: string;
+  mapCommunityKey?: string;
+  mapCommunityType?: import("@/src/features/social/types").SocialEntityType;
   /** Accessible controls owned by the containing surface, such as Map close. */
   headerAccessory?: React.ReactNode;
   demoArtwork?: boolean;
@@ -105,6 +109,7 @@ export interface BeaconFeedCardProps {
   planContext?: {
     title: string;
     onPress: () => void;
+    onShowOnMap?: () => void;
     stepIndex?: number | null;
   };
   compactFooter?: React.ReactNode;
@@ -314,6 +319,10 @@ export function BeaconFeedCard({
   presentation,
   adaptiveDiscovery = false,
   mapPreview = false,
+  mapIcon,
+  mapCommunityName,
+  mapCommunityKey,
+  mapCommunityType,
   headerAccessory,
   demoArtwork = false,
   decorationAccent,
@@ -539,6 +548,12 @@ export function BeaconFeedCard({
     return whenLabel || "";
   })();
 
+  const mapWhen = (() => {
+    if (!mapPreview || !isLive || !validInterval) return whenText;
+    const formatter = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
+    return [formatter.format(startTime), formatter.format(endTime)].join("–");
+  })();
+
   const onSwipeableOpen = (
     direction: SwipeDirection.LEFT | SwipeDirection.RIGHT,
   ) => {
@@ -625,13 +640,18 @@ export function BeaconFeedCard({
   ) ? (
     <DiscoveryBeaconCard
       mapPreview={mapPreview}
+      mapIcon={mapIcon}
+      mapCommunityName={mapCommunityName}
+      mapCommunityKey={mapCommunityKey}
+      mapCommunityType={mapCommunityType}
+      mapHostLabel={hostName}
       activityId={activityId}
       title={title}
       category={category}
       artworkVariant={artworkVariant}
       decorationAccent={decorationAccent}
       decorationEmoji={decorationEmoji}
-      whenLabel={isCancelled ? "Cancelled" : isEnded ? "Ended" : whenText}
+      whenLabel={mapWhen}
       isLive={isLive}
       locationLabel={
         secondaryMetadata?.kind === "host" ? null : secondaryMetadata?.label

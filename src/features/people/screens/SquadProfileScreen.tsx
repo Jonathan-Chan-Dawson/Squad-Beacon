@@ -1,3 +1,5 @@
+import { CommunityBeaconTopics } from "@/src/features/discovery/CommunityBeaconTopics";
+import { useCommunityTopicSelection } from "@/src/features/discovery/useCommunityTopics";
 import { CommunityActivityRow } from "@/src/features/social/CommunityActivityRow";
 import { CommunityInCommon } from "@/src/features/social/CommunityInCommon";
 import { SquadBoostLink } from "./SquadBoostScreen";
@@ -113,6 +115,7 @@ export default function SquadProfileScreen() {
     fromChat?: string;
   }>();
   const squadId = Array.isArray(id) ? id[0] : id;
+  const topicSelection = useCommunityTopicSelection(squadId);
   const requestedTab = Array.isArray(tabParam) ? tabParam[0] : tabParam;
   const requestedSettings = Array.isArray(settingsParam)
     ? settingsParam[0]
@@ -698,6 +701,7 @@ export default function SquadProfileScreen() {
             />
           ) : null}
 
+          <CommunityBeaconTopics type="squad" entity={activeSquadId} {...topicSelection} />
           <CommunityPublicBeacons
             type="squad"
             entityId={activeSquadId}
@@ -1078,6 +1082,7 @@ export default function SquadProfileScreen() {
               Your role: {isOwner ? "Owner" : (viewerRole ?? "Member")}
             </Txt>
           </View>
+          {isAdmin && <CommunityBeaconTopics type="squad" entity={activeSquadId} manage browse={false} />}
           {settingsCategories.map((category) => (
             <CommunitySettingsRow
               key={category}

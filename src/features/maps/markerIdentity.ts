@@ -1,4 +1,5 @@
 import { friendIds } from "@/src/shared/domain";
+import type { Availability } from "@/src/theme/data";
 import type { Activity, Data } from "@/src/shared/types";
 import { canReadBeaconActivity } from "@/src/features/beacons/beaconModules";
 import { isBeaconLive } from "@/src/features/beacons/beaconLive";
@@ -137,14 +138,6 @@ export function visibleFriendLabels(
       .map((point) => point.id),
   );
 }
-export const categoryMarkerGlyphs = {
-  Fitness: "🏀",
-  Study: "📚",
-  Gaming: "🎮",
-  Creative: "🎨",
-  Social: "☕",
-  Other: "✦",
-} as const;
 /** Identity is independent of access; use only the viewer’s authorized relationships. */
 export function markerIdentity(
   data: Data,
@@ -179,11 +172,11 @@ export function markerIdentity(
   return null;
 }
 
-/** Map rings use fixed, vivid status colors independently of the selected theme. */
-export const mapAvailabilityColors = {
-  available: "#16C65B",
-  unavailable: "#F12B38",
-  endingSoon: "#F3C917",
-  "ending-soon": "#F3C917",
-  unknown: "#B7BEC8C7",
-};
+export function mapAvailabilityColors(availability: Record<Availability, { color: string }>) {
+  return {
+    available: availability.available.color,
+    unavailable: availability.unavailable.color,
+    "ending-soon": availability.endingSoon.color,
+    unknown: availability.unknown.color,
+  };
+}

@@ -71,6 +71,7 @@ export function MapExplorationHeader({
   onOpenFilters,
   activeFilterCount,
   activeChips,
+  planFocusControl,
   onRemoveChip,
   onClearContexts,
   onSearchFocus,
@@ -101,6 +102,7 @@ export function MapExplorationHeader({
   onOpenFilters(): void;
   activeFilterCount: number;
   activeChips: ActiveMapFilterChip[];
+  planFocusControl?: React.ReactNode;
   onRemoveChip(key: string): void;
   onClearContexts?: () => void;
   onSearchFocus(): void;
@@ -654,6 +656,7 @@ export function MapExplorationHeader({
           </View>
         </Modal>
       )}
+      {planFocusControl}
       {[false, true].map((contextRail) =>
         activeChips.some(
           (chip) => chip.key.startsWith("context:") === contextRail,

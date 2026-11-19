@@ -24,6 +24,7 @@ import type { MapBeaconFeature } from "./mapBeaconFeatures";
 
 export function MapTooltip({
   beaconId,
+  onShowContext,
   onDetails,
   onOpenPeople,
   onMessage,
@@ -53,6 +54,7 @@ export function MapTooltip({
   )
     return null;
 
+  const community = communityAssociations.find(row => row.activity_id === activity.id && row.priority === 0)?.summary;
   const reason = browseEntryReason(
     { kind: "activity", activity },
     data,
@@ -65,6 +67,9 @@ export function MapTooltip({
     ? {
         title: plan.title,
         stepIndex: activity.plan_step_index,
+        onShowOnMap: onShowContext
+          ? () => onShowContext({ kind: "plan", id: plan.id })
+          : undefined,
         onPress: () =>
           router.push({ pathname: "/plan/[id]", params: { id: plan.id } }),
       }
@@ -116,6 +121,10 @@ export function MapTooltip({
       <BeaconFeedCard
         compact
         mapPreview
+        mapIcon={activity.map_icon}
+        mapCommunityName={community?.name}
+        mapCommunityKey={community?.entity_id}
+        mapCommunityType={community?.entity_type}
         presentation="discovery"
         adaptiveDiscovery
         detailsLabel="See overview"

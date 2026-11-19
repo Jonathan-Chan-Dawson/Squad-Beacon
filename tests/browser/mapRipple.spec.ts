@@ -5,6 +5,7 @@ import {
   BEACON_PULSE_DURATION,
   BEACON_PULSE_SCALE,
 } from "../../src/features/maps/markerIdentity";
+import { beaconPinSymbols } from "../../src/features/maps/beaconPinArtwork";
 import { test, expect } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import ts from "typescript";
@@ -20,6 +21,10 @@ const marker = source.slice(
     "    const size = m.getSize();",
     source.indexOf("    const marker = ("),
   ),
+);
+const glyph = source.slice(
+  source.indexOf("function addBeaconGlyph("),
+  source.indexOf("\nfunction hasUsableMapViewport("),
 );
 const clusterSource = readFileSync("src/features/maps/cluster.ts", "utf8");
 const sizing = clusterSource
@@ -49,6 +54,9 @@ const script = ts.transpileModule(
       wrapper.dataset.anchor = JSON.stringify(options.icon.iconAnchor);
       wrapper.append(options.icon.html); document.body.append(wrapper);
     } }) };
+  const beaconPinPath = () => ${JSON.stringify(beaconPinSymbols.fitness)};
+  const beaconPinImage = () => null;
+  ${glyph}
   ${sizing}
   ${marker}
   window.renderMarker = (input) => {
@@ -90,6 +98,9 @@ test("web Beacon ripple stays at the badge center across dot/full sizes, chips, 
           chip,
           selected,
         });
+        await expect(page.getByTestId("beacon-marker-beam")).toHaveCount(Number(selected));
+        if (selected || zoom >= 12)
+          await expect(page.getByTestId("beacon-pin-tip")).toBeVisible();
         for (const currentTime of [0, 500, 1500]) {
           const result = await page.evaluate((time) => {
             const halo = document.querySelector(".map-now-halo") as HTMLElement;
@@ -113,7 +124,7 @@ test("web Beacon ripple stays at the badge center across dot/full sizes, chips, 
           }, currentTime);
           expect(Math.abs(result.x)).toBeLessThan(0.1);
           expect(Math.abs(result.y)).toBeLessThan(0.1);
-          expect(result.anchor).toBe("[32,40]");
+          expect(result.anchor).toBe(zoom < 12 && !selected ? "[32,5]" : "[32,58]");
           expect(result.pointerEvents).toBe("none");
         }
         await page.getByRole("button", { name: "Test Beacon" }).click();

@@ -97,6 +97,7 @@ import {
 import { usePreferences } from "@/src/shared/preferences";
 import { friendIds, locationIsFresh } from "@/src/shared/domain";
 import { canViewProfile } from "@/src/features/profile/privacy";
+import { followedBeaconIds } from "@/src/features/discovery/beaconTopics";
 import { publicMapBeacons } from "../publicMapDiscovery";
 import { usePublicBeacons } from "@/src/features/discovery/usePublicBeacons";
 import { requestSignIn } from "@/src/features/auth/navigation";
@@ -163,6 +164,7 @@ import {
 } from "@/src/features/maps/mapUIselectors";
 import { MapTooltip } from "@/src/features/maps/MapTooltip";
 import { MapTooltipClose } from "@/src/features/maps/MapTooltipShell";
+import { MapPlanFocusBar } from "@/src/features/maps/MapPlanFocusBar";
 import { physicalDirectionsUrl } from "@/src/features/maps/directions";
 import { pulseCopy } from "@/src/features/pulse/copy/pulse";
 import { usePulse } from "@/src/features/pulse/usePulse";
@@ -995,10 +997,13 @@ export default function MapScreen() {
     [data, userId],
   );
 
+  const followingIds = useMemo(() => followedBeaconIds(data, userId), [data, userId]);
+  const onlyFollowing = !!exploration.filters.onlyFollowing;
   const normalActivities = useMemo(
     () =>
       safeActivities.filter(
         (activity) =>
+          (!onlyFollowing || followingIds.has(activity.id)) &&
           !!userId &&
           showBeaconOnMap(
             data,
@@ -1015,6 +1020,8 @@ export default function MapScreen() {
       ),
     [
       safeActivities,
+      onlyFollowing,
+      followingIds,
       discoveryActive,
       userId,
       data,
@@ -1267,11 +1274,13 @@ export default function MapScreen() {
     rankedPublic,
     exploration.filters,
     selectedCategories,
-    activities.map((row) => row.id),
+    onlyFollowing ? activities
+      .filter(row => safePlaces.some(place => place.activity_id === row.id && validPhysicalPlace(place)))
+      .map(row => row.id) : activities.map((row) => row.id),
     !!contextViews.length,
     viewport,
     now,
-    { data, viewerId: userId, now, friends: discoveryFriends },
+    { data, viewerId: userId, now, friends: discoveryFriends, followingIds },
   );
   const surpriseArea =
     surprise?.contextKey === surpriseContextKey ? surprise.area : viewport;
@@ -1287,7 +1296,7 @@ export default function MapScreen() {
     !!contextViews.length,
     surpriseArea,
     now,
-    { data, viewerId: userId, now, friends: discoveryFriends },
+    { data, viewerId: userId, now, friends: discoveryFriends, followingIds },
   );
   const surprisePool = surpriseCandidates(
     data,
@@ -1501,6 +1510,7 @@ export default function MapScreen() {
   ].map((row) => ({
     id: `public:${row.activity_id}`,
     publicBeaconId: row.activity_id,
+    mapIcon: row.map_icon,
     category: row.category,
     title: row.title,
     latitude: row.coarse_lat!,
@@ -1738,6 +1748,7 @@ export default function MapScreen() {
 
   const activeChips = useMemo<ActiveMapFilterChip[]>(() => {
     const chips: ActiveMapFilterChip[] = [];
+    if (exploration.filters.onlyFollowing) chips.push({ key: "following", label: "Only Following" });
     const audienceLabel =
       exploration.filters.audience === "Everyone"
         ? ""
@@ -1775,7 +1786,7 @@ export default function MapScreen() {
           )?.label ?? "Plan",
       });
     chips.push(
-      ...contextViews.map((view) => ({ key: view.key, label: view.label })),
+      ...contextViews.filter((view) => view.key !== planFocus?.key).map((view) => ({ key: view.key, label: view.label })),
     );
     if (discoveryActive) chips.unshift({ key: "discovery", label: "Beacons" });
     return chips;
@@ -1786,6 +1797,7 @@ export default function MapScreen() {
     mapAudiences,
     planFilterOptions,
     contextViews,
+    planFocus?.key,
     friendLabel,
   ]);
 
@@ -2436,6 +2448,7 @@ export default function MapScreen() {
       join: key === "join" ? "Any" : exploration.filters.join,
       format: key === "format" ? "Any" : exploration.filters.format,
       planId: key === "plan" ? null : exploration.filters.planId,
+      onlyFollowing: key === "following" ? false : exploration.filters.onlyFollowing,
       starredOnly: key === "starred" ? false : exploration.filters.starredOnly,
       category: "All categories",
     };
@@ -2689,7 +2702,7 @@ export default function MapScreen() {
     ),
   );
   // An expanded sheet leaves only its exposed map available for floating controls.
-  const controlsTop = headerTop + headerHeight - 44 + 12;
+  const controlsTop = headerTop + headerHeight + (planFocus ? 8 : -32);
   const availableControlHeight = Math.max(
     0,
     (detailTab
@@ -2911,14 +2924,16 @@ export default function MapScreen() {
             }}
             hideControls
             viewportInsets={{
-              top: insets.top + headerHeight + (planFocus ? 136 : 16),
+              top: insets.top + headerHeight + 16,
               right: 68,
               bottom: mapBottomClearance,
               left: 12,
             }}
             previewHeight={
-              !pickMode && (person || (selected && !detailTab))
+              !pickMode && person
                 ? mapTooltip.maxHeight
+                : !pickMode && selected && !detailTab
+                  ? mapTooltip.beaconMaxHeight
                 : undefined
             }
             focused={focusedCoordinate}
@@ -3220,6 +3235,24 @@ export default function MapScreen() {
               }}
               activeFilterCount={activeFilterCount}
               activeChips={activeChips}
+              planFocusControl={planFocus ? (
+                <MapPlanFocusBar
+                  title={planFocus.label.replace(/^Plan: /, "")}
+                  stopCount={planFocus.points.length}
+                  onFit={() =>
+                    setControlCommand((previous) => ({
+                      kind: mapContextCameraKind(planFocus.points),
+                      coordinates: planFocus.points,
+                      revision: (previous?.revision ?? 0) + 1,
+                    }))
+                  }
+                  onOpen={() => router.push({
+                    pathname: "/plan/[id]",
+                    params: { id: planFocus.key.slice("context:plan:".length) },
+                  })}
+                  onExit={() => clearContexts(planFocus.key)}
+                />
+              ) : undefined}
               onRemoveChip={removeActiveChip}
               onClearContexts={
                 contextViews.length >= 3 ? () => clearContexts() : undefined
@@ -3234,73 +3267,6 @@ export default function MapScreen() {
             />
           )}
         </View>
-
-        {planFocus && !pickMode && !activeSearchVisible ? (
-          <View
-            testID="map-plan-focus"
-            style={[
-              styles.card,
-              {
-                position: "absolute",
-                top: headerTop + headerHeight + 8,
-                left: 12,
-                right: 80,
-                zIndex: 12,
-                padding: 10,
-                gap: 4,
-              },
-            ]}
-          >
-            <Text style={styles.muted}>Plan Focus shows all stops</Text>
-            <Text style={styles.muted}>
-              Exit Plan Focus to use Surprise Me.
-            </Text>
-            <View style={styles.row}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.body} numberOfLines={1}>
-                  {planFocus.label}
-                </Text>
-                <Text style={styles.muted}>
-                  {planFocus.points.length
-                    ? `${planFocus.points.length} visible physical stops`
-                    : "No visible physical stops"}
-                </Text>
-              </View>
-              <IconButton
-                label="Exit Plan Focus"
-                onPress={() => clearContexts(planFocus.key)}
-              >
-                <X size={20} color={colors.ink} />
-              </IconButton>
-            </View>
-            <View style={[styles.row, { justifyContent: "flex-start" }]}>
-              <Button
-                title="Fit Plan"
-                secondary
-                compact
-                disabled={!planFocus.points.length}
-                onPress={() =>
-                  setControlCommand((previous) => ({
-                    kind: mapContextCameraKind(planFocus.points),
-                    coordinates: planFocus.points,
-                    revision: (previous?.revision ?? 0) + 1,
-                  }))
-                }
-              />
-              <Button
-                title="View Plan"
-                secondary
-                compact
-                onPress={() =>
-                  router.push({
-                    pathname: "/plan/[id]",
-                    params: { id: planFocus.key.slice("context:plan:".length) },
-                  })
-                }
-              />
-            </View>
-          </View>
-        ) : null}
 
         {activeSearchVisible ? (
           <View
@@ -3363,8 +3329,8 @@ export default function MapScreen() {
                   ),
                 )}
                 query={exploration.query}
-                beacons={searchActivityResults}
-                publicBeacons={rankedPublic
+                beacons={onlyFollowing ? searchActivityResults.filter(row => followingIds.has(row.id)) : searchActivityResults}
+                publicBeacons={(onlyFollowing ? rankedPublic.filter(row => followingIds.has(row.activity_id)) : rankedPublic)
                   .filter(
                     (row) =>
                       !searchActivityResults.some(
@@ -3483,15 +3449,15 @@ export default function MapScreen() {
             <Text numberOfLines={2} style={[styles.muted, { flex: 1 }]}>
               {publicDiscovery.error
                 ? "Couldn't refresh results."
-                : "No Beacons match these filters."}
+                : onlyFollowing ? "No followed Beacons match here." : "No Beacons match these filters."}
             </Text>
             {!publicDiscovery.error && (
               <Button
                 compact
                 secondary
-                title="Broaden"
-                accessibilityLabel="Clear Friends and category filters"
-                onPress={() => chooseQuickFilter("All")}
+                title={onlyFollowing ? "Show all Beacons" : "Broaden"}
+                accessibilityLabel={onlyFollowing ? "Show all Beacons" : "Clear Friends and category filters"}
+                onPress={() => onlyFollowing ? removeActiveChip("following") : chooseQuickFilter("All")}
               />
             )}
             {publicDiscovery.error ? (
@@ -3704,28 +3670,28 @@ export default function MapScreen() {
                 }}
                 style={{
                   minHeight: 44,
-                  paddingHorizontal: 10,
-                  minWidth: 102,
+                  paddingHorizontal: planFocus ? 0 : 10,
+                  minWidth: planFocus ? 44 : 102,
                   borderRadius: 22,
                   backgroundColor: colors.white,
                   borderWidth: 1,
                   borderColor: weatherOpen ? colors.green : colors.line,
                   flexDirection: "row",
                   alignItems: "center",
+                  justifyContent: "center",
                   gap: 5,
                 }}
               >
                 <WeatherIcon size={16} color={colors.green} />
-                <Text
-                  numberOfLines={1}
-                  style={{ color: colors.ink, fontSize: 12 }}
-                >
-                  {weather.value
-                    ? `Weather ${Math.round(weather.value.temperature)}°`
-                    : weather.loading
-                      ? "Weather…"
-                      : "Weather"}
-                </Text>
+                {!planFocus && (
+                  <Text numberOfLines={1} style={{ color: colors.ink, fontSize: 12 }}>
+                    {weather.value
+                      ? `Weather ${Math.round(weather.value.temperature)}°`
+                      : weather.loading
+                        ? "Weather…"
+                        : "Weather"}
+                  </Text>
+                )}
               </Pressable>
             )}
             {(compassSheetOpen || mapControlSettingsOpen || weatherOpen) && (
@@ -4013,7 +3979,8 @@ export default function MapScreen() {
               testID="map-public-callout"
               onDismiss={() => setPublicSelection(null)}
               compact
-              maxWidth={mapTooltip.width}
+              maxWidth={mapTooltip.beaconWidth}
+              maxContentHeight={mapTooltip.beaconMaxHeight}
               anchor={mapAnchor}
               bounds={{
                 ...mapSize,
@@ -4024,7 +3991,7 @@ export default function MapScreen() {
               <ScrollView
                 showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
-                style={{ maxHeight: mapTooltip.maxHeight }}
+                style={{ flexShrink: 1, maxHeight: mapTooltip.beaconMaxHeight }}
                 contentContainerStyle={{ paddingBottom: 0 }}
               >
                 <PublicBeaconPreview
@@ -4084,7 +4051,8 @@ export default function MapScreen() {
               setPublicSelection(null);
               setDetailTab(null);
             }}
-            maxWidth={mapTooltip.width}
+            maxWidth={person ? mapTooltip.width : mapTooltip.beaconWidth}
+            maxContentHeight={person ? mapTooltip.maxHeight : mapTooltip.beaconMaxHeight}
             anchor={mapAnchor}
             bounds={{
               ...mapSize,
@@ -4102,7 +4070,7 @@ export default function MapScreen() {
             <ScrollView
               showsVerticalScrollIndicator={false}
               keyboardShouldPersistTaps="handled"
-              style={{ flexShrink: 1, maxHeight: mapTooltip.maxHeight }}
+              style={{ flexShrink: 1, maxHeight: person ? mapTooltip.maxHeight : mapTooltip.beaconMaxHeight }}
               contentContainerStyle={{ paddingBottom: 0 }}
             >
               {person ? (
@@ -4183,12 +4151,12 @@ export default function MapScreen() {
               compact={clusterActivityIds.length + clusterPersonIds.length <= 5}
               key={clusterSelectionId}
               initialSection={clusterSection}
-              beaconIds={clusterActivityIds}
+              beaconIds={onlyFollowing ? clusterActivityIds.filter(id => followingIds.has(id)) : clusterActivityIds}
               personIds={clusterPersonIds.filter((id) =>
                 mapLocations.some((row) => row.owner_id === id),
               )}
               publicBeacons={publicDiscovery.rows.filter((row) =>
-                clusterActivityIds.includes(row.activity_id),
+                clusterActivityIds.includes(row.activity_id) && (!onlyFollowing || followingIds.has(row.activity_id)),
               )}
               onPublicBeacon={choosePublicBeacon}
               onBeacon={chooseBeacon}

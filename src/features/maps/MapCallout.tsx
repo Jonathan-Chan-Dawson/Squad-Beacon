@@ -26,6 +26,7 @@ export function MapCallout({
   height,
   testID,
   maxWidth,
+  maxContentHeight = mapTooltip.maxHeight,
   onDismiss,
   compact = false,
   motion = "default",
@@ -44,6 +45,7 @@ export function MapCallout({
   height?: number;
   testID?: string;
   maxWidth?: number;
+  maxContentHeight?: number;
   compact?: boolean;
   motion?: "default" | "place";
   onDismiss?: () => void;
@@ -65,7 +67,7 @@ export function MapCallout({
     anchor,
     bounds,
     compact
-      ? Math.min(naturalHeight ?? measuredHeight, mapTooltip.maxHeight)
+      ? Math.min(naturalHeight ?? measuredHeight, maxContentHeight)
       : measuredHeight,
     height,
     tokens.layout.screenGutter,
@@ -118,7 +120,7 @@ export function MapCallout({
         top,
         width,
         maxHeight: compact
-          ? Math.min(maxHeight, mapTooltip.maxHeight)
+          ? Math.min(maxHeight, maxContentHeight)
           : maxHeight,
         ...(height ? { height: maxHeight } : {}),
         zIndex: 20,

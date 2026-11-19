@@ -144,8 +144,8 @@ for (const appearance of ["light", "dark"] as const) {
       ).toBeVisible();
       await expect(
         preview
-          .getByTestId("map-beacon-context")
-          .getByRole("button", { name: /^Open Plan/ }),
+          .getByTestId("map-beacon-identity")
+          .getByRole("button", { name: /^Plan stop 1: Show .* on Map$/i }),
       ).toBeVisible();
       await expect(
         preview.getByRole("button", { name: /^Beacon tools/ }),

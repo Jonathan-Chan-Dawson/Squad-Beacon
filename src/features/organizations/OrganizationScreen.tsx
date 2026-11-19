@@ -1,3 +1,5 @@
+import { CommunityBeaconTopics } from "@/src/features/discovery/CommunityBeaconTopics";
+import { useCommunityTopicSelection } from "@/src/features/discovery/useCommunityTopics";
 import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
 import { CommunityActivityRow } from "@/src/features/social/CommunityActivityRow";
 import { CommunityInCommon } from "@/src/features/social/CommunityInCommon";
@@ -123,6 +125,7 @@ export default function OrganizationScreen() {
     section?: string;
   }>();
   const { data, userId, act } = useBeacon();
+  const topicSelection = useCommunityTopicSelection(id);
   const {
     summary: safeSummary,
     loading: summaryLoading,
@@ -1068,13 +1071,16 @@ export default function OrganizationScreen() {
         </View>
       )}
       {tab === "overview" ? (
-        <CommunityPublicBeacons
+        <>
+        <CommunityBeaconTopics type="organization" entity={organization.id} {...topicSelection} />
+          <CommunityPublicBeacons
           type="organization"
           entityId={organization.id}
           excludeActivityIds={organizationActivities.map(
             (activity) => activity.id,
           )}
         />
+        </>
       ) : null}
 
       {tab === "members" && !canReadMembers ? (
@@ -1624,6 +1630,7 @@ export default function OrganizationScreen() {
                   : "Public profile settings"}
               </Txt>
             </View>
+            {canManageCurrentNetworkSettings && <CommunityBeaconTopics type="organization" entity={organization.id} manage browse={false} />}
             {settingsSections
               .filter((section) =>
                 section === "details" || section === "access"

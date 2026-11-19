@@ -1,3 +1,4 @@
+import { beaconPinImage, beaconPinSymbol } from "@/src/features/maps/beaconPinArtwork";
 import { useCallback, useEffect, useState } from "react";
 import { useFocusEffect } from "expo-router";
 import { useBeacon } from "@/src/shared/store";
@@ -95,6 +96,23 @@ export function usePublicBeacons(
                   ? { error: "This public preview is no longer available." }
                   : {}),
             });
+          if (!current || !userId || !data.capabilities?.beacon_map_icons || !parsed.length) return;
+          void Promise.resolve(supabase!.rpc("public_beacon_map_icons", {
+            activity_ids: parsed.slice(0, 50).map((row) => row.activity_id),
+          })).then(({ data: rows, error }) => {
+            if (!current || epoch !== getViewerEpoch() || error || !Array.isArray(rows)) return;
+            const icons = new Map<string, string>();
+            for (const row of rows) {
+              const icon = beaconPinSymbol(row?.map_icon) ?? beaconPinImage(row?.map_icon);
+              if (typeof row?.activity_id === "string" && icon) icons.set(row.activity_id, icon);
+            }
+            if (!icons.size) return;
+            setResult(previous => previous?.key === key && previous.snapshot === data ? {
+              ...previous,
+              rows: previous.rows.map(row => ({ ...row, map_icon: icons.get(row.activity_id) })),
+              focused: previous.focused ? { ...previous.focused, map_icon: icons.get(previous.focused.activity_id) } : null,
+            } : previous);
+          }).catch(() => {});
         })
         .catch(() => {
           if (current && epoch === getViewerEpoch())
@@ -132,7 +150,10 @@ export function usePublicBeacons(
     };
   if (demo && userId)
     return {
-      rows: demoPublicBeacons(data, userId, query),
+      rows: demoPublicBeacons(data, userId, query).map(row => {
+        const activity = data.activities.find(beacon => beacon.id === row.activity_id && beacon.map_icon_public);
+        return { ...row, map_icon: activity?.map_icon };
+      }),
       focused: publicId
         ? (demoPublicBeacons(data, userId, "").find(
             (row) => row.activity_id === publicId,

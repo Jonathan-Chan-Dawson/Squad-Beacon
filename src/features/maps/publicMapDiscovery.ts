@@ -27,6 +27,7 @@ export function publicMapBeacons(
     viewerId: string | null;
     now: number;
     friends?: ReturnType<typeof prepareDiscoveryFriends>;
+    followingIds?: ReadonlySet<string>;
   },
 ) {
   if (
@@ -43,6 +44,7 @@ export function publicMapBeacons(
     return [];
   return rows
     .filter((row) => {
+      if (filters.onlyFollowing && !context?.followingIds?.has(row.activity_id)) return false;
       if (!matchesKnownDiscoveryContext(row.activity_id, filters, context))
         return false;
       if (

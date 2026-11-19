@@ -47,7 +47,9 @@ Maps feature
 
 - Map selection: singleton markers open their exact preview; all genuine multi-item groups open Nearby without changing the camera. Map-only card density uses Bookmark and Close headers, compact linked context, and counted anchored Tools menus; public previews stay anchored to coarse coordinates. Explicit navigation, search, Plan focus and Zoom to Fit retain camera control.
 
-- Plan Focus reuses contextFilters authorization, numbered physical stops and static paths; MapScreen isolates markers, fits on entry/explicit action and restores the prior camera/valid selection. Small clusters use MapNearbyPanel compact selection; quiet-map result feedback follows deliberate actions only.
+- Plan Focus uses one tinted filter bar with icon actions to fit, open, or exit. It keeps regular Beacon pins, adds small stop numbers, and colors each route arrow to match the next Beacon category.
 
-- Map Beacon cards place compact reaction and action controls above a full-size bottom action; ordinary 320px previews fit without scrolling while preserving the bounded fallback for larger content.
+- The selected Beacon card puts Bookmark, Close, and the Plan stop shortcut in the patterned identity panel. The shortcut fits visible stops and shows directional arrows along authorized route legs. Hosting shares the time row above attendance, and Tools sits beside the primary action.
+
+- beaconPinArtwork.ts and components/BeaconPinGlyph.tsx: shared category symbols and validated custom thumbnails. Selected pins and live pins you host can show a beam. Map friend rings reuse the Profile availability theme tokens.
 - BeaconLocationPreview.web.tsx adds a compact, noninteractive CARTO mini map for authorized physical meeting locations beside arrival. Tapping opens the canonical Map; other web preview sizes retain their existing presentation.

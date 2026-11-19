@@ -13,3 +13,5 @@ Public discovery feature
 - 202610110001_map_discovery.sql supplies authenticated discovery, publishing, joining, and capacity enforcement.
 
 - Community connections: beaconCommunities/useBeaconCommunities provide a viewer-scoped batched safe association projection; BeaconCommunityRow shares secondary canonical membership controls. CommunityPublicProfile, CommunityPublicBeacons, CommunityPublicRelatedCommunities and useCommunityPublicBeacons support summary-only public routes and scoped pagination. domain.ts merges public/readable Browse rows and ranks/diversifies only authorized contexts.
+
+- CommunityBeaconTopics and useCommunityTopics expose optional official-source topics and account-scoped follows on community profiles. Map derives Following matches from authorized topic assignments in the snapshot.

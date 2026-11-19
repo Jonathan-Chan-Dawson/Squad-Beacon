@@ -350,20 +350,19 @@ test("Plan Focus keeps its stops while Now changes and explains why Surprise is 
   }
   await page.goto("/?mapPlan=quick-filter-plan");
   const focus = page.getByTestId("map-plan-focus");
-  await expect(focus).toContainText("2 visible physical stops");
-  await expect(focus).toContainText("Plan Focus shows all stops");
-  await expect(focus).toContainText("Exit Plan Focus to use Surprise Me");
+  await expect(focus).toContainText("2 stops");
+  await expect(page.getByTestId("map-surprise")).toHaveAttribute("title", "Exit Plan Focus to use Surprise Me");
   await expect(page.getByTestId("map-surprise")).toBeDisabled();
   await page
     .getByRole("button", { name: "Happening now", exact: true })
     .click();
-  await expect(focus).toContainText("2 visible physical stops");
+  await expect(focus).toContainText("2 stops");
   await page.getByRole("button", { name: "All", exact: true }).click();
   await expect(page.getByTestId("map-now")).toHaveAttribute(
     "aria-pressed",
     "true",
   );
-  await expect(focus).toContainText("2 visible physical stops");
+  await expect(focus).toContainText("2 stops");
 });
 
 for (const width of [320, 375, 390, 430, 1280])

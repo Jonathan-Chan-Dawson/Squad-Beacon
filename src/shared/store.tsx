@@ -588,7 +588,7 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
       const beforeAction = dataRef.current;
       const profileAction = action === "onboard" || action === "save_profile";
       const atomicCreation = action === "create_activity_with_invitees" || action === "create_plan_beacon_with_invitees";
-      const actorScoped = /(?:boost|checklist|supply|tool_config|tool_preset|journal_details|memory_recap)/.test(action) || action === "save_template" || action === "delete_template" || action.includes("plan") || action.includes("routine") || action.includes("planning") || action.includes("council") || atomicCreation || action === "create_activity" || action === "create_plan_beacon" || ["rsvp","start_location","stop_location","save_activity_note","end_activity_note","update_presence","save_status_note","create_planning_thread","add_council_proposal"].includes(action);
+      const actorScoped = /(?:boost|checklist|supply|tool_config|tool_preset|journal_details|memory_recap|beacon_topic|beacon_map_icon)/.test(action) || action === "save_template" || action === "delete_template" || action.includes("plan") || action.includes("routine") || action.includes("planning") || action.includes("council") || atomicCreation || action === "create_activity" || action === "create_plan_beacon" || ["rsvp","start_location","stop_location","save_activity_note","end_activity_note","update_presence","save_status_note","create_planning_thread","add_council_proposal"].includes(action);
       const assertAtomicViewer = () => {
         if (profileAction && (generation !== epoch.current ||
           sessionRef.current?.user.id !== viewer ||

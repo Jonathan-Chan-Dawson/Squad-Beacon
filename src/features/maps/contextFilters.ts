@@ -13,6 +13,7 @@ import {
   visiblePlanningProposals,
 } from "@/src/features/planning/domain";
 import { isValidCoordinate, type Coordinate } from "@/src/shared/exploration";
+import { mapBeaconTitle } from "@/src/features/discovery/discoveryCardPresentation";
 
 export type MapContextFilter = {
   kind: "plan" | "thread" | "beacon";
@@ -21,6 +22,7 @@ export type MapContextFilter = {
 export const mapContextKey = (filter: MapContextFilter) =>
   `context:${filter.kind}:${filter.id}`;
 export type MapContextPoint = Coordinate & {
+  mapIcon?: string | null;
   id: string;
   title: string;
   activityId?: string;
@@ -35,8 +37,10 @@ export type MapContextView = {
   label: string;
   activities: Activity[];
   points: MapContextPoint[];
-  paths: Coordinate[][];
+  paths: MapRoutePoint[][];
 };
+
+export type MapRoutePoint = Coordinate & { category?: Category };
 
 export function canReadMapPlan(data: Data, plan: Plan, viewerId: string) {
   return (
@@ -125,7 +129,7 @@ export function resolveMapContext(
     const plan = data.plans.find((row) => row.id === filter.id);
     if (!plan || !canReadMapPlan(data, plan, viewerId)) return null;
     result.label = `Plan: ${plan.title}`;
-    let path: Coordinate[] = [];
+    let path: MapRoutePoint[] = [];
     const finishPath = () => {
       if (path.length > 1) result.paths.push(path);
       path = [];
@@ -139,8 +143,13 @@ export function resolveMapContext(
       // Do not connect across a hidden, virtual, or missing step.
       if (coordinate) {
         const point = result.points.find(row => row.activityId === activity.id);
-        if (point) point.stopNumber = index + 1;
-        path.push(coordinate);
+        if (point) {
+          point.stopNumber = index + 1;
+          point.title = mapBeaconTitle(activity.title, true, index).title;
+          point.category = activity.category;
+          point.mapIcon = activity.map_icon;
+        }
+        path.push({ ...coordinate, category: activity.category });
       }
       else finishPath();
     }
@@ -175,4 +184,35 @@ export function resolveMapContext(
 export function mapContextCameraKind(points: Coordinate[]): "focus" | "fit" {
   const first = points[0];
   return first && points.every(point => Math.abs(point.latitude - first.latitude) < 0.001 && Math.abs(((point.longitude - first.longitude + 540) % 360) - 180) < 0.001) ? "focus" : "fit";
+}
+
+/** Draw each chevron within a known route leg, including paths across the date line. */
+export function planPathArrowheads(paths: readonly (readonly MapRoutePoint[])[]) {
+  const heads: { coordinates: Coordinate[]; category?: Category }[] = [];
+  const wrapLongitude = (longitude: number) => ((longitude + 540) % 360) - 180;
+  for (const path of paths) {
+    for (let index = 1; index < path.length; index += 1) {
+      const start = path[index - 1];
+      const end = path[index];
+      const centerLatitude = (start.latitude + end.latitude) / 2;
+      const deltaLongitude = wrapLongitude(end.longitude - start.longitude);
+      const centerLongitude = start.longitude + deltaLongitude / 2;
+      const longitudeScale = Math.max(0.01, Math.cos((centerLatitude * Math.PI) / 180));
+      const east = deltaLongitude * longitudeScale;
+      const north = end.latitude - start.latitude;
+      const distance = Math.hypot(east, north);
+      if (distance < 0.000001) continue;
+
+      const armLength = Math.min(0.0011, distance * 0.085);
+      const forwardEast = (east / distance) * armLength;
+      const forwardNorth = (north / distance) * armLength;
+      const arm = (side: -1 | 1) => ({
+        latitude: centerLatitude - forwardNorth + side * forwardEast * 0.6,
+        longitude: wrapLongitude(centerLongitude - (forwardEast + side * forwardNorth * 0.6) / longitudeScale),
+      });
+      const points = [arm(-1), { latitude: centerLatitude, longitude: wrapLongitude(centerLongitude) }, arm(1)];
+      if (points.every(isValidCoordinate)) heads.push({ coordinates: points, category: end.category });
+    }
+  }
+  return heads;
 }

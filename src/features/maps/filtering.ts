@@ -334,6 +334,7 @@ export function explorationFilterCount(filters: ExplorationFilters) {
     Number(!!filters.when && filters.when !== "Any") +
     Number(!!filters.join && filters.join !== "Any") +
     Number(!!filters.format && filters.format !== "Any") +
-    Number(filters.starredOnly === true)
+    Number(filters.starredOnly === true) +
+    Number(filters.onlyFollowing === true)
   );
 }

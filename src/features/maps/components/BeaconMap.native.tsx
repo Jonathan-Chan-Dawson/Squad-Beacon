@@ -1,6 +1,6 @@
 import {
+  EMPTY_MARKER_STATE,
   mapAvailabilityColors,
-  categoryMarkerGlyphs,
   visibleFriendLabels,
   ownsMapBeacon,
   prepareMapIdentity,
@@ -52,6 +52,8 @@ import { isValidCoordinate } from "@/src/shared/exploration";
 import { useBeacon } from "@/src/shared/store";
 import { useTheme } from "@/src/shared/ui";
 import { usePreferences } from "@/src/shared/preferences";
+import { BeaconPinGlyph } from "./BeaconPinGlyph";
+import { planPathArrowheads } from "../contextFilters";
 import { useDesignTheme } from "@/src/theme";
 import { googleMapStyles } from "@/src/theme/map";
 import { useNow } from "@/src/shared/useNow";
@@ -177,7 +179,7 @@ export default function BeaconMap({
 }: MapProps) {
   const { data: identityData, userId: identityViewer } = useBeacon();
   const { colors, resolvedAppearance } = useTheme();
-  const { categories } = useDesignTheme();
+  const { categories, availability } = useDesignTheme();
 
   const map = useRef<MapView>(null);
   const gestureActive = useRef(false);
@@ -736,13 +738,8 @@ export default function BeaconMap({
     ],
   );
   const availabilityColors = useMemo(
-    () => ({
-      available: mapAvailabilityColors.available,
-      unavailable: mapAvailabilityColors.unavailable,
-      "ending-soon": mapAvailabilityColors.endingSoon,
-      unknown: mapAvailabilityColors.unknown,
-    }),
-    [],
+    () => mapAvailabilityColors(availability),
+    [availability],
   );
   const clusterAppearanceKey = `${appearanceKey}:${JSON.stringify(categoryColors)}:${JSON.stringify(availabilityColors)}`;
   const modelsFor = (item: NativeMapPresentation) =>
@@ -916,13 +913,12 @@ export default function BeaconMap({
             zoom >= 15 ||
             contextPoints.some((p) => p.activityId === place.activity_id);
           const isSelected = selectedActivityId === place.activity_id;
-          // Anchor and scale match BeaconMapPin/MarkerContent; the artwork face is 40px.
-          const height = hasChip ? 70 : 56;
-          const faceY =
-            height / 2 + (20 - height / 2) * (isSelected ? 1.25 : 1);
+          // Keep the ripple centered on the face above the tip of the pin.
+          const height = hasChip ? 83 : 69;
+          const faceY = height / 2 + (33 - height / 2) * (isSelected ? 1.25 : 1);
           const center = await view.coordinateForPoint({
             x: point.x,
-            y: point.y + faceY - height * (hasChip ? 0.82 : 0.92),
+            y: point.y + faceY - 58,
           });
           return [place.activity_id, center] as const;
         }),
@@ -1158,6 +1154,15 @@ export default function BeaconMap({
             zIndex={0}
           />
         ))}
+        {planPathArrowheads(contextPaths).map(({ coordinates, category }, index) => (
+          <Polyline
+            key={`plan-direction:${index}`}
+            coordinates={coordinates}
+            strokeColor={category ? categoryColors[category] : colors.green}
+            strokeWidth={2.5}
+            zIndex={1}
+          />
+        ))}
         {contextPoints
           .filter(
             (point) =>
@@ -1170,8 +1175,30 @@ export default function BeaconMap({
                 !point.activityId ||
                 renderedSingletonIds.has(`beacon:${point.activityId}`)),
           )
-          .map((point) =>
-            point.activityId && !point.stopNumber ? (
+          .map((point) => {
+            if (point.stopNumber) {
+              const category = point.category ?? "Other";
+              const activity = identityData.activities.find((row) => row.id === point.activityId);
+              return (
+                <BeaconMapPin
+                  key={point.id}
+                  id={point.id}
+                  title={point.title}
+                  coordinate={point}
+                  category={category}
+                  categoryColor={categoryColors[category]}
+                  icon={point.mapIcon}
+                  stopNumber={point.stopNumber}
+                  selected={selectedActivityId === point.activityId}
+                  dimmed={false}
+                  appearanceKey={appearanceKey}
+                  markerState={activity ? beaconMarkerState(identityData, activity, identityLookup, now) : EMPTY_MARKER_STATE}
+                  disabled={!!onPick}
+                  onPress={() => onContextPoint?.(point)}
+                />
+              );
+            }
+            return point.activityId ? (
               <Circle
                 key={`context:${point.id}`}
                 center={point}
@@ -1187,7 +1214,7 @@ export default function BeaconMap({
                 coordinate={point}
                 anchor={{ x: 0.5, y: 0.5 }}
                 zIndex={2}
-                accessibilityLabel={`${point.stopNumber ? `Plan stop ${point.stopNumber}` : point.publicBeaconId ? "Public Beacon" : "Suggestion"}: ${point.title}`}
+                accessibilityLabel={`${point.publicBeaconId ? "Public Beacon" : "Suggestion"}: ${point.title}`}
                 onPress={(event) => {
                   event.stopPropagation();
                   if (!onPick) onContextPoint?.(point);
@@ -1205,40 +1232,35 @@ export default function BeaconMap({
                     style={{
                       paddingHorizontal: 8,
                       paddingVertical: 5,
-                      borderRadius: point.publicBeaconId ? 16 : 12,
-                      borderBottomLeftRadius: point.publicBeaconId ? 5 : 12,
+                      borderRadius: point.publicBeaconId ? 13 : 12,
                       minWidth: 46,
                       minHeight: 46,
                       alignItems: "center",
                       justifyContent: "center",
-                      borderWidth: point.publicBeaconId ? 3 : 1,
+                      borderWidth: point.publicBeaconId ? 2 : 1,
                       borderStyle:
-                        point.publicBeaconId || point.stopNumber
+                        point.publicBeaconId
                           ? "solid"
                           : "dashed",
-                      borderColor: colors.green,
-                      backgroundColor: colors.white,
+                      borderColor: point.publicBeaconId ? categoryColors[point.category ?? "Other"] : colors.green,
+                      backgroundColor: colors.surface,
                     }}
                   >
-                    <Text
+                    {point.publicBeaconId ? <BeaconPinGlyph category={point.category ?? "Other"} icon={point.mapIcon} size={23} color={colors.ink} /> : <Text
                       numberOfLines={1}
                       style={{
                         maxWidth: 150,
                         color: colors.green,
-                        fontSize: point.publicBeaconId ? 25 : 11,
+                        fontSize: 11,
                       }}
                     >
-                      {point.stopNumber
-                        ? String(point.stopNumber)
-                        : point.publicBeaconId
-                          ? categoryMarkerGlyphs[point.category ?? "Other"]
-                          : "? Suggestion"}
-                    </Text>
+                      ? Suggestion
+                    </Text>}
                   </View>
                 </View>
               </Marker>
-            ),
-          )}
+            );
+          })}
         {pins
           .filter((place) => nowHaloIds.has(`beacon:${place.activity_id}`))
           .map((place) => {
@@ -1310,6 +1332,7 @@ export default function BeaconMap({
                 }}
                 markerState={markerStates.get(activity.id)!}
                 category={activity.category}
+                icon={zoom >= 14 || selectedPin ? activity.map_icon : undefined}
                 categoryColor={categoryColors[activity.category]}
                 selected={selectedPin}
                 dimmed={
@@ -1337,10 +1360,6 @@ export default function BeaconMap({
                 .filter((activity) => activity.owner_id === location.owner_id)
                 .map((activity) => friendAvailabilityState(activity, now))
                 .find((state) => state !== "unknown") ?? "unknown";
-            const availabilityKey =
-              ownerAvailability === "ending-soon"
-                ? "endingSoon"
-                : ownerAvailability;
             const ageLabel =
               formatLocationAge(location.updated_at, now) ?? "now";
             return (
@@ -1348,7 +1367,7 @@ export default function BeaconMap({
                 key={`person:${location.owner_id}`}
                 location={location}
                 profile={profile}
-                availabilityColor={mapAvailabilityColors[availabilityKey]}
+                availabilityColor={availabilityColors[ownerAvailability]}
                 availabilityLabel={ownerAvailability.replace("-", " ")}
                 showLabel={friendLabelIds.has(profile.id)}
                 ageLabel={ageLabel}

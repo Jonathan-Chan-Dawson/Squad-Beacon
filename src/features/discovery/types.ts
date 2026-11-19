@@ -7,6 +7,7 @@ import type { Category, ID } from "@/src/shared/types";
  */
 export interface PublicBeaconSummary {
   activity_id: ID;
+  map_icon?: string | null;
   title: string;
   category: Category;
   interest_tags: string[];

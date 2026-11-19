@@ -21,7 +21,7 @@ for (const example of [
       .getByRole("button", { name: example.action, exact: true })
       .click();
     const chip = page.getByRole("button", {
-      name: `Remove ${example.chip} filter`,
+      name: example.chip.startsWith("Plan:") ? "Exit Plan Focus" : `Remove ${example.chip} filter`,
       exact: true,
     });
     await expect(chip).toBeVisible();

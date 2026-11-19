@@ -1,3 +1,6 @@
+import { beaconPinImage, beaconPinPath } from "../beaconPinArtwork";
+import { planPathArrowheads } from "../contextFilters";
+import type { Category } from "@/src/shared/types";
 import { mapAvailabilityColors } from "../markerIdentity";
 import { isBeaconLive } from "@/src/features/beacons/beaconLive";
 import { bloomGeometry } from "../clusterBloom";
@@ -10,7 +13,6 @@ import {
   BEACON_PULSE_DURATION,
   BEACON_PULSE_SCALE,
   type BeaconMarkerState,
-  categoryMarkerGlyphs,
   ownsMapBeacon,
   mapIdentityColors,
   friendLocationLabel,
@@ -61,6 +63,32 @@ import {
   MAP_MAX_ZOOM,
 } from "@/src/features/maps/cluster";
 
+function addBeaconGlyph(node: HTMLElement, category: Category, size: number, icon?: string | null) {
+  const namespace = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(namespace, "svg");
+  svg.setAttribute("viewBox", "0 0 24 24");
+  svg.setAttribute("width", String(size));
+  svg.setAttribute("height", String(size));
+  svg.setAttribute("aria-hidden", "true");
+  const path = document.createElementNS(namespace, "path");
+  path.setAttribute("d", beaconPinPath(category, icon));
+  path.setAttribute("fill", "none");
+  path.setAttribute("stroke", "currentColor");
+  path.setAttribute("stroke-width", "1.9");
+  path.setAttribute("stroke-linecap", "round");
+  path.setAttribute("stroke-linejoin", "round");
+  svg.append(path);
+  node.append(svg);
+  const uri = beaconPinImage(icon);
+  if (!uri) return;
+  const image = document.createElement("img");
+  image.alt = "";
+  image.style.cssText = `position:absolute;width:${size + 5}px;height:${size + 5}px;object-fit:cover;border-radius:7px;`;
+  image.onerror = () => image.remove();
+  image.src = uri;
+  node.append(image);
+}
+
 function hasUsableMapViewport(map: Leaflet.Map | null | undefined) {
   if (!map) return false;
   const container = map.getContainer();
@@ -110,6 +138,7 @@ function mapTimeChip(activity: MapProps["activities"][number], now: number) {
 export default function BeaconMap(props: MapProps) {
   const { colors, resolvedAppearance } = useTheme();
   const { categories, availability } = useDesignTheme();
+  const availabilityColors = useMemo(() => mapAvailabilityColors(availability), [availability]);
   const { data: identityData, userId: identityViewer } = useBeacon();
   const now = useNow();
   const identityLookup = useMemo(
@@ -645,6 +674,21 @@ export default function BeaconMap(props: MapProps) {
           ).addTo(decorations),
       ),
     );
+    planPathArrowheads(contextPaths).forEach(({ coordinates, category }, index) => {
+      const color = category ? categories[category].color : colors.green;
+      decorationCache.use(
+        `plan-direction:${index}`,
+        JSON.stringify([coordinates, color]),
+        () => {
+          const arrow = L.polyline(
+            coordinates.map(({ latitude, longitude }) => [latitude, longitude]),
+            { color, weight: 2.5, lineCap: "round", interactive: false },
+          ).addTo(decorations);
+          arrow.getElement()?.setAttribute("data-testid", "map-plan-direction");
+          return arrow;
+        },
+      );
+    });
     const physicalPlaces = [
       ...new Map(
         places
@@ -704,6 +748,8 @@ export default function BeaconMap(props: MapProps) {
       detached = false,
       fullMarker = false,
       cacheKey?: string,
+      customIcon?: string | null,
+      stopNumber?: number,
     ): HTMLButtonElement | Leaflet.Marker => {
       if (cacheKey && !detached) {
         const revision = JSON.stringify([
@@ -721,6 +767,8 @@ export default function BeaconMap(props: MapProps) {
           identity,
           owned,
           fullMarker,
+          customIcon,
+          stopNumber,
           colors.white,
           colors.ink,
           colors.line,
@@ -752,6 +800,9 @@ export default function BeaconMap(props: MapProps) {
               owned,
               false,
               fullMarker,
+              undefined,
+              customIcon,
+              stopNumber,
             ) as Leaflet.Marker,
           click,
         ) as Leaflet.Marker;
@@ -763,19 +814,20 @@ export default function BeaconMap(props: MapProps) {
       const compact = detached && !fullMarker;
       const node = document.createElement("button");
       const dot =
-        !friend && m.getZoom() < 12 && !detached && !owned && !fullMarker;
+        !friend && m.getZoom() < 12 && !detached && !owned && !fullMarker && !selectedPin;
       const visualSize = compact
         ? 32
         : dot
           ? 10
           : markerVisualSize(friend ? "person" : "beacon");
       const iconWidth = compact ? 32 : 64;
-      const iconHeight = compact ? 32 : friend ? 52 : timeChip ? 68 : 48;
+      const pinInset = !friend && !dot && !compact ? 13 : 0;
+      const iconHeight = compact ? 32 : friend ? 52 : (timeChip ? 68 : 48) + pinInset;
       node.type = "button";
       node.setAttribute("aria-label", label);
       node.title = label;
       node.dataset.availability = availabilityLabel;
-      node.style.cssText = `position:relative;border:0;border-radius:0;background:transparent;color:${colors.ink};padding:0;width:${iconWidth}px;height:${iconHeight}px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;font:600 16px system-ui;cursor:pointer;opacity:${dimmed ? 0.7 : 1};transform:scale(${selectedPin && !compact ? 1.25 : 1});transform-origin:50% 50%;transition:${reducedMotion ? "none" : "transform 180ms cubic-bezier(.2,.8,.2,1),opacity 180ms ease"};`;
+      node.style.cssText = `position:relative;border:0;border-radius:0;background:transparent;color:${colors.ink};padding:${pinInset}px 0 0;box-sizing:border-box;width:${iconWidth}px;height:${iconHeight}px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;font:600 16px system-ui;cursor:pointer;opacity:${dimmed ? 0.7 : 1};transform:scale(${selectedPin && !compact ? 1.25 : 1});transform-origin:50% 50%;transition:${reducedMotion ? "none" : "transform 180ms cubic-bezier(.2,.8,.2,1),opacity 180ms ease"};`;
       if (friend) {
         const frame = document.createElement("span");
         frame.dataset.clusterFace = "true";
@@ -812,19 +864,37 @@ export default function BeaconMap(props: MapProps) {
           halo.style.cssText = `position:absolute;left:50%;top:50%;width:${visualSize}px;height:${visualSize}px;margin:${-visualSize / 2}px 0 0 ${-visualSize / 2}px;box-sizing:border-box;pointer-events:none;border-radius:50%;border:1.5px solid ${tone};background:${tone}25;--beacon-pulse-duration:${BEACON_PULSE_DURATION}ms;--beacon-pulse-scale:${BEACON_PULSE_SCALE};`;
           face.append(halo);
         }
+        if (!compact && !dot && (selectedPin || (nowBeacon && owned))) {
+          const beam = document.createElement("span");
+          beam.dataset.testid = "beacon-marker-beam";
+          beam.setAttribute("aria-hidden", "true");
+          beam.style.cssText = `position:absolute;top:0;left:50%;width:2px;height:14px;margin-left:-1px;border-radius:2px;background:${tone};box-shadow:0 0 5px ${tone};pointer-events:none;`;
+          node.append(beam);
+        }
         const notch = document.createElement("span");
-        if (dot) notch.style.display = "none";
-        notch.style.cssText = `display:${dot || compact ? "none" : "block"};position:absolute;top:34px;width:12px;height:12px;background:${tone};transform:rotate(45deg);border-radius:2px;z-index:-1;`;
+        notch.dataset.testid = "beacon-pin-tip";
+        notch.setAttribute("aria-hidden", "true");
+        notch.style.cssText = `display:${dot || compact ? "none" : "block"};position:absolute;top:${pinInset + 34}px;width:12px;height:12px;background:${tone};transform:rotate(45deg);border-radius:2px;z-index:-1;`;
         node.append(notch);
         const badge = document.createElement("span");
-        badge.textContent = dot ? "" : text;
-        badge.style.cssText = `position:relative;box-sizing:border-box;flex-shrink:0;width:${visualSize}px;height:${visualSize}px;border:${dot ? 1 : compact ? 2 : 3}px solid ${dot ? colors.white : tone};border-radius:50%;background:${dot ? tone : colors.white};display:flex;align-items:center;justify-content:center;box-shadow:${compact ? "none" : "0 3px 10px #172c2940"};font-size:${compact ? 20 : 22}px;`;
+        if (!dot) addBeaconGlyph(badge, text as Category, compact ? 17 : 22, compact ? undefined : customIcon);
+        badge.style.cssText = `position:relative;box-sizing:border-box;flex-shrink:0;width:${visualSize}px;height:${visualSize}px;border:${dot ? 1 : compact ? 2 : 3}px solid ${dot ? colors.white : tone};border-radius:${dot ? 5 : compact ? 9 : 13}px;background:${dot ? tone : colors.surface};display:flex;align-items:center;justify-content:center;box-shadow:${compact ? "none" : "0 3px 10px #172c2940"};font-size:${compact ? 20 : 22}px;`;
+        if (selectedPin) badge.style.outline = `2px solid ${colors.ink}`;
+        if (selectedPin) badge.style.outlineOffset = "2px";
         face.append(badge);
+        if (stopNumber) {
+          const order = document.createElement("span");
+          order.dataset.testid = "map-plan-stop-badge";
+          order.setAttribute("aria-hidden", "true");
+          order.textContent = String(stopNumber);
+          order.style.cssText = `position:absolute;left:-4px;top:-4px;min-width:16px;height:16px;box-sizing:border-box;padding:0 3px;border:1px solid ${tone};border-radius:8px;background:${colors.surface};color:${colors.textPrimary};display:grid;place-items:center;font:700 9px system-ui;pointer-events:none;`;
+          face.append(order);
+        }
         if (identity?.friendHosted) {
           const rim = document.createElement("span");
           rim.dataset.testid = "beacon-friend-rim";
           rim.setAttribute("aria-hidden", "true");
-          rim.style.cssText = `position:absolute;inset:0;box-sizing:border-box;border:${dot ? 1 : compact ? 1.5 : 2.5}px solid ${colors.success};opacity:.95;border-radius:50%;pointer-events:none;`;
+          rim.style.cssText = `position:absolute;inset:0;box-sizing:border-box;border:${dot ? 1 : compact ? 1.5 : 2.5}px solid ${colors.success};opacity:.95;border-radius:inherit;pointer-events:none;`;
           badge.append(rim);
         }
         if (identity?.saved && !owned && !dot) {
@@ -862,10 +932,10 @@ export default function BeaconMap(props: MapProps) {
           iconSize: [iconWidth, iconHeight],
           iconAnchor: friend
             ? [iconWidth / 2, visualSize / 2]
-            : [iconWidth / 2, 40],
+            : [iconWidth / 2, dot ? 5 : pinInset + 45],
         }),
         title: label,
-        keyboard: true,
+        keyboard: !stopNumber,
       }).addTo(group);
     };
     const size = m.getSize();
@@ -993,6 +1063,23 @@ export default function BeaconMap(props: MapProps) {
         .map((a) => a.id),
     );
     for (const point of contextPoints) {
+      const activate = () => {
+        const current = latest.current.contextPoints?.find((row) => row.id === point.id);
+        if (!latest.current.onPick && current) latest.current.onContextPoint?.(current);
+      };
+      if (point.stopNumber) {
+        const category = point.category ?? "Other";
+        const activity = identityData.activities.find((row) => row.id === point.activityId);
+        const state = activity ? beaconMarkerState(identityData, activity, identityLookup, now) : null;
+        marker(
+          point.latitude, point.longitude, category,
+          `Plan stop ${point.stopNumber}: ${point.title}`, activate,
+          false, 0, categories[category].color, selectedActivityId === point.activityId,
+          false, "", "unknown", false, "", state, !!state?.owned, false, true,
+          `context:${point.id}`, point.mapIcon, point.stopNumber,
+        );
+        continue;
+      }
       if (
         point.publicBeaconId &&
         (!renderedSingletonIds.has(`beacon:${point.publicBeaconId}`) ||
@@ -1002,12 +1089,11 @@ export default function BeaconMap(props: MapProps) {
       )
         continue;
       if (
-        !point.stopNumber &&
         point.activityId &&
         !renderedSingletonIds.has(`beacon:${point.activityId}`)
       )
         continue;
-      if (point.activityId && !point.stopNumber) {
+      if (point.activityId) {
         decorationCache.use(
           `context:${point.id}`,
           JSON.stringify([point, colors.green]),
@@ -1029,20 +1115,15 @@ export default function BeaconMap(props: MapProps) {
           () => {
             const node = document.createElement("button");
             node.type = "button";
-            node.textContent = point.stopNumber
-              ? String(point.stopNumber)
-              : point.publicBeaconId
-                ? categoryMarkerGlyphs[point.category ?? "Other"]
-                : "?";
+            if (point.publicBeaconId) addBeaconGlyph(node, point.category ?? "Other", 23, point.mapIcon);
+            else node.textContent = "?";
             node.setAttribute(
               "aria-label",
-              `${point.stopNumber ? `Plan stop ${point.stopNumber}` : point.publicBeaconId ? "Public Beacon" : "Suggestion"}: ${point.title}`,
+              `${point.publicBeaconId ? "Public Beacon" : "Suggestion"}: ${point.title}`,
             );
             node.style.cssText = `max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-height:44px;padding:5px 8px;border:1px dashed ${colors.green};border-radius:12px;background:${colors.white};color:${colors.green};font:11px system-ui;cursor:pointer;`;
-            if (point.stopNumber)
-              node.style.cssText = `width:44px;height:44px;border:2px solid ${colors.green};border-radius:22px;background:${colors.white};color:${colors.green};font:bold 18px system-ui;cursor:pointer;`;
             if (point.publicBeaconId)
-              node.style.cssText = `width:46px;height:46px;border:3px solid ${colors.green};border-radius:16px 16px 16px 5px;background:${colors.white};font-size:25px;cursor:pointer;box-shadow:0 3px 8px #172c2920;`;
+              node.style.cssText = `width:46px;height:46px;border:2px solid ${categories[point.category ?? "Other"].color};border-radius:13px;background:${colors.surface};display:grid;place-items:center;color:${colors.ink};position:relative;cursor:pointer;box-shadow:0 3px 8px #172c2920;`;
             L.DomEvent.disableClickPropagation(node);
             node.onclick = () => markerCache.activate(contextKey);
             return L.marker([point.latitude, point.longitude], {
@@ -1053,23 +1134,17 @@ export default function BeaconMap(props: MapProps) {
                 html: node,
                 className: "beacon-marker",
                 iconSize: [
-                  point.stopNumber ? 44 : point.publicBeaconId ? 46 : 88,
+                  point.publicBeaconId ? 46 : 88,
                   46,
                 ],
                 iconAnchor: [
-                  point.stopNumber ? 22 : point.publicBeaconId ? 23 : 44,
+                  point.publicBeaconId ? 23 : 44,
                   23,
                 ],
               }),
             }).addTo(group);
           },
-          () => {
-            const current = latest.current.contextPoints?.find(
-              (row) => row.id === point.id,
-            );
-            if (!latest.current.onPick && current)
-              latest.current.onContextPoint?.(current);
-          },
+          activate,
         );
       }
     }
@@ -1101,7 +1176,7 @@ export default function BeaconMap(props: MapProps) {
       return marker(
         member.latitude,
         member.longitude,
-        categoryMarkerGlyphs[member.category ?? "Other"],
+        member.category ?? "Other",
         profile
           ? `Map friend: ${profile.name}, ${state}, location ${age}`
           : `Map: ${model.label ?? context?.title ?? "Beacon"}`,
@@ -1119,7 +1194,7 @@ export default function BeaconMap(props: MapProps) {
         !!profile,
         profile ? (profile.avatar_seed ?? avatarSeed(profile.id)) : 0,
         profile
-          ? mapAvailabilityColors[state]
+          ? availabilityColors[state]
           : categories[member.category ?? "Other"].color,
         selectedActivityId === id,
         false,
@@ -1201,7 +1276,7 @@ export default function BeaconMap(props: MapProps) {
             reducedMotion,
             friendColor: (point) => {
               const model = models.get(point.id);
-              return mapAvailabilityColors[
+              return availabilityColors[
                 model?.kind === "person" ? model.availability : "unknown"
               ];
             },
@@ -1258,14 +1333,7 @@ export default function BeaconMap(props: MapProps) {
         marker(
           p.latitude,
           p.longitude,
-          {
-            Fitness: "\uD83C\uDFC0",
-            Study: "\uD83D\uDCDA",
-            Gaming: "\uD83C\uDFAE",
-            Creative: "\uD83C\uDFA8",
-            Social: "\u2615",
-            Other: "\u2728",
-          }[a.category],
+          a.category,
           `Map: ${a.title}${markerStateLabel(state!) ? `, ${markerStateLabel(state!)}` : ""}`,
           () => onActivity(a.id),
           false,
@@ -1290,6 +1358,7 @@ export default function BeaconMap(props: MapProps) {
           false,
           true,
           `beacon:${a.id}`,
+          m.getZoom() >= 14 || selectedActivityId === a.id ? a.map_icon : undefined,
         );
     });
     const labelIds = visibleFriendLabels(
@@ -1332,10 +1401,6 @@ export default function BeaconMap(props: MapProps) {
                 .filter((activity) => activity.owner_id === l.owner_id)
                 .map((activity) => friendAvailabilityState(activity, now))
                 .find((state) => state !== "unknown") ?? "unknown";
-            const availabilityKey =
-              availabilityState === "ending-soon"
-                ? "endingSoon"
-                : availabilityState;
             const ageLabel = formatLocationAge(l.updated_at, now) ?? "now";
             marker(
               l.latitude,
@@ -1349,7 +1414,7 @@ export default function BeaconMap(props: MapProps) {
               () => onPerson(p.id),
               true,
               p.avatar_seed ?? avatarSeed(p.id),
-              mapAvailabilityColors[availabilityKey],
+              availabilityColors[availabilityState],
               false,
               false,
               labelIds.has(p.id) ? friendLocationLabel(p.name, ageLabel) : "",
@@ -1446,6 +1511,7 @@ export default function BeaconMap(props: MapProps) {
     colors,
     resolvedAppearance,
     categories,
+    availabilityColors,
     availability,
     activities,
     availabilityActivities,

@@ -59,6 +59,7 @@ export function PublicBeaconPreview({
   const { data, userId, act, getViewerEpoch } = useBeacon();
   const now = useNow();
   const associations = useBeaconCommunityAssociations();
+  const mapCommunity = showCommunityIdentity ? associations.find(row => row.activity_id === summary.activity_id && row.priority === 0)?.summary : undefined;
   const reason =
     contextLabel ??
     browseEntryReason(
@@ -290,6 +291,10 @@ export function PublicBeaconPreview({
     <View testID="map-public-preview" style={{ gap: 8 }}>
       <DiscoveryBeaconCard
         mapPreview={mapPreview}
+        mapIcon={summary.map_icon}
+        mapCommunityName={mapCommunity?.name}
+        mapCommunityKey={mapCommunity?.entity_id}
+        mapCommunityType={mapCommunity?.entity_type}
         actionShortcuts={
           mapPreview ? (
             <View ref={mapInfoAnchor} collapsable={false}>

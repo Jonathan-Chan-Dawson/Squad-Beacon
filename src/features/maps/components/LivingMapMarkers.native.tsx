@@ -14,7 +14,7 @@ import {
 } from "../clusterBloom";
 import { Marker, Polygon } from "react-native-maps";
 import { AvatarStatusBadge } from "@/src/features/profile/AvatarStatusBadge";
-import { ActivityBadge } from "@/src/features/beacons/ActivityBadge";
+import { BeaconPinGlyph } from "./BeaconPinGlyph";
 import { useTheme } from "@/src/shared/ui";
 import { useReducedMotion } from "@/src/shared/design-system";
 import type { Category } from "@/src/shared/types";
@@ -102,7 +102,7 @@ const MemberArtwork = React.memo(function MemberArtwork({
         style={{
           width: size,
           height: size,
-          borderRadius: size / 2,
+          borderRadius: model.kind === "beacon" ? 9 : size / 2,
           borderWidth: 2,
           borderColor: color,
           backgroundColor: colors.surface,
@@ -111,7 +111,7 @@ const MemberArtwork = React.memo(function MemberArtwork({
         }}
       >
         {model.kind === "beacon" ? (
-          <ActivityBadge category={model.category} size={24} iconSize={18} />
+          <BeaconPinGlyph category={model.category} size={17} color={colors.ink} />
         ) : model.profile ? (
           <FriendMapAvatar
             profile={model.profile}
@@ -128,7 +128,7 @@ const MemberArtwork = React.memo(function MemberArtwork({
               inset: 0,
               borderWidth: 1.5,
               borderColor: colors.success,
-              borderRadius: size / 2,
+              borderRadius: model.kind === "beacon" ? 9 : size / 2,
             }}
           />
         )}

@@ -55,6 +55,7 @@ export type ExplorationFilters = {
     | "Spots Available";
   format?: "Any" | "Physical" | "Virtual";
   starredOnly?: boolean;
+  onlyFollowing?: boolean;
 };
 export type MapViewport = {
   center: Coordinate;

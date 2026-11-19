@@ -354,12 +354,12 @@ test("Plan Focus handles a Plan with no physical stops and exits to the ordinary
   const focus = page.getByTestId("map-plan-focus");
   await expect(focus).toBeVisible();
   await expect(focus).toContainText(
-    /visible physical stops|No visible physical stops/,
+    /\d+ stops?|No visible stops/,
   );
   await expect(page.locator('[data-testid="map-constellation"]')).toHaveCount(
     0,
   );
-  await expect(focus).toContainText("No visible physical stops");
+  await expect(focus).toContainText("No visible stops");
   await expect(
     focus.getByRole("button", { name: "Fit Plan", exact: true }),
   ).toBeDisabled();
@@ -511,7 +511,7 @@ test("Plan Focus shows authorized numbered physical stops without unrelated map 
   }
   await page.goto("/?mapPlan=physical-plan");
   const focus = page.getByTestId("map-plan-focus");
-  await expect(focus).toContainText("2 visible physical stops");
+  await expect(focus).toContainText("2 stops");
   await expect(
     page.getByRole("button", {
       name: "Plan stop 1: Physical stop 1",

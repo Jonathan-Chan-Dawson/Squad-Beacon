@@ -6,7 +6,7 @@ import {
   type BeaconDraft,
   type PlanningThread,
 } from "../src/shared/types";
-import { resolveMapContext, mapContextCameraKind } from "../src/features/maps/contextFilters";
+import { resolveMapContext, mapContextCameraKind, planPathArrowheads } from "../src/features/maps/contextFilters";
 import { readablePlanForActivity } from "../src/features/beacons/screens/discoveryPlan";
 import { showBeaconOnMap } from "../src/features/maps/mapDiscovery";
 
@@ -104,7 +104,7 @@ test("Plan context reveals permitted unavailable Beacons in order without alteri
   );
   assert.deepEqual(
     view.paths[0],
-    view.points.map(({ latitude, longitude }) => ({ latitude, longitude })),
+    view.points.map(({ latitude, longitude, category }) => ({ latitude, longitude, category })),
   );
   assert.equal(showBeaconOnMap(data, data.activities[0], "viewer"), false);
 });
@@ -299,4 +299,24 @@ test("Plan fits handle single, coincident and widely separated physical stops", 
   assert.equal(mapContextCameraKind([{latitude: 10, longitude: 20}]), "focus");
   assert.equal(mapContextCameraKind([{latitude: 10, longitude: 20}, {latitude: 10.00001, longitude: 20.00001}]), "focus");
   assert.equal(mapContextCameraKind([{latitude: 10, longitude: 20}, {latitude: -30, longitude: 60}]), "fit");
+});
+
+test("Plan arrows point toward consecutive stops and skip coincident stops and gaps", () => {
+  const first = { latitude: 41, longitude: -87 };
+  const east = { latitude: 41, longitude: -86.99, category: "Creative" as const };
+  const north = { latitude: 41.01, longitude: -86.99, category: "Fitness" as const };
+  const [eastLeg, northLeg, ...extra] = planPathArrowheads([
+    [first, first, east],
+    [east, north],
+    [{ latitude: 42, longitude: -88 }],
+  ]);
+  assert.equal(extra.length, 0);
+  assert.equal(eastLeg.category, "Creative");
+  assert.equal(northLeg.category, "Fitness");
+  const eastArrow = eastLeg.coordinates;
+  const northArrow = northLeg.coordinates;
+  assert.ok(eastArrow[1].longitude > eastArrow[0].longitude);
+  assert.ok(eastArrow[1].longitude > eastArrow[2].longitude);
+  assert.ok(northArrow[1].latitude > northArrow[0].latitude);
+  assert.ok(northArrow[1].latitude > northArrow[2].latitude);
 });

@@ -64,6 +64,8 @@ import {
 import { ConfirmDialog, QuickChoiceDialog } from "@/src/shared/Dialogs";
 import { friendIds, validateActivity } from "@/src/shared/domain";
 import { pageAnimation } from "@/src/shared/mobilePresentation";
+import { useCommunityTopics } from "@/src/features/discovery/useCommunityTopics";
+import { BeaconMapIconEditor } from "../components/BeaconMapIconEditor";
 import { useBeacon } from "@/src/shared/store";
 import type { Activity, Profile, RSVP } from "@/src/shared/types";
 import {
@@ -256,6 +258,11 @@ export default function ActivityDetail() {
   const { data, userId, demo, loading, error, refresh, act } = useBeacon();
   const activityId = Array.isArray(id) ? id[0] : id;
   const activity = data.activities.find((item) => item.id === activityId);
+  const sourceLink = data.activity_social_links.find(row => row.activity_id === activityId);
+  const { rows: activityTopics } = useCommunityTopics(sourceLink?.entity_type, sourceLink?.entity_id);
+  const currentTopic = data.beacon_topic_assignments?.find(row => row.activity_id === activityId)?.topic_id;
+  const [editTopic, setEditTopic] = useState(false);
+  const [mapIconDraft, setMapIconDraft] = useState<{ id: string; icon: string | null; shared: boolean } | null>(null);
   const toolRouteKey = JSON.stringify([
     activityId,
     initialTab,
@@ -1934,6 +1941,16 @@ export default function ActivityDetail() {
                 },
               ]
             : []),
+          ...(mine && activity.status === "scheduled" && (activityTopics.length || currentTopic) ? [{
+            label: "Topic",
+            icon: <Pencil size={20} color={colors.green} />,
+            onPress: () => setEditTopic(true),
+          }] : []),
+          ...(mine && activity.mode !== "solo" && (demo || data.capabilities?.beacon_map_icons) ? [{
+            label: "Map icon",
+            icon: <Pencil size={20} color={colors.green} />,
+            onPress: () => setMapIconDraft({ id: activity.id, icon: activity.map_icon ?? null, shared: activity.map_icon_public === true }),
+          }] : []),
           {
             label: "People & invitations",
             icon: <UsersRound size={20} color={colors.green} />,
@@ -1948,6 +1965,24 @@ export default function ActivityDetail() {
             : []),
         ]}
       />
+
+      <Sheet title="Beacon topic" visible={editTopic && mine} onClose={() => setEditTopic(false)}>
+        {[{ id: null, name: "No topic" }, ...activityTopics].map(topic => (
+          <Action key={topic.id ?? "none"} title={topic.name} secondary={(currentTopic ?? null) !== topic.id} run={async () => {
+            await act("set_beacon_topic", { id: activity.id, beacon_topic_id: topic.id, expected_actor_id: userId });
+            setEditTopic(false);
+          }} />
+        ))}
+      </Sheet>
+      <Sheet title="Map icon" visible={mapIconDraft?.id === activity.id} onClose={() => setMapIconDraft(null)}>
+        {mapIconDraft?.id === activity.id ? <>
+          <BeaconMapIconEditor category={activity.category} value={mapIconDraft.icon} shared={mapIconDraft.shared} onChange={(icon, shared) => setMapIconDraft(current => current?.id === activity.id ? { ...current, icon, shared } : current)} />
+          <Action title="Save Map icon" run={async () => {
+            await act("set_beacon_map_icon", { id: activity.id, map_icon: mapIconDraft.icon, map_icon_public: mapIconDraft.shared, expected_actor_id: userId });
+            setMapIconDraft(null);
+          }} />
+        </> : null}
+      </Sheet>
 
       <GuestShareSheet visible={guestShareOpen} onClose={() => setGuestShareOpen(false)} target={activity.id} title={activity.mode === "solo" ? "A note from Squad Beacon" : activity.title} kind={activity.mode === "solo" ? "status" : "beacon"} statusText={activity.title} expiresAt={activity.ends_at} readOnly={activity.mode === "solo"} />
       {owner ? (

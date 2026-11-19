@@ -1,3 +1,5 @@
+import { CommunityBeaconTopics } from "@/src/features/discovery/CommunityBeaconTopics";
+import { useCommunityTopicSelection } from "@/src/features/discovery/useCommunityTopics";
 import { CommunityActivityRow } from "@/src/features/social/CommunityActivityRow";
 import { CommunityInCommon } from "@/src/features/social/CommunityInCommon";
 import { canReadBeaconActivity } from "@/src/features/beacons/beaconModules";
@@ -90,6 +92,7 @@ export default function SpaceScreen() {
     section?: string;
   }>();
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
+  const topicSelection = useCommunityTopicSelection(id);
   const legacyView = params.tab ?? params.view;
   const { data, userId, act } = useBeacon();
   const {
@@ -557,11 +560,14 @@ export default function SpaceScreen() {
           </View>
         )}
       {tab === "overview" ? (
-        <CommunityPublicBeacons
+        <>
+          <CommunityBeaconTopics type="space" entity={id} {...topicSelection} />
+          <CommunityPublicBeacons
           type="space"
           entityId={id}
           excludeActivityIds={spaceActivities.map((activity) => activity.id)}
         />
+        </>
       ) : null}
       {tab === "overview" ? (
         <View style={{ gap: 4 }}>
@@ -593,6 +599,7 @@ export default function SpaceScreen() {
                 : "Public profile settings"}
             </Txt>
           </View>
+          {manageable && <CommunityBeaconTopics type="space" entity={id} manage browse={false} />}
           {settingsSections
             .filter((section) =>
               section === "details" || section === "access"
