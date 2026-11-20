@@ -1,8 +1,9 @@
-import React, { useEffect } from "react";
+import React, { useCallback } from "react";
 import { Pressable, Text, View } from "react-native";
 import { router } from "expo-router";
 import { Info, X } from "lucide-react-native";
-import { EmptyState, useDesignTheme } from "@/src/shared/design-system";
+import { EmptyState, Toast, useDesignTheme } from "@/src/shared/design-system";
+import { actionNoticeCopy } from "@/src/shared/actionNotice";
 import { useBeacon } from "@/src/shared/store";
 import { Button } from "@/src/shared/ui";
 import { BeaconIllustration, type IllustrationKey } from "./illustrations";
@@ -226,39 +227,31 @@ export function ContextTip({ name }: { name: keyof typeof tipCopy }) {
 }
 export function FirstSuccessNotice() {
   const { success, dismissSuccess, tone, quips } = useOnboarding();
-  const { colors, tokens } = useDesignTheme();
-  useEffect(() => {
-    if (!success) return;
-    const timer = setTimeout(dismissSuccess, 7000);
-    return () => clearTimeout(timer);
-  }, [success, dismissSuccess]);
-  if (!success) return null;
-  const key = success.replace(/\.v1$/, "") as CopyKey;
-  const content = getCopy(key, tone, "success", quips);
+  const { actionNotice, dismissActionNotice } = useBeacon();
+  const dismiss = useCallback(() => {
+    dismissActionNotice();
+    dismissSuccess();
+  }, [dismissActionNotice, dismissSuccess]);
+  const message = actionNotice
+    ? actionNoticeCopy[actionNotice.kind][quips ? 0 : 1]
+    : success
+      ? getCopy(success.replace(/\.v1$/, "") as CopyKey, tone, "success", quips).title
+      : null;
+  if (!message) return null;
   return (
     <View
-      accessibilityLiveRegion="polite"
+      pointerEvents="box-none"
       testID="first-success"
       style={{
         position: "absolute",
-        left: 12,
-        right: 12,
+        alignSelf: "center",
+        width: "92%",
+        maxWidth: 420,
         bottom: 100,
-        backgroundColor: colors.surfaceRaised,
-        borderWidth: 1,
-        borderColor: colors.border,
-        borderRadius: tokens.radius.card,
-        padding: 12,
-        gap: 6,
+        zIndex: 50,
       }}
     >
-      <Text style={{ color: colors.textPrimary, ...tokens.type.titleSmall }}>
-        {content.title}
-      </Text>
-      <Text style={{ color: colors.textSecondary, ...tokens.type.secondary }}>
-        {content.quip ?? content.body}
-      </Text>
-      <Button compact secondary title="Got it" onPress={dismissSuccess} />
+      <Toast key={actionNotice?.id ?? success} visible message={message} tone="success" onDismiss={dismiss} />
     </View>
   );
 }

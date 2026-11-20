@@ -238,7 +238,7 @@ function AccountProgress({
         if (event.viewer !== viewer || event.epoch !== epoch || !alive())
           return;
         void mark(event.key).then((inserted) => {
-          if (inserted && alive()) setSuccess(event.key);
+          if (inserted && alive() && !event.quiet) setSuccess(event.key);
         });
       }),
     [alive, epoch, mark, viewer],

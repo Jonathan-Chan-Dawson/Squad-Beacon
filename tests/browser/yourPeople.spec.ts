@@ -1,11 +1,31 @@
 import { expect, test, type Page } from "@playwright/test";
+import { mockOnboardingAccount } from "./onboardingAccount";
+import { startDemoFromEntry } from "./demoEntry";
 
 async function home(page: Page) {
-  await page.goto("/");
-  await page.getByRole("button", { name: /Explore the demo/ }).click();
+  await mockOnboardingAccount(page, { signedOut: true });
+  await page.goto("/auth/sign-in");
+  await startDemoFromEntry(page);
   await page.getByRole("tab", { name: "Beacons", exact: true }).click();
   await expect(page.getByTestId("friends-right-now")).toBeVisible();
 }
+
+test("a shared Beacon opens directly from its own Your People action", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 900 });
+  await home(page);
+  const rail = page.getByTestId("friends-right-now");
+  await rail.getByRole("button", { name: "All Friends", exact: true }).click();
+  const beacon = rail.getByRole("button", { name: /^Open Beacon:/ }).first();
+  await expect(beacon).toBeVisible();
+  const tiles = rail.getByTestId("your-people-card");
+  await expect.poll(async () => {
+    const heights = await tiles.evaluateAll((nodes) => nodes.slice(0, 4).map((node) => node.getBoundingClientRect().height));
+    return Math.max(...heights) - Math.min(...heights);
+  }).toBeLessThan(1);
+  await rail.screenshot({ path: ".expo/your-people/browsing-390.png" });
+  await beacon.press("Enter");
+  await expect(page.getByTestId("activity-detail-hero")).toBeVisible();
+});
 
 for (const width of [320, 390, 1024]) {
   for (const appearance of ["light", "dark"]) {
@@ -48,8 +68,9 @@ for (const width of [320, 390, 1024]) {
         expect(await cards.count()).toBeGreaterThan(1);
         expect(await cards.count()).toBeLessThan(146);
         const cardBox = await cards.first().boundingBox();
-        expect(cardBox!.width).toBe(108);
-        await cards.first().click();
+        expect(cardBox!.width).toBeCloseTo((width <= 360 ? 136 : width <= 600 ? 152 : 160) - 2, 0);
+        await expect(carousel.getByTestId(/^availability-badge-/).filter({ hasText: /Free to hang|Free until/ }).first()).toBeVisible();
+        await cards.first().press("Enter");
         await expect(
           page.getByRole("dialog", { name: "Status & activity", exact: true }),
         ).toBeVisible();

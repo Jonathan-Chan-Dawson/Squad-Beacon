@@ -184,7 +184,7 @@ test("first published Beacon celebrates only after confirmation and does not rep
   ).toBeVisible();
   await page
     .getByTestId("first-success")
-    .getByRole("button", { name: "Got it", exact: true })
+    .getByRole("button", { name: "Dismiss notification", exact: true })
     .click();
   await page.getByRole("button", { name: /Developer lab:/ }).click();
   await page.getByRole("button", { name: "Open Home", exact: true }).click();

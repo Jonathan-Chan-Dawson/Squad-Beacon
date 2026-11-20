@@ -1067,6 +1067,8 @@ export function Screen({
           Math.min(fontScale, tokens.type.denseMaxMultiplier) +
         tokens.space.xxs
       : 0);
+  const narrowHeader = width < 480;
+  const compactTitleScale = Math.min(fontScale, tokens.type.denseMaxMultiplier);
   const compactHeaderHeight =
     (iconOnlyBack && fontScale > 1.2
       ? tokens.layout.minTapTarget + tokens.space.sm
@@ -1074,8 +1076,7 @@ export function Screen({
     tokens.space.xs +
     Math.max(
       tokens.layout.minTapTarget,
-      tokens.type.title.lineHeight *
-        Math.min(fontScale, tokens.type.denseMaxMultiplier),
+      (narrowHeader ? 44 : tokens.type.title.lineHeight) * compactTitleScale,
     ) +
     tokens.space.xs;
   const expandedHeight = back
@@ -1126,6 +1127,13 @@ export function Screen({
     ? tokens.layout.tabBarHeight + insets.bottom + tokens.layout.scrollClearance
     : tokens.space.xxl + insets.bottom;
   const action = headerAction ?? (inTabs ? <InboxButton /> : null);
+  const [headerBackWidth, setHeaderBackWidth] = useState(0);
+  const [headerActionWidth, setHeaderActionWidth] = useState(0);
+  const stackHeaderAction = iconOnlyBack && fontScale > 1.2;
+  const headerSideWidth = Math.max(
+    back ? headerBackWidth : 0,
+    action && !stackHeaderAction ? headerActionWidth : 0,
+  );
 
   return (
     <SafeAreaView edges={["top"]} style={styles.screen}>
@@ -1218,7 +1226,7 @@ export function Screen({
                 : back
                   ? tokens.space.sm
                   : tokens.space.md,
-              paddingBottom: tokens.space.sm,
+              paddingBottom: compactHeader ? tokens.space.xs : tokens.space.sm,
               overflow: "hidden",
               justifyContent: compactHeader ? "center" : "flex-end",
             }}
@@ -1229,39 +1237,62 @@ export function Screen({
                   flexDirection: "row",
                   alignItems: "center",
                   gap: tokens.space.sm,
-                  flexWrap: iconOnlyBack && fontScale > 1.2 ? "wrap" : "nowrap",
+                  flexWrap: stackHeaderAction ? "wrap" : "nowrap",
                   minHeight: tokens.layout.minTapTarget,
                 }}
               >
-                {back ? <BackButton iconOnly={iconOnlyBack} /> : null}
+                {back ? (
+                  <View
+                    style={{ position: "absolute", left: 0, top: 0, zIndex: 1 }}
+                    onLayout={(event) =>
+                      setHeaderBackWidth(event.nativeEvent.layout.width)
+                    }
+                  >
+                    <BackButton iconOnly={iconOnlyBack || narrowHeader} />
+                  </View>
+                ) : null}
                 <Text
                   accessibilityRole="header"
-                  numberOfLines={1}
+                  numberOfLines={narrowHeader ? 2 : 1}
                   maxFontSizeMultiplier={tokens.type.denseMaxMultiplier}
                   style={[
                     styles.title,
                     {
                       flex: 1,
                       minWidth: 0,
-                      fontSize:
-                        iconOnlyBack && width < 375
-                          ? 18
-                          : tokens.type.title.fontSize,
+                      textAlign: "center",
+                      marginHorizontal: headerSideWidth + tokens.space.sm,
+                      fontSize: narrowHeader ? 18 : tokens.type.title.fontSize,
                       lineHeight:
-                        tokens.type.title.lineHeight *
-                        Math.min(fontScale, tokens.type.denseMaxMultiplier),
+                        (narrowHeader ? 22 : tokens.type.title.lineHeight) *
+                        compactTitleScale,
                     },
                   ]}
                 >
                   {title}
                 </Text>
-                {iconOnlyBack && fontScale > 1.2 ? (
+                {action && !stackHeaderAction ? (
+                  <View
+                    style={{
+                      position: "absolute",
+                      right: 0,
+                      top: 0,
+                      zIndex: 1,
+                      minHeight: tokens.layout.minTapTarget,
+                      justifyContent: "center",
+                    }}
+                    onLayout={(event) =>
+                      setHeaderActionWidth(event.nativeEvent.layout.width)
+                    }
+                  >
+                    {action}
+                  </View>
+                ) : null}
+                {stackHeaderAction ? (
                   <View style={{ width: "100%", alignItems: "flex-end" }}>
                     {action}
                   </View>
-                ) : (
-                  action
-                )}
+                ) : null}
               </View>
             ) : back ? (
               <View

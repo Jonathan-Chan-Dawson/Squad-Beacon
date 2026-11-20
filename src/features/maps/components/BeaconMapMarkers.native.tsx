@@ -296,7 +296,7 @@ export function BeaconPinLight({
   compact?: boolean;
 }) {
   const { level, color, core, beamHeight, beamWidth, coreWidth, beamOpacity, glowOpacity } = lighting;
-  const spread = compact ? 20 : level === 1 ? 46 : level === 2 ? 33 : level === 3 ? 29 : 27;
+  const spread = compact ? 25 : level === 1 ? 46 : level === 2 ? 33 : level === 3 ? 29 : 27;
   return (
     <>
       <Svg pointerEvents="none" width={spread * 2} height={spread * 2} style={{ position: "absolute", top: inset + (compact ? 16 : 20) - spread }}>

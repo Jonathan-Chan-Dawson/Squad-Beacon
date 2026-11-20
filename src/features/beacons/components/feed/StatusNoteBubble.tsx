@@ -8,14 +8,49 @@ export function NoteSpeechBubble({
   compact = false,
   tailTowardIdentity = false,
   dense = false,
+  dialogue,
 }: {
   children: React.ReactNode;
   compact?: boolean;
   tailTowardIdentity?: boolean;
   dense?: boolean;
+  dialogue?: "side" | "top";
 }) {
-  const { colors } = useTheme();
+  const { colors, resolvedAppearance } = useTheme();
   const gradientId = React.useId().replace(/:/g, "");
+  if (dialogue) {
+    const fill = resolvedAppearance === "dark" ? "#27272A" : "#F2F2F3";
+    const leading = I18nManager.isRTL ? "right" : "left";
+    return (
+      <View style={{ alignSelf: "flex-start", maxWidth: "100%", paddingTop: dialogue === "top" ? 6 : 0 }}>
+        <View
+          testID="status-note-dialogue"
+          style={{ backgroundColor: fill, borderRadius: 12, paddingHorizontal: 11, paddingVertical: 8 }}
+        >
+          <View
+            pointerEvents="none"
+            style={{
+              position: "absolute",
+              width: 0,
+              height: 0,
+              ...(dialogue === "top" ? {
+                top: -5, [leading]: 15,
+                borderLeftWidth: 5, borderRightWidth: 5,
+                borderLeftColor: "transparent", borderRightColor: "transparent",
+                borderBottomWidth: 6, borderBottomColor: fill,
+              } : {
+                top: 9, [leading]: -5,
+                borderTopWidth: 4, borderBottomWidth: 4,
+                borderTopColor: "transparent", borderBottomColor: "transparent",
+                ...(I18nManager.isRTL ? { borderLeftWidth: 6, borderLeftColor: fill } : { borderRightWidth: 6, borderRightColor: fill }),
+              }),
+            }}
+          />
+          {children}
+        </View>
+      </View>
+    );
+  }
   return (
     <View
       testID="status-note-speech-bubble"

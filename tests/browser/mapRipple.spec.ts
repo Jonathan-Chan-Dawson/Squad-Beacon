@@ -100,10 +100,10 @@ test("beam height and gradient follow one priority in both appearances and at co
   await page.addScriptTag({ content: script });
   const cases = [
     { selected: true, identity: { participatingLive: true, owned: true }, height: 32, compactHeight: 0, color: "255, 254, 244" },
-    { selected: false, identity: { participatingLive: true, owned: true }, height: 21, compactHeight: 6, color: "255, 221, 156" },
-    { selected: false, identity: { owned: true }, height: 15, compactHeight: 0, color: "255, 241, 173" },
-    { selected: false, identity: { friendHosted: true, squadHosted: true }, height: 12, compactHeight: 0, color: "203, 234, 255" },
-    { selected: false, identity: { squadHosted: true }, height: 14, compactHeight: 11, color: "201, 245, 224" },
+    { selected: false, identity: { participatingLive: true, owned: true }, height: 21, compactHeight: 22, color: "255, 221, 156" },
+    { selected: false, identity: { owned: true }, height: 15, compactHeight: 17, color: "255, 241, 173" },
+    { selected: false, identity: { friendHosted: true, squadHosted: true }, height: 12, compactHeight: 14, color: "203, 234, 255" },
+    { selected: false, identity: { squadHosted: true }, height: 14, compactHeight: 16, color: "201, 245, 224" },
   ];
   for (const appearance of ["light", "dark"] as const) {
     const semantic = getDesignColorTheme(themeNames[0], appearance).colors;
@@ -123,7 +123,7 @@ test("beam height and gradient follow one priority in both appearances and at co
         });
         const glow = page.getByTestId("beacon-marker-glow");
         await expect(glow).toHaveAttribute("data-lighting-level", String(index + 1));
-        const haloRadius = compact ? 6 : [36, 19, 13, 10, 10][index];
+        const haloRadius = compact ? 12 : [36, 19, 13, 10, 10][index];
         await expect(glow).toHaveCSS("box-shadow", new RegExp(`0px 0px ${haloRadius}px`));
         const height = compact ? item.compactHeight : item.height;
         const beam = page.getByTestId("beacon-marker-beam");

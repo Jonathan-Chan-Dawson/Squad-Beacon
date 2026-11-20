@@ -21,6 +21,8 @@ import {
   ArrowRight,
   CircleHelp,
   Radio,
+  ChevronRight,
+  Clock3,
 } from "lucide-react-native";
 import { HomeAction } from "../HomeAction";
 import { useDesignTheme } from "@/src/shared/design-system";
@@ -33,6 +35,9 @@ import { ActionRow, ContextMenu } from "@/src/shared/ContextMenu";
 import { StatusViewer } from "./StatusViewer";
 import {
   availabilityLabel,
+  homeFriendAvailability,
+  isFreeWithoutEnd,
+  prioritizeOpenEndedAvailability,
   filterSocialFriends,
   socialFriends,
   type SocialFriend,
@@ -298,7 +303,8 @@ export function useSocialFriendsController() {
   return {
     friends,
     scoped,
-    filtered,
+    filtered: browse.scope === "friends" && browse.filter === "All" && !browse.query.trim()
+      ? prioritizeOpenEndedAvailability(filtered) : filtered,
     available,
     inBeacons,
     loading,
@@ -316,10 +322,8 @@ export function useSocialFriendsController() {
 /** Each title has one place; shared notes remain independent of activity context. */
 function FriendContext({
   friend,
-  compact = false,
 }: {
   friend: SocialFriend;
-  compact?: boolean;
 }) {
   const { colors, tokens } = useDesignTheme();
   const beacon = friend.currentBeacon?.activity ?? friend.beacon;
@@ -327,7 +331,7 @@ function FriendContext({
   const differentTitle = activityTitle && activityTitle !== friend.statusText;
   const attachment = friend.attachment;
   return (
-    <View style={{ gap: 2, minHeight: compact ? 54 : undefined }}>
+    <View style={{ gap: 2 }}>
       {!!friend.statusText && (
         <Text
           numberOfLines={2}
@@ -342,11 +346,10 @@ function FriendContext({
           style={{
             color: colors.accent,
             ...tokens.type.caption,
-            ...(compact ? { fontSize: 11, lineHeight: 15 } : {}),
           }}
         >
           In a Beacon{differentTitle ? " · " + activityTitle : ""}
-          {compact ? "" : " · Happening now"}
+          {" · Happening now"}
         </Text>
       ) : differentTitle ? (
         <Text
@@ -356,8 +359,7 @@ function FriendContext({
           Activity · {activityTitle}
         </Text>
       ) : null}
-      {!compact &&
-      attachment &&
+      {attachment &&
       attachment.id !== beacon?.id &&
       attachment.title !== friend.statusText &&
       attachment.title !== activityTitle ? (
@@ -369,8 +371,7 @@ function FriendContext({
           {attachment.title}
         </Text>
       ) : null}
-      {!compact &&
-      friend.ping &&
+      {friend.ping &&
       friend.ping.id !== attachment?.id &&
       friend.ping.title !== friend.statusText &&
       friend.ping.title !== activityTitle ? (
@@ -495,96 +496,169 @@ export function SocialFriendRow({
 
 function FriendCard({
   friend,
+  now,
+  width,
   planning,
   selected,
   onPress,
+  onOpenBeacon,
 }: {
   friend: SocialFriend;
+  now: number;
+  width: number;
   planning: boolean;
   selected: boolean;
   onPress: () => void;
+  onOpenBeacon: (id: string) => void;
 }) {
   const { colors, tokens } = useDesignTheme();
-  const { fontScale } = useWindowDimensions();
   const status =
     tokens.availability[
       friend.availability === "ending-soon" ? "endingSoon" : friend.availability
     ];
-  const label =
-    friend.availability === "available" || friend.availability === "ending-soon"
-      ? "Free"
-      : friend.availability === "unavailable"
-        ? "Busy"
-        : "Not shared";
+  const label = homeFriendAvailability(friend, now);
+  const priority = isFreeWithoutEnd(friend);
+  const timedFree = !!friend.until && Date.parse(friend.until) > now &&
+    (friend.availability === "available" || friend.availability === "ending-soon");
+  const beacon = friend.currentBeacon?.activity ?? friend.beacon;
+  const title = beacon?.title ?? friend.currentActivityTitle;
+  const distinctTitle = title?.trim().toLocaleLowerCase() !==
+    friend.statusText?.trim().toLocaleLowerCase();
+  const context = beacon
+    ? distinctTitle && title ? `In a Beacon · ${title}` : "In a Beacon"
+    : title ? (distinctTitle ? title : "Current activity") : null;
+  const contextText = context ? (
+    <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
+      <Text numberOfLines={1} style={{ color: colors.accent, ...tokens.type.caption }}>
+        {beacon ? "In a Beacon" : context}
+      </Text>
+      {beacon && distinctTitle && title ? (
+        <Text numberOfLines={1} style={{ color: colors.textPrimary, ...tokens.type.caption }}>
+          {title}
+        </Text>
+      ) : null}
+    </View>
+  ) : null;
   return (
-    <Pressable
-      testID={"social-friend-" + friend.id}
-      accessibilityRole="button"
-      accessibilityLabel={
-        planning
-          ? (selected ? "Deselect " : "Select ") + friend.name + " for planning"
-          : "Open " + friend.name + "'s shared status"
-      }
-      accessibilityState={planning ? { selected } : undefined}
-      aria-pressed={planning ? selected : undefined}
-      onPress={onPress}
-      style={({ pressed }) => ({
-        width: 108,
-        minHeight: 182 * Math.max(1, fontScale),
-        padding: 8,
-        gap: 4,
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: selected
-          ? tokens.availability.available.color
-          : colors.border,
-        backgroundColor: selected
-          ? tokens.availability.available.tint
-          : colors.surfaceRaised,
-        opacity: pressed ? 0.7 : 1,
-      })}
-    >
-      <View style={{ alignSelf: "center" }}>
-        <ProfileAvatar profile={friend.profile} size={48} />
-        {selected && (
-          <View
-            style={{
-              position: "absolute",
-              right: -3,
-              bottom: -2,
-              borderRadius: 8,
-              padding: 2,
-              backgroundColor: tokens.availability.available.color,
-            }}
-          >
-            <Check size={12} color={tokens.availability.available.onColor} />
+    <View testID="your-people-card" style={{
+      width,
+      flexGrow: 1,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: selected ? tokens.availability.available.color : colors.border,
+      backgroundColor: selected ? tokens.availability.available.tint : colors.surfaceRaised,
+    }}>
+      <Pressable
+        testID={"social-friend-" + friend.id}
+        accessibilityRole="button"
+        accessibilityLabel={
+          planning
+            ? (selected ? "Deselect " : "Select ") + friend.name + " for planning"
+            : "Open " + friend.name + "'s shared status"
+        }
+        accessibilityState={planning ? { selected } : undefined}
+        accessibilityHint={[label, friend.statusText, planning ? context : null].filter(Boolean).join(". ") || undefined}
+        aria-pressed={planning ? selected : undefined}
+        onPress={onPress}
+        style={({ pressed }) => ({
+          flexGrow: 1,
+          padding: 10,
+          gap: 5,
+          borderRadius: 12,
+          opacity: pressed ? 0.7 : 1,
+        })}
+      >
+        <View style={{ alignSelf: "flex-start" }}>
+          <ProfileAvatar profile={friend.profile} size={48} />
+          {selected && (
+            <View
+              style={{
+                position: "absolute",
+                right: -3,
+                bottom: -2,
+                borderRadius: 8,
+                padding: 2,
+                backgroundColor: tokens.availability.available.color,
+              }}
+            >
+              <Check size={12} color={tokens.availability.available.onColor} />
+            </View>
+          )}
+        </View>
+        <Text
+          numberOfLines={2}
+          style={{
+            color: colors.textPrimary,
+            ...tokens.type.secondary,
+            fontWeight: "600",
+          }}
+        >
+          {friend.name}
+        </Text>
+        {label ? (
+          <View style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 5,
+            ...(priority || timedFree ? {
+              alignSelf: "flex-start",
+              maxWidth: "100%",
+              backgroundColor: priority ? status.tint : colors.surface,
+              paddingHorizontal: 6,
+              paddingVertical: 3,
+              borderRadius: 6,
+            } : {}),
+          }}>
+            {timedFree
+              ? <Clock3 size={12} color={friend.availability === "ending-soon" ? status.color : colors.textSecondary} />
+              : <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: status.color }} />}
+            <Text testID={"availability-badge-" + friend.id} style={{
+              flexShrink: 1, color: priority ? status.color : colors.textPrimary,
+              ...tokens.type.caption,
+              ...(priority ? { fontWeight: "600" } : {}),
+            }}>
+              {label}
+            </Text>
           </View>
-        )}
-      </View>
-      <Text
-        numberOfLines={1}
-        style={{
-          color: colors.textPrimary,
-          ...tokens.type.secondary,
-          fontWeight: "500",
-        }}
-      >
-        {friend.name}
-      </Text>
-      <Text
-        testID={"availability-badge-" + friend.id}
-        style={{ color: status.color, ...tokens.type.caption }}
-      >
-        {label}
-      </Text>
-      <FriendContext friend={friend} compact />
-    </Pressable>
+        ) : null}
+        {friend.statusText ? (
+          <Text numberOfLines={2} style={{ color: colors.textSecondary, ...tokens.type.secondary }}>
+            {friend.statusText}
+          </Text>
+        ) : null}
+        {planning && contextText ? (
+          <View style={{ flexDirection: "row", padding: 6, borderRadius: 7, backgroundColor: beacon ? colors.surface : undefined }}>
+            {contextText}
+          </View>
+        ) : null}
+      </Pressable>
+      {!planning && contextText ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={beacon ? `Open Beacon: ${beacon.title}` : `Open ${friend.name}'s current activity`}
+          onPress={() => beacon ? onOpenBeacon(beacon.id) : onPress()}
+          style={({ pressed }) => ({
+            minHeight: 44, flexDirection: "row", alignItems: "center", paddingVertical: 6,
+            paddingHorizontal: 8, marginHorizontal: 7, marginBottom: 7,
+            borderRadius: 8, backgroundColor: beacon ? colors.surface : undefined,
+            gap: 5, opacity: pressed ? 0.65 : 1,
+          })}
+        >
+          <Radio size={13} color={colors.accent} />
+          {contextText}
+          <ChevronRight size={13} color={colors.textSecondary} />
+        </Pressable>
+      ) : null}
+    </View>
   );
 }
 
 export function SocialFriendsSection() {
   const { colors, tokens } = useDesignTheme();
-  const { data } = useBeacon();
+  const { data, getCurrentData } = useBeacon();
+  const now = useNow();
+  const { width } = useWindowDimensions();
+  const cardWidth = width <= 360 ? 136 : width <= 600 ? 152 : 160;
   const controller = useSocialFriendsController();
   const {
     friends,
@@ -607,9 +681,10 @@ export function SocialFriendsSection() {
   );
   // Retain IDs only, never stale status/profile objects. Scope and visit reset ranking.
   const orderKey = userId + ":" + browse.scope + ":" + visit;
+  const ranked = prioritizeOpenEndedAvailability(scoped);
   const [order, setOrder] = useState(() => ({
     key: orderKey,
-    ids: scoped.map((friend) => friend.id),
+    ids: ranked.map((friend) => friend.id),
   }));
   const current = new Map(scoped.map((friend) => [friend.id, friend]));
   const retained =
@@ -617,7 +692,7 @@ export function SocialFriendsSection() {
   const retainedSet = new Set(retained);
   const orderedIds = [
     ...retained,
-    ...scoped
+    ...ranked
       .filter((friend) => !retainedSet.has(friend.id))
       .map((friend) => friend.id),
   ];
@@ -637,7 +712,7 @@ export function SocialFriendsSection() {
         )?.name
       : undefined;
   return (
-    <View testID="friends-right-now" style={{ gap: 2, paddingVertical: 6 }}>
+    <View testID="friends-right-now" style={{ gap: 4, paddingVertical: 6 }}>
       <View
         style={{
           flexDirection: "row",
@@ -666,22 +741,21 @@ export function SocialFriendsSection() {
         />
         <HomeAction
           title={planning ? "Done" : "Plan"}
-          outlined
+          primary={!planning}
+          outlined={planning}
           prominent
           icon={
             planning ? (
               <Check size={15} color={tokens.availability.available.color} />
             ) : (
-              <UsersRound size={15} color={colors.textSecondary} />
+              <UsersRound size={15} color={colors.onAccent} />
             )
           }
           selected={planning}
-          tone={{
-            color: planning
-              ? tokens.availability.available.color
-              : colors.textSecondary,
-            tint: "transparent",
-          }}
+          tone={planning ? {
+            color: tokens.availability.available.color,
+            tint: tokens.availability.available.tint,
+          } : undefined}
           onPress={() => setPlanning(!planning)}
         />
       </View>
@@ -691,7 +765,6 @@ export function SocialFriendsSection() {
           flexWrap: "wrap",
           columnGap: 18,
           rowGap: 0,
-          marginTop: -4,
         }}
       >
         {(
@@ -765,8 +838,11 @@ export function SocialFriendsSection() {
         testID="your-people-summary"
         style={{ color: colors.textSecondary, ...tokens.type.caption }}
       >
-        {scoped.length} {browse.scope === "favorites" ? "favorites" : "friends"}{" "}
-        · {available} free · {inBeacons} in Beacons
+        {[
+          `${scoped.length} ${browse.scope === "favorites" ? (scoped.length === 1 ? "favorite" : "favorites") : (scoped.length === 1 ? "friend" : "friends")}`,
+          available ? `${available} free to hang` : null,
+          inBeacons ? `${inBeacons} in ${inBeacons === 1 ? "a Beacon" : "Beacons"}` : null,
+        ].filter(Boolean).join(" · ")}
       </Text>
       {planning ? (
         <View
@@ -806,12 +882,21 @@ export function SocialFriendsSection() {
         initialNumToRender={6}
         maxToRenderPerBatch={6}
         windowSize={3}
-        contentContainerStyle={{ gap: 8, paddingVertical: 4 }}
+        contentContainerStyle={{ alignItems: "stretch", gap: 8, paddingVertical: 4 }}
         renderItem={({ item }) => (
           <FriendCard
             friend={item}
+            now={now}
+            width={cardWidth}
             planning={planning}
             selected={selectedIds.includes(item.id)}
+            onOpenBeacon={(id) => {
+              const snapshot = getCurrentData();
+              if (!snapshot || !userId) return;
+              const fresh = socialFriends(snapshot, userId, Date.now()).find((friend) => friend.id === item.id);
+              if ((fresh?.currentBeacon?.activity.id ?? fresh?.beacon?.id) !== id) return;
+              router.push({ pathname: "/activity/[id]", params: { id } });
+            }}
             onPress={() =>
               planning
                 ? controller.toggle(item.id)

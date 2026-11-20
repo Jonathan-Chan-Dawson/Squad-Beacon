@@ -1,4 +1,6 @@
 import { expect, test } from "@playwright/test";
+import { mockOnboardingAccount } from "./onboardingAccount";
+import { startDemoFromEntry } from "./demoEntry";
 
 for (const [width, appearance] of [
   [320, "dark"],
@@ -20,8 +22,9 @@ for (const [width, appearance] of [
       },
       { appearance },
     );
-    await page.goto("/");
-    await page.getByRole("button", { name: /Explore the demo/ }).click();
+    await mockOnboardingAccount(page, { signedOut: true });
+    await page.goto("/auth/sign-in");
+    await startDemoFromEntry(page);
     await page.getByRole("tab", { name: "Beacons", exact: true }).click();
     const home = page.getByTestId("home-identity-status");
     const avatar = home.getByTestId("home-status-avatar");
@@ -43,6 +46,15 @@ for (const [width, appearance] of [
     expect(sonarBox.height).toBeGreaterThanOrEqual(44);
     await expect(sonar).toHaveAccessibleName("Open Sonar");
     const myStatus = page.getByTestId("home-my-status");
+    const dialogueColor = appearance === "dark" ? "rgb(39, 39, 42)" : "rgb(242, 242, 243)";
+    await expect(homeNote.getByTestId("status-note-dialogue")).toHaveCSS("background-color", dialogueColor);
+    const addActivity = myStatus.getByTestId("add-activity-note");
+    await expect(addActivity).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+    await expect(addActivity.getByText("Add", { exact: true })).toBeVisible();
+    const chooseBeacon = myStatus.getByRole("button", { name: "Choose live Beacon", exact: true });
+    await expect(chooseBeacon).toBeVisible();
+    expect((await chooseBeacon.boundingBox())!.y).toBeGreaterThan((await addActivity.boundingBox())!.y);
+    await myStatus.screenshot({ path: test.info().outputPath(`status-home-${width}-${appearance}.png`) });
     expect((await myStatus.boundingBox())!.height).toBeLessThanOrEqual(280);
     await expect(page.getByTestId("home-status-card")).toHaveCount(0);
     await expect(page.getByTestId("home-personal-timeline")).toHaveCSS("border-top-width", "1px");
@@ -128,6 +140,8 @@ for (const [width, appearance] of [
     await avatar.click();
     const identity = page.getByTestId("profile-identity");
     const note = identity.getByTestId("living-status-message");
+    await expect(note.getByTestId("status-note-dialogue")).toHaveCSS("background-color", dialogueColor);
+    await expect(page.getByRole("button", { name: "Add Activity Note", exact: true }).getByText("Add", { exact: true })).toBeVisible();
     const pill = identity.getByRole("button", {
       name: "Change availability",
       exact: true,

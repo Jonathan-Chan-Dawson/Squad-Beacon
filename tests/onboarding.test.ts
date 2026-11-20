@@ -19,6 +19,24 @@ import {
   type OnboardingKey,
 } from "../src/features/onboarding/progress";
 import { demoPublicBeacons } from "../src/features/discovery/publicDirectory";
+import { actionNoticeFor } from "../src/shared/actionNotice";
+
+test("action toasts require a confirmed change from the same viewer", () => {
+  const { data } = makeScenario("populated");
+  const created = demoAction(data, "create_squad", { name: "Toast Squad" });
+  assert.equal(actionNoticeFor(data, created, DEMO_ID, "create_squad", {}), "squad");
+  assert.equal(actionNoticeFor(created, created, DEMO_ID, "create_squad", {}), null);
+  assert.equal(actionNoticeFor(data, created, "other-account", "create_squad", {}), null);
+  assert.equal(actionNoticeFor(data, created, DEMO_ID, "send_message", {}), null);
+
+  const beacon = data.activities.find((row) =>
+    row.owner_id === DEMO_ID && row.mode !== "solo" && row.status === "scheduled");
+  assert.ok(beacon);
+  const payload = { id: beacon.id, status: "cancelled" };
+  const cancelled = demoAction(data, "activity_status", payload);
+  assert.equal(actionNoticeFor(data, cancelled, DEMO_ID, "activity_status", payload), "cancelled");
+  assert.equal(actionNoticeFor(cancelled, cancelled, DEMO_ID, "activity_status", payload), null);
+});
 
 test("empty is not new: reliable first-entry evidence and loaded progress are required", () => {
   const { data } = makeScenario("fresh");

@@ -44,13 +44,13 @@ export function beaconPinEmphasis(
   if (selected)
     return { level: 1, color: "#E6AE45", core: "#FFFEF4", beamHeight: BEACON_SELECTED_BEAM_HEIGHT, beamWidth: 25, coreWidth: 5, beamOpacity: 1, glowOpacity: 0.98 };
   if (state?.participatingLive)
-    return { level: 2, color: LIVE_BEACON_COLOR, core: "#FFDD9C", beamHeight: compact ? 6 : BEACON_LIVE_BEAM_HEIGHT, beamWidth: compact ? 8 : 18, coreWidth: compact ? 2 : 4, beamOpacity: compact ? 0.53 : 0.83, glowOpacity: compact ? 0.22 : 0.69 };
+    return { level: 2, color: LIVE_BEACON_COLOR, core: "#FFDD9C", beamHeight: compact ? 22 : BEACON_LIVE_BEAM_HEIGHT, beamWidth: compact ? 16 : 18, coreWidth: 4, beamOpacity: compact ? 0.79 : 0.83, glowOpacity: compact ? 0.57 : 0.69 };
   if (state?.owned)
-    return { level: 3, color: "#F3B932", core: "#FFF1AD", beamHeight: compact ? 0 : 15, beamWidth: 14, coreWidth: 3, beamOpacity: 0.71, glowOpacity: compact ? 0.15 : 0.47 };
+    return { level: 3, color: "#F3B932", core: "#FFF1AD", beamHeight: compact ? 17 : 15, beamWidth: 14, coreWidth: 3, beamOpacity: 0.71, glowOpacity: compact ? 0.4 : 0.47 };
   if (state?.friendHosted)
-    return { level: 4, color: "#6DAFE5", core: "#CBEAFF", beamHeight: compact ? 0 : 12, beamWidth: 11, coreWidth: 2, beamOpacity: 0.59, glowOpacity: compact ? 0.1 : 0.26 };
+    return { level: 4, color: "#6DAFE5", core: "#CBEAFF", beamHeight: compact ? 14 : 12, beamWidth: 11, coreWidth: compact ? 3 : 2, beamOpacity: 0.59, glowOpacity: compact ? 0.24 : 0.26 };
   if (state?.squadHosted)
-    return { level: 5, color: "#67C49B", core: "#C9F5E0", beamHeight: compact ? 11 : 14, beamWidth: compact ? 12 : 10, coreWidth: compact ? 3 : 2, beamOpacity: 0.57, glowOpacity: compact ? 0.09 : 0.25 };
+    return { level: 5, color: "#67C49B", core: "#C9F5E0", beamHeight: compact ? 16 : 14, beamWidth: compact ? 12 : 10, coreWidth: compact ? 3 : 2, beamOpacity: 0.57, glowOpacity: compact ? 0.23 : 0.25 };
   if (!compact && state?.saved)
     return { level: 0, color: categoryColor, core: categoryColor, beamHeight: 0, beamWidth: 0, coreWidth: 0, beamOpacity: 0, glowOpacity: 0.18 };
   return null;

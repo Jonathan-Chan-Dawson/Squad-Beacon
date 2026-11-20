@@ -189,6 +189,38 @@ export function availabilityLabel(friend: SocialFriend, now = Date.now()) {
   return "No availability shared";
 }
 
+export function homeFriendAvailability(friend: SocialFriend, now: number) {
+  const time = (date: Date) =>
+    date.toLocaleTimeString([], {
+      hour: "numeric",
+      ...(date.getMinutes() ? { minute: "2-digit" } : {}),
+    });
+  const until = friend.until ? new Date(friend.until) : null;
+  const end = until && until.getTime() > now ? time(until) : "";
+  if (friend.availability === "available" || friend.availability === "ending-soon")
+    return end ? `Free until ${end}` : "Free to hang";
+  if (friend.availability === "unavailable")
+    return end ? `Busy until ${end}` : "Busy right now";
+  if (friend.note?.available === true && Date.parse(friend.note.starts_at) > now) {
+    const start = new Date(friend.note.starts_at);
+    const day = start.toDateString() === new Date(now).toDateString()
+      ? ""
+      : `${start.toLocaleDateString([], { month: "short", day: "numeric" })}, `;
+    return `Free from ${day}${time(start)}`;
+  }
+  return null;
+}
+
+export function isFreeWithoutEnd(friend: SocialFriend) {
+  return friend.availability === "available" && !friend.until;
+}
+
+export function prioritizeOpenEndedAvailability(friends: readonly SocialFriend[]) {
+  return [...friends].sort(
+    (a, b) => Number(isFreeWithoutEnd(b)) - Number(isFreeWithoutEnd(a)),
+  );
+}
+
 export function filterSocialFriends(
   friends: SocialFriend[],
   data: Data,

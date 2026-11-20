@@ -438,41 +438,38 @@ export function LivingStatusHeader({
       {presence?.sharing === false && <EyeOff size={17} color={colors.muted} />}
     </View>
   );
+  const noteContent = (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+      <Text
+        style={[styles.body, {
+          flexShrink: 1,
+          minWidth: 0,
+          fontSize: variant === "compact" ? 13 : 14,
+          lineHeight: 20,
+          color: text ? colors.ink : colors.muted,
+        }]}
+      >
+        {text || "Add a status message…"}
+      </Text>
+      <Pencil size={15} color={colors.muted} />
+    </View>
+  );
   const noteControl = (
     <Pressable
       testID="living-status-message"
       accessibilityRole="button"
       accessibilityLabel="Edit Status Note"
       onPress={onEditStatus}
-      style={{
+      style={({ pressed }) => ({
         minHeight: 44,
         alignSelf: "stretch",
         minWidth: 0,
         justifyContent: "center",
-      }}
+        opacity: pressed ? 0.75 : 1,
+      })}
     >
-      <NoteSpeechBubble
-        compact
-        tailTowardIdentity
-        dense={variant === "compact"}
-      >
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
-          <Text
-            style={[
-              styles.body,
-              {
-                flex: 1,
-                minWidth: 0,
-                fontSize: variant === "compact" ? 13 : 14,
-                lineHeight: 20,
-                color: text ? colors.ink : colors.muted,
-              },
-            ]}
-          >
-            {text || "Add a status message…"}
-          </Text>
-          <Pencil size={15} color={colors.muted} />
-        </View>
+      <NoteSpeechBubble dialogue={variant === "compact" ? "side" : "top"}>
+        {noteContent}
       </NoteSpeechBubble>
     </Pressable>
   );
@@ -824,48 +821,25 @@ export function LivingActivitySection({
                   setEditorSource(undefined);
                   setEditor(true);
                 }}
-                style={[
-                  surface,
-                  {
-                    minHeight: compact ? 48 : 80,
-                    padding: compact ? 8 : 12,
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: compact ? 8 : 12,
-                  },
-                ]}
+                style={({ pressed }) => ({
+                  minHeight: 44,
+                  flexDirection: "row",
+                  alignItems: "center",
+                  gap: 8,
+                  opacity: pressed ? 0.72 : 1,
+                })}
               >
-                <View
-                  style={{
-                    width: compact ? 24 : 34,
-                    height: compact ? 24 : 34,
-                    borderRadius: 11,
-                    backgroundColor: colors.green + "10",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                >
-                  <Zap size={18} color={colors.green} />
-                </View>
-                <View style={{ flex: 1, gap: 3 }}>
-                  <Text
-                    style={[
-                      styles.body,
-                      {
-                        fontWeight: "600",
-                        ...(compact ? { fontSize: 14 } : {}),
-                      },
-                    ]}
-                  >
-                    What are you up to?
-                  </Text>
-                  {!compact && (
-                    <Text style={[styles.muted, { fontSize: 12 }]}>
-                      Share what you’re doing right now
-                    </Text>
-                  )}
-                </View>
-                <Plus size={18} color={colors.muted} />
+                <Text style={[styles.body, { flex: 1, fontWeight: "600", fontSize: 14 }]}>
+                  What are you up to?
+                </Text>
+                  <View style={{
+                    flexDirection: "row", alignItems: "center", gap: 4,
+                    borderWidth: 1, borderColor: colors.line, borderRadius: 8,
+                    paddingHorizontal: 9, paddingVertical: 5,
+                  }}>
+                    <Plus size={15} color={colors.accent} />
+                    <Text style={[styles.label, { color: colors.accent }]}>Add</Text>
+                  </View>
               </Pressable>
               {options.length > 0 && (
                 <Pressable
@@ -876,12 +850,15 @@ export function LivingActivitySection({
                     minHeight: 44,
                     justifyContent: "center",
                     alignSelf: "flex-start",
-                    paddingHorizontal: 4,
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 5,
                   }}
                 >
                   <Text style={{ fontSize: 12, color: colors.muted }}>
-                    Choose live Beacon ›
+                    Choose live Beacon
                   </Text>
+                  <ChevronRight size={13} color={colors.muted} />
                 </Pressable>
               )}
             </View>

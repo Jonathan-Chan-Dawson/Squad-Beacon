@@ -63,6 +63,7 @@ const MemberArtwork = React.memo(function MemberArtwork({
   compact = false,
   showIdentity = true,
   showSaved = true,
+  lightEnabled = true,
   categoryColors,
   availabilityColors,
   onImageLoad,
@@ -71,6 +72,7 @@ const MemberArtwork = React.memo(function MemberArtwork({
   compact?: boolean;
   showIdentity?: boolean;
   showSaved?: boolean;
+  lightEnabled?: boolean;
   onImageLoad?: () => void;
 }) {
   const { colors } = useTheme();
@@ -97,7 +99,7 @@ const MemberArtwork = React.memo(function MemberArtwork({
     model.kind === "beacon"
       ? categoryColors[model.category]
       : availabilityColors[model.availability];
-  const lighting = model.kind === "beacon"
+  const lighting = lightEnabled && model.kind === "beacon"
     ? beaconPinEmphasis(model.markerState, false, color, true)
     : null;
   return (
@@ -415,6 +417,7 @@ function LivingMapPinComponent({
                   model={model}
                   compact={!geometry.fullBeacon}
                   showIdentity={geometry.markerSize >= 24}
+                  lightEnabled={presentation.scale !== "micro"}
                   showSaved={petalBookmarkVisible(geometry, index)}
                   categoryColors={categoryColors}
                   availabilityColors={availabilityColors}

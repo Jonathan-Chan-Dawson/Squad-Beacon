@@ -24,7 +24,7 @@ export function parseProgress(rows: unknown): Set<OnboardingKey> {
   }
   return keys;
 }
-type SuccessEvent = { viewer: string; epoch: number; key: SuccessKey };
+type SuccessEvent = { viewer: string; epoch: number; key: SuccessKey; quiet?: boolean };
 const listeners = new Set<(event: SuccessEvent) => void>();
 export function reportOnboardingSuccess(event: SuccessEvent) {
   listeners.forEach((listener) => listener(event));

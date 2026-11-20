@@ -896,7 +896,7 @@ export default function BeaconMap(props: MapProps) {
           const inner = Math.round(glowOpacity * 255).toString(16).padStart(2, "0");
           const outer = Math.round(glowOpacity * 132).toString(16).padStart(2, "0");
           const prominent = !compact && (level === 1 || level === 2);
-          const haloRadius = compact ? 6 : level === 1 ? 36 : level === 2 ? 19 : level === 3 ? 13 : 10;
+          const haloRadius = compact ? 12 : level === 1 ? 36 : level === 2 ? 19 : level === 3 ? 13 : 10;
           const shadow = prominent ? "0 4px 12px #11182777" : `0 3px ${compact ? 5 : 9}px #11182744`;
           const glow = `0 0 ${compact ? 3 : level === 1 ? 13 : prominent ? 8 : 6}px ${color}${inner},0 0 ${haloRadius}px ${color}${outer},${shadow}`;
           badge.style.boxShadow = level === 1
@@ -1253,6 +1253,7 @@ export default function BeaconMap(props: MapProps) {
         );
       const visualRevision = JSON.stringify([
         presentation.mode,
+        presentation.scale,
         presentation.overflow,
         presentation.people.map((point) => [
           point.id,

@@ -124,6 +124,15 @@ export function webConstellation(
         .forEach((decoration) => decoration.remove());
     if (!petalBookmarkVisible(geometry, index))
       item.querySelector('[data-testid="beacon-saved-bookmark"]')?.remove();
+    if (presentation.scale === "micro") {
+      item.querySelector('[data-testid="beacon-marker-beam"]')?.remove();
+      const glow = item.querySelector<HTMLElement>('[data-testid="beacon-marker-glow"]');
+      if (glow) {
+        glow.style.boxShadow = "none";
+        delete glow.dataset.testid;
+        delete glow.dataset.lightingLevel;
+      }
+    }
     items.push(item);
     node.append(item);
   });

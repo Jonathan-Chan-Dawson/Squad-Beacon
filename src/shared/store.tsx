@@ -10,7 +10,8 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { AppState } from "react-native";
+import { AppState, Platform } from "react-native";
+import * as SecureStore from "expo-secure-store";
 import { normalizeProfileQuery, parseProfileContentPage, profilePermissionKey, selectProfileContent, type ProfileContentQuery, type ProfileContentPage } from "@/src/features/profile/profileContent";
 import * as Network from "expo-network";
 import type { Session } from "@supabase/supabase-js";
@@ -19,6 +20,7 @@ import { DEMO_ID, demoAction, makeDemo } from "@/src/shared/demo";
 import type { DemoScenario } from "@/src/features/onboarding/scenarios";
 import { firstSuccessCandidate } from "@/src/features/onboarding/presentation";
 import { reportOnboardingSuccess } from "@/src/features/onboarding/progress";
+import { actionNoticeFor, type ActionNoticeKind } from "./actionNotice";
 import { clearEntryIntent } from "@/src/features/auth/entryIntent";
 import { requestSignIn } from "@/src/features/auth/navigation";
 import { clearAuthLink } from "@/src/features/auth/authLink";
@@ -64,6 +66,8 @@ type Store = {
   getCurrentData: () => Data | null;
   getViewerEpoch: () => number;
   viewerEpoch: number;
+  actionNotice: { kind: ActionNoticeKind; id: number } | null;
+  dismissActionNotice: () => void;
   act: (action: string, payload?: Payload, requestId?: string) => Promise<Record<string, unknown>>;
   loadRoutineCalendar: (range: RoutineCalendarRange) => Promise<RoutineCalendarResult>;
   searchDirectory: (
@@ -110,6 +114,44 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
     fetchId = useRef(0);
   const [viewerEpoch, setViewerEpoch] = useState(0);
   const viewerEpochRef = useRef(0);
+  const [notice, setNotice] = useState<{ kind: ActionNoticeKind; epoch: number; id: number } | null>(null);
+  const noticeId = useRef(0);
+  const seenFirstConnection = useRef(new Set<string>());
+  const dismissActionNotice = useCallback(() => setNotice(null), []);
+  const reportActionFeedback = useCallback((before: Data, after: Data, viewer: string, action: string, payload: Payload) => {
+    const successKey = firstSuccessCandidate(before, after, viewer, action);
+    let kind = actionNoticeFor(before, after, viewer, action, payload);
+    if (kind === "beacon" && successKey === "success.firstBeacon.v1") kind = "firstBeacon";
+    const currentEpoch = viewerEpochRef.current;
+    const connection = after.demo_session_id ?? viewer;
+    if (successKey === "success.firstConnection.v1" && !seenFirstConnection.current.has(connection)) {
+      seenFirstConnection.current.add(connection);
+      const id = ++noticeId.current;
+      void (async () => {
+        if (!after.is_demo) {
+          const key = `beacon.firstConnectionNotice.${viewer}`;
+          try {
+            if (Platform.OS === "web") {
+              if (localStorage.getItem(key)) return;
+              localStorage.setItem(key, "1");
+            } else {
+              if (await SecureStore.getItemAsync(key)) return;
+              await SecureStore.setItemAsync(key, "1");
+            }
+          } catch {
+            // Session deduplication still applies if device storage is unavailable.
+          }
+        }
+        if (viewerEpochRef.current === currentEpoch && noticeId.current === id)
+          setNotice({ kind: "friend", epoch: currentEpoch, id });
+      })();
+    }
+    if (kind) setNotice({ kind, epoch: currentEpoch, id: ++noticeId.current });
+    if (successKey) reportOnboardingSuccess({
+      viewer, epoch: currentEpoch, key: successKey,
+      quiet: !!kind || successKey === "success.firstConnection.v1",
+    });
+  }, []);
   const getViewerEpoch = useCallback(() => viewerEpochRef.current, []);
   useEffect(() => {
     if (!supabase) return;
@@ -375,8 +417,7 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
           throw failure;
         }
         setData(next);
-        const successKey = firstSuccessCandidate(baseData, next, DEMO_ID, action);
-        if (successKey) reportOnboardingSuccess({ viewer: DEMO_ID, epoch: viewerEpochRef.current, key: successKey });
+        reportActionFeedback(baseData, next, DEMO_ID, action, payload);
         if (atomic) {
           const created=next.activities.find((item)=>!baseData.activities.some((previous)=>previous.id===item.id));
           const result={id:created?.id,event:action,committed:true,invited_ids:payload.invitee_ids};
@@ -613,12 +654,11 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
         !dataRef.current.profiles.some((profile) => profile.id === viewer)))
         throw new Error("Your profile could not be confirmed. Reconnect and retry.");
       if (generation === epoch.current && dataRef.current.viewer_id === viewer) {
-        const successKey = firstSuccessCandidate(beforeAction, dataRef.current, viewer, action);
-        if (successKey) reportOnboardingSuccess({ viewer, epoch: viewerEpochRef.current, key: successKey });
+        reportActionFeedback(beforeAction, dataRef.current, viewer, action, payload);
       }
       return result;
     },
-    [demo, session, refresh, setData],
+    [demo, session, refresh, setData, reportActionFeedback],
   );
   async function signOut() {
     if (!demo && session) {
@@ -678,6 +718,8 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
         getCurrentData,
         getViewerEpoch,
         viewerEpoch,
+        actionNotice: notice?.epoch === viewerEpoch ? notice : null,
+        dismissActionNotice,
         act,
         searchDirectory,
         loadCommunitySummary,
