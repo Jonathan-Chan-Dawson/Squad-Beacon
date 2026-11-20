@@ -3,7 +3,7 @@ import { Pressable, Text, View } from "react-native";
 import { router } from "expo-router";
 import { Info, X } from "lucide-react-native";
 import { EmptyState, Toast, useDesignTheme } from "@/src/shared/design-system";
-import { actionNoticeCopy } from "@/src/shared/actionNotice";
+import { actionNoticeMessage } from "@/src/shared/actionNotice";
 import { useBeacon } from "@/src/shared/store";
 import { Button } from "@/src/shared/ui";
 import { BeaconIllustration, type IllustrationKey } from "./illustrations";
@@ -233,7 +233,7 @@ export function FirstSuccessNotice() {
     dismissSuccess();
   }, [dismissActionNotice, dismissSuccess]);
   const message = actionNotice
-    ? actionNoticeCopy[actionNotice.kind][quips ? 0 : 1]
+    ? actionNoticeMessage(actionNotice.kind, quips, actionNotice.id)
     : success
       ? getCopy(success.replace(/\.v1$/, "") as CopyKey, tone, "success", quips).title
       : null;

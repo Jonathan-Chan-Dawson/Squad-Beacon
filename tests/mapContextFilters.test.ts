@@ -225,6 +225,27 @@ test("Ping context shows its permitted draft or converted Beacon, never a denied
 // Geometry checks cover sideways attachment and protected controls at both orientations.
 import { mapCalloutLayout } from "../src/features/maps/mapCalloutLayout";
 import { mapTooltip } from "../src/features/maps/tooltipConstants";
+import { visibleBeaconLabels } from "../src/features/maps/markerIdentity";
+
+test("Beacon names show for isolated pins and yield to nearby markers", () => {
+  const beacon = { id: "beacon:solo", latitude: 0, longitude: 0 };
+  const neighbor = { id: "person:friend", latitude: 0, longitude: 0.025 };
+  const singleton = new Set([beacon.id]);
+  assert.equal(visibleBeaconLabels([beacon], singleton, 11).size, 0);
+  assert.equal(visibleBeaconLabels([beacon], singleton, 12).has(beacon.id), true);
+  assert.equal(visibleBeaconLabels([beacon, neighbor], singleton, 12).size, 0);
+  assert.equal(visibleBeaconLabels([beacon, neighbor], singleton, 15).has(beacon.id), true);
+  assert.equal(visibleBeaconLabels([beacon], new Set(), 15).size, 0);
+});
+
+test("a clamped map preview keeps its pointer if the map pin is outside the card", () => {
+  const bounds = { width: 320, height: 520, top: 164, bottom: 24 };
+  const clearance = { above: 104, below: 18 };
+  const anchor = { x: 50, y: 180 };
+  assert.equal(mapCalloutLayout(anchor, bounds, 305, undefined, 16, 292, clearance).attached, false);
+  assert.equal(mapCalloutLayout(anchor, bounds, 305, undefined, 16, 292, clearance, true).attached, true);
+  assert.equal(mapCalloutLayout({ ...anchor, y: 300 }, bounds, 305, undefined, 16, 292, clearance, true).attached, false);
+});
 test("compact callouts stay above or below their markers and aim sideways after shifting", () => {
   const bounds = { width: 390, height: 700, top: 130, bottom: 24 };
   const above = mapCalloutLayout(

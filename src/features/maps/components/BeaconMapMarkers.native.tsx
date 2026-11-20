@@ -4,6 +4,7 @@ import {
   beaconPinEmphasis,
   BEACON_LIVE_BEAM_HEIGHT,
   BEACON_SELECTED_BEAM_HEIGHT,
+  BEACON_NAME_MAX_WIDTH,
   BEACON_PIN_RADIUS,
   BEACON_PIN_TIP,
   COMPACT_BEACON_PIN_TIP,
@@ -314,8 +315,8 @@ export function BeaconPinLight({
           <Defs>
             <LinearGradient id="beaconBeam" x1="0%" y1="0%" x2="0%" y2="100%">
               <Stop offset="0%" stopColor={color} stopOpacity={0} />
-              <Stop offset="34%" stopColor={color} stopOpacity={0.33} />
-              <Stop offset="66%" stopColor={color} stopOpacity={0.73} />
+              <Stop offset="34%" stopColor={color} stopOpacity={0.41} />
+              <Stop offset="66%" stopColor={color} stopOpacity={0.81} />
               <Stop offset="100%" stopColor={core} />
             </LinearGradient>
             <RadialGradient id="beaconBeamAura" cy="100%">
@@ -339,6 +340,7 @@ export function BeaconMarkerArtwork({
   selected = false,
   dimmed = false,
   streetTime,
+  beaconName,
   markerState = EMPTY_MARKER_STATE,
   showSaved = true,
   icon,
@@ -355,6 +357,7 @@ export function BeaconMarkerArtwork({
   selected?: boolean;
   dimmed?: boolean;
   streetTime?: string;
+  beaconName?: string;
   markerState?: BeaconMarkerState;
   showSaved?: boolean;
   icon?: string | null;
@@ -371,8 +374,8 @@ export function BeaconMarkerArtwork({
     <MarkerContent selected={selected} dimmed={dimmed} tipY={tipY}>
       <View
         style={{
-          width: raisedPin && selected ? 116 : raisedPin && lighting?.level === 2 ? 66 : 58,
-          height: (streetTime ? 70 : 56) + pinInset,
+          width: raisedPin && selected ? 116 : beaconName ? BEACON_NAME_MAX_WIDTH : raisedPin && lighting?.level === 2 ? 66 : 58,
+          height: (streetTime || beaconName ? 70 : 56) + pinInset,
           paddingTop: pinInset,
           alignItems: "center",
         }}
@@ -425,23 +428,25 @@ export function BeaconMarkerArtwork({
           {showSaved && markerState.saved && !owned && <SavedBookmark />}
           {owned && <OwnershipStar />}
         </View>
-        {streetTime ? (
+        {streetTime || beaconName ? (
           <View
+            testID={beaconName ? "beacon-map-name" : undefined}
             style={{
               marginTop: BEACON_PIN_TIP.height,
               paddingHorizontal: 7,
               paddingVertical: 2,
-              borderRadius: 9,
-              backgroundColor: "#FFFFFF",
+              borderRadius: 8,
+              maxWidth: BEACON_NAME_MAX_WIDTH,
+              backgroundColor: beaconName ? colors.surface : "#FFFFFF",
               borderWidth: 1,
-              borderColor: categoryColor,
+              borderColor: beaconName ? colors.line : categoryColor,
             }}
           >
             <Text
               numberOfLines={1}
-              style={{ color: "#203038", fontSize: 10, fontWeight: "700" }}
+              style={{ color: beaconName ? colors.ink : "#203038", fontSize: 10, fontWeight: "700" }}
             >
-              {streetTime}
+              {beaconName || streetTime}
             </Text>
           </View>
         ) : null}
@@ -459,6 +464,7 @@ function BeaconMapPinComponent({
   selected,
   dimmed,
   streetTime,
+  beaconName,
   appearanceKey,
   onPress,
   disabled = false,
@@ -477,6 +483,7 @@ function BeaconMapPinComponent({
   selected: boolean;
   dimmed: boolean;
   streetTime?: string;
+  beaconName?: string;
   appearanceKey: string;
   onPress: (id: string) => void;
   disabled?: boolean;
@@ -489,7 +496,7 @@ function BeaconMapPinComponent({
   const tipBottom = pinInset + markerVisualSize("beacon") / 2 + BEACON_FACE_TO_TIP;
   const label = `${stopNumber ? `Plan stop ${stopNumber}` : "Map"}: ${title}${stateLabel ? `, ${stateLabel}` : ""}`;
   const tracking = useMarkerTracking(
-    `${JSON.stringify(markerState)}:${id}:${categoryColor}:${selected}:${dimmed}:${streetTime ?? ""}:${appearanceKey}:${dot}:${icon ?? ""}:${stopNumber ?? ""}`,
+    `${JSON.stringify(markerState)}:${id}:${categoryColor}:${selected}:${dimmed}:${streetTime ?? ""}:${beaconName ?? ""}:${appearanceKey}:${dot}:${icon ?? ""}:${stopNumber ?? ""}`,
   );
   if (dot)
     return (
@@ -530,7 +537,7 @@ function BeaconMapPinComponent({
     <Marker
       key={id}
       coordinate={coordinate}
-      anchor={{ x: 0.5, y: tipBottom / ((streetTime ? 70 : 56) + pinInset) }}
+      anchor={{ x: 0.5, y: tipBottom / ((streetTime || beaconName ? 70 : 56) + pinInset) }}
       tracksViewChanges={tracking}
       accessibilityLabel={label}
       accessibilityState={{ selected }}
@@ -550,6 +557,7 @@ function BeaconMapPinComponent({
         selected={selected}
         dimmed={dimmed}
         streetTime={streetTime}
+        beaconName={beaconName}
         markerState={markerState}
         stopNumber={stopNumber}
       />
@@ -572,6 +580,7 @@ export const BeaconMapPin = React.memo(
     left.selected === right.selected &&
     left.dimmed === right.dimmed &&
     left.streetTime === right.streetTime &&
+    left.beaconName === right.beaconName &&
     left.appearanceKey === right.appearanceKey &&
     left.disabled === right.disabled &&
     left.dot === right.dot &&

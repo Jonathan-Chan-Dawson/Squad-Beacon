@@ -21,6 +21,25 @@ import {
 import { demoPublicBeacons } from "../src/features/discovery/publicDirectory";
 import { actionNoticeFor } from "../src/shared/actionNotice";
 
+test("participation notices follow real joins, departures and first ballots", () => {
+  const { data } = makeScenario("populated");
+  const beacon = data.activities.find((row) => row.mode !== "solo" && row.owner_id !== DEMO_ID)!;
+  const id = beacon.id;
+  const before = { ...data, rsvps: data.rsvps.filter((row) => row.activity_id !== id || row.user_id !== DEMO_ID) };
+  const joined = { ...before, rsvps: [...before.rsvps, {
+    activity_id: id, user_id: DEMO_ID, status: "going" as const, approved: true,
+  }] };
+  assert.equal(actionNoticeFor(before, joined, DEMO_ID, "rsvp", { id }), "joined");
+  assert.equal(actionNoticeFor(joined, before, DEMO_ID, "rsvp", { id }), "left");
+  assert.equal(actionNoticeFor(joined, joined, DEMO_ID, "rsvp", { id }), null);
+  const thread_id = "notice-test-council";
+  const voted = { ...before, planning_votes: [...before.planning_votes, {
+    thread_id, user_id: DEMO_ID, proposal_id: "choice", created_at: new Date().toISOString(),
+  }] };
+  assert.equal(actionNoticeFor(before, voted, DEMO_ID, "vote_council_proposal", { thread_id }), "voted");
+  assert.equal(actionNoticeFor(voted, voted, DEMO_ID, "vote_council_proposal", { thread_id }), null);
+});
+
 test("action toasts require a confirmed change from the same viewer", () => {
   const { data } = makeScenario("populated");
   const created = demoAction(data, "create_squad", { name: "Toast Squad" });

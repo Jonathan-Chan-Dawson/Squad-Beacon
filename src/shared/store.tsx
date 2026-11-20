@@ -116,6 +116,7 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
   const viewerEpochRef = useRef(0);
   const [notice, setNotice] = useState<{ kind: ActionNoticeKind; epoch: number; id: number } | null>(null);
   const noticeId = useRef(0);
+  const voteNotices = useRef({ epoch: 0, votes: 0 });
   const seenFirstConnection = useRef(new Set<string>());
   const dismissActionNotice = useCallback(() => setNotice(null), []);
   const reportActionFeedback = useCallback((before: Data, after: Data, viewer: string, action: string, payload: Payload) => {
@@ -146,7 +147,15 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
           setNotice({ kind: "friend", epoch: currentEpoch, id });
       })();
     }
-    if (kind) setNotice({ kind, epoch: currentEpoch, id: ++noticeId.current });
+    if (kind === "voted") {
+      if (voteNotices.current.epoch !== currentEpoch)
+        voteNotices.current = { epoch: currentEpoch, votes: 0 };
+      if (++voteNotices.current.votes % 3 !== 0) kind = null;
+    }
+    if (kind) {
+      const next = { kind, epoch: currentEpoch, id: ++noticeId.current };
+      setNotice((previous) => next.kind === "voted" && previous?.epoch === currentEpoch ? previous : next);
+    }
     if (successKey) reportOnboardingSuccess({
       viewer, epoch: currentEpoch, key: successKey,
       quiet: !!kind || successKey === "success.firstConnection.v1",

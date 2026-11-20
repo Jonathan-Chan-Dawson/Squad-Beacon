@@ -4044,6 +4044,7 @@ export default function MapScreen() {
             testID="map-tooltip"
             key={person ?? selected}
             compact
+            pointWhenClamped
             onDismiss={() => {
               clearRouteSelection();
               setPerson(null);

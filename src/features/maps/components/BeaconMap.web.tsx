@@ -1,4 +1,5 @@
 import { beaconPinImage, beaconPinPath } from "../beaconPinArtwork";
+import { mapBeaconTitle } from "@/src/features/discovery/discoveryCardPresentation";
 import { planPathArrowheads } from "../contextFilters";
 import type { Category } from "@/src/shared/types";
 import { mapAvailabilityColors } from "../markerIdentity";
@@ -24,6 +25,8 @@ import {
   mapIdentityColors,
   friendLocationLabel,
   visibleFriendLabels,
+  visibleBeaconLabels,
+  BEACON_NAME_MAX_WIDTH,
 } from "../markerIdentity";
 import { useBeacon } from "@/src/shared/store";
 import {
@@ -751,6 +754,7 @@ export default function BeaconMap(props: MapProps) {
       cacheKey?: string,
       customIcon?: string | null,
       stopNumber?: number,
+      beaconName?: string,
     ): HTMLButtonElement | Leaflet.Marker => {
       if (cacheKey && !detached) {
         const revision = JSON.stringify([
@@ -770,6 +774,7 @@ export default function BeaconMap(props: MapProps) {
           fullMarker,
           customIcon,
           stopNumber,
+          beaconName,
           colors.white,
           colors.ink,
           colors.line,
@@ -804,6 +809,7 @@ export default function BeaconMap(props: MapProps) {
               undefined,
               customIcon,
               stopNumber,
+              beaconName,
             ) as Leaflet.Marker,
           click,
         ) as Leaflet.Marker;
@@ -826,7 +832,7 @@ export default function BeaconMap(props: MapProps) {
       const tipSize = compact ? COMPACT_BEACON_PIN_TIP : BEACON_PIN_TIP;
       const tipTop = pinInset + visualSize - tipSize.overlap;
       const tipBottom = tipTop + tipSize.height;
-      const iconHeight = compact ? 32 : friend ? 52 : (timeChip ? 68 : 48) + pinInset;
+      const iconHeight = compact ? 32 : friend ? 52 : (timeChip || beaconName ? 68 : 48) + pinInset;
       node.type = "button";
       node.setAttribute("aria-label", label);
       node.title = label;
@@ -878,7 +884,7 @@ export default function BeaconMap(props: MapProps) {
           const light = document.createElement("span");
           light.dataset.testid = "beacon-marker-beam";
           light.setAttribute("aria-hidden", "true");
-          light.style.cssText = `position:absolute;top:${pinInset - beamHeight + 2}px;left:50%;width:${beamWidth}px;height:${beamHeight}px;transform:translateX(-50%);opacity:${beamOpacity};background:linear-gradient(to top,${core},${color}bb 34%,${color}55 66%,transparent) center / ${coreWidth}px 100% no-repeat,radial-gradient(ellipse at bottom,${color}88,${color}30 42%,transparent 78%);border-radius:50% 50% 4px 4px;pointer-events:none;`;
+          light.style.cssText = `position:absolute;top:${pinInset - beamHeight + 2}px;left:50%;width:${beamWidth}px;height:${beamHeight}px;transform:translateX(-50%);opacity:${beamOpacity};background:linear-gradient(to top,${core},${color}ce 34%,${color}69 66%,transparent) center / ${coreWidth}px 100% no-repeat,radial-gradient(ellipse at bottom,${color}88,${color}30 42%,transparent 78%);border-radius:50% 50% 4px 4px;pointer-events:none;`;
           node.append(light);
         }
         if (!dot) {
@@ -938,10 +944,14 @@ export default function BeaconMap(props: MapProps) {
           face.append(star);
         }
         node.append(face);
-        if (timeChip) {
+        if (beaconName || timeChip) {
           const chip = document.createElement("span");
-          chip.textContent = timeChip;
-          chip.style.cssText = `position:relative;margin-top:${BEACON_PIN_TIP.height}px;padding:1px 7px;border:1px solid ${tone};border-radius:9px;background:${colors.white};color:${colors.ink};font:700 10px system-ui;white-space:nowrap;`;
+          chip.textContent = beaconName || timeChip;
+          if (beaconName) {
+            chip.dataset.testid = "beacon-map-name";
+            chip.setAttribute("aria-hidden", "true");
+          }
+          chip.style.cssText = `position:relative;margin-top:${BEACON_PIN_TIP.height}px;padding:1px 7px;border:1px solid ${beaconName ? colors.line : tone};border-radius:8px;background:${beaconName ? colors.surface : colors.white};color:${colors.ink};font:700 10px system-ui;white-space:nowrap;box-sizing:border-box;max-width:${BEACON_NAME_MAX_WIDTH}px;overflow:hidden;text-overflow:ellipsis;`;
           node.append(chip);
         }
       }
@@ -1066,6 +1076,14 @@ export default function BeaconMap(props: MapProps) {
         )
         .map((item) => item.group.members[0].id),
     );
+    const beaconLabels = visibleBeaconLabels(
+      clusterPoints,
+      new Set(presentations.flatMap(({ group }) =>
+        group.members.length === 1 && markerStates.has(group.members[0].id.slice(7))
+          ? [group.members[0].id] : [])),
+      m.getZoom(),
+    );
+    for (const id of beaconLabels) renderedSingletonIds.add(id);
     const pulseBudget = Math.max(
       0,
       150 -
@@ -1232,7 +1250,7 @@ export default function BeaconMap(props: MapProps) {
       ) as HTMLButtonElement;
     };
     for (const presentation of presentations.filter(
-      (item) => item.mode !== "stack" || item.group.members.length > 1,
+      (item) => item.group.members.length !== 1 || !renderedSingletonIds.has(item.group.members[0].id),
     )) {
       const cluster = presentation.group;
       const open = () => {
@@ -1383,6 +1401,11 @@ export default function BeaconMap(props: MapProps) {
           true,
           `beacon:${a.id}`,
           m.getZoom() >= 14 || selectedActivityId === a.id ? a.map_icon : undefined,
+          undefined,
+          !onPick && !contextPoints.some((point) => point.activityId === a.id) &&
+            beaconLabels.has(`beacon:${a.id}`)
+            ? mapBeaconTitle(a.title, !!a.plan_id, a.plan_step_index).title.trim()
+            : undefined,
         );
     });
     const labelIds = visibleFriendLabels(

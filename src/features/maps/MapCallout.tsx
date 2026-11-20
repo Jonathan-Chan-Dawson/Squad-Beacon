@@ -27,6 +27,7 @@ export function MapCallout({
   testID,
   maxWidth,
   markerClearance,
+  pointWhenClamped = false,
   maxContentHeight = mapTooltip.maxHeight,
   onDismiss,
   compact = false,
@@ -47,6 +48,7 @@ export function MapCallout({
   testID?: string;
   maxWidth?: number;
   markerClearance?: { above: number; below: number };
+  pointWhenClamped?: boolean;
   maxContentHeight?: number;
   compact?: boolean;
   motion?: "default" | "place";
@@ -75,6 +77,7 @@ export function MapCallout({
     tokens.layout.screenGutter,
     maxWidth,
     markerClearance,
+    pointWhenClamped,
   );
   useEffect(() => {
     if (!onDismiss) return;
@@ -132,6 +135,7 @@ export function MapCallout({
     >
       {attached && (
         <Svg
+          testID="map-callout-pointer"
           pointerEvents="none"
           width={width}
           height={mapTooltip.pointerSize + 2}

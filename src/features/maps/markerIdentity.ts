@@ -6,6 +6,7 @@ import { isBeaconLive } from "@/src/features/beacons/beaconLive";
 import { isApprovedGoing } from "@/src/features/beacons/permissions";
 import { communityTypeLabel } from "@/src/features/social/communityPresentation";
 import type { MapContextPoint } from "./contextFilters";
+import { mapPointOffset } from "./mapPointOffset";
 
 export type BeaconMarkerState = {
   owned: boolean;
@@ -44,13 +45,13 @@ export function beaconPinEmphasis(
   if (selected)
     return { level: 1, color: "#E6AE45", core: "#FFFEF4", beamHeight: BEACON_SELECTED_BEAM_HEIGHT, beamWidth: 25, coreWidth: 5, beamOpacity: 1, glowOpacity: 0.98 };
   if (state?.participatingLive)
-    return { level: 2, color: LIVE_BEACON_COLOR, core: "#FFDD9C", beamHeight: compact ? 22 : BEACON_LIVE_BEAM_HEIGHT, beamWidth: compact ? 16 : 18, coreWidth: 4, beamOpacity: compact ? 0.79 : 0.83, glowOpacity: compact ? 0.57 : 0.69 };
+    return { level: 2, color: LIVE_BEACON_COLOR, core: "#FFDD9C", beamHeight: compact ? 22 : BEACON_LIVE_BEAM_HEIGHT, beamWidth: compact ? 16 : 18, coreWidth: 4, beamOpacity: compact ? 0.84 : 0.89, glowOpacity: compact ? 0.61 : 0.73 };
   if (state?.owned)
-    return { level: 3, color: "#F3B932", core: "#FFF1AD", beamHeight: compact ? 17 : 15, beamWidth: 14, coreWidth: 3, beamOpacity: 0.71, glowOpacity: compact ? 0.4 : 0.47 };
+    return { level: 3, color: "#F3B932", core: "#FFF1AD", beamHeight: compact ? 17 : 15, beamWidth: 14, coreWidth: 3, beamOpacity: 0.77, glowOpacity: compact ? 0.44 : 0.51 };
   if (state?.friendHosted)
-    return { level: 4, color: "#6DAFE5", core: "#CBEAFF", beamHeight: compact ? 14 : 12, beamWidth: 11, coreWidth: compact ? 3 : 2, beamOpacity: 0.59, glowOpacity: compact ? 0.24 : 0.26 };
+    return { level: 4, color: "#6DAFE5", core: "#CBEAFF", beamHeight: compact ? 14 : 12, beamWidth: 11, coreWidth: compact ? 3 : 2, beamOpacity: 0.65, glowOpacity: compact ? 0.27 : 0.29 };
   if (state?.squadHosted)
-    return { level: 5, color: "#67C49B", core: "#C9F5E0", beamHeight: compact ? 16 : 14, beamWidth: compact ? 12 : 10, coreWidth: compact ? 3 : 2, beamOpacity: 0.57, glowOpacity: compact ? 0.23 : 0.25 };
+    return { level: 5, color: "#67C49B", core: "#C9F5E0", beamHeight: compact ? 16 : 14, beamWidth: compact ? 12 : 10, coreWidth: compact ? 3 : 2, beamOpacity: 0.63, glowOpacity: compact ? 0.26 : 0.28 };
   if (!compact && state?.saved)
     return { level: 0, color: categoryColor, core: categoryColor, beamHeight: 0, beamWidth: 0, coreWidth: 0, beamOpacity: 0, glowOpacity: 0.18 };
   return null;
@@ -201,6 +202,28 @@ export function friendLocationLabel(name: string, age: string) {
 }
 
 /** Greedy screen-space labels; never remove the underlying authorized avatar. */
+export const BEACON_NAME_MAX_WIDTH = 112;
+
+export function visibleBeaconLabels(
+  points: readonly { id: string; latitude: number; longitude: number }[],
+  singletons: ReadonlySet<string>,
+  zoom: number,
+) {
+  if (zoom < 12) return new Set<string>();
+  const close = zoom >= 15;
+  return new Set(points.filter((point) =>
+    point.id.startsWith("beacon:") && singletons.has(point.id) &&
+    !points.some((other) => {
+      if (other.id === point.id) return false;
+      const { x, y } = mapPointOffset(other, point, zoom);
+      return close
+        ? (Math.abs(x) < BEACON_NAME_MAX_WIDTH && Math.abs(y) < 20) ||
+          (Math.abs(x) < 79 && y > -42 && y < 72)
+        : Math.abs(x) < 132 && Math.abs(y) < 90;
+    }),
+  ).map((point) => point.id));
+}
+
 export function visibleFriendLabels(
   points: { id: string; latitude: number; longitude: number }[],
   zoom: number,

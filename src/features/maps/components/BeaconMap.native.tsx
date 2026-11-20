@@ -1,5 +1,6 @@
 import {
   EMPTY_MARKER_STATE,
+  visibleBeaconLabels,
   mapAvailabilityColors,
   visibleFriendLabels,
   ownsMapBeacon,
@@ -8,6 +9,7 @@ import {
   beaconPulseStyle,
   BEACON_SELECTED_SCALE,
 } from "../markerIdentity";
+import { mapBeaconTitle } from "@/src/features/discovery/discoveryCardPresentation";
 import { isBeaconLive } from "@/src/features/beacons/beaconLive";
 import Svg, { Path as CountPath } from "react-native-svg";
 import {
@@ -754,6 +756,14 @@ export default function BeaconMap({
       )
       .map((item) => item.group.members[0].id),
   );
+  const beaconLabels = visibleBeaconLabels(
+    mapPoints,
+    new Set(presentations.flatMap(({ group }) =>
+      group.members.length === 1 && markerStates.has(group.members[0].id.slice(7))
+        ? [group.members[0].id] : [])),
+    zoom,
+  );
+  for (const id of beaconLabels) renderedSingletonIds.add(id);
   const [cameraMoving, setCameraMoving] = useState(false);
   const [countBadges, setCountBadges] = useState<
     {
@@ -1259,7 +1269,7 @@ export default function BeaconMap({
           })}
         {presentations
           .filter(
-            (item) => item.mode !== "stack" || item.group.members.length > 1,
+            (item) => item.group.members.length !== 1 || !renderedSingletonIds.has(item.group.members[0].id),
           )
           .map((presentation) => (
             <LivingMapPin
@@ -1312,6 +1322,9 @@ export default function BeaconMap({
                   (contextPoints.some((point) => point.activityId) && !context)
                 }
                 streetTime={streetTime}
+                beaconName={!onPick && !context && beaconLabels.has(`beacon:${activity.id}`)
+                  ? mapBeaconTitle(activity.title, !!activity.plan_id, activity.plan_step_index).title.trim()
+                  : undefined}
                 appearanceKey={appearanceKey}
                 disabled={!!onPick}
                 onPress={selectActivity}

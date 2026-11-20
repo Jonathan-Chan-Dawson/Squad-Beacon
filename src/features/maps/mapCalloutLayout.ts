@@ -15,6 +15,7 @@ export function mapCalloutLayout(
   gutter = 16,
   maximumWidth = 420,
   markerClearance?: { above: number; below: number },
+  pointWhenClamped = false,
 ) {
   let width = Math.min(
     maximumWidth,
@@ -83,15 +84,16 @@ export function mapCalloutLayout(
       Math.min(bounds.width - width - gutter - reserved, point.x - width / 2),
     );
   }
+  const edge = above ? top + cardHeight : top;
+  const gap = above ? point.y - edge : edge - point.y;
   const attached =
     !!anchor &&
     point.x >= 0 &&
     point.x <= bounds.width &&
-    Math.abs(
-      (above
-        ? top + cardHeight + aboveGap
-        : top - belowGap) - point.y,
-    ) < 3;
+    point.y >= 0 &&
+    point.y <= bounds.height &&
+    (Math.abs(gap - (above ? aboveGap : belowGap)) < 3 ||
+      (pointWhenClamped && gap >= 8));
   return {
     width,
     maxHeight,

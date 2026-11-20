@@ -1,6 +1,6 @@
 import { getDesignColorTheme } from "../../src/theme/data";
 import { themeNames } from "../../src/theme/palettes";
-import { mapIdentityColors } from "../../src/features/maps/markerIdentity";
+import { BEACON_NAME_MAX_WIDTH, mapIdentityColors } from "../../src/features/maps/markerIdentity";
 import { beaconPinSymbols } from "../../src/features/maps/beaconPinArtwork";
 import { test, expect } from "@playwright/test";
 import { readFileSync } from "node:fs";
@@ -39,6 +39,7 @@ const script = ts.transpileModule(
   let zoom = 13;
   let resolvedAppearance = "light";
   const mapIdentityColors = ${JSON.stringify(mapIdentityColors)};
+  const BEACON_NAME_MAX_WIDTH = ${BEACON_NAME_MAX_WIDTH};
   let colors = { green: "#218466", ink: "#182c30", white: "#fff", success: "#176B4A", outline: "#718078", surface: "#fff", textPrimary: "#182c30" };
   const reducedMotion = false, group = {}, coordinates = [];
   const onPick = undefined, identityViewer = "viewer";
@@ -64,7 +65,7 @@ const script = ts.transpileModule(
     document.querySelectorAll(".beacon-marker").forEach(node => node.remove());
     zoom = input.zoom;
     if (input.colors) colors = input.colors;
-    const result = marker(41.88, -87.64, "?", "Test Beacon", () => clicks++, false, 0, "#218466", input.selected, false, "", "unknown", input.live ?? true, input.chip, input.identity, !!input.identity?.owned, !!input.compact);
+    const result = marker(41.88, -87.64, "?", "Test Beacon", () => clicks++, false, 0, "#218466", input.selected, false, "", "unknown", input.live ?? true, input.chip, input.identity, !!input.identity?.owned, !!input.compact, false, undefined, undefined, undefined, input.name);
     if (input.compact) {
       result.classList.add("beacon-marker");
       document.body.append(result);
@@ -92,6 +93,21 @@ const script = ts.transpileModule(
   },
 ).outputText;
 const css = readFileSync("components/leaflet.web.css", "utf8");
+
+test("Beacon names sit below the pin tip and truncate within the chip", async ({ page }) => {
+  await page.setContent("<body></body>");
+  await page.addStyleTag({ content: css });
+  await page.addScriptTag({ content: script });
+  const name = "Table Tennis with the Wednesday Lunch Squad";
+  await page.evaluate((name) => (window as any).renderMarker({ zoom: 16, name }), name);
+  const chip = page.getByTestId("beacon-map-name");
+  await expect(chip).toHaveText(name);
+  await expect(chip).toHaveCSS("text-overflow", "ellipsis");
+  const bounds = (await chip.boundingBox())!;
+  const tip = (await page.getByTestId("beacon-pin-tip").boundingBox())!;
+  expect(bounds.y).toBeGreaterThan(tip.y + tip.height);
+  expect(bounds.width).toBeLessThanOrEqual(BEACON_NAME_MAX_WIDTH);
+});
 
 test("beam height and gradient follow one priority in both appearances and at compact zoom", async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 750, height: 460 });
