@@ -163,6 +163,7 @@ export function SharedStatusControl({
   livingLayout = false,
   identityOnly = false,
   renderIdentity,
+  noteAccessory,
 }: {
   compact?: boolean;
   avatarControl?: boolean;
@@ -170,6 +171,7 @@ export function SharedStatusControl({
   livingLayout?: boolean;
   identityOnly?: boolean;
   renderIdentity?: (availability: React.ReactNode) => React.ReactNode;
+  noteAccessory?: React.ReactNode;
 }) {
   const { userId, data } = useBeacon();
   const living =
@@ -184,12 +186,14 @@ export function SharedStatusControl({
       livingLayout={living}
       identityOnly={identityOnly}
       renderIdentity={renderIdentity}
+      noteAccessory={noteAccessory}
     />
   );
 }
 
 function SharedStatusContent({
   renderIdentity,
+  noteAccessory,
   identityOnly,
   livingLayout,
   compact,
@@ -202,6 +206,7 @@ function SharedStatusContent({
   livingLayout: boolean;
   identityOnly: boolean;
   renderIdentity?: (availability: React.ReactNode) => React.ReactNode;
+  noteAccessory?: React.ReactNode;
 }) {
   const control = useOwnStatusControl();
   const { colors, tokens } = useDesignTheme();
@@ -368,6 +373,7 @@ function SharedStatusContent({
               <LivingStatusHeader
                 variant={compact ? "compact" : "profile"}
                 renderIdentity={renderIdentity}
+                noteAccessory={noteAccessory}
                 onEditStatus={control.openCurrent}
               />
               {!identityOnly && (
@@ -375,6 +381,7 @@ function SharedStatusContent({
                   personId={userId!}
                   showLower={false}
                   compact={compact}
+                  divider={compact}
                   sonar={!compact}
                 />
               )}

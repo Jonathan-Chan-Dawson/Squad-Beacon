@@ -1073,12 +1073,14 @@ export function Toast({
   onDismiss,
   duration,
   tone = "info",
+  action,
 }: {
   message: string;
   visible: boolean;
   onDismiss: () => void;
   duration?: number;
   tone?: "info" | "success" | "warning" | "danger";
+  action?: { label: string; onPress: () => void };
 }) {
   const { colors, tokens: themeTokens } = useDesignTheme();
   const visibleDuration = duration ?? themeTokens.motion.toastDuration;
@@ -1123,10 +1125,10 @@ export function Toast({
       }}
     >
       <ToneIcon size={iconSize.sm} color={toneColor} />
+      <View style={{ flex: 1, minWidth: 0 }}>
       <Text
         maxFontSizeMultiplier={themeTokens.type.denseMaxMultiplier}
         style={{
-          flex: 1,
           color: colors.textPrimary,
           ...type.secondary,
           fontWeight: type.weight.semibold,
@@ -1134,6 +1136,15 @@ export function Toast({
       >
         {message}
       </Text>
+      {action ? (
+        <MotionPressable accessibilityRole="button" onPress={action.onPress}
+          style={{ minHeight: themeTokens.layout.minTapTarget, alignSelf: "flex-start", justifyContent: "center" }}>
+          <Text style={{ ...type.secondary, color: colors.accent, fontWeight: type.weight.semibold }}>
+            {action.label}
+          </Text>
+        </MotionPressable>
+      ) : null}
+      </View>
       <MotionPressable
         accessibilityRole="button"
         accessibilityLabel="Dismiss notification"

@@ -1933,6 +1933,33 @@ function CreateEditor({ templateBrowser = false }: { templateBrowser?: boolean }
         <Txt muted>{category} · Change category</Txt>
       </Pressable>
       </View>
+      <View style={{ gap: 6 }} testID="inline-beacon-timing">
+        <Text style={styles.label}>START TIME</Text>
+        <Chips
+          options={["Now", "In 30 min", "Pick time"]}
+          value={when === "Now" || when === "In 30 min" ? when : "Pick time"}
+          accessibilityPrefix="Start time"
+          showSelectedCheckmark
+          onChange={(value) => {
+            if (value === "Pick time") {
+              setTiming(true);
+              return;
+            }
+            if (duration === "Custom") {
+              const minutes = durationMinutesForLabel(duration, starts, ends);
+              if (minutes > 0) setDuration(formatDurationLabel(minutes));
+            }
+            setWhen(value);
+          }}
+        />
+        <Text style={styles.label}>DURATION</Text>
+        <Chips
+          options={["30 min", "1 hour", "2 hours", "Custom"]}
+          value={["30 min", "1 hour", "2 hours"].includes(duration) ? duration : "Custom"}
+          accessibilityPrefix="Duration"
+          showSelectedCheckmark
+          onChange={(value) => value === "Custom" ? setTiming(true) : setDuration(value)}
+        />
       <View style={{ flexDirection: "row", gap: 8 }}>
         <View style={{ flex: 1 }}>
           <CreationRow
@@ -1952,6 +1979,7 @@ function CreateEditor({ templateBrowser = false }: { templateBrowser?: boolean }
             onPress={() => setTiming(true)}
           />
         </View>
+      </View>
       </View>
       <View style={{ gap: 6 }}>
         <View

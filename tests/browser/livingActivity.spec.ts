@@ -1,10 +1,13 @@
 import { expect, test, type Page } from "@playwright/test";
+import { mockOnboardingAccount } from "./onboardingAccount";
+import { startDemoFromEntry } from "./demoEntry";
 test.setTimeout(90000);
 
 async function profile(page: Page) {
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.goto("/");
-  await page.getByRole("button", { name: /Explore the demo/ }).click();
+  await mockOnboardingAccount(page, { signedOut: true });
+  await page.goto("/auth/sign-in");
+  await startDemoFromEntry(page);
   await page.getByRole("tab", { name: "Profile", exact: true }).click();
   await expect(page.getByTestId("add-activity-note")).toBeVisible();
 }

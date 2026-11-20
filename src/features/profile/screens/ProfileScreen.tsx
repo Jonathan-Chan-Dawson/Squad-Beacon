@@ -2,10 +2,11 @@ import {
   PremiumHeaderButton,
   PersonalMembershipSummary,
 } from "../components/PremiumEntry";
-import React, { useCallback, useState } from "react";
-import { Modal, Share, Text, View } from "react-native";
+import React, { useCallback, useRef, useState } from "react";
+import { Modal, Pressable, Share, Text, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import { Pencil, QrCode, Settings, Sparkles, X } from "lucide-react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { Pencil, QrCode, RadioTower, Settings, Sparkles, X } from "lucide-react-native";
 import { useBeacon } from "@/src/shared/store";
 import {
   Button,
@@ -15,7 +16,10 @@ import {
   Txt,
   useTheme,
 } from "@/src/shared/ui";
-import { Skeleton, useReducedMotion } from "@/src/shared/design-system";
+import { Skeleton, Toast, useReducedMotion } from "@/src/shared/design-system";
+import { templates, type BeaconTemplate } from "@/src/shared/templates";
+import { startCreationDraft, setCreationDraftField } from "@/src/features/beacons/socialPlanningSession";
+import { formatDurationLabel } from "@/src/features/beacons/createTiming";
 import { ChatKeyboardFrame } from "@/src/features/messages/ChatKeyboard";
 import { ProfileSurveyContent } from "../ProfileSurvey";
 import { InviteQR } from "@/src/features/people/InviteQR";
@@ -27,10 +31,20 @@ export default function ProfileScreen() {
   const { userId, viewerEpoch, demo } = useBeacon();
   return <ProfileScreenBody key={`${userId}:${viewerEpoch}:${demo}`} />;
 }
+
+const dotColors = ["#8EDDB5", "#AAB8FF", "#F5C481", "#F1A6CF", "#82D7EA"];
+const dotQuips = [
+  "Tiny Beacon. Big main-character energy.",
+  "You found the button with no job description.",
+  "The Beacon has changed outfits.",
+  "Congrats. You’ve picked up a signal.",
+];
+
 function ProfileScreenBody() {
   const { data, userId, loading, refresh } = useBeacon();
   const { semanticColors: colors, styles } = useTheme();
   const reducedMotion = useReducedMotion();
+  const insets = useSafeAreaInsets();
   const [surveyOpen, setSurveyOpen] = useState(false);
   const [surveyBusy, setSurveyBusy] = useState(false);
   const [surveyScrollRequest, setSurveyScrollRequest] = useState<{
@@ -39,6 +53,35 @@ function ProfileScreenBody() {
   }>();
   const [saved, setSaved] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const taps = useRef(0);
+  const [dotColor, setDotColor] = useState(dotColors[0]);
+  const [dotToast, setDotToast] = useState<{ message: string; recipe?: BeaconTemplate } | null>(null);
+  const dismissDotToast = useCallback(() => setDotToast(null), []);
+  function tapDot() {
+    const roll = Math.random();
+    setDotColor((previous) => {
+      const choices = dotColors.filter((color) => color !== previous);
+      return choices[Math.floor(roll * choices.length)];
+    });
+    taps.current += 1;
+    if (taps.current % 4 !== 0) return;
+    if (taps.current % 8 === 0) {
+      const recipe = templates[Math.floor(Math.random() * templates.length)];
+      setDotToast({ message: `Plot twist: ${recipe.title}?`, recipe });
+    } else {
+      setDotToast({ message: dotQuips[Math.floor(Math.random() * dotQuips.length)] });
+    }
+  }
+  function openSurpriseDraft(recipe: BeaconTemplate) {
+    const token = startCreationDraft(userId);
+    if (!token) return;
+    setCreationDraftField(userId, token, "selectedRecipe", recipe);
+    setCreationDraftField(userId, token, "title", recipe.title);
+    setCreationDraftField(userId, token, "category", recipe.category);
+    setCreationDraftField(userId, token, "duration", formatDurationLabel(recipe.minutes));
+    dismissDotToast();
+    router.push({ pathname: "/create", params: { editor: "yes", planSession: token } });
+  }
   const params = useLocalSearchParams<{ section?: string }>();
   const [tab, setTab] = useState<ProfileTab>(
     params.section === "aspirations" ? "About" : "Overview",
@@ -84,6 +127,7 @@ function ProfileScreenBody() {
       </View>
     ) : null;
   return (
+    <View style={{ flex: 1 }}>
     <Screen
       title="Profile"
       eyebrow=""
@@ -107,6 +151,24 @@ function ProfileScreenBody() {
           tab={displayedTab}
           onTabChange={setTab}
           onAspirationPosition={focusAspirations}
+          noteAccessory={
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Tap the tiny Beacon"
+              onPress={tapDot}
+              style={({ pressed }) => ({
+                width: 44,
+                height: 44,
+                alignItems: "center",
+                justifyContent: "center",
+                opacity: pressed ? 0.65 : 1,
+              })}
+            >
+              <View testID="profile-tiny-beacon" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+                <RadioTower size={15} color={dotColor} strokeWidth={2} />
+              </View>
+            </Pressable>
+          }
           actions={
             <>
               <Button
@@ -245,5 +307,17 @@ function ProfileScreenBody() {
         )}
       </Sheet>
     </Screen>
+      {dotToast ? (
+        <View pointerEvents="box-none" style={{ position: "absolute", top: insets.top + 57, right: 12, width: 252, zIndex: 10 }}>
+          <Toast visible message={dotToast.message} onDismiss={dismissDotToast}
+            duration={dotToast.recipe ? 4500 : undefined}
+            action={dotToast.recipe ? {
+              label: "Open surprise draft",
+              onPress: () => { if (dotToast.recipe) openSurpriseDraft(dotToast.recipe); },
+            } : undefined}
+          />
+        </View>
+      ) : null}
+    </View>
   );
 }

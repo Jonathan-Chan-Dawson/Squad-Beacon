@@ -204,6 +204,7 @@ export function ProfileExperience({
   profile,
   actions,
   accessory,
+  noteAccessory,
   tab,
   onTabChange,
   onAspirationPosition,
@@ -211,6 +212,7 @@ export function ProfileExperience({
   profile: Profile;
   actions: React.ReactNode;
   accessory?: React.ReactNode;
+  noteAccessory?: React.ReactNode;
   tab: ProfileTab;
   onTabChange: (tab: ProfileTab) => void;
   onAspirationPosition?: (y: number) => void;
@@ -441,9 +443,15 @@ export function ProfileExperience({
             livingLayout
             identityOnly
             renderIdentity={renderIdentity}
+            noteAccessory={noteAccessory}
           />
         ) : (
-          renderIdentity()
+          <>
+            {renderIdentity()}
+            {own && noteAccessory && (
+              <View style={{ alignSelf: "flex-end" }}>{noteAccessory}</View>
+            )}
+          </>
         )}
         {(data.is_demo || data.capabilities?.living_activity) && !own && (
           <StatusBubble
@@ -545,7 +553,7 @@ export function ProfileExperience({
         </View>
       </View>
       {(data.is_demo || data.capabilities?.living_activity) && (
-        <LivingActivitySection personId={profile.id} showLower={false} />
+        <LivingActivitySection personId={profile.id} showLower={false} divider={own} />
       )}
       {(data.is_demo || data.capabilities?.living_activity) && (
         <LivingActivityHighlights personId={profile.id} />

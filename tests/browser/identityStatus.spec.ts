@@ -2,6 +2,38 @@ import { expect, test } from "@playwright/test";
 import { mockOnboardingAccount } from "./onboardingAccount";
 import { startDemoFromEntry } from "./demoEntry";
 
+test("tiny Profile Beacon can open a surprise draft with inline timing choices", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 900 });
+  await mockOnboardingAccount(page, { signedOut: true });
+  await page.goto("/auth/sign-in");
+  await startDemoFromEntry(page);
+  await page.getByRole("tab", { name: "Profile", exact: true }).click();
+  await expect(page.getByTestId("profile-identity")).toBeVisible();
+  const icon = page.getByTestId("profile-tiny-beacon").locator("svg");
+  const trigger = page.getByRole("button", { name: "Tap the tiny Beacon" });
+  const noteBox = (await page.getByTestId("living-status-message").boundingBox())!;
+  const triggerBox = (await trigger.boundingBox())!;
+  expect(triggerBox.x).toBeGreaterThanOrEqual(noteBox.x + noteBox.width);
+  expect(Math.abs(triggerBox.y + triggerBox.height / 2 - noteBox.y - noteBox.height / 2)).toBeLessThan(2);
+  const firstColor = (await icon.getAttribute("stroke"))!;
+  expect(firstColor).toMatch(/^#/);
+  await trigger.click();
+  await expect(icon).not.toHaveAttribute("stroke", firstColor);
+  for (let tap = 1; tap < 8; tap++) await trigger.click();
+  const draftAction = page.getByRole("button", { name: "Open surprise draft" });
+  await expect(draftAction).toBeVisible();
+  await draftAction.click();
+  await expect(page.getByLabel("Activity title", { exact: true })).toHaveValue(/Coffee together|Study together|Go for a walk/);
+  const timing = page.getByTestId("inline-beacon-timing");
+  const later = timing.getByLabel("Start time: In 30 min", { exact: true });
+  await later.click();
+  await expect(later).toHaveAttribute("aria-selected", "true");
+  const duration = timing.getByLabel("Duration: 2 hours", { exact: true });
+  await duration.click();
+  await expect(duration).toHaveAttribute("aria-selected", "true");
+  await expect(timing.getByRole("button", { name: /^Ends,/ })).toBeVisible();
+});
+
 for (const [width, appearance] of [
   [320, "dark"],
   [430, "dark"],
@@ -10,6 +42,7 @@ for (const [width, appearance] of [
   [430, "light"],
   [390, "light"],
   [1024, "dark"],
+  [1024, "light"],
 ] as const) {
   test(`identity-attached status at ${width}px in ${appearance}`, async ({
     page,
@@ -46,6 +79,9 @@ for (const [width, appearance] of [
     expect(sonarBox.height).toBeGreaterThanOrEqual(44);
     await expect(sonar).toHaveAccessibleName("Open Sonar");
     const myStatus = page.getByTestId("home-my-status");
+    const homeActivity = myStatus.getByTestId("current-activity-section");
+    await expect(homeActivity).toHaveCSS("border-top-width", "1px");
+    await expect(homeActivity).toHaveCSS("padding-top", "8px");
     const dialogueColor = appearance === "dark" ? "rgb(39, 39, 42)" : "rgb(242, 242, 243)";
     await expect(homeNote.getByTestId("status-note-dialogue")).toHaveCSS("background-color", dialogueColor);
     const addActivity = myStatus.getByTestId("add-activity-note");
@@ -217,8 +253,9 @@ test("compact homepage previews preserve Activity Note editing and explicit Beac
 }) => {
   await page.setViewportSize({ width: 320, height: 844 });
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.goto("/");
-  await page.getByRole("button", { name: /Explore the demo/ }).click();
+  await mockOnboardingAccount(page, { signedOut: true });
+  await page.goto("/auth/sign-in");
+  await startDemoFromEntry(page);
   await page.getByRole("tab", { name: "Beacons", exact: true }).click();
   const section = page.getByTestId("home-my-status");
   const originalStatus = await section

@@ -584,7 +584,7 @@ export default function ActivitiesScreen() {
           <View
             testID="home-personal-timeline"
             style={{
-              gap: 0,
+              gap: 8,
               borderTopWidth: 1,
               borderTopColor: designColors.border,
               paddingTop: 12,

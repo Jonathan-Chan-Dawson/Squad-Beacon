@@ -291,10 +291,12 @@ export function LivingStatusHeader({
   onEditStatus,
   variant = "profile",
   renderIdentity,
+  noteAccessory,
 }: {
   onEditStatus(): void;
   variant?: "compact" | "profile";
   renderIdentity?: (availability: React.ReactNode) => React.ReactNode;
+  noteAccessory?: React.ReactNode;
 }) {
   const { data, userId, act } = useBeacon();
   const now = useNow(1000);
@@ -542,7 +544,12 @@ export function LivingStatusHeader({
               {renderIdentity(undefined)}
             </>
           ) : null}
-          {noteControl}
+          {noteAccessory ? (
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
+              <View style={{ flex: 1, minWidth: 0 }}>{noteControl}</View>
+              {noteAccessory}
+            </View>
+          ) : noteControl}
           {!renderIdentity && availabilityControl}
         </View>
       )}
@@ -722,11 +729,13 @@ export function LivingActivitySection({
   showLower = true,
   sonar = false,
   compact = false,
+  divider = false,
 }: {
   personId: string;
   showLower?: boolean;
   sonar?: boolean;
   compact?: boolean;
+  divider?: boolean;
 }) {
   const { data, userId, act, getViewerEpoch } = useBeacon();
   const now = useNow(1000);
@@ -800,7 +809,17 @@ export function LivingActivitySection({
   return (
     <View style={{ gap: compact ? 4 : 12 }}>
       {(own || current) && (
-        <View style={{ gap: 8 }}>
+        <View
+          testID={divider ? "current-activity-section" : undefined}
+          style={[
+            { gap: 8 },
+            divider && {
+              borderTopWidth: 1,
+              borderTopColor: colors.border,
+              paddingTop: 8,
+            },
+          ]}
+        >
           {(!compact || current) && (
             <View
               style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
@@ -812,7 +831,7 @@ export function LivingActivitySection({
             </View>
           )}
           {!current && own ? (
-            <View style={{ gap: 4 }}>
+            <View>
               <Pressable
                 testID="add-activity-note"
                 accessibilityRole="button"
@@ -1165,31 +1184,33 @@ export function LivingActivityHighlights({ personId }: { personId: string }) {
     .sort((a, b) => b.starts_at.localeCompare(a.starts_at))[0];
   const featured = visibleStatusAttachment(data, status, userId, now);
   const next = personId === userId ? upNext(data, userId, now) : null;
+  const featuredIsCurrent =
+    current?.type === "beacon" &&
+    featured?.type === "beacon" &&
+    featured.id === current.activity.id;
+  const visibleFeatured = featuredIsCurrent ? null : featured;
+  if (!visibleFeatured && !next) return null;
+
   return (
     <View style={{ gap: 12 }}>
-      {featured &&
-        !(
-          current?.type === "beacon" &&
-          featured.type === "beacon" &&
-          featured.id === current.activity.id
-        ) && (
-          <View style={{ gap: 6 }}>
-            <Txt muted>Featured</Txt>
-            <StatusAttachmentPreview
-              compact
-              activity={featured}
-              onPress={() =>
-                router.push({
-                  pathname:
-                    featured.type === "beacon"
-                      ? "/activity/[id]"
-                      : "/council/[id]",
-                  params: { id: featured.id },
-                })
-              }
-            />
-          </View>
-        )}
+      {visibleFeatured && (
+        <View style={{ gap: 6 }}>
+          <Txt muted>Featured</Txt>
+          <StatusAttachmentPreview
+            compact
+            activity={visibleFeatured}
+            onPress={() =>
+              router.push({
+                pathname:
+                  visibleFeatured.type === "beacon"
+                    ? "/activity/[id]"
+                    : "/council/[id]",
+                params: { id: visibleFeatured.id },
+              })
+            }
+          />
+        </View>
+      )}
       {next && (
         <View style={{ gap: 6 }}>
           <Txt muted>Up Next · Only you</Txt>
