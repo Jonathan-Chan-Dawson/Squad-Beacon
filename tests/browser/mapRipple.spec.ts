@@ -103,7 +103,7 @@ test("beam height and gradient follow one priority in both appearances and at co
     { selected: false, identity: { participatingLive: true, owned: true }, height: 21, compactHeight: 6, color: "255, 221, 156" },
     { selected: false, identity: { owned: true }, height: 15, compactHeight: 0, color: "255, 241, 173" },
     { selected: false, identity: { friendHosted: true, squadHosted: true }, height: 12, compactHeight: 0, color: "203, 234, 255" },
-    { selected: false, identity: { squadHosted: true }, height: 13, compactHeight: 8, color: "201, 245, 224" },
+    { selected: false, identity: { squadHosted: true }, height: 14, compactHeight: 11, color: "201, 245, 224" },
   ];
   for (const appearance of ["light", "dark"] as const) {
     const semantic = getDesignColorTheme(themeNames[0], appearance).colors;
