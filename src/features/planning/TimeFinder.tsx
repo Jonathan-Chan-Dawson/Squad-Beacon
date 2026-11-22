@@ -1,4 +1,7 @@
 import { PlanningKindSelector } from "./PlanningKindSelector";
+import { PlanningAudienceField, PlanningDateField } from "./PlanningCreationFields";
+import { PlanningTimeSlots } from "./PlanningTimeSlots";
+import { planningTimezone } from "./creationTiming";
 import {
   PlanningActionRow,
   PlanningChoiceRow,
@@ -6,7 +9,7 @@ import {
   PlanningLink,
   PlanningToggle,
 } from "./PlanningControls";
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import {
   CalendarClock,
   ThumbsUp,
@@ -15,7 +18,7 @@ import {
   ThumbsDown,
 } from "lucide-react-native";
 import { TimeSlotHeading } from "./PingPresentation";
-import { View, Text, Pressable } from "react-native";
+import { View, Text, Pressable, type TextInput } from "react-native";
 import { randomUUID } from "expo-crypto";
 import { router, useLocalSearchParams } from "expo-router";
 import {
@@ -30,7 +33,6 @@ import { useNow } from "@/src/shared/useNow";
 import {
   Action,
   Chips,
-  AudiencePicker,
   Button,
   Field,
   Screen,
@@ -56,7 +58,6 @@ import {
   connectedPlanningEnabled,
   noneAvailability,
   slotLabel,
-  suggestedSlots,
   validateSlots,
 } from "./connected";
 import ZonedTimeField from "./ZonedTimeField";
@@ -65,7 +66,9 @@ import {
   type PlanningCreationSession,
 } from "./creationSession";
 import {
+  composerMapCoordinate,
   composerSession,
+  composerTiming,
   storeComposerSession,
   completeComposerSession,
 } from "./composerSession";
@@ -204,9 +207,21 @@ export function TimeFinderComposer({ sessionId }: { sessionId: string }) {
     recoveryId?: string;
     activityNoteId?: string;
     squadId?: string;
+    organizationId?: string;
+    inviteeIds?: string;
+    placeLabel?: string;
+    latitude?: string;
+    longitude?: string;
     beaconDraftToken?: string;
     timezone?: string;
   }>();
+  const now = useNow();
+  const plan = data.plans.find((row) => row.id === params.returnPlanId && data.viewer_id === userId);
+  const titleInput = useRef<TextInput>(null);
+  const submitLock = useRef(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [titleError, setTitleError] = useState("");
+  const [slotsError, setSlotsError] = useState("");
   const source = data.planning_threads.find(
     (t) =>
       t.id === params.sourceThreadId &&
@@ -314,7 +329,10 @@ export function TimeFinderComposer({ sessionId }: { sessionId: string }) {
       a.owner_id === userId &&
       a.mode === "solo",
   );
+  const contextTimezone = planningTimezone(plan?.timezone ?? source?.payload?.timezone ?? recovery?.timezone ?? params.timezone);
   const [draft, setDraft] = useState(() => {
+    const createdAt = Date.now();
+    const timing = composerTiming(createdAt, params.startsAt, contextTimezone);
     const restored = structuredClone(
       composerSession(userId ?? "", sessionId, () => ({
         title:
@@ -335,17 +353,21 @@ export function TimeFinderComposer({ sessionId }: { sessionId: string }) {
             ? "squad"
             : params.planAudience === "private"
               ? "private"
-              : "friends"),
+              : params.organizationId ? "organization" : "friends"),
         audienceId:
           source?.audience_id ??
           recovery?.audience_id ??
           params.squadId ??
+          params.organizationId ??
           null,
         allowBackupHosting: source?.allow_backup_hosting,
-        startsAt: new Date(Date.now() + 172800000).toISOString(),
-        deadline: new Date(Date.now() + 86400000).toISOString(),
+        startsAt: timing.startsAt,
+        deadline: new Date(createdAt + 86400000).toISOString(),
+        timeSlotTimezone: contextTimezone,
+        flexibleTime: timing.startsAt !== params.startsAt,
         minutes: "60",
-        place: source?.payload?.label ?? recovery?.label ?? "",
+        place: source?.payload?.label ?? recovery?.label ?? params.placeLabel ?? "",
+        coordinate: source || recovery ? undefined : composerMapCoordinate(params.latitude, params.longitude),
         category:
           source?.payload?.category ??
           recovery?.category ??
@@ -354,44 +376,14 @@ export function TimeFinderComposer({ sessionId }: { sessionId: string }) {
         options: [],
         touched: [],
         publication: {},
-        timeSlots: suggestedSlots(
-          Date.now(),
-          randomUUID,
-          source?.payload ??
-            recovery ??
-            (params.returnPlanId
-              ? {
-                  ...makeBeaconDraft(),
-                  timezone:
-                    data.plans.find((p) => p.id === params.returnPlanId)
-                      ?.timezone ?? "UTC",
-                  ...(params.startsAt ? { starts_at: params.startsAt } : {}),
-                }
-              : undefined),
-        ),
+        timeSlots: [],
       })),
     );
-    if (!restored.timeSlots)
-      restored.timeSlots = suggestedSlots(
-        Date.now(),
-        randomUUID,
-        source?.payload ??
-          recovery ??
-          (params.returnPlanId
-            ? {
-                ...makeBeaconDraft(),
-                timezone:
-                  data.plans.find((p) => p.id === params.returnPlanId)
-                    ?.timezone ?? "UTC",
-                ...(params.startsAt ? { starts_at: params.startsAt } : {}),
-              }
-            : undefined),
-      );
     return restored;
   });
   const frozen = !!draft.publication.attempt;
   const update = (value: Partial<typeof draft>) => {
-    if (frozen) return;
+    if (frozen || submitLock.current) return;
     const next = { ...draft, ...value };
     storeComposerSession(userId ?? "", sessionId, next);
     setDraft(next);
@@ -426,242 +418,244 @@ export function TimeFinderComposer({ sessionId }: { sessionId: string }) {
         <Txt>This server needs the Connected Planning update.</Txt>
       </Screen>
     );
+  async function publish() {
+    if (submitLock.current) return;
+    submitLock.current = true;
+    setSubmitting(true);
+    try {
+      await performPublication();
+    } finally {
+      submitLock.current = false;
+      setSubmitting(false);
+    }
+  }
+
+  async function performPublication() {
+    if (!userId || data.viewer_id !== userId)
+      throw new Error("Sign in to continue.");
+    if (!publication.attempt) {
+      if (!draft.title.trim() || draft.title.trim().length > 120) {
+        setTitleError("Add an activity name.");
+        titleInput.current?.focus();
+        return;
+      }
+      if (params.inviteeIds && params.inviteeIds !== "[]")
+        throw new Error("Choose a group audience before sending a time poll. Individual invitations are available for Beacons.");
+      try {
+        validateSlots(draft.timeSlots ?? [], draft.deadline);
+      } catch (error) {
+        setSlotsError(error instanceof Error ? error.message : "Review your proposed times.");
+        return;
+      }
+    }
+    if (params.sourceThreadId && !source)
+      throw new Error("The source is no longer available.");
+    const payload: BeaconDraft = {
+      ...makeBeaconDraft(),
+      ...source?.payload,
+      ...recovery,
+      title: draft.title,
+      description: draft.body,
+      category: draft.category,
+      label: draft.place,
+      latitude: draft.coordinate?.latitude ?? (
+        draft.place === (source?.payload?.label ?? recovery?.label ?? "")
+          ? (source?.payload?.latitude ?? recovery?.latitude ?? null)
+          : null),
+      longitude: draft.coordinate?.longitude ?? (
+        draft.place === (source?.payload?.label ?? recovery?.label ?? "")
+          ? (source?.payload?.longitude ?? recovery?.longitude ?? null)
+          : null),
+      audience: draft.audience,
+      audience_id: draft.audienceId,
+      flexible_time: false,
+      starts_at:
+        draft.timeSlots?.[0]?.starts_at ?? makeBeaconDraft().starts_at,
+      ends_at: draft.timeSlots?.[0]?.ends_at ?? makeBeaconDraft().ends_at,
+      timezone:
+        draft.timeSlots?.[0]?.timezone ?? makeBeaconDraft().timezone,
+    };
+    if (!publication.attempt) validateBeaconDraft(payload);
+    const epoch = getViewerEpoch();
+    const attempt = publication;
+    const operation = publishPlanningSession(
+      attempt,
+      {
+        id: /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(sessionId)
+          ? sessionId
+          : randomUUID(),
+        kind: "time",
+        return_plan_id: params.returnPlanId,
+        plan_stop_id: params.planStopId,
+        plan_after_stop_id: params.planAfterStopId,
+        coowner_ids:
+          data.plans.find((p) => p.id === params.returnPlanId)
+            ?.coowner_ids ?? [],
+        title: draft.title,
+        body: draft.body.slice(0, 500),
+        audience: draft.audience,
+        audience_id: draft.audienceId,
+        deadline_at: draft.deadline,
+        payload,
+        slots: draft.timeSlots,
+        source_thread_id: source?.id,
+        source_activity_note_id: note?.id,
+        allow_backup_hosting:
+          draft.allowBackupHosting ?? draft.audience === "squad",
+        recovery_context: payload,
+        local_draft_token: params.beaconDraftToken,
+      },
+      [],
+      async (a, p, id) => {
+        const frozenPayload = { ...p, expected_actor_id: userId };
+        setCreationDraftField(
+          userId,
+          recoveryToken,
+          "title",
+          `Find a Time: ${draft.title}`,
+        );
+        setCreationDraftField(
+          userId,
+          recoveryToken,
+          "pendingPublication",
+          {
+            action: a,
+            payload: frozenPayload,
+            requestId: id,
+            viewer: userId,
+          },
+        );
+        await saveCreationDraft(userId, recoveryToken, {
+          planningRecovery: "time",
+        });
+        if (epoch !== getViewerEpoch())
+          throw new Error("Your account changed.");
+        return act(a, frozenPayload, id);
+      },
+      randomUUID,
+    );
+    const pending = { ...draft, publication: attempt, recoveryToken };
+    storeComposerSession(userId, sessionId, pending);
+    setDraft(pending);
+    setPublication(pending.publication);
+    try {
+      const id = await operation;
+      if (epoch === getViewerEpoch()) {
+        completePlanningDraft(userId, recoveryToken);
+        completeComposerSession(userId, sessionId);
+        if (params.returnPlanId) {
+          router.dismissTo({
+            pathname: "/plan/[id]",
+            params: { id: params.returnPlanId },
+          });
+          return;
+        }
+        router.replace({
+          pathname: "/responses",
+          params: { threadId: id },
+        });
+      }
+    } catch (failure) {
+      if (
+        epoch === getViewerEpoch() &&
+        (failure as { definitive?: boolean }).definitive &&
+        !attempt.threadId
+      ) {
+        const restored = { ...draft, publication: {}, recoveryToken };
+        storeComposerSession(userId, sessionId, restored);
+        setDraft(restored);
+        setPublication({});
+        setCreationDraftField(
+          userId,
+          recoveryToken,
+          "pendingPublication",
+          null,
+        );
+        await saveCreationDraft(userId, recoveryToken, {
+          planningRecovery: "time",
+        });
+      }
+      throw failure;
+    }
+  }
+
+  const slots = draft.timeSlots ?? [];
+  const timezone = draft.timeSlotTimezone ?? contextTimezone;
+  const earliestTime = slots.length ? Math.min(...slots.map((slot) => Date.parse(slot.starts_at))) : undefined;
+  const locked = frozen || submitting;
   return (
-    <Screen title="Find a Time" eyebrow="" compactHeader>
-      <PlanningKindSelector kind="time" sessionId={sessionId} disabled={frozen} />
-      <View pointerEvents={frozen ? "none" : "auto"} style={{ gap: 12 }}>
+    <Screen
+      title="Find a Time"
+      eyebrow=""
+      compactHeader
+      footer={<Action title={frozen ? "Verify creation" : "Send Time Poll"} disabled={submitting} run={publish} />}
+    >
+      <PlanningKindSelector kind="time" sessionId={sessionId} disabled={locked} />
+      <View pointerEvents={locked ? "none" : "auto"} accessibilityElementsHidden={locked} importantForAccessibility={locked ? "no-hide-descendants" : "auto"} style={{ gap: 12, opacity: frozen ? 0.65 : 1 }}>
         <Field
-          label="Activity title"
-          placeholder="What would you like to do?"
+          inputRef={titleInput}
+          label="What are you planning?"
+          placeholder="A pickup basketball game"
           value={draft.title}
           maxLength={120}
-          onChangeText={(title) => update({ title })}
+          editable={!locked}
+          onChangeText={(title) => {
+            setTitleError("");
+            update({ title });
+          }}
         />
-        <View style={[styles.card, { gap: 16, padding: 16 }]}>
-          <View style={styles.row}>
-            <CalendarClock size={18} color={styles.body.color} />
-            <Text style={styles.h2}>Audience & deadline</Text>
-          </View>
-          {params.returnPlanId ? (
-            <Txt muted>
-              For{" "}
-              {data.plans.find((p) => p.id === params.returnPlanId)?.title ??
-                "your Plan"}{" "}
-              ·{" "}
-              {params.squadId
-                ? (data.squads.find((s) => s.id === params.squadId)?.name ??
-                  "Squad")
-                : "Personal"}
-            </Txt>
-          ) : (
-            <AudiencePicker
-              value={draft.audience}
-              id={draft.audienceId}
-              onChange={(audience, audienceId) => {
-                if (!source) update({ audience, audienceId });
-              }}
-            />
-          )}
-          <ZonedTimeField
-            timezone={
-              draft.timeSlots?.[0]?.timezone ??
-              Intl.DateTimeFormat().resolvedOptions().timeZone
-            }
-            label="Response deadline"
-            value={draft.deadline}
-            onChange={(deadline) => update({ deadline })}
-          />
-        </View>
-        <SlotFields
-          slots={draft.timeSlots ?? []}
-          onChange={(timeSlots) => update({ timeSlots })}
+        {!!titleError && <Text accessibilityRole="alert" style={styles.error}>{titleError}</Text>}
+        <PlanningTimeSlots
+          slots={slots}
+          timezone={timezone}
+          now={now}
+          deadline={draft.deadline}
+          duration={source?.payload ?? recovery}
+          onChange={(timeSlots) => {
+            setSlotsError("");
+            update({ timeSlots });
+          }}
         />
-        <PlanningDisclosure
-          title="Activity details"
-          summary="Description, category and place · Optional"
-        >
-          <Field
-            label="Description · Optional"
-            value={draft.body}
-            maxLength={2000}
-            onChangeText={(body) => update({ body })}
-          />
+        {!!slotsError && <Text accessibilityRole="alert" style={styles.error}>{slotsError}</Text>}
+        <PlanningAudienceField
+          value={draft.audience}
+          id={draft.audienceId}
+          fixedLabel={params.returnPlanId ? plan?.title ?? "Your Plan" : undefined}
+          locked={!!source}
+          onChange={(audience, audienceId) => {
+            if (!source) update({ audience, audienceId });
+          }}
+        />
+        <PlanningDateField
+          label="Responses close"
+          value={draft.deadline}
+          timezone={timezone}
+          now={now}
+          min={now}
+          max={earliestTime}
+          onChange={(deadline) => {
+            setSlotsError("");
+            update({ deadline });
+          }}
+        />
+        <PlanningDisclosure title="More options">
+          <Field label="Description · Optional" value={draft.body} maxLength={2000} onChangeText={(body) => update({ body })} />
           <Chips
-            options={
-              [
-                "Fitness",
-                "Study",
-                "Gaming",
-                "Creative",
-                "Social",
-                "Other",
-              ] as const
-            }
+            options={["Fitness", "Study", "Gaming", "Creative", "Social", "Other"] as const}
             value={draft.category}
             onChange={(category) => update({ category })}
           />
-          <Field
-            label="Place · Optional"
-            value={draft.place}
-            maxLength={160}
-            onChangeText={(place) => update({ place, coordinate: undefined })}
-          />
-        </PlanningDisclosure>
-        <PlanningDisclosure
-          title="Organizer options"
-          summary={`Backup hosting ${(draft.allowBackupHosting ?? draft.audience === "squad") ? "on" : "off"}`}
-        >
+          <Field label="Place · Optional" value={draft.place} maxLength={160} onChangeText={(place) => update({ place, coordinate: undefined })} />
           <PlanningToggle
-            title="Allow Backup Hosting"
+            title="Allow backup hosting"
             description="Eligible participants may volunteer if the organizer is unavailable."
             value={draft.allowBackupHosting ?? draft.audience === "squad"}
-            disabled={frozen}
+            disabled={locked}
             onChange={(allowBackupHosting) => update({ allowBackupHosting })}
           />
         </PlanningDisclosure>
       </View>
-      <Action
-        title={frozen ? "Verify creation" : "Create Find a Time"}
-        run={async () => {
-          if (!userId || data.viewer_id !== userId)
-            throw new Error("Sign in to continue.");
-          if (
-            !publication.attempt &&
-            (!draft.title.trim() || draft.title.trim().length > 120)
-          )
-            throw new Error(
-              "Give this activity a title (up to 120 characters).",
-            );
-          if (!publication.attempt)
-            validateSlots(draft.timeSlots ?? [], draft.deadline);
-          if (params.sourceThreadId && !source)
-            throw new Error("The source is no longer available.");
-          const payload: BeaconDraft = {
-            ...makeBeaconDraft(),
-            ...source?.payload,
-            ...recovery,
-            title: draft.title,
-            description: draft.body,
-            category: draft.category,
-            label: draft.place,
-            latitude: draft.coordinate?.latitude ?? (
-              draft.place === (source?.payload?.label ?? recovery?.label ?? "")
-                ? (source?.payload?.latitude ?? recovery?.latitude ?? null)
-                : null),
-            longitude: draft.coordinate?.longitude ?? (
-              draft.place === (source?.payload?.label ?? recovery?.label ?? "")
-                ? (source?.payload?.longitude ?? recovery?.longitude ?? null)
-                : null),
-            audience: draft.audience,
-            audience_id: draft.audienceId,
-            starts_at:
-              draft.timeSlots?.[0].starts_at ?? makeBeaconDraft().starts_at,
-            ends_at: draft.timeSlots?.[0].ends_at ?? makeBeaconDraft().ends_at,
-            timezone:
-              draft.timeSlots?.[0].timezone ?? makeBeaconDraft().timezone,
-          };
-          if (!publication.attempt) validateBeaconDraft(payload);
-          const epoch = getViewerEpoch();
-          const attempt = publication;
-          const operation = publishPlanningSession(
-            attempt,
-            {
-              id: /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(sessionId)
-                ? sessionId
-                : randomUUID(),
-              kind: "time",
-              return_plan_id: params.returnPlanId,
-              plan_stop_id: params.planStopId,
-              plan_after_stop_id: params.planAfterStopId,
-              coowner_ids:
-                data.plans.find((p) => p.id === params.returnPlanId)
-                  ?.coowner_ids ?? [],
-              title: draft.title,
-              body: draft.body.slice(0, 500),
-              audience: draft.audience,
-              audience_id: draft.audienceId,
-              deadline_at: draft.deadline,
-              payload,
-              slots: draft.timeSlots,
-              source_thread_id: source?.id,
-              source_activity_note_id: note?.id,
-              allow_backup_hosting:
-                draft.allowBackupHosting ?? draft.audience === "squad",
-              recovery_context: payload,
-              local_draft_token: params.beaconDraftToken,
-            },
-            [],
-            async (a, p, id) => {
-              const frozenPayload = { ...p, expected_actor_id: userId };
-              setCreationDraftField(
-                userId,
-                recoveryToken,
-                "title",
-                `Find a Time: ${draft.title}`,
-              );
-              setCreationDraftField(
-                userId,
-                recoveryToken,
-                "pendingPublication",
-                {
-                  action: a,
-                  payload: frozenPayload,
-                  requestId: id,
-                  viewer: userId,
-                },
-              );
-              await saveCreationDraft(userId, recoveryToken, {
-                planningRecovery: "time",
-              });
-              if (epoch !== getViewerEpoch())
-                throw new Error("Your account changed.");
-              return act(a, frozenPayload, id);
-            },
-            randomUUID,
-          );
-          update({ publication: attempt, recoveryToken });
-          setPublication({ ...attempt });
-          try {
-            const id = await operation;
-            if (epoch === getViewerEpoch()) {
-              completePlanningDraft(userId, recoveryToken);
-              completeComposerSession(userId, sessionId);
-              if (params.returnPlanId) {
-                router.dismissTo({
-                  pathname: "/plan/[id]",
-                  params: { id: params.returnPlanId },
-                });
-                return;
-              }
-              router.replace({
-                pathname: "/responses",
-                params: { threadId: id },
-              });
-            }
-          } catch (failure) {
-            if (
-              epoch === getViewerEpoch() &&
-              (failure as { definitive?: boolean }).definitive &&
-              !attempt.threadId
-            ) {
-              const restored = { ...draft, publication: {}, recoveryToken };
-              storeComposerSession(userId, sessionId, restored);
-              setDraft(restored);
-              setPublication({});
-              setCreationDraftField(
-                userId,
-                recoveryToken,
-                "pendingPublication",
-                null,
-              );
-              await saveCreationDraft(userId, recoveryToken, {
-                planningRecovery: "time",
-              });
-            }
-            throw failure;
-          }
-        }}
-      />
+      {frozen && <Txt muted>Verification will retry with your original submitted values.</Txt>}
     </Screen>
   );
 }

@@ -15,6 +15,11 @@ const keyFor = (viewerId: string) =>
     .map((character) => character.codePointAt(0)!.toString(16))
     .join("-")}`;
 
+export async function readSavedViewerDeviceDefaults(viewerId: string) {
+  await writes.get(viewerId)?.catch(() => {});
+  return readViewerDeviceDefaults(viewerId);
+}
+
 export async function readViewerDeviceDefaults(
   viewerId: string,
 ): Promise<ViewerDeviceDefaults> {

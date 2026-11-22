@@ -2,6 +2,8 @@ import { getDesignColorTheme } from "../../src/theme/data";
 import { themeNames } from "../../src/theme/palettes";
 import { BEACON_NAME_MAX_WIDTH, mapIdentityColors } from "../../src/features/maps/markerIdentity";
 import { beaconPinSymbols } from "../../src/features/maps/beaconPinArtwork";
+import { appendBeaconUpperBeam, appendMapProjector, beaconProjectionDimensions } from "../../src/features/maps/projector";
+import { miniAvatarSvg } from "../../src/features/profile/avatarArt";
 import { test, expect } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import ts from "typescript";
@@ -44,7 +46,10 @@ const script = ts.transpileModule(
   const reducedMotion = false, group = {}, coordinates = [];
   const onPick = undefined, identityViewer = "viewer";
   ${lighting}
-  const m = { getZoom: () => zoom };
+  const appendMapProjector = ${appendMapProjector.toString()};
+  const appendBeaconUpperBeam = ${appendBeaconUpperBeam.toString()};
+  const beaconProjectionDimensions = ${beaconProjectionDimensions.toString()};
+  const presentationMode = { get current() { return zoom >= 16 ? "stack" : zoom >= 12 ? "swarm" : zoom >= 9 ? "atmosphere" : "micro"; } };
   let clicks = 0;
   const L = { DomEvent: { disableClickPropagation() {} }, divIcon: icon => icon,
     marker: (point, options) => ({ addTo() {
@@ -58,6 +63,7 @@ const script = ts.transpileModule(
     } }) };
   const beaconPinPath = () => ${JSON.stringify(beaconPinSymbols.fitness)};
   const beaconPinImage = () => null;
+  const miniAvatarSvg = () => ${JSON.stringify(miniAvatarSvg(42))};
   ${glyph}
   ${sizing}
   ${marker}
@@ -84,6 +90,14 @@ const script = ts.transpileModule(
     }
   };
   window.markerClicks = () => clicks;
+  window.renderFriendMarker = (compact = false) => {
+    document.querySelectorAll(".beacon-marker").forEach(node => node.remove());
+    const result = marker(41.88, -87.64, "", "Test friend", () => clicks++, true, 42, "#218466", false, false, "", "unknown", false, "", null, false, compact);
+    if (compact) {
+      result.classList.add("beacon-marker");
+      document.body.append(result);
+    }
+  };
 `,
   {
     compilerOptions: {
@@ -94,6 +108,35 @@ const script = ts.transpileModule(
 ).outputText;
 const css = readFileSync("components/leaflet.web.css", "utf8");
 
+test("Beacon skin previews are selectable from Customize appearance", async ({ page }, info) => {
+  await page.goto("/auth/sign-in");
+  await page.getByRole("button", { name: /Explore the demo/ }).click();
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("button", { name: "+ Create Blank Beacon", exact: true }).click();
+  await page.getByRole("button", { name: "Customize appearance", exact: true }).click();
+  const appearance = page.getByRole("dialog", { name: "Customize appearance", exact: true });
+  await appearance.getByRole("button", { name: "Preview Beacon skins" }).click();
+  await appearance.getByRole("button", { name: "Legendary", exact: true }).click();
+  await expect(appearance.getByText("Gold frame and crown accent")).toBeVisible();
+  await expect(appearance.getByText(/Purchases and equipping are unavailable/)).toBeVisible();
+  await appearance.screenshot({ path: info.outputPath("skin-preview.png") });
+});
+
+test("a friend keeps a recognizable 34px avatar and a larger target without projection", async ({ page }) => {
+  await page.setContent("<body></body>");
+  await page.addStyleTag({ content: css });
+  await page.addScriptTag({ content: script });
+  await page.evaluate(() => (window as any).renderFriendMarker());
+  const friend = page.getByRole("button", { name: "Test friend" });
+  const avatar = friend.locator("[data-cluster-face]");
+  await expect(avatar.locator("img")).toBeVisible();
+  await expect(avatar).toHaveCSS("width", "34px");
+  await expect(friend.getByTestId("friend-marker-projection")).toHaveCount(0);
+  await expect(friend.getByTestId("map-person-projector")).toHaveCount(0);
+  expect((await friend.boundingBox())!.width).toBeGreaterThanOrEqual(44);
+  await expect(page.locator(".beacon-marker")).toHaveAttribute("data-anchor", "[32,17]");
+});
+
 test("Beacon names sit below the pin tip and truncate within the chip", async ({ page }) => {
   await page.setContent("<body></body>");
   await page.addStyleTag({ content: css });
@@ -101,11 +144,16 @@ test("Beacon names sit below the pin tip and truncate within the chip", async ({
   const name = "Table Tennis with the Wednesday Lunch Squad";
   await page.evaluate((name) => (window as any).renderMarker({ zoom: 16, name }), name);
   const chip = page.getByTestId("beacon-map-name");
+  const projector = page.getByTestId("map-beacon-projector");
+  await expect(projector).toHaveCSS("height", "23px");
+  await expect(projector).toHaveCSS("width", "36px");
   await expect(chip).toHaveText(name);
   await expect(chip).toHaveCSS("text-overflow", "ellipsis");
   const bounds = (await chip.boundingBox())!;
   const tip = (await page.getByTestId("beacon-pin-tip").boundingBox())!;
+  const base = (await projector.locator('[data-projector-part="base"]').boundingBox())!;
   expect(bounds.y).toBeGreaterThan(tip.y + tip.height);
+  expect(bounds.y + 1).toBeGreaterThanOrEqual(base.y + base.height);
   expect(bounds.width).toBeLessThanOrEqual(BEACON_NAME_MAX_WIDTH);
 });
 
@@ -115,11 +163,11 @@ test("beam height and gradient follow one priority in both appearances and at co
   await page.addStyleTag({ content: css });
   await page.addScriptTag({ content: script });
   const cases = [
-    { selected: true, identity: { participatingLive: true, owned: true }, height: 32, compactHeight: 0, color: "255, 254, 244" },
-    { selected: false, identity: { participatingLive: true, owned: true }, height: 21, compactHeight: 22, color: "255, 221, 156" },
-    { selected: false, identity: { owned: true }, height: 15, compactHeight: 17, color: "255, 241, 173" },
-    { selected: false, identity: { friendHosted: true, squadHosted: true }, height: 12, compactHeight: 14, color: "203, 234, 255" },
-    { selected: false, identity: { squadHosted: true }, height: 14, compactHeight: 16, color: "201, 245, 224" },
+    { selected: true, identity: { participatingLive: true, owned: true }, height: 38, compactHeight: 0, tint: "rgb(230, 174, 69)", color: "255, 254, 244" },
+    { selected: false, identity: { participatingLive: true, owned: true }, height: 26, compactHeight: 27, tint: "rgb(241, 132, 50)", color: "255, 221, 156" },
+    { selected: false, identity: { owned: true }, height: 19, compactHeight: 21, tint: "rgb(243, 185, 50)", color: "255, 241, 173" },
+    { selected: false, identity: { friendHosted: true, squadHosted: true }, height: 15, compactHeight: 17, tint: "rgb(109, 175, 229)", color: "203, 234, 255" },
+    { selected: false, identity: { squadHosted: true }, height: 18, compactHeight: 20, tint: "rgb(103, 196, 155)", color: "201, 245, 224" },
   ];
   for (const appearance of ["light", "dark"] as const) {
     const semantic = getDesignColorTheme(themeNames[0], appearance).colors;
@@ -139,13 +187,14 @@ test("beam height and gradient follow one priority in both appearances and at co
         });
         const glow = page.getByTestId("beacon-marker-glow");
         await expect(glow).toHaveAttribute("data-lighting-level", String(index + 1));
-        const haloRadius = compact ? 12 : [36, 19, 13, 10, 10][index];
+        const haloRadius = compact ? 8 : [36, 19, 13, 10, 10][index];
         await expect(glow).toHaveCSS("box-shadow", new RegExp(`0px 0px ${haloRadius}px`));
-        const height = compact ? item.compactHeight : item.height;
+        const height = compact ? 0 : item.height;
         const beam = page.getByTestId("beacon-marker-beam");
         if (height) {
           await expect(beam).toHaveCSS("height", `${height}px`);
           await expect(beam).toHaveCSS("background-image", new RegExp(item.color));
+          await expect(page.getByTestId("map-beacon-projector")).toHaveCSS("color", item.tint);
         } else {
           await expect(beam).toHaveCount(0);
         }
@@ -180,13 +229,35 @@ test("beam height and gradient follow one priority in both appearances and at co
   }
 });
 
+test("important individual Beacons keep a quieter upper beam farther out", async ({ page }) => {
+  await page.setContent("<body></body>");
+  await page.addScriptTag({ content: script });
+  const beam = page.getByTestId("beacon-marker-beam");
+  for (const [zoom, selected, identity, height] of [
+    [14, true, {}, 25],
+    [14, false, { participatingLive: true }, 17],
+    [14, false, { owned: true }, 13],
+    [14, false, { friendHosted: true }, 0],
+    [10, true, {}, 12],
+    [8, true, {}, 0],
+  ] as const) {
+    await page.evaluate((input) => (window as any).renderMarker(input), { zoom, selected, identity });
+    if (height) await expect(beam).toHaveCSS("height", `${height}px`);
+    else await expect(beam).toHaveCount(0);
+    const projector = page.getByTestId("map-beacon-projector");
+    if (zoom === 14) await expect(projector).toHaveCSS("height", "20px");
+    else if (zoom === 10) await expect(projector).toHaveCSS("height", "16px");
+    await expect(page.locator(".map-now-halo")).toHaveCount(0);
+  }
+});
+
 test("web Beacon ripple stays at the badge center across dot/full sizes, chips, selection, animation and reduced motion", async ({
   page,
 }) => {
   await page.setContent("<body></body>");
   await page.addStyleTag({ content: css });
   await page.addScriptTag({ content: script });
-  for (const zoom of [11, 13])
+  for (const zoom of [8, 10, 16])
     for (const chip of ["", "20m left"])
       for (const selected of [false, true]) {
         await page.evaluate((input) => (window as any).renderMarker(input), {
@@ -194,9 +265,14 @@ test("web Beacon ripple stays at the badge center across dot/full sizes, chips, 
           chip,
           selected,
         });
-        await expect(page.getByTestId("beacon-marker-beam")).toHaveCount(Number(selected));
-        if (selected || zoom >= 12)
-          await expect(page.getByTestId("beacon-pin-tip")).toBeVisible();
+        await expect(page.getByTestId("beacon-marker-beam")).toHaveCount(Number(selected && zoom >= 9));
+        await expect(page.getByTestId("beacon-pin-tip")).toHaveCount(Number(zoom >= 16));
+        if (zoom < 16) {
+          await expect(page.locator(".map-now-halo")).toHaveCount(0);
+          await expect(page.getByTestId("map-beacon-projector")).toHaveCount(Number(selected && zoom >= 9));
+          await page.getByRole("button", { name: "Test Beacon" }).click();
+          continue;
+        }
         for (const currentTime of [0, 500, 1500]) {
           const result = await page.evaluate((time) => {
             const halo = document.querySelector(".map-now-halo") as HTMLElement;
@@ -220,12 +296,12 @@ test("web Beacon ripple stays at the badge center across dot/full sizes, chips, 
           }, currentTime);
           expect(Math.abs(result.x)).toBeLessThan(0.1);
           expect(Math.abs(result.y)).toBeLessThan(0.1);
-          expect(result.anchor).toBe(zoom < 12 && !selected ? "[32,5]" : "[32,83]");
+          expect(result.anchor).toBe(zoom < 12 && !selected ? "[32,5]" : "[32,88]");
           expect(result.pointerEvents).toBe("none");
         }
         await page.getByRole("button", { name: "Test Beacon" }).click();
       }
-  expect(await page.evaluate(() => (window as any).markerClicks())).toBe(8);
+  expect(await page.evaluate(() => (window as any).markerClicks())).toBe(12);
   await page.emulateMedia({ reducedMotion: "reduce" });
   const reduced = await page.evaluate(() => {
     const halo = document.querySelector(".map-now-halo") as HTMLElement;
@@ -302,7 +378,7 @@ test("pulse expands, fades and stops during gestures; detached petals never anim
   await page.addStyleTag({ content: css });
   await page.addScriptTag({ content: script });
   await page.evaluate(() =>
-    (window as any).renderMarker({ zoom: 13, selected: false, chip: "" }),
+    (window as any).renderMarker({ zoom: 16, selected: false, chip: "" }),
   );
   const frames = await page.locator(".map-now-halo").evaluate((node) => {
     const animation = node.getAnimations()[0];

@@ -15,10 +15,8 @@ import {
 } from "react-native";
 import { router, useFocusEffect } from "expo-router";
 import {
-  Check,
   X,
-  UsersRound,
-  ArrowRight,
+  Star,
   CircleHelp,
   Radio,
   ChevronRight,
@@ -31,13 +29,13 @@ import { useBeacon } from "@/src/shared/store";
 import { usePreferences } from "@/src/shared/preferences";
 import { useNow } from "@/src/shared/useNow";
 import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
-import { ActionRow, ContextMenu } from "@/src/shared/ContextMenu";
 import { StatusViewer } from "./StatusViewer";
+import { SharedStatusControl } from "./SharedStatusControl";
 import {
   availabilityLabel,
   homeFriendAvailability,
   isFreeWithoutEnd,
-  prioritizeOpenEndedAvailability,
+  prioritizeFreeFriends,
   filterSocialFriends,
   socialFriends,
   type SocialFriend,
@@ -58,7 +56,7 @@ import {
 
 export function useSocialFriendsController() {
   const { colors, tokens } = useDesignTheme();
-  const { data, userId, loading } = useBeacon();
+  const { data, userId, loading, getCurrentData } = useBeacon();
   const now = useNow();
   const friends = useMemo(
     () => socialFriends(data, userId, now),
@@ -125,12 +123,14 @@ export function useSocialFriendsController() {
       setDetailId(null);
     } else action();
   };
-  const plan = () => {
+  const plan = (invitees = selectedIds) => {
     try {
-      validateCreationInvitees(data, userId, selectedIds);
+      const snapshot = getCurrentData();
+      if (!snapshot || snapshot.viewer_id !== userId) return;
+      validateCreationInvitees(snapshot, userId, invitees);
       const params = hubInviteeParams(
-        selectedIds,
-        eligibleCreationInvitees(data, userId),
+        invitees,
+        eligibleCreationInvitees(snapshot, userId),
       );
       const planSession = startPlanningDraft(userId);
       setError("");
@@ -250,7 +250,7 @@ export function useSocialFriendsController() {
             }
             stretch
             tone={tokens.availability.available}
-            onPress={plan}
+            onPress={() => plan()}
           />
         </View>
       </View>
@@ -284,6 +284,12 @@ export function useSocialFriendsController() {
         afterDetail.current = null;
         action?.();
       }}
+      primaryAction={detail && eligible.has(detail.id) ? (
+        <Button title="Plan Together" onPress={() => {
+          afterDetail.current = () => plan([detail.id]);
+          setDetailId(null);
+        }} />
+      ) : undefined}
     >
       {detail && (
         <Button
@@ -304,7 +310,7 @@ export function useSocialFriendsController() {
     friends,
     scoped,
     filtered: browse.scope === "friends" && browse.filter === "All" && !browse.query.trim()
-      ? prioritizeOpenEndedAvailability(filtered) : filtered,
+      ? prioritizeFreeFriends(filtered) : filtered,
     available,
     inBeacons,
     loading,
@@ -498,16 +504,12 @@ function FriendCard({
   friend,
   now,
   width,
-  planning,
-  selected,
   onPress,
   onOpenBeacon,
 }: {
   friend: SocialFriend;
   now: number;
   width: number;
-  planning: boolean;
-  selected: boolean;
   onPress: () => void;
   onOpenBeacon: (id: string) => void;
 }) {
@@ -521,7 +523,7 @@ function FriendCard({
   const timedFree = !!friend.until && Date.parse(friend.until) > now &&
     (friend.availability === "available" || friend.availability === "ending-soon");
   const beacon = friend.currentBeacon?.activity ?? friend.beacon;
-  const title = beacon?.title ?? friend.currentActivityTitle;
+  const title = beacon?.title ?? friend.attachment?.title ?? friend.currentActivityTitle;
   const distinctTitle = title?.trim().toLocaleLowerCase() !==
     friend.statusText?.trim().toLocaleLowerCase();
   const context = beacon
@@ -542,23 +544,18 @@ function FriendCard({
   return (
     <View testID="your-people-card" style={{
       width,
+      minHeight: 212,
       flexGrow: 1,
       borderRadius: 12,
       borderWidth: 1,
-      borderColor: selected ? tokens.availability.available.color : colors.border,
-      backgroundColor: selected ? tokens.availability.available.tint : colors.surfaceRaised,
+      borderColor: colors.border,
+      backgroundColor: colors.surfaceRaised,
     }}>
       <Pressable
         testID={"social-friend-" + friend.id}
         accessibilityRole="button"
-        accessibilityLabel={
-          planning
-            ? (selected ? "Deselect " : "Select ") + friend.name + " for planning"
-            : "Open " + friend.name + "'s shared status"
-        }
-        accessibilityState={planning ? { selected } : undefined}
-        accessibilityHint={[label, friend.statusText, planning ? context : null].filter(Boolean).join(". ") || undefined}
-        aria-pressed={planning ? selected : undefined}
+        accessibilityLabel={"Open " + friend.name + "'s shared status"}
+        accessibilityHint={[label, friend.statusText].filter(Boolean).join(". ") || undefined}
         onPress={onPress}
         style={({ pressed }) => ({
           flexGrow: 1,
@@ -570,24 +567,13 @@ function FriendCard({
       >
         <View style={{ alignSelf: "flex-start" }}>
           <ProfileAvatar profile={friend.profile} size={48} />
-          {selected && (
-            <View
-              style={{
-                position: "absolute",
-                right: -3,
-                bottom: -2,
-                borderRadius: 8,
-                padding: 2,
-                backgroundColor: tokens.availability.available.color,
-              }}
-            >
-              <Check size={12} color={tokens.availability.available.onColor} />
-            </View>
-          )}
+
         </View>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
         <Text
-          numberOfLines={2}
+          numberOfLines={1}
           style={{
+            flex: 1,
             color: colors.textPrimary,
             ...tokens.type.secondary,
             fontWeight: "600",
@@ -595,6 +581,8 @@ function FriendCard({
         >
           {friend.name}
         </Text>
+        {friend.starred && <Star size={13} color={colors.accent} fill={colors.accent} accessibilityLabel="Favorite" />}
+        </View>
         {label ? (
           <View style={{
             flexDirection: "row",
@@ -626,13 +614,8 @@ function FriendCard({
             {friend.statusText}
           </Text>
         ) : null}
-        {planning && contextText ? (
-          <View style={{ flexDirection: "row", padding: 6, borderRadius: 7, backgroundColor: beacon ? colors.surface : undefined }}>
-            {contextText}
-          </View>
-        ) : null}
       </Pressable>
-      {!planning && contextText ? (
+      {contextText ? (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={beacon ? `Open Beacon: ${beacon.title}` : `Open ${friend.name}'s current activity`}
@@ -660,19 +643,17 @@ export function SocialFriendsSection() {
   const { width } = useWindowDimensions();
   const cardWidth = width <= 360 ? 136 : width <= 600 ? 152 : 160;
   const controller = useSocialFriendsController();
-  const {
-    friends,
-    scoped,
-    available,
-    inBeacons,
-    loading,
-    userId,
-    selectedIds,
-  } = controller;
+  const { friends, scoped, loading, userId } = controller;
   const [browse, updateBrowse] = useFriendsBrowseState(userId);
-  const [planning, setPlanning] = useState(false);
-  const [listsOpen, setListsOpen] = useState(false);
-  const listsAnchor = useRef<View>(null);
+  const free = friends.filter((friend) => ["available", "ending-soon"].includes(friend.availability)).length;
+  const favorites = friends.filter((friend) => friend.starred).length;
+  const inBeacons = friends.filter((friend) => friend.currentBeacon || friend.beacon).length;
+  const filters = [
+    { label: "All", count: friends.length, scope: "friends", filter: "All" },
+    { label: "Free", count: free, scope: "friends", filter: "Available" },
+    { label: "Favorites", count: favorites, scope: "favorites", filter: "All" },
+    { label: "In Beacons", count: inBeacons, scope: "friends", filter: "In a Beacon" },
+  ] as const;
   const [visit, setVisit] = useState(0);
   useFocusEffect(
     useCallback(() => {
@@ -681,10 +662,9 @@ export function SocialFriendsSection() {
   );
   // Retain IDs only, never stale status/profile objects. Scope and visit reset ranking.
   const orderKey = userId + ":" + browse.scope + ":" + visit;
-  const ranked = prioritizeOpenEndedAvailability(scoped);
   const [order, setOrder] = useState(() => ({
     key: orderKey,
-    ids: ranked.map((friend) => friend.id),
+    ids: scoped.map((friend) => friend.id),
   }));
   const current = new Map(scoped.map((friend) => [friend.id, friend]));
   const retained =
@@ -692,7 +672,7 @@ export function SocialFriendsSection() {
   const retainedSet = new Set(retained);
   const orderedIds = [
     ...retained,
-    ...ranked
+    ...scoped
       .filter((friend) => !retainedSet.has(friend.id))
       .map((friend) => friend.id),
   ];
@@ -703,14 +683,8 @@ export function SocialFriendsSection() {
   ) {
     setOrder({ key: orderKey, ids: orderedIds });
   }
-  const ordered = orderedIds.map((id) => current.get(id)!);
-  const listName =
-    data.viewer_id === userId
-      ? data.lists.find(
-          (list) =>
-            list.id === browse.scope.slice(7) && list.owner_id === userId,
-        )?.name
-      : undefined;
+  const allowed = new Set(filterSocialFriends(friends, data, userId, { ...browse, query: "" }).map((friend) => friend.id));
+  const ordered = prioritizeFreeFriends(orderedIds.filter((id) => allowed.has(id)).map((id) => current.get(id)!));
   return (
     <View testID="friends-right-now" style={{ gap: 4, paddingVertical: 6 }}>
       <View
@@ -734,149 +708,37 @@ export function SocialFriendsSection() {
           Your People
         </Text>
         <HomeAction
-          title={"See all " + scoped.length + " →"}
-          label={"See all " + scoped.length + " friends"}
+          title="See All →"
+          label={"See all " + friends.length + " friends"}
           plain
           onPress={() => router.push("/friends")}
         />
-        <HomeAction
-          title={planning ? "Done" : "Plan"}
-          primary={!planning}
-          outlined={planning}
-          prominent
-          icon={
-            planning ? (
-              <Check size={15} color={tokens.availability.available.color} />
-            ) : (
-              <UsersRound size={15} color={colors.onAccent} />
-            )
-          }
-          selected={planning}
-          tone={planning ? {
-            color: tokens.availability.available.color,
-            tint: tokens.availability.available.tint,
-          } : undefined}
-          onPress={() => setPlanning(!planning)}
-        />
       </View>
-      <View
-        style={{
-          flexDirection: "row",
-          flexWrap: "wrap",
-          columnGap: 18,
-          rowGap: 0,
-        }}
-      >
-        {(
-          [
-            { scope: "friends", label: "All Friends" },
-            { scope: "favorites", label: "★ Favorites" },
-          ] as const
-        ).map(({ scope, label }) => (
-          <Pressable
-            key={scope}
-            accessibilityRole="button"
-            accessibilityLabel={label}
-            accessibilityState={{ selected: browse.scope === scope }}
-            aria-pressed={browse.scope === scope}
-            onPress={() => updateBrowse({ scope })}
-            style={{
-              minHeight: 44,
-              justifyContent: "center",
-              borderBottomWidth: 2,
-              borderBottomColor:
-                browse.scope === scope ? colors.accent : "transparent",
-            }}
-          >
-            <Text
-              style={{
-                color:
-                  browse.scope === scope
-                    ? colors.textPrimary
-                    : colors.textSecondary,
-                ...tokens.type.caption,
-                fontWeight: browse.scope === scope ? "600" : "400",
-              }}
-            >
-              {label}
-            </Text>
-          </Pressable>
-        ))}
-        <View ref={listsAnchor} collapsable={false} style={{ maxWidth: 130 }}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={listName ? "Lists: " + listName : "Lists"}
-            accessibilityState={{
-              selected: browse.scope.startsWith("custom:"),
-              expanded: listsOpen,
-            }}
-            onPress={() => setListsOpen(!listsOpen)}
-            style={{
-              minHeight: 44,
-              minWidth: 44,
-              justifyContent: "center",
-              borderBottomWidth: 2,
-              borderBottomColor: browse.scope.startsWith("custom:")
-                ? colors.accent
-                : "transparent",
-            }}
-          >
-            <Text
-              numberOfLines={1}
-              style={{
-                color: listName ? colors.textPrimary : colors.textSecondary,
-                ...tokens.type.caption,
-                fontWeight: listName ? "600" : "400",
-              }}
-            >
-              {listName ?? "Lists"} ▾
-            </Text>
-          </Pressable>
-        </View>
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+        {filters.map(({ label, count, scope, filter }) => {
+          const selected = browse.scope === scope && browse.filter === filter;
+          return (
+            <Pressable key={label} accessibilityRole="button" accessibilityLabel={`${label} · ${count}`}
+              accessibilityState={{ selected }} aria-pressed={selected} onPress={() => updateBrowse({ scope, filter })}
+              style={{ minHeight: 44, justifyContent: "center", paddingHorizontal: 8, borderRadius: 8, backgroundColor: selected ? colors.surfaceSelected : "transparent" }}>
+              <Text style={{ color: selected ? colors.textPrimary : colors.textSecondary, ...tokens.type.caption }}>{label} · {count}</Text>
+            </Pressable>
+          );
+        })}
       </View>
-      <Text
-        testID="your-people-summary"
-        style={{ color: colors.textSecondary, ...tokens.type.caption }}
-      >
-        {[
-          `${scoped.length} ${browse.scope === "favorites" ? (scoped.length === 1 ? "favorite" : "favorites") : (scoped.length === 1 ? "friend" : "friends")}`,
-          available ? `${available} free to hang` : null,
-          inBeacons ? `${inBeacons} in ${inBeacons === 1 ? "a Beacon" : "Beacons"}` : null,
-        ].filter(Boolean).join(" · ")}
+      <Text testID="your-people-summary" style={{ color: colors.textSecondary, ...tokens.type.caption }}>
+        {`${ordered.length} ${ordered.length === 1 ? "friend" : "friends"}`}
       </Text>
-      {planning ? (
-        <View
-          accessibilityLiveRegion="polite"
-          style={{
-            flexDirection: "row",
-            alignItems: "center",
-            gap: 6,
-            paddingVertical: 6,
-          }}
-        >
-          <UsersRound size={16} color={colors.textSecondary} />
-          <Text
-            style={{
-              flex: 1,
-              color: colors.textPrimary,
-              ...tokens.type.caption,
-              fontWeight: "500",
-            }}
-          >
-            Select your people
-          </Text>
-          <Text style={{ color: colors.textSecondary, ...tokens.type.caption }}>
-            Scroll for more
-          </Text>
-          <ArrowRight size={14} color={colors.textSecondary} />
-        </View>
-      ) : null}
       <FlatList
-        key={userId + ":" + browse.scope}
+        key={userId + ":" + browse.scope + ":" + browse.filter}
         testID="your-people-carousel"
         horizontal
         data={ordered}
-        extraData={{ selectedIds, planning }}
+        ListHeaderComponent={userId && data.viewer_id === userId ? (
+          <View testID="your-people-self" style={{ width: cardWidth, minHeight: 212, flex: 1, borderRadius: 12, backgroundColor: colors.surfaceSelected }}>
+            <SharedStatusControl card />
+          </View>
+        ) : null}
         keyExtractor={(friend) => friend.id}
         showsHorizontalScrollIndicator={false}
         initialNumToRender={6}
@@ -888,8 +750,6 @@ export function SocialFriendsSection() {
             friend={item}
             now={now}
             width={cardWidth}
-            planning={planning}
-            selected={selectedIds.includes(item.id)}
             onOpenBeacon={(id) => {
               const snapshot = getCurrentData();
               if (!snapshot || !userId) return;
@@ -897,11 +757,7 @@ export function SocialFriendsSection() {
               if ((fresh?.currentBeacon?.activity.id ?? fresh?.beacon?.id) !== id) return;
               router.push({ pathname: "/activity/[id]", params: { id } });
             }}
-            onPress={() =>
-              planning
-                ? controller.toggle(item.id)
-                : controller.openDetail(item.id)
-            }
+            onPress={() => controller.openDetail(item.id)}
           />
         )}
         ListEmptyComponent={
@@ -913,7 +769,7 @@ export function SocialFriendsSection() {
                   ? "Good plans start with your people."
                   : browse.scope === "favorites"
                     ? "No favorites yet."
-                    : "No friends in this list yet."}
+                    : "No friends match this filter."}
             </Txt>
             {!loading && (
               <HomeAction
@@ -921,7 +777,7 @@ export function SocialFriendsSection() {
                 plain
                 onPress={() =>
                   friends.length
-                    ? updateBrowse({ scope: "friends" })
+                    ? updateBrowse({ scope: "friends", filter: "All" })
                     : router.push("/find-friends")
                 }
               />
@@ -934,57 +790,6 @@ export function SocialFriendsSection() {
           {controller.error}
         </Text>
       )}
-      {planning ? (
-        controller.action
-      ) : selectedIds.length ? (
-        <HomeAction
-          title={selectedIds.length + " selected · Continue planning"}
-          plain
-          onPress={() => setPlanning(true)}
-        />
-      ) : null}
-      <ContextMenu
-        title="Private Lists"
-        mode="dropdown"
-        visible={listsOpen}
-        anchorRef={listsAnchor}
-        onClose={() => setListsOpen(false)}
-      >
-        {data.viewer_id === userId &&
-          data.lists
-            .filter((list) => list.owner_id === userId)
-            .map((list) => (
-              <ActionRow
-                key={list.id}
-                label={list.name}
-                selected={browse.scope === "custom:" + list.id}
-                onPress={() => {
-                  updateBrowse({
-                    scope: ("custom:" + list.id) as `custom:${string}`,
-                  });
-                  setListsOpen(false);
-                }}
-              />
-            ))}
-        {!data.lists.some((list) => list.owner_id === userId) && (
-          <Text
-            style={{
-              padding: 12,
-              color: colors.textSecondary,
-              ...tokens.type.caption,
-            }}
-          >
-            No private lists yet.
-          </Text>
-        )}
-        <ActionRow
-          label="Manage Private Lists"
-          onPress={() => {
-            setListsOpen(false);
-            router.push("/friends");
-          }}
-        />
-      </ContextMenu>
       {controller.detailSheet}
     </View>
   );

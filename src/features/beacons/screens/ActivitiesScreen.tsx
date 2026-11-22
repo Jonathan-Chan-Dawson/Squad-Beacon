@@ -1,5 +1,6 @@
 import { PremiumHeaderButton } from "@/src/features/profile/components/PremiumEntry";
-import { LivingActivityHighlights } from "../components/feed/LivingActivitySection";
+import { SpontaneityEntry } from "../spontaneity/SpontaneityEntry";
+import { UpNextCard, LivingActivitySection } from "../components/feed/LivingActivitySection";
 import { homePresentation } from "@/src/features/onboarding/presentation";
 import { useOnboarding } from "@/src/features/onboarding/runtime";
 import {
@@ -52,7 +53,6 @@ import {
   BeaconFeedCard,
   type BeaconFeedCardProps,
 } from "@/src/features/beacons/components/BeaconFeedCard";
-import { SharedStatusControl } from "@/src/features/beacons/components/feed/SharedStatusControl";
 import { SocialFriendsSection } from "@/src/features/beacons/components/feed/SocialFriendsSection";
 import { HomeAction } from "@/src/features/beacons/components/HomeAction";
 import { GlassBar, Skeleton, useDesignTheme } from "@/src/shared/design-system";
@@ -131,11 +131,6 @@ export default function ActivitiesScreen() {
       }
     }, [params.confirmed, params.filter, params.participation]),
   );
-  const confirmedActivities = useMemo(
-    () => confirmedHubActivities(data, userId),
-    [data, userId],
-  );
-  const personalPreview = personalHubPreview(confirmedActivities, now);
   const goToActivity = useCallback((id: string) => {
     router.push({ pathname: "/activity/[id]", params: { id } });
   }, []);
@@ -420,6 +415,8 @@ export default function ActivitiesScreen() {
       <Text
         accessibilityRole="header"
         style={{
+          flexShrink: 1,
+          minWidth: 0,
           color: designColors.textPrimary,
           ...tokens.type.titleSmall,
           fontWeight: "600",
@@ -494,6 +491,7 @@ export default function ActivitiesScreen() {
             >
               Beacons
             </Text>
+            {userId && <SpontaneityEntry compact />}
             <PremiumHeaderButton />
             <Pressable
               accessibilityRole="button"
@@ -557,7 +555,6 @@ export default function ActivitiesScreen() {
             />
           </View>
         ) : null}
-        <SharedStatusControl compact />
         {userId ? (
           <View
             testID="home-friends-section"
@@ -570,6 +567,16 @@ export default function ActivitiesScreen() {
             <SocialFriendsSection key={userId ?? "signed-out"} />
           </View>
         ) : null}
+        {userId && data.viewer_id === userId && (
+          <View testID="home-personal-timeline" style={{ gap: 8, borderTopWidth: 1, borderTopColor: designColors.border, paddingTop: 12 }}>
+            {hubHeading("Your Activity", "My Activity →", () => router.push("/your-activity" as Href))}
+            {data.is_demo || data.capabilities?.living_activity ? (
+              <LivingActivitySection key={userId} personId={userId} compact dashboard />
+            ) : (
+              <UpNextCard personId={userId} />
+            )}
+          </View>
+        )}
         {home.kind === "welcome" ||
         (!hasPersonal && home.kind === "compact") ? (
           <HomeInvitation
@@ -579,43 +586,6 @@ export default function ActivitiesScreen() {
         ) : null}
         {home.kind === "loading" ? (
           <Skeleton height={160} borderRadius={12} />
-        ) : null}
-        {hasPersonal ? (
-          <View
-            testID="home-personal-timeline"
-            style={{
-              gap: 8,
-              borderTopWidth: 1,
-              borderTopColor: designColors.border,
-              paddingTop: 12,
-            }}
-          >
-            {hubHeading("Your Activity", "My Activity →", () =>
-              router.push("/your-activity" as Href),
-            )}
-            {(data.is_demo || data.capabilities?.living_activity) && userId ? (
-              <LivingActivityHighlights personId={userId} />
-            ) : (
-              <View style={{ borderRadius: 12, overflow: "hidden" }}>
-                {personalPreview.length ? (
-                  personalPreview.map((activity) => (
-                    <BeaconFeedCard
-                      key={activity.id}
-                      presentation="personal-preview"
-                      compact
-                      {...buildCardProps(activity)}
-                    />
-                  ))
-                ) : (
-                  <Txt muted>
-                    {loading
-                      ? "Loading your activity…"
-                      : "No confirmed plans yet."}
-                  </Txt>
-                )}
-              </View>
-            )}
-          </View>
         ) : null}
         {nowPreview.length || upcomingPreview.length ? (
           <View

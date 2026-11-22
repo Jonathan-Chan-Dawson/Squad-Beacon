@@ -48,11 +48,9 @@ for (const count of [1, 2, 5, 6, 10, 11, 25]) {
     const snapshot = structuredClone(original);
     const [item] = nativeMapPresentations(original, viewport, "stack");
     assert.equal(item.group.members.length, count);
-    assert.equal(item.visible.length, count <= 5 ? count : count <= 10 ? 6 : 7);
-    assert.equal(
-      item.overflow,
-      count - (count <= 5 ? count : count <= 10 ? 6 : 7),
-    );
+    assert.ok(item.visible.length >= Math.min(count, 3) && item.visible.length <= Math.min(count, 4));
+    assert.equal(item.overflow, count - item.visible.length);
+    assert.equal(bloomGeometry(item).countBadge?.beaconTotal, count > 1 ? count : undefined);
     assert.equal(nativeStackOpensExplorer(count), count >= 6);
     assert.equal(item.mode, "stack");
     assert.deepEqual(original, snapshot);
@@ -67,7 +65,7 @@ test("deduplication counts entity IDs, not owners or coordinates", () => {
   const input = [...points(10), ...points(10), ...points(3, "person")];
   const [item] = nativeMapPresentations(input, viewport, "stack");
   assert.equal(item.group.members.length, 13);
-  assert.equal(item.overflow, 4);
+  assert.equal(item.overflow, 10 - bloomGeometry(item).primary.length);
   assert.equal(item.people.length, 3);
   assert.deepEqual(
     nativeMapPresentations([...input].reverse(), viewport, "stack"),
@@ -89,8 +87,8 @@ test("priority puts selected, owned and joined Beacons before category variety a
     ["beacon:013", "beacon:011", "beacon:012"],
   );
   assert.equal(result.owned[0].id, "beacon:011");
-  assert.equal(result.overflow, 7);
-  assert.equal(result.satellites.length, 0);
+  assert.equal(result.overflow, 11);
+  assert.ok(result.satellites.length <= 2);
   assert.deepEqual(
     nativePresentation(
       group([...members].reverse()),
@@ -123,9 +121,9 @@ test("zoom transitions retain modes in both hysteresis buffers", () => {
 
 test("all groups use their requested zoom tier and actual nearby friends never move a Beacon anchor", () => {
   for (const [mode, zoom, visible] of [
-    ["swarm", 14, 5],
-    ["atmosphere", 10, 3],
-    ["micro", 7, 2],
+    ["swarm", 14, 3],
+    ["atmosphere", 10, 0],
+    ["micro", 7, 0],
   ] as const) {
     const camera = { ...viewport, zoom };
     const [base] = nativeMapPresentations(points(5), camera, mode);
@@ -153,19 +151,19 @@ test("all groups use their requested zoom tier and actual nearby friends never m
   }
 });
 
-test("20 Beacons and 11 friends show seven petals and one combined total with no satellites", () => {
+test("20 Beacons and 11 friends keep three petals, bounded avatar peeks and one combined total", () => {
   const [item] = nativeMapPresentations(
     [...points(20), ...points(11, "person")],
     { ...viewport, zoom: 14 },
     "swarm",
   );
-  assert.equal(item.overflow, 13);
+  assert.equal(item.overflow, 17);
   assert.equal(item.people.length, 11);
-  assert.equal(item.satellites.length, 0);
+  assert.ok(item.satellites.length <= 2);
   assert.equal(bloomGeometry(item).countBadge?.text, "👥 11 · ✦ 20");
-  assert.equal(item.friendOverflow, 11);
-  assert.equal(item.featureCost, 8);
-  assert.equal(item.visible.filter((p) => p.kind === "beacon").length, 7);
+  assert.equal(item.friendOverflow, 11 - item.satellites.length);
+  assert.equal(item.featureCost, 4 + item.satellites.length);
+  assert.equal(item.visible.filter((p) => p.kind === "beacon").length, 3);
   assert.equal(presentationOpensExplorer(item), true);
 });
 
@@ -204,7 +202,7 @@ test("friends outside collision distance stay separate; Friends filter only chan
   );
 });
 
-test("friend-only groups use mini petals for two to four and compact totals for five or more", () => {
+test("friend-only groups show up to two authorized avatar previews and the full total", () => {
   for (const count of [2, 3, 4, 5, 11]) {
     const [item] = nativeMapPresentations(
       points(count, "person"),
@@ -214,8 +212,9 @@ test("friend-only groups use mini petals for two to four and compact totals for 
     assert.equal(item.beacons.length, 0);
     assert.equal(item.people.length, count);
     assert.equal(item.overflow, 0);
-    assert.equal(item.friendOverflow, count >= 5 ? count : 0);
-    assert.equal(item.visible.length, count < 5 ? count : 0);
+    assert.equal(item.friendOverflow, count - 2);
+    assert.equal(item.visible.length, 2);
+    assert.equal(bloomGeometry(item).countBadge?.peopleCount, count);
     assert.equal(presentationOpensExplorer(item), true);
   }
 });
@@ -227,16 +226,10 @@ test("compact far-zoom groups retain all IDs while drawing only their previews",
     {},
     new Set(),
   );
-  assert.equal(
-    beaconItem.visible.filter((point) => point.kind === "beacon").length,
-    2,
-  );
-  assert.equal(
-    presentationArtworkPoints(beaconItem).filter(
-      (point) => point.kind === "beacon",
-    ).length,
-    2,
-  );
+  assert.equal(beaconItem.group.members.length, 16);
+  assert.deepEqual(presentationArtworkPoints(beaconItem), []);
+  assert.deepEqual(bloomGeometry(beaconItem).dots.map((dot) => dot.category), ["Social"]);
+  assert.equal(bloomGeometry(beaconItem).countBadge?.text, "👥 11 · ✦ 5");
   const friendItem = nativePresentation(
     group(points(4, "person")),
     "micro",
@@ -264,9 +257,9 @@ test("only supplied eligible points contribute; removing an entity updates count
     {},
     ownedIds,
   );
-  assert.equal(before.overflow, 5);
+  assert.equal(bloomGeometry(before).countBadge?.beaconTotal, 12);
   assert.equal(before.owned.length, 1);
-  assert.equal(after.overflow, 0);
+  assert.equal(bloomGeometry(after).countBadge?.beaconTotal, 5);
   assert.equal(after.owned.length, 0);
   assert.equal(nativeMapPresentations([], viewport, "atmosphere").length, 0);
 });
@@ -343,6 +336,14 @@ test("selected markers retain exact coordinates and invalid or offscreen selecti
   assert.equal(selected?.group.members.length, 1);
   assert.equal(selected?.group.latitude, input[1].latitude);
   assert.equal(selected?.group.longitude, input[1].longitude);
+  for (const [mode, zoom] of [["stack", 17], ["swarm", 14], ["atmosphere", 11], ["micro", 8]] as const) {
+    const items = nativeMapPresentations(input, { ...viewport, zoom }, mode, priority);
+    const selectedId = "beacon:001";
+    assert.equal(items.flatMap((item) => item.group.members).filter((point) => point.id === selectedId).length, 1);
+    const remaining = items.find((item) => item.group.members.length === 2);
+    assert.equal(bloomGeometry(remaining!).countBadge?.beaconTotal, 2);
+    assert.ok(bloomGeometry(remaining!).primary.every((point) => point.id !== selectedId));
+  }
   assert.equal(
     nativeMapPresentations(
       [{ ...input[1], latitude: NaN }],
@@ -376,9 +377,9 @@ test("budget pressure permits close-zoom swarms without dropping any items", () 
     "stack",
     {},
     new Set(),
-    10,
+    4,
   );
-  assert.ok(result.reduce((sum, item) => sum + item.featureCost, 0) <= 10);
+  assert.ok(result.reduce((sum, item) => sum + item.featureCost, 0) <= 4);
   assert.ok(result.some((item) => item.mode === "swarm"));
   assert.equal(
     result.flatMap((item) => item.group.members).length,

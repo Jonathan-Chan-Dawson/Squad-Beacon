@@ -156,6 +156,8 @@ For onboarding scenarios, run `npm run test:onboarding`, then `npm run build:onb
 
 Signed-out visitors use the existing Map, Beacons home, Browse, navigation and Create button. Personal routes and account actions open the existing login screen; demo mode remains a signed-in sample account. Hosts must publish a public preview and separately enable **Visible without signing in** before it appears to signed-out visitors. Guest visibility starts off and is removed with public publishing. Signing in returns to the existing Browse preview for explicit join confirmation. Apply the additive guest-discovery migration listed in [the backend inventory](supabase/_inventory.md) in order for live signed-out discovery; local source changes do not deploy the database. The existing loading, empty and error UI handles unavailable discovery. `test:onboarding` and its browser companion include this coverage.
 
+Beacon Score uses the ordered migration listed in the [backend inventory](supabase/_inventory.md). Live scores settle when Profile syncs. Exact totals and recent awards are private, and showing the tier badge is optional. Run `npx tsx --test tests/beaconScore.database.test.ts` for local reward, replay, and privacy coverage.
+
 The installed dependency audit reports 15 moderate advisories (the same count reported before feature dependencies were added). Review the dependency audit before public release; no forced SDK upgrade was applied.
 
 Type-check Edge Functions separately with Deno:

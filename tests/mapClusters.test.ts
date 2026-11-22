@@ -191,7 +191,7 @@ test("marker visuals keep the fixed activity and friend sizes", () => {
   );
   assert.deepEqual(
     [markerVisualSize("person", 12), markerVisualSize("person", 17)],
-    [36, 36],
+    [34, 34],
   );
   assert.ok(markerVisualSize("beacon", 15) > markerVisualSize("person", 15));
 });

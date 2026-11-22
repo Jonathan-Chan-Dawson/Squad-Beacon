@@ -893,7 +893,7 @@ export default function BrowseBeaconsScreen() {
                     borderColor: colors.border,
                     borderRadius: tokens.radius.button,
                     backgroundColor: colors.surface,
-                    paddingHorizontal: tokens.space.md,
+                    paddingHorizontal: tokens.space.sm,
                   }}
                 >
                   <Search size={18} color={colors.textSecondary} />
@@ -912,8 +912,7 @@ export default function BrowseBeaconsScreen() {
                         minHeight: 44,
                         paddingLeft: tokens.space.sm,
                         color: colors.textPrimary,
-                        ...tokens.type.body,
-                        outlineStyle: "none",
+                        ...tokens.type.secondary,
                       } as never
                     }
                   />
@@ -966,6 +965,7 @@ export default function BrowseBeaconsScreen() {
                         onPress={() => openMap()}
                         style={{
                           minHeight: 44,
+                          maxWidth: "100%",
                           flexDirection: "row",
                           alignItems: "center",
                           gap: 5,
@@ -979,6 +979,7 @@ export default function BrowseBeaconsScreen() {
                           numberOfLines={1}
                           style={{
                             maxWidth: 200,
+                            flexShrink: 1,
                             color: colors.textSecondary,
                             ...tokens.type.caption,
                           }}
@@ -999,6 +1000,7 @@ export default function BrowseBeaconsScreen() {
                         }
                         style={{
                           minHeight: 44,
+                          maxWidth: "100%",
                           justifyContent: "center",
                           paddingHorizontal: 8,
                         }}

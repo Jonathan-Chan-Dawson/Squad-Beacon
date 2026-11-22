@@ -386,27 +386,12 @@ test("a Space seeds optional Beacon association without introducing a Space audi
   await page.getByRole("button", { name: "All Beacons", exact: true }).click();
   await page.getByRole("button", { name: "+ Beacon", exact: true }).click();
   await expect(page).toHaveURL(/\/create\?spaceId=space-neighborhood-studio/);
-  await page.getByRole("button", { name: /^Advanced Options/ }).click();
-  await expect(
-    page.getByRole("button", {
-      name: "Associated with Neighborhood Studio",
-      exact: true,
-    }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "space", exact: true }),
-  ).toHaveCount(0);
-  await page
-    .getByRole("button", {
-      name: "Associated with Neighborhood Studio",
-      exact: true,
-    })
-    .click();
-  await page
-    .getByRole("dialog")
-    .getByRole("button", { name: "No community association", exact: true })
-    .click();
-  await expect(
-    page.getByRole("button", { name: "Choose a community", exact: true }),
-  ).toBeVisible();
+  const community = page.getByRole("button", { name: /^Community, / });
+  await expect(community).toContainText("Neighborhood Studio");
+  await community.click();
+  const picker = page.getByRole("dialog", { name: "Choose a community" });
+  await expect(picker.getByRole("radio", { name: "Neighborhood Studio" })).toBeChecked();
+  await expect(picker.getByRole("button", { name: "space", exact: true })).toHaveCount(0);
+  await picker.getByRole("button", { name: "Clear community", exact: true }).click();
+  await expect(community).toContainText("None");
 });

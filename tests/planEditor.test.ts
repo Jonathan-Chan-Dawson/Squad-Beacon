@@ -6,9 +6,24 @@ import {
   recurrencePreview,
 } from "../src/features/plans/recurrence";
 import {
+  planStopsForSave,
+  movePlanEditorStop,
   planEditorFromData,
+  type EditorStop,
   type PlanEditorDraft,
 } from "../src/features/plans/planEditorModel";
+
+test("staged Beacon handoffs stay local until confirmed and visible moves keep row identities", () => {
+  const idea: EditorStop = { id: "idea", kind: "idea", title: "Coffee", details: "Somewhere quiet" };
+  const linked: EditorStop = { id: "linked", kind: "decision", title: "Where?", details: "", thread_id: "thread" };
+  const staged: EditorStop = { id: "beacon", kind: "beacon", title: "New Beacon", details: "", awaiting_beacon: true, creation_token: "child" };
+  const reordered = movePlanEditorStop([idea, staged, linked], "linked", "idea");
+  assert.deepEqual(planStopsForSave(reordered), [linked, idea]);
+  const completed = { ...staged, title: "Walk", creation_token: undefined };
+  const saved = planStopsForSave([...reordered.slice(0, 1), completed, idea]);
+  assert.deepEqual(saved.map((stop) => stop.id), ["linked", "beacon", "idea"]);
+  assert.equal("awaiting_beacon" in saved[1], false);
+});
 
 const rule = {
   anchor_date: "2027-01-31",

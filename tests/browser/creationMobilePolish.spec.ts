@@ -1,8 +1,9 @@
 import { expect, test, type Page } from "@playwright/test";
+import { startDemoFromEntry } from "./demoEntry";
 
 async function blank(page: Page) {
   await page.goto("/");
-  await page.getByRole("button", { name: /Explore the demo/ }).click();
+  await startDemoFromEntry(page);
   await page.getByRole("button", { name: "Create", exact: true }).click();
   await page
     .getByRole("button", { name: "+ Create Blank Beacon", exact: true })
@@ -19,11 +20,11 @@ test("full-screen invitations allow more than 20, inline list management, and ke
   await page.goto(
     `/create?${new URLSearchParams({ editor: "yes", inviteeIds: JSON.stringify(inviteeIds) })}`,
   );
-  await page.getByRole("button", { name: /Explore the demo/ }).click();
-  await page.getByRole("button", { name: "+ Add People", exact: true }).click();
-  const modal = page.getByRole("dialog", { name: "Add People", exact: true });
+  await startDemoFromEntry(page);
+  await page.getByRole("button", { name: /^(?:Add friends|Edit invited friends)$/ }).click();
+  const modal = page.getByRole("dialog", { name: "Invite friends", exact: true });
   await modal
-    .getByLabel("Search people and groups", { exact: true })
+    .getByLabel("Search friends", { exact: true })
     .fill("Jordan");
   await modal
     .getByRole("checkbox", { name: "Select Jordan Ellis", exact: true })
@@ -31,10 +32,11 @@ test("full-screen invitations allow more than 20, inline list management, and ke
   await expect(
     modal.getByRole("checkbox", { name: "Select Jordan Ellis", exact: true }),
   ).toBeChecked();
-  await expect(modal.getByText(/21 selected.*Invitations/)).toBeVisible();
+  await expect(modal.getByRole("button", { name: "Selected · 21", exact: true })).toBeVisible();
   await modal
     .getByRole("button", { name: "Clear selection", exact: true })
     .click();
+  await modal.getByRole("button", { name: "Filter", exact: true }).click();
   await modal
     .getByRole("button", { name: "Private Lists", exact: true })
     .click();
@@ -49,7 +51,7 @@ test("full-screen invitations allow more than 20, inline list management, and ke
     .getByRole("button", { name: "Back to people", exact: true })
     .click();
   await expect(lists).toHaveCount(0);
-  await modal.getByLabel("Search people and groups", { exact: true }).focus();
+  await modal.getByLabel("Search friends", { exact: true }).focus();
   for (let index = 0; index < 12; index++) {
     await page.keyboard.press("Tab");
     expect(
@@ -63,7 +65,7 @@ test("full-screen invitations allow more than 20, inline list management, and ke
   await page.keyboard.press("Escape");
   await expect(modal).toHaveCount(0);
   await expect(
-    page.getByRole("button", { name: "+ Add People", exact: true }),
+    page.getByRole("button", { name: /^(?:Add friends|Edit invited friends)$/ }),
   ).toBeFocused();
 });
 
@@ -76,11 +78,10 @@ test("inline audiences and communities keep distinct values and one expansion", 
     exact: true,
   });
   const community = page.getByRole("button", {
-    name: "Community",
-    exact: true,
+    name: /^Community, /,
   });
   const joining = page.getByRole("button", {
-    name: "Joining & Capacity",
+    name: "Joining",
     exact: true,
   });
   await visibility.click();
@@ -97,7 +98,7 @@ test("inline audiences and communities keep distinct values and one expansion", 
   await expect(visibility).toHaveAttribute("aria-expanded", "false");
   await expect(visibility).toContainText(label);
   await expect(
-    page.getByText("No invitations yet", { exact: true }),
+    page.getByText("Invitations are sent when you create the Beacon.", { exact: true }),
   ).toBeVisible();
   await community.click();
   await page
@@ -108,9 +109,11 @@ test("inline audiences and communities keep distinct values and one expansion", 
   await expect(visibility).toContainText(label);
   await visibility.click();
   await community.click();
+  const picker = page.getByRole("dialog", { name: "Choose a community" });
+  await picker.getByRole("button", { name: "Close picker", exact: true }).click();
+  await expect(picker).toHaveCount(0);
   await expect(visibility).toHaveAttribute("aria-expanded", "false");
   await joining.click();
-  await expect(community).toHaveAttribute("aria-expanded", "false");
   await page.getByRole("radio", { name: "Host Approval", exact: true }).click();
   await page.getByRole("button", { name: "Set maximum", exact: true }).click();
   await page.getByLabel("Maximum spots (2–500)", { exact: true }).fill("501");
@@ -133,7 +136,7 @@ test("inline audiences and communities keep distinct values and one expansion", 
   await page
     .getByRole("button", { name: "Clear community", exact: true })
     .click();
-  await expect(community).toContainText("No community selected");
+  await expect(community).toContainText("None");
   await expect(visibility).toContainText(label);
 });
 
@@ -154,13 +157,13 @@ for (const width of [320, 375, 430, 1024]) {
         path: `.expo/creation-mobile/editor-${width}-${theme}.png`,
       });
       await page
-        .getByRole("button", { name: "Choose artwork", exact: true })
+        .getByRole("button", { name: "Customize appearance", exact: true })
         .click();
       await expect(
-        page.getByRole("dialog", { name: "Appearance", exact: true }),
+        page.getByRole("dialog", { name: "Customize appearance", exact: true }),
       ).toBeVisible();
-      const appearance = page.getByRole("dialog", { name: "Appearance", exact: true });
-      await expect(appearance.getByText("Card Appearance · Preview only")).toBeVisible();
+      const appearance = page.getByRole("dialog", { name: "Customize appearance", exact: true });
+      await expect(appearance.getByText("Card background · Preview only")).toBeVisible();
       const preview = appearance.getByText("Beacon card preview", { exact: true }).locator("..");
       for (const category of ["Fitness", "Study", "Gaming", "Creative", "Other", "Social"]) {
         await appearance.getByRole("button", { name: category, exact: true }).click();
@@ -172,8 +175,8 @@ for (const width of [320, 375, 430, 1024]) {
         await expect(option).toHaveAttribute("aria-selected", "true");
       }
       await page
-        .getByRole("dialog", { name: "Appearance", exact: true })
-        .getByRole("button", { name: "Close", exact: true })
+        .getByRole("dialog", { name: "Customize appearance", exact: true })
+        .getByRole("button", { name: "Done", exact: true })
         .click();
       await expect(page.getByLabel("Activity title", { exact: true })).toHaveValue(
         "An activity with a long title for our friends",
@@ -200,16 +203,17 @@ for (const width of [320, 375, 430, 1024]) {
         path: `.expo/creation-mobile/visibility-${width}-${theme}.png`,
       });
       await page
-        .getByRole("button", { name: "+ Add People", exact: true })
+        .getByRole("button", { name: /^(?:Add friends|Edit invited friends)$/ })
         .click();
       const modal = page.getByRole("dialog", {
-        name: "Add People",
+        name: "Invite friends",
         exact: true,
       });
       await expect(modal).toBeInViewport();
-      expect((await modal.boundingBox())!.height).toBeGreaterThan(800);
+      expect((await modal.boundingBox())!.height).toBeLessThan(844);
+      expect((await modal.boundingBox())!.width).toBeLessThanOrEqual(Math.min(width - 12, 400));
       await modal
-        .getByLabel("Search people and groups", { exact: true })
+        .getByLabel("Search friends", { exact: true })
         .fill("Jordan");
       await modal
         .getByRole("checkbox", { name: "Select Jordan Ellis", exact: true })
@@ -219,19 +223,20 @@ for (const width of [320, 375, 430, 1024]) {
       });
       await modal.getByRole("button", { name: "Cancel", exact: true }).click();
       await expect(
-        page.getByRole("button", { name: "+ Add People", exact: true }),
+        page.getByRole("button", { name: /^(?:Add friends|Edit invited friends)$/ }),
       ).toBeFocused();
       await expect(visibility).toHaveAttribute("aria-expanded", "true");
       await expect(
-        page.getByText("No invitations yet", { exact: true }),
+        page.getByText("Invitations are sent when you create the Beacon.", { exact: true }),
       ).toBeVisible();
       await visibility.click();
       await page
-        .getByRole("button", { name: "Community", exact: true })
+        .getByRole("button", { name: /^Community, / })
         .click();
       await page
         .getByLabel("Search communities", { exact: true })
         .fill("Auburn Hoops");
+      await page.screenshot({ path: `.expo/creation-mobile/community-${width}-${theme}.png` });
       await page
         .getByRole("radio", { name: "Auburn Hoops", exact: true })
         .click();

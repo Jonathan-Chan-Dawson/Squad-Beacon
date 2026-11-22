@@ -83,6 +83,58 @@ test("distinct public events cover a large concert and a strict five-person meet
   assert.ok(joined.rsvps.some(row => row.activity_id === meetup.activity_id && row.user_id === DEMO_ID && row.approved));
 });
 
+test("regional demo fixtures provide visible campus activity and privacy-safe public discovery nationwide", () => {
+  const data = makeDemo(), now = Date.now();
+  const regional = data.activities.filter(row => row.id.startsWith("map-region-") && row.mode !== "solo");
+  const locations = data.locations.filter(row => row.owner_id.startsWith("map-region-"));
+  const publicRows = data.public_beacons.filter(row => row.activity_id.startsWith("map-region-"));
+  assert.equal(locations.length, 636);
+  assert.equal(regional.length, 424);
+  assert.equal(publicRows.length, 108);
+  assert.equal(new Set(publicRows.map(row => row.area_label)).size, 51);
+  assert.equal(new Set(data.public_beacons.map(row => row.area_label === "Chicago" ? "IL" : row.area_label.split(", ").at(-1))).size, 51);
+  const friends = new Set(friendIds(data, DEMO_ID));
+  assert.ok(locations.every(row => friends.has(row.owner_id) && locationIsFresh(row, new Date(now))));
+  assert.ok(locations.some(row => row.owner_id.startsWith("map-region-anchorage-") && row.latitude! > 60));
+  assert.ok(locations.some(row => row.owner_id.startsWith("map-region-honolulu-") && row.longitude! < -150));
+  assert.ok(locations.some(row => row.longitude! > -72));
+  const campusCore = locations.filter(row => row.owner_id.startsWith("map-region-auburn-") &&
+    Math.abs(row.latitude! - 32.603) < 0.001 && Math.abs(row.longitude! + 85.486) < 0.001);
+  assert.ok(campusCore.length >= 24);
+  const campusBeacons = regional.filter(row => row.id.startsWith("map-region-auburn-"));
+  assert.equal(campusBeacons.length, 24);
+  assert.ok(campusBeacons.some(row => Date.parse(row.starts_at) < now && showBeaconOnMap(data, row, DEMO_ID, {}, now)));
+  for (const row of publicRows) {
+    const activity = regional.find(beacon => beacon.id === row.activity_id)!;
+    const place = data.places.find(place => place.activity_id === row.activity_id)!;
+    assert.equal(showBeaconOnMap(data, activity, DEMO_ID, {}, now), false);
+    assert.equal(row.coarse_lat, Math.round(place.latitude! * 100) / 100);
+    assert.equal(row.coarse_lng, Math.round(place.longitude! * 100) / 100);
+  }
+});
+
+test("spread Beacons fill Indiana, Ohio, and Alabama and appear singly in outlying cities", () => {
+  const data = makeDemo(), now = Date.now();
+  const spread = data.activities.filter(row => row.id.startsWith("map-spread-"));
+  const places = data.places.filter(row => row.activity_id.startsWith("map-spread-"));
+  assert.equal(spread.length, 148);
+  for (const [state, expected] of [["IN", 42], ["OH", 45], ["AL", 32]] as const) {
+    const local = places.filter(row => row.label.endsWith(`, ${state}`));
+    assert.equal(local.length, expected);
+    for (const key of ["latitude", "longitude"] as const) {
+      const values = local.map(row => row[key]!);
+      assert.ok(Math.max(...values) - Math.min(...values) > 2);
+    }
+  }
+  assert.equal(places.filter(row => row.label.endsWith("Birmingham, AL")).length, 8);
+  assert.equal(places.filter(row => row.label.endsWith("Moab, UT")).length, 1);
+  assert.equal(places.filter(row => row.label.endsWith("Sitka, AK")).length, 1);
+  const publicIds = new Set(data.public_beacons.map(row => row.activity_id));
+  for (const activity of spread) {
+    assert.equal(showBeaconOnMap(data, activity, DEMO_ID, {}, now), !publicIds.has(activity.id));
+  }
+});
+
 test("demo Beacon Plan resolves three ordered, visible stops and a connected Map route", () => {
   const data = makeDemo(), now = Date.now();
   const context = resolveMapContext(data, DEMO_ID, { kind: "plan", id: "map-plan-city-afternoon" });

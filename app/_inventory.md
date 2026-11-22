@@ -31,6 +31,7 @@ Keep route paths stable; move reusable screens and feature logic into src/featur
 - your-activity.tsx, plans.tsx and calendar.tsx render the same Your Activity workspace with compatible default subtabs and retained incoming parameters; see docs/YOUR_ACTIVITY_UX_VALIDATION.md.
 
 - beacon-templates.tsx: full-screen Beacon template browsing and existing creation-editor handoff.
+- spontaneity.tsx: full-screen Side Quest generator with existing Beacon and Ping editor handoffs.
 
 - settings/premium.tsx: Premium comparison, current entitlement and usage; demo-only tier switching. No billing integration.
 

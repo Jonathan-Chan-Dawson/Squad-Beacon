@@ -1,12 +1,6 @@
 import { ThemedSwitch } from "@/src/shared/ThemedSwitch";
 import React from "react";
-import {
-  Pressable,
-  Text,
-  View,
-  type TextInput,
-  useWindowDimensions,
-} from "react-native";
+import { Pressable, Text, View } from "react-native";
 import { ChevronRight } from "lucide-react-native";
 import { Button, Field, Txt, useTheme } from "@/src/shared/ui";
 import type { BeaconControlValues } from "../controls";
@@ -64,9 +58,11 @@ export function CreationSwitch({
   detail,
   value,
   onChange,
+  icon,
 }: {
   title: string;
   detail?: string;
+  icon?: React.ReactNode;
   value: boolean;
   onChange: (value: boolean) => void;
 }) {
@@ -80,6 +76,7 @@ export function CreationSwitch({
         gap: 12,
       }}
     >
+      {icon}
       <View style={{ flex: 1, gap: 3 }}>
         <Text style={[styles.body, { fontWeight: "600" }]}>{title}</Text>
         {detail ? <Txt muted>{detail}</Txt> : null}
@@ -97,40 +94,31 @@ export function CreationModuleControls({
   value,
   onChange,
   category,
-  musicInputRef,
+  focusMusic = false,
 }: {
   value: BeaconControlValues;
   onChange: (value: BeaconControlValues) => void;
   category: string;
-  musicInputRef?: React.Ref<TextInput>;
+  focusMusic?: boolean;
 }) {
   const { styles, colors } = useTheme();
-  const recommendations = recommendedCreationModules(category);
-  const { width } = useWindowDimensions();
+  const recommendations = recommendedCreationModules(category).filter(
+    (field) => !value[field],
+  );
   return (
-    <View style={{ gap: 16, flexDirection: "row", flexWrap: "wrap" }}>
-      <View
-        style={{
-          flexBasis: "100%",
-          flexDirection: "row",
-          alignItems: "center",
-          gap: 8,
-        }}
-      >
-        <View style={{ flex: 1 }}>
-          <Txt muted>
-            Suggested for {category}:{" "}
-            {creationModules
-              .filter((row) => recommendations.includes(row.field))
-              .map((row) => row.name)
-              .join(" + ")}
-          </Txt>
-        </View>
+    <View style={{ gap: 12 }}>
+      {recommendations.length > 0 && <View style={{ gap: 4 }}>
+        <Txt muted>
+          Suggested for {category} ·{" "}
+          {creationModules
+            .filter((row) => recommendations.includes(row.field))
+            .map((row) => row.name)
+            .join(" + ")}
+        </Txt>
         <Button
           compact
           secondary
-          title="Apply"
-          accessibilityLabel="Apply module recommendations"
+          title="Use suggested tools"
           onPress={() =>
             onChange({
               ...value,
@@ -140,16 +128,9 @@ export function CreationModuleControls({
             })
           }
         />
-      </View>
-      {(["Social", "Tools", "Media"] as const).map((family) => (
-        <View
-          key={family}
-          style={{
-            gap: 12,
-            flexBasis: width >= 768 ? "30%" : "100%",
-            flexGrow: 1,
-          }}
-        >
+      </View>}
+      {(["Social", "Collaboration", "Media"] as const).map((family) => (
+        <View key={family} style={{ gap: 4 }}>
           <Text style={styles.label}>{family}</Text>
           {creationModules
             .filter((row) => row.family === family)
@@ -165,6 +146,11 @@ export function CreationModuleControls({
                 <CreationSwitch
                   title={row.name}
                   detail={row.description}
+                  icon={
+                    <Text accessible={false} style={styles.body}>
+                      {row.icon}
+                    </Text>
+                  }
                   value={value[row.field]}
                   onChange={(enabled) =>
                     onChange({ ...value, [row.field]: enabled })
@@ -172,8 +158,8 @@ export function CreationModuleControls({
                 />
                 {value[row.field] && row.field === "enable_music" ? (
                   <Field
-                    inputRef={musicInputRef}
                     label="Music link"
+                    autoFocus={focusMusic}
                     value={value.music_url ?? ""}
                     onChangeText={(music_url) =>
                       onChange({ ...value, music_url: music_url || null })

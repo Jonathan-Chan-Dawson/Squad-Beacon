@@ -12,9 +12,10 @@ export default function DateField({
   value,
   onChange,
   timezone = Intl.DateTimeFormat().resolvedOptions().timeZone,
+  showTimezone = true,
   onValidityChange,
 }: DateTimeFieldProps) {
-  const { semanticColors: colors, styles } = useTheme();
+  const { semanticColors: colors, styles, resolvedAppearance } = useTheme();
   const source = value + ":" + timezone;
   const [edit, setEdit] = useState(() => ({
     source,
@@ -27,7 +28,7 @@ export default function DateField({
   return (
     <View style={{ gap: 4 }}>
       <Text style={styles.label}>{label}</Text>
-      <Text style={styles.muted}>{timezone}</Text>
+      {showTimezone && <Text style={styles.muted}>{timezone}</Text>}
       <input
         aria-label={label}
         aria-invalid={!!error}
@@ -64,7 +65,7 @@ export default function DateField({
           color: colors.textPrimary,
           padding: "10px 12px",
           font: "inherit",
-          colorScheme: "light dark",
+          colorScheme: resolvedAppearance,
         }}
       />
       {!!error && (

@@ -1,7 +1,7 @@
 import { SemanticEmpty } from "@/src/features/onboarding/OnboardingUI";
 import {
   LivingActivitySection,
-  LivingActivityHighlights,
+  UpNextCard,
 } from "@/src/features/beacons/components/feed/LivingActivitySection";
 import React, { useEffect, useRef, useState } from "react";
 import { Text, View, useWindowDimensions } from "react-native";
@@ -29,6 +29,7 @@ import { MotionPressable } from "@/src/shared/MotionPressable";
 import { ProfileAvatar } from "../ProfileAvatar";
 import { selectProfileBeacon, type ProfileContentRow } from "../profileContent";
 import { useProfileContent } from "../useProfileContent";
+import { BeaconTierBadge } from "./BeaconTierBadge";
 import { ProfileAlbums, openProfileBeacon } from "./ProfileAlbums";
 import { visibleSoloActivity } from "@/src/features/maps/soloActivity";
 import {
@@ -203,6 +204,7 @@ function ProfileTags({ values }: { values: string[] }) {
 export function ProfileExperience({
   profile,
   actions,
+  overviewAccessory,
   accessory,
   noteAccessory,
   tab,
@@ -211,6 +213,7 @@ export function ProfileExperience({
 }: {
   profile: Profile;
   actions: React.ReactNode;
+  overviewAccessory?: React.ReactNode;
   accessory?: React.ReactNode;
   noteAccessory?: React.ReactNode;
   tab: ProfileTab;
@@ -453,6 +456,7 @@ export function ProfileExperience({
             )}
           </>
         )}
+        {!own && <BeaconTierBadge personId={profile.id} />}
         {(data.is_demo || data.capabilities?.living_activity) && !own && (
           <StatusBubble
             attached
@@ -552,90 +556,6 @@ export function ProfileExperience({
           {actions}
         </View>
       </View>
-      {(data.is_demo || data.capabilities?.living_activity) && (
-        <LivingActivitySection personId={profile.id} showLower={false} divider={own} />
-      )}
-      {(data.is_demo || data.capabilities?.living_activity) && (
-        <LivingActivityHighlights personId={profile.id} />
-      )}
-      {featured && !(data.is_demo || data.capabilities?.living_activity) && (
-        <MotionPressable
-          testID="profile-current-beacon"
-          accessibilityRole="button"
-          accessibilityLabel={`Open Beacon ${featured.title}`}
-          onPress={() => openProfileBeacon(featured.id)}
-          style={{
-            backgroundColor: colors.surfaceRaised,
-            borderRadius: 20,
-            padding: 13,
-            gap: 10,
-            borderWidth: 1,
-            borderColor: live ? colors.accent + "55" : colors.border,
-          }}
-        >
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 7 }}>
-            <View
-              style={{
-                width: 7,
-                height: 7,
-                borderRadius: 4,
-                backgroundColor: live ? colors.accent : colors.textSecondary,
-              }}
-            />
-            <Text style={[styles.body, { fontWeight: "600", flex: 1 }]}>
-              {live ? "Current Beacon" : "Next Beacon"}
-            </Text>
-            {live && (
-              <Text
-                style={{
-                  color: colors.accent,
-                  fontSize: 11,
-                  fontWeight: "700",
-                }}
-              >
-                LIVE
-              </Text>
-            )}
-            <ChevronRight size={17} color={colors.textSecondary} />
-          </View>
-          <View style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
-            <ActivityBadge category={featured.category} size={52} />
-            <View style={{ flex: 1, gap: 4 }}>
-              <Text
-                numberOfLines={2}
-                style={[styles.body, { fontWeight: "600" }]}
-              >
-                {featured.title}
-              </Text>
-              <Text style={styles.muted}>
-                {activityWhen(featured, new Date(now))}
-              </Text>
-              {!!meetingLabel && meetingLabel !== featured.title && (
-                <Text style={styles.muted}>{meetingLabel}</Text>
-              )}
-              {!!attendeeProfiles.length && (
-                <View
-                  style={{ flexDirection: "row", alignItems: "center", gap: 7 }}
-                >
-                  <View style={{ flexDirection: "row", paddingLeft: 4 }}>
-                    {attendeeProfiles.map((p) => (
-                      <View key={p.id} style={{ marginLeft: -4 }}>
-                        <ProfileAvatar profile={p} size={23} />
-                      </View>
-                    ))}
-                  </View>
-                  <Text style={styles.muted}>
-                    {attendeeProfiles.length === 1 &&
-                    attendeeProfiles[0].id === featured.owner_id
-                      ? "Hosting"
-                      : "Taking part"}
-                  </Text>
-                </View>
-              )}
-            </View>
-          </View>
-        </MotionPressable>
-      )}
       <View
         testID="profile-tabs"
         accessibilityRole="tablist"
@@ -679,6 +599,90 @@ export function ProfileExperience({
         <View
           style={{ display: tab === "Overview" ? "flex" : "none", gap: 22 }}
         >
+          {data.is_demo || data.capabilities?.living_activity ? (
+            <LivingActivitySection key={profile.id} personId={profile.id} compact dashboard />
+          ) : (
+            <UpNextCard personId={profile.id} />
+          )}
+          {featured && !(data.is_demo || data.capabilities?.living_activity) && (
+            <MotionPressable
+              testID="profile-current-beacon"
+              accessibilityRole="button"
+              accessibilityLabel={`Open Beacon ${featured.title}`}
+              onPress={() => openProfileBeacon(featured.id)}
+              style={{
+                backgroundColor: colors.surfaceRaised,
+                borderRadius: 20,
+                padding: 13,
+                gap: 10,
+                borderWidth: 1,
+                borderColor: live ? colors.accent + "55" : colors.border,
+              }}
+            >
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 7 }}>
+                <View
+                  style={{
+                    width: 7,
+                    height: 7,
+                    borderRadius: 4,
+                    backgroundColor: live ? colors.accent : colors.textSecondary,
+                  }}
+                />
+                <Text style={[styles.body, { fontWeight: "600", flex: 1 }]}>
+                  {live ? "Current Beacon" : "Next Beacon"}
+                </Text>
+                {live && (
+                  <Text
+                    style={{
+                      color: colors.accent,
+                      fontSize: 11,
+                      fontWeight: "700",
+                    }}
+                  >
+                    LIVE
+                  </Text>
+                )}
+                <ChevronRight size={17} color={colors.textSecondary} />
+              </View>
+              <View style={{ flexDirection: "row", gap: 12, alignItems: "center" }}>
+                <ActivityBadge category={featured.category} size={52} />
+                <View style={{ flex: 1, gap: 4 }}>
+                  <Text
+                    numberOfLines={2}
+                    style={[styles.body, { fontWeight: "600" }]}
+                  >
+                    {featured.title}
+                  </Text>
+                  <Text style={styles.muted}>
+                    {activityWhen(featured, new Date(now))}
+                  </Text>
+                  {!!meetingLabel && meetingLabel !== featured.title && (
+                    <Text style={styles.muted}>{meetingLabel}</Text>
+                  )}
+                  {!!attendeeProfiles.length && (
+                    <View
+                      style={{ flexDirection: "row", alignItems: "center", gap: 7 }}
+                    >
+                      <View style={{ flexDirection: "row", paddingLeft: 4 }}>
+                        {attendeeProfiles.map((p) => (
+                          <View key={p.id} style={{ marginLeft: -4 }}>
+                            <ProfileAvatar profile={p} size={23} />
+                          </View>
+                        ))}
+                      </View>
+                      <Text style={styles.muted}>
+                        {attendeeProfiles.length === 1 &&
+                        attendeeProfiles[0].id === featured.owner_id
+                          ? "Hosting"
+                          : "Taking part"}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+            </MotionPressable>
+          )}
+          {overviewAccessory}
           <ProfileAlbums
             personId={profile.id}
             own={own}

@@ -4,6 +4,7 @@ Planning feature
 
 - PlanningListScreen.tsx: organizer management, contributed proposals, and history; everyday participation lives in Responses & Invitations.
 - PlanningComposer.tsx and composerSession.ts: focused Ping/Vote/Draw creation, unique account-scoped in-memory sessions, stable option editor handoffs, and frozen publication recovery.
+- PlanningKindSelector.tsx shares creation mode names and descriptions across Create, Responses and Plan entry points. PlanningCreationFields.tsx shares audience and scheduling pickers, PlanningChoicesEditor.tsx edits Vote/Draw choices, and PlanningTimeSlots.tsx stages each proposed time before adding it to a new poll.
 - inbox.ts and DecisionRow.tsx: canonical decision grouping, flat action-first rows, inline context, and authoritative Draw results.
 - PlanningResponseControls.tsx, PingPreferences.tsx, and submission.ts: reusable response controls, explicit Ping preferences, and shared per-thread submission exclusion.
 - PlanningDetailScreen.tsx: retained advanced Council management and embedded decision details.

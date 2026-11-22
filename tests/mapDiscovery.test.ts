@@ -120,11 +120,9 @@ test("public pins honor the existing audience, category and context filters", ()
     ).length,
     0,
   );
-  assert.equal(
-    publicMapBeacons(rows, filters, ["Study"], [], false, null, Date.now())
-      .length,
-    0,
-  );
+  const studyPins = publicMapBeacons(rows, filters, ["Study"], [], false, null, Date.now());
+  assert.ok(studyPins.length > 0);
+  assert.ok(studyPins.every((row) => row.category === "Study"));
   assert.equal(
     publicMapBeacons(rows, filters, [], [], true, null, Date.now()).length,
     0,

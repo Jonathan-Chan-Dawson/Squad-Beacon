@@ -10,6 +10,8 @@ export type ViewerDeviceDefaults = {
   beaconAudience?: Audience;
   beaconAudienceId?: string | null;
   sonarDurationMinutes?: SonarDurationMinutes;
+  tinyBeaconTaps?: number;
+  beaconScoreStream?: { id: string; total: number; legacy: number };
   quickStatus?: { audience: Audience; audienceId: string | null; minutes: number };
 };
 export const defaultAudienceOptions = [
@@ -25,6 +27,7 @@ export function parseViewerDeviceDefaults(
 ): ViewerDeviceDefaults {
   if (!value || typeof value !== "object") return {};
   const row = value as Record<string, unknown>;
+  const stream = row.beaconScoreStream as ViewerDeviceDefaults["beaconScoreStream"];
   const audience = defaultAudienceOptions.find(
     (option) => option === row.beaconAudience,
   );
@@ -32,6 +35,17 @@ export function parseViewerDeviceDefaults(
     (option) => option === row.sonarDurationMinutes,
   ) as SonarDurationMinutes | undefined;
   return {
+    ...(stream && typeof stream.id === "string" &&
+    /^[0-9a-f-]{36}$/i.test(stream.id) &&
+    Number.isSafeInteger(stream.total) && stream.total >= 0 &&
+    Number.isSafeInteger(stream.legacy) && stream.legacy >= 0
+      ? { beaconScoreStream: stream }
+      : {}),
+    ...(typeof row.tinyBeaconTaps === "number" &&
+    Number.isSafeInteger(row.tinyBeaconTaps) &&
+    row.tinyBeaconTaps >= 0
+      ? { tinyBeaconTaps: row.tinyBeaconTaps }
+      : {}),
     ...(parseQuickStatus(row.quickStatus) ? { quickStatus: parseQuickStatus(row.quickStatus)! } : {}),
     ...(audience
       ? {

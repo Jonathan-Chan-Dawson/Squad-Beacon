@@ -6,8 +6,6 @@ import {
   visibleCurrentBeacon,
 } from "./currentStatusBeacon";
 import { isApprovedGoing, beaconRoleFor } from "./permissions";
-import { canReadPlanningThread } from "@/src/features/planning/domain";
-import { visibleStatusAttachment } from "./statusAttachments";
 
 export const isActivityNote = (activity: Activity) =>
   activity.mode === "solo" && activity.solo_purpose === "activity_note";
@@ -134,15 +132,12 @@ export function currentActivity(
 
 export function upNext(data: Data, owner: string | null, now: number) {
   if (!owner || data.viewer_id !== owner) return null;
-  const status = data.activities
-    .filter((a) => a.owner_id === owner && isStatusNote(a) && activeAt(a, now))
-    .sort((a, b) => b.starts_at.localeCompare(a.starts_at))[0];
-  const featured = visibleStatusAttachment(data, status, owner, now);
   const beacons = data.activities.filter(
     (a) =>
       a.mode !== "solo" &&
       a.status === "scheduled" &&
       Date.parse(a.starts_at) > now &&
+      Date.parse(a.ends_at) > Date.parse(a.starts_at) &&
       !(a.plan_id && a.plan_step && !a.plan_started_at) &&
       canReadActivityPreview(data, a, owner) &&
       (["owner", "coowner"].includes(beaconRoleFor(data, a, owner)) ||
@@ -151,44 +146,9 @@ export function upNext(data: Data, owner: string | null, now: number) {
           data.rsvps.find((r) => r.activity_id === a.id && r.user_id === owner),
         )),
   );
-  const pings = data.planning_threads.filter(
-    (t) =>
-      t.kind === "ping" &&
-      t.owner_id === owner &&
-      t.status === "open" &&
-      Date.parse(t.deadline_at) > now &&
-      t.payload &&
-      Date.parse(t.payload.starts_at) > now &&
-      canReadPlanningThread(data, t, owner),
-  );
-  const candidates = [
-    ...beacons.map((a) => ({
-      type: "beacon" as const,
-      id: a.id,
-      title: a.title,
-      time: a.starts_at,
-      category: a.category,
-      state: "Upcoming",
-    })),
-    ...pings.map((t) => ({
-      type: "ping" as const,
-      id: t.id,
-      title: t.title,
-      time: t.payload!.starts_at,
-      category: t.payload!.category,
-      state: "Planning",
-    })),
-  ];
-  candidates.sort(
-    (a, b) => a.time.localeCompare(b.time) || a.id.localeCompare(b.id),
-  );
-  const highlighted = candidates.find(
-    (c) => c.id === featured?.id && c.type === featured.type,
-  );
-  // Do not choose a different item merely to fill the duplicate's space.
-  return highlighted
-    ? null
-    : (candidates.find((c) => c.type === "beacon") ?? candidates[0] ?? null);
+  return beacons.sort((a, b) =>
+    Date.parse(a.starts_at) - Date.parse(b.starts_at) || a.id.localeCompare(b.id),
+  )[0] ?? null;
 }
 
 export function activityNoteSeed(

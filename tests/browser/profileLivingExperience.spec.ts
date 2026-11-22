@@ -1,8 +1,11 @@
 import { expect, test, type Page } from "@playwright/test";
+import { mockOnboardingAccount } from "./onboardingAccount";
+import { startDemoFromEntry } from "./demoEntry";
 
 async function openDemo(page: Page) {
-  await page.goto("/");
-  await page.getByRole("button", { name: /Explore the demo/ }).click();
+  await mockOnboardingAccount(page, { signedOut: true });
+  await page.goto("/auth/sign-in");
+  await startDemoFromEntry(page);
   await page.getByRole("tab", { name: "Profile", exact: true }).click();
   await expect(page.getByTestId("profile-identity")).toBeVisible();
 }
@@ -44,13 +47,15 @@ for (const width of [360, 390, 430]) {
         page.getByRole("button", { name: "Edit profile", exact: true }),
       ).toBeInViewport();
       await expect(tabs).toBeInViewport();
-      await expect(page.getByTestId("profile-memories")).toBeInViewport({
-        ratio: 0.05,
-      });
+      const current = page.getByTestId("current-activity-section");
+      await expect(current).toBeVisible();
+      expect((await tabs.boundingBox())!.y).toBeLessThan((await current.boundingBox())!.y);
+      await expect(page.getByTestId("profile-memories")).toBeVisible();
       await page.screenshot({
         path: `test-results/profile-own-${width}-${appearance}.png`,
       });
       await tabs.getByRole("tab", { name: "Beacons", exact: true }).click();
+      await expect(current).toBeHidden();
       await expect(
         page.getByRole("textbox", { name: "Search past Beacons", exact: true }),
       ).toBeVisible();
@@ -123,7 +128,7 @@ test("long identity text remains usable and biography expands without losing edi
   ).toBeVisible();
   await page.getByRole("button", { name: "Collapse bio", exact: true }).click();
   await page
-    .getByRole("button", { name: "Edit your status", exact: true })
+    .getByRole("button", { name: "Edit Status Note", exact: true })
     .click();
   await expect(page.getByRole("dialog")).toBeVisible();
   expect(

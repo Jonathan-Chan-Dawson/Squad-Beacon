@@ -66,6 +66,8 @@ import { friendIds, validateActivity } from "@/src/shared/domain";
 import { pageAnimation } from "@/src/shared/mobilePresentation";
 import { useCommunityTopics } from "@/src/features/discovery/useCommunityTopics";
 import { BeaconMapIconEditor } from "../components/BeaconMapIconEditor";
+import { creationScheduleSummary } from "../createTiming";
+import { planningTimezone } from "@/src/features/planning/creationTiming";
 import { useBeacon } from "@/src/shared/store";
 import type { Activity, Profile, RSVP } from "@/src/shared/types";
 import {
@@ -82,7 +84,9 @@ import { useNow } from "@/src/shared/useNow";
 import * as ExpoLinking from "expo-linking";
 import { Stack, router, useLocalSearchParams } from "expo-router";
 import {
+  BellRing,
   Bookmark,
+  CalendarClock,
   CalendarDays,
   ChevronRight,
   Camera,
@@ -1999,10 +2003,20 @@ export default function ActivityDetail() {
         onClose={() => { setEdit(false); setEditTiming(false); }}
       >
         <Field label="Title" value={title} onChangeText={setTitle} />
-        <Button secondary title="Change date & time" onPress={() => setEditTiming(true)} />
-        <Txt muted>{new Date(starts).toLocaleString()} – {new Date(ends).toLocaleString()}</Txt>
+        <View style={{ gap: 8 }}>
+          <Txt muted>
+            {creationScheduleSummary(Date.parse(starts), ends, planningTimezone(activity.timezone))}
+          </Txt>
+          <Button
+            secondary
+            title="Change date & time"
+            icon={<CalendarClock size={18} color={colors.green} />}
+            onPress={() => setEditTiming(true)}
+          />
+        </View>
         <Action
           title="Save and notify attendees"
+          icon={<BellRing size={18} color={colors.onPrimary} />}
           run={async () => {
             validateActivity({ title, starts_at: starts, ends_at: ends });
             await act("edit_activity", {

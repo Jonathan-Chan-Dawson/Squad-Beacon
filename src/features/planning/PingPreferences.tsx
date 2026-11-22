@@ -73,7 +73,7 @@ export function PingPreferences({
           inline
           availableAfter={response?.available_after}
           autoRsvp={auto}
-          startsAt={thread.payload.starts_at}
+          startsAt={thread.payload.flexible_time ? undefined : thread.payload.starts_at}
           onSave={save}
           onClose={() => setEditing(false)}
         />

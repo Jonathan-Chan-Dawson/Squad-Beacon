@@ -215,10 +215,13 @@ export function isFreeWithoutEnd(friend: SocialFriend) {
   return friend.availability === "available" && !friend.until;
 }
 
-export function prioritizeOpenEndedAvailability(friends: readonly SocialFriend[]) {
-  return [...friends].sort(
-    (a, b) => Number(isFreeWithoutEnd(b)) - Number(isFreeWithoutEnd(a)),
-  );
+export function prioritizeFreeFriends(friends: readonly SocialFriend[]) {
+  const priority = (friend: SocialFriend) => {
+    if (isFreeWithoutEnd(friend)) return 0;
+    if (friend.availability === "available" || friend.availability === "ending-soon") return 1;
+    return 2;
+  };
+  return [...friends].sort((a, b) => priority(a) - priority(b));
 }
 
 export function filterSocialFriends(

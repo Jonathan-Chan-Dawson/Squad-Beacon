@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { startDemoFromEntry } from "./demoEntry";
 import { mockOnboardingAccount } from "./onboardingAccount";
 import { makeDemo } from "../../src/shared/demo";
 import type { Activity } from "../../src/shared/types";
@@ -87,7 +88,7 @@ test("Sonar requires people review before Start and selection never starts shari
   });
   page.on("pageerror", (error) => geo.push(error.message));
   await page.goto("/location");
-  await page.getByRole("button", { name: /Explore the demo/ }).click();
+  await startDemoFromEntry(page);
   const people = page.getByRole("dialog", {
     name: "Share location with",
     exact: true,
@@ -123,7 +124,7 @@ test("Profile section links reveal Making time for and consume the intent", asyn
   page,
 }) => {
   await page.goto("/profile?section=aspirations");
-  await page.getByRole("button", { name: /Explore the demo/ }).click();
+  await startDemoFromEntry(page);
   await expect(
     page.getByText("Making time for", { exact: true }),
   ).toBeInViewport();
@@ -167,43 +168,40 @@ test("Quick Activity has compact categories, custom duration and recoverable can
   await expect(editor.getByLabel("Minutes", { exact: true })).toHaveValue("30");
 });
 
-test("Beacon timing stages changes, keeps title errors outside and rejects DST gaps", async ({
-  page,
-}) => {
-  await mockOnboardingAccount(page, { eligible: false });
+test("inline Beacon timing fixes quick starts and keeps a valid date across edits", async ({ page }) => {
+  await mockOnboardingAccount(page, { signedOut: true });
+  await page.clock.setFixedTime(new Date("2026-11-22T23:00:00Z"));
   await page.goto("/create?editor=yes&timezone=America%2FChicago");
-  const starts = page.getByRole("button", { name: /^Starts,/ });
-  await page
-    .getByRole("button", { name: "Create Beacon", exact: true })
-    .click();
-  const previous = await starts.getAttribute("aria-label");
-  await starts.click();
-  const timing = page.getByRole("dialog", {
-    name: "When shall we?",
-    exact: true,
-  });
-  await expect(timing.getByText(/Give.*title|title.*required/i)).toHaveCount(0);
-  await timing.getByLabel("Starts", { exact: true }).fill("2026-11-15T18:30");
-  await timing
-    .getByRole("radio", { name: "Custom duration", exact: true })
-    .click();
-  await timing.getByLabel("Hours", { exact: true }).fill("1");
-  await timing.getByLabel("Minutes", { exact: true }).fill("30");
-  await timing.getByRole("button", { name: "Cancel", exact: true }).click();
-  await expect(starts).toHaveAttribute("aria-label", previous!);
-  await starts.click();
-  await timing.getByLabel("Starts", { exact: true }).fill("2026-11-15T18:30");
+  await startDemoFromEntry(page);
+  const timing = page.getByTestId("inline-beacon-timing");
+  await timing.getByRole("button", { name: "Start time: In 30 min", exact: true }).click();
+  await page.clock.setFixedTime(new Date("2026-11-22T23:12:00Z"));
+  await timing.getByRole("button", { name: "Start time: Choose date", exact: true }).click();
+  const start = timing.getByLabel("Starts", { exact: true });
+  const end = timing.getByLabel("Ends", { exact: true });
+  await expect(start).toHaveValue("2026-11-22T17:30");
   await timing.getByRole("radio", { name: "2 hours", exact: true }).click();
+  await expect(start).toHaveValue("2026-11-22T17:30");
+  await expect(end).toHaveValue("2026-11-22T19:30");
+  await timing.getByRole("radio", { name: "Custom duration" }).click();
+  await timing.getByLabel("Hours", { exact: true }).fill("1");
+  await timing.getByLabel("Minutes", { exact: true }).fill("15");
+  await expect(start).toHaveValue("2026-11-22T17:30");
+  await expect(end).toHaveValue("2026-11-22T18:45");
+  await start.fill("2027-03-14T02:30");
+  await expect(timing.getByRole("alert").first()).toBeVisible();
+  await page.getByRole("button", { name: "Preview", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Review your Beacon" })).toHaveCount(0);
+  await start.fill("2026-11-23T18:30");
+  await timing.getByRole("radio", { name: "30 min", exact: true }).click();
+  await expect(end).toHaveValue("2026-11-23T19:00");
+  await end.fill("2026-11-23T20:15");
+  await expect(start).toHaveValue("2026-11-23T18:30");
+  await expect(end).toHaveValue("2026-11-23T20:15");
+  await expect(timing.getByLabel("Minutes", { exact: true })).toHaveValue("45");
   await page.screenshot({ path: test.info().outputPath("beacon-timing.png") });
-  await timing.getByRole("button", { name: "Done", exact: true }).click();
-  await starts.click();
-  await expect(timing.getByLabel("Starts", { exact: true })).toHaveValue(
-    "2026-11-15T18:30",
-  );
-  await timing.getByLabel("Starts", { exact: true }).fill("2027-03-14T02:30");
-  await expect(
-    timing.getByRole("button", { name: "Done", exact: true }),
-  ).toBeDisabled();
+  await page.getByRole("button", { name: "Preview", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Review your Beacon" })).toBeVisible();
 });
 
 test("Public can be chosen before creation and a lost listing reply never creates twice", async ({
@@ -262,8 +260,9 @@ test("Public can be chosen before creation and a lost listing reply never create
   await page
     .getByLabel("HTTPS meeting link", { exact: true })
     .fill("https://example.com/meet");
+  await page.getByRole("button", { name: "Public listing", exact: true }).click();
   await page
-    .getByRole("switch", { name: "Public listing", exact: true })
+    .getByRole("switch", { name: "Show a public preview", exact: true })
     .click();
   await page
     .getByLabel("City or general area", { exact: true })
@@ -349,7 +348,7 @@ test("Plan Focus handles a Plan with no physical stops and exits to the ordinary
   page,
 }) => {
   await page.goto("/plan/demo-routine:demo-you:friday:plan");
-  await page.getByRole("button", { name: /Explore the demo/ }).click();
+  await startDemoFromEntry(page);
   await page.getByRole("button", { name: "Map", exact: true }).click();
   const focus = page.getByTestId("map-plan-focus");
   await expect(focus).toBeVisible();
@@ -406,19 +405,15 @@ for (const width of [320, 375, 390, 430])
       });
       await note.getByRole("button", { name: "Cancel", exact: true }).click();
       await page.goto("/create?editor=yes");
-      await page.getByRole("button", { name: /^Starts,/ }).click();
-      const timing = page.getByRole("dialog", {
-        name: "When shall we?",
-        exact: true,
-      });
-      await expect(
-        timing.getByRole("button", { name: "Done", exact: true }),
-      ).toBeInViewport();
+      await page.getByRole("button", { name: "Start time: Choose date", exact: true }).click();
+      const timing = page.getByTestId("inline-beacon-timing");
+      await expect(timing.getByLabel("Starts", { exact: true })).toBeVisible();
+      await expect(page.getByRole("button", { name: "Preview", exact: true })).toBeInViewport();
       await page.screenshot({
         path: test.info().outputPath(`timing-${width}-${appearance}.png`),
       });
-      await page.keyboard.press("Escape");
-      await expect(timing).toHaveCount(0);
+      await timing.getByRole("button", { name: "Hide exact time", exact: true }).click();
+      await expect(timing.getByLabel("Starts", { exact: true })).toHaveCount(0);
     });
   }
 
@@ -598,14 +593,14 @@ test("the composer keeps completion reachable with enlarged text and keyboard di
 test("Beacon creation offers lightweight choices and staged People Picker cancellation", async ({page}) => {
   await mockOnboardingAccount(page,{eligible:false});
   await page.goto("/create?editor=yes");
-  await page.getByRole("button",{name:"Choose category",exact:true}).click();
-  const appearance=page.getByRole("dialog",{name:"Appearance",exact:true});
+  await page.getByRole("button",{name:"Customize appearance",exact:true}).click();
+  const appearance=page.getByRole("dialog",{name:"Customize appearance",exact:true});
   await appearance.getByRole("button",{name:"See more activity choices",exact:true}).click();
   await appearance.getByRole("button",{name:"Food, Social category",exact:true}).click();
   await appearance.getByRole("button",{name:"Done",exact:true}).click();
   await expect(page.getByLabel("Activity title",{exact:true})).toHaveValue("Food");
-  await page.getByRole("button",{name:"+ Add People",exact:true}).click();
-  const people=page.getByRole("dialog",{name:"Add People",exact:true});
+  await page.getByRole("button",{name:/^(?:Add friends|Edit invited friends)$/}).click();
+  const people=page.getByRole("dialog",{name:"Invite friends",exact:true});
   await people.getByRole("button",{name:"Cancel",exact:true}).click();
   await expect(people).toHaveCount(0);
   await expect(page.getByLabel("Activity title",{exact:true})).toHaveValue("Food");

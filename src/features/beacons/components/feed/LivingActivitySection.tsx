@@ -39,17 +39,21 @@ import {
   activeAt,
   currentActivity,
   isStatusNote,
+  ownActivityNote,
   presenceFor,
   upNext,
 } from "../../livingActivity";
 import {
+  eligibleStatusAttachments,
   statusNoteText,
   visibleStatusAttachment,
+  type StatusAttachment,
 } from "../../statusAttachments";
 import { BeaconIcon } from "../BeaconIcon";
 import { CurrentBeaconPreview } from "./CurrentBeaconPreview";
 import { StatusAttachmentPreview } from "./StatusAttachmentEditor";
 import { NoteSpeechBubble } from "./StatusNoteBubble";
+import { liveOwnedStatuses, saveOwnStatus } from "./statusActions";
 
 type NoteDraft = {
   id?: string;
@@ -79,10 +83,14 @@ export function ActivityNoteEditor({
   visible,
   note,
   onClose,
+  inline = false,
+  onBusyChange,
 }: {
   visible: boolean;
   note?: Activity;
   onClose(): void;
+  inline?: boolean;
+  onBusyChange?: (busy: boolean) => void;
 }) {
   const { data, userId, act, getViewerEpoch } = useBeacon();
   const { styles } = useTheme();
@@ -131,6 +139,7 @@ export function ActivityNoteEditor({
     if (busy || !userId || data.viewer_id !== userId) return;
     const epoch = getViewerEpoch();
     setBusy(true);
+    onBusyChange?.(true);
     setError("");
     try {
       if (!draft.title.trim())
@@ -192,20 +201,14 @@ export function ActivityNoteEditor({
             : "Could not save your activity.",
         );
     } finally {
-      if (epoch === getViewerEpoch()) setBusy(false);
+      if (epoch === getViewerEpoch()) {
+        setBusy(false);
+        onBusyChange?.(false);
+      }
     }
   };
-  return (
-    <Sheet
-      title={note ? "Edit Activity Note" : "What are you doing?"}
-      centered
-      maxHeightPercent={92}
-      footer={<View style={{ flexDirection: "row", gap: 8 }}><View style={{ flex: 1 }}><Button secondary title="Cancel" disabled={busy} onPress={onClose} /></View><View style={{ flex: 2 }}><Button title={busy ? "Saving…" : note ? "Save Changes" : "Share Activity"} disabled={busy} onPress={() => void save()} /></View></View>}
-      visible={visible}
-      onClose={() => {
-        if (!busy) onClose();
-      }}
-    >
+  const footer = <View style={{ flexDirection: "row", gap: 8 }}><View style={{ flex: 1 }}><Button secondary title="Cancel" disabled={busy} onPress={onClose} /></View><View style={{ flex: 2 }}><Button title={busy ? "Saving…" : note ? "Save Changes" : "Share Activity"} disabled={busy} onPress={() => void save()} /></View></View>;
+  const body = (
       <View style={{ gap: 10 }}>
         <Field
           label="What are you up to?"
@@ -283,6 +286,11 @@ export function ActivityNoteEditor({
         )}
 
       </View>
+  );
+  if (inline) return <View style={{ gap: 12 }}>{body}{footer}</View>;
+  return (
+    <Sheet title={note ? "Edit Activity Note" : "What are you doing?"} centered maxHeightPercent={92} footer={footer} visible={visible} onClose={() => { if (!busy) onClose(); }}>
+      {body}
     </Sheet>
   );
 }
@@ -292,11 +300,13 @@ export function LivingStatusHeader({
   variant = "profile",
   renderIdentity,
   noteAccessory,
+  onLegacyAvailability,
 }: {
   onEditStatus(): void;
-  variant?: "compact" | "profile";
+  variant?: "compact" | "profile" | "card";
   renderIdentity?: (availability: React.ReactNode) => React.ReactNode;
   noteAccessory?: React.ReactNode;
+  onLegacyAvailability?: () => void;
 }) {
   const { data, userId, act } = useBeacon();
   const now = useNow(1000);
@@ -370,7 +380,7 @@ export function LivingStatusHeader({
         alignItems: "center",
         alignSelf: "flex-start",
         gap: 8,
-        flexShrink: variant === "compact" ? 1 : 0,
+        flexShrink: variant === "profile" ? 0 : 1,
         minWidth: 0,
       }}
     >
@@ -380,10 +390,10 @@ export function LivingStatusHeader({
         accessibilityLabel="Change availability"
         accessibilityState={{ expanded: open, disabled: busy }}
         disabled={busy}
-        onPress={() => availabilityAnchor.current?.measureInWindow((x, y, width, height) => {
+        onPress={onLegacyAvailability ?? (() => availabilityAnchor.current?.measureInWindow((x, y, width, height) => {
           setAnchor({ x, y, width, height });
           setOpen(true);
-        })}
+        }))}
         style={{
           minHeight: 44,
           flexShrink: 1,
@@ -479,13 +489,27 @@ export function LivingStatusHeader({
   return (
     <View
       testID={
-        variant === "compact"
+        variant !== "profile"
           ? "home-identity-status"
           : "profile-identity-status"
       }
       style={{ gap: 4 }}
     >
-      {variant === "compact" ? (
+      {variant === "card" ? (
+        <View style={{ padding: 10, gap: 4 }}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Open your profile" onPress={() => router.push("/(tabs)/profile")}>
+            <ProfileAvatar profile={profile} size={48} />
+          </Pressable>
+          <Text style={styles.label}>You</Text>
+          {availabilityControl}
+          <Pressable testID="living-status-message" accessibilityRole="button" accessibilityLabel="Edit Status Note" onPress={onEditStatus}
+            style={{ minHeight: 44, flexDirection: "row", alignItems: "center", gap: 6 }}>
+            <Text numberOfLines={2} style={[styles.muted, { flex: 1 }]}>{text || "Add a status note"}</Text>
+            <Pencil size={15} color={colors.accent} />
+          </Pressable>
+          <ProfileSonarCard compact iconOnly />
+        </View>
+      ) : variant === "compact" ? (
         <View
           style={{ flexDirection: "row", alignItems: "center", gap: 10 }}
         >
@@ -530,6 +554,7 @@ export function LivingStatusHeader({
         <View style={{ gap: 2 }}>
           {renderIdentity ? (
             <>
+              {renderIdentity(undefined)}
               <View
                 style={{
                   flexDirection: "row",
@@ -541,7 +566,6 @@ export function LivingStatusHeader({
                 {availabilityControl}
                 <ProfileSonarCard compact pill />
               </View>
-              {renderIdentity(undefined)}
             </>
           ) : null}
           {noteAccessory ? (
@@ -553,7 +577,7 @@ export function LivingStatusHeader({
           {!renderIdentity && availabilityControl}
         </View>
       )}
-      {status && <GuestShareButton label="Share selected Status Note" kind="status" target={status.id} title="A note from Squad Beacon" statusText={status.title} expiresAt={status.ends_at} readOnly />}
+      {status && variant !== "card" && <GuestShareButton label="Share selected Status Note" kind="status" target={status.id} title="A note from Squad Beacon" statusText={status.title} expiresAt={status.ends_at} readOnly />}
       <Modal transparent visible={open} animationType="none" onRequestClose={() => setOpen(false)}>
         <Pressable accessibilityLabel="Dismiss availability menu" onPress={() => setOpen(false)} style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0 }} />
         <View role="dialog" accessibilityViewIsModal accessibilityLabel="Availability & sharing" style={{
@@ -730,18 +754,31 @@ export function LivingActivitySection({
   sonar = false,
   compact = false,
   divider = false,
+  dashboard = false,
 }: {
   personId: string;
   showLower?: boolean;
   sonar?: boolean;
   compact?: boolean;
   divider?: boolean;
+  dashboard?: boolean;
 }) {
-  const { data, userId, act, getViewerEpoch } = useBeacon();
+  const { data, userId, act, getViewerEpoch, getCurrentData } = useBeacon();
   const now = useNow(1000);
   const { colors, styles, tokens } = useTheme();
   const own = userId === personId;
   const current = currentActivity(data, personId, userId, now);
+  const activeStatus = dashboard ? liveOwnedStatuses(data, own ? userId : null, now)[0] ?? data.activities.find(
+    (item) => item.owner_id === personId && isStatusNote(item) && activeAt(item, now),
+  ) : undefined;
+  const featured = dashboard && presenceFor(data, personId)?.sharing !== false
+    ? visibleStatusAttachment(data, activeStatus, userId, now)
+    : null;
+  const note = own && dashboard ? ownActivityNote(data, personId, now) : undefined;
+  const canFeature = data.is_demo || (data.capabilities?.status_attachments && data.capabilities?.status_current_beacon);
+  const [manage, setManage] = useState<"home" | "note" | "feature" | "live" | null>(null);
+  const featureOptions = manage === "feature" ? eligibleStatusAttachments(data, userId, now) : [];
+  const featureBusy = useRef(false);
   const [editorSource, setEditorSource] = useState<Activity | undefined>();
   const [editor, setEditor] = useState(false),
     [menu, setMenu] = useState(false),
@@ -769,6 +806,7 @@ export function LivingActivitySection({
     try {
       await act(action, payload);
       if (epoch === getViewerEpoch()) {
+        setManage(null);
         setMenu(false);
         setChoose(false);
         setSelection(null);
@@ -777,6 +815,37 @@ export function LivingActivitySection({
       if (epoch === getViewerEpoch())
         setError(e instanceof Error ? e.message : "Could not update activity.");
     } finally {
+      if (epoch === getViewerEpoch()) setBusy(false);
+    }
+  };
+  const saveFeature = async (attachment: StatusAttachment | null) => {
+    const snapshot = getCurrentData();
+    if (!snapshot || snapshot.viewer_id !== userId || featureBusy.current) return;
+    const epoch = getViewerEpoch();
+    const time = Date.now();
+    const source = liveOwnedStatuses(snapshot, userId, time)[0];
+    if (!attachment && !source?.status_attachment) return;
+    featureBusy.current = true;
+    setBusy(true);
+    setError("");
+    try {
+      const title = source?.own_status_note?.title ?? source?.title ?? "";
+      const description = source?.own_status_note?.description ?? source?.description;
+      const keepNoteHidden = source?.status_presentation === "activity_only" && !!(title || description);
+      await saveOwnStatus(snapshot, userId, {
+        sourceId: source?.id,
+        attachment,
+        presentation: keepNoteHidden || (attachment && !title) ? "activity_only" : attachment ? "text_activity" : "text_only",
+        title,
+        description,
+        available: source?.available ?? false,
+        endsAt: source?.ends_at ?? new Date(time + 60 * 60_000).toISOString(),
+      }, act, time);
+      if (epoch === getViewerEpoch()) setManage(null);
+    } catch (failure) {
+      if (epoch === getViewerEpoch()) setError(failure instanceof Error ? failure.message : "Could not update your featured activity.");
+    } finally {
+      featureBusy.current = false;
       if (epoch === getViewerEpoch()) setBusy(false);
     }
   };
@@ -806,11 +875,36 @@ export function LivingActivitySection({
     borderRadius: 20,
     backgroundColor: colors.surfaceRaised,
   };
+  const livePicker = (
+    <>
+      {options.map((item) => (
+        <Button key={item.id} secondary={selection !== item.id} title={item.title} onPress={() => setSelection(item.id)} />
+      ))}
+      {selection && (
+        <>
+          <Txt muted>An active activity note will end. Only people in this audience who can access the Beacon can see it.</Txt>
+          <AudiencePicker value={currentAudience} id={currentAudienceId} onChange={(audience, id) => {
+            setCurrentAudience(audience);
+            setCurrentAudienceId(id);
+          }} />
+          <Button title="Use as My Current Activity" disabled={busy} onPress={() => void perform("update_presence", {
+            show_current_beacon: true,
+            current_beacon_id: selection,
+            current_audience: currentAudience,
+            current_audience_id: currentAudienceId,
+          })} />
+        </>
+      )}
+      {current?.type === "beacon" && (
+        <Button secondary title="Stop sharing Current Beacon" disabled={busy} onPress={() => void perform("update_presence", { show_current_beacon: false })} />
+      )}
+    </>
+  );
   return (
     <View style={{ gap: compact ? 4 : 12 }}>
-      {(own || current) && (
+      {(own || current || featured) && (
         <View
-          testID={divider ? "current-activity-section" : undefined}
+          testID={dashboard || divider ? "current-activity-section" : undefined}
           style={[
             { gap: 8 },
             divider && {
@@ -820,7 +914,7 @@ export function LivingActivitySection({
             },
           ]}
         >
-          {(!compact || current) && (
+          {(dashboard || !compact || current) && (
             <View
               style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
             >
@@ -828,9 +922,42 @@ export function LivingActivitySection({
               <Text style={[styles.label, { color: colors.ink }]}>
                 Current Activity
               </Text>
+              {dashboard && own && (current || featured) && (
+                <Button compact secondary title="Edit activity" onPress={() => setManage("home")} />
+              )}
             </View>
           )}
-          {!current && own ? (
+          {featured ? (
+            <>
+              <StatusAttachmentPreview compact activity={featured} onPress={() => router.push({
+                pathname: featured.type === "beacon" ? "/activity/[id]" : "/council/[id]",
+                params: { id: featured.id },
+              })} />
+              {note && <Button compact secondary title="Do with others" onPress={() => setSocial(true)} />}
+            </>
+          ) : !current && own && dashboard ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Add activity"
+              onPress={() => setManage("home")}
+              style={({ pressed }) => ({
+                minHeight: 50,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 10,
+                paddingHorizontal: 10,
+                paddingVertical: 7,
+                borderRadius: 12,
+                backgroundColor: colors.surfaceRaised,
+                opacity: pressed ? 0.75 : 1,
+              })}
+            >
+              <View style={{ width: 32, height: 32, borderRadius: 16, alignItems: "center", justifyContent: "center", backgroundColor: colors.accent + "20" }}>
+                <Plus size={17} color={colors.accent} accessible={false} />
+              </View>
+              <Text style={[styles.body, { flex: 1, color: colors.muted }]}>Share what you&apos;re up to</Text>
+            </Pressable>
+          ) : !current && own ? (
             <View>
               <Pressable
                 testID="add-activity-note"
@@ -895,7 +1022,7 @@ export function LivingActivitySection({
                   })
                 }
               />
-              {own && (
+              {own && !dashboard && (
                 <Button
                   compact
                   secondary
@@ -933,6 +1060,7 @@ export function LivingActivitySection({
                   }
                   onPress={() => {
                     if (own) {
+                      if (dashboard) { setManage("home"); return; }
                       setEditorSource(current.activity);
                       setEditor(true);
                     } else setDetails(true);
@@ -988,7 +1116,7 @@ export function LivingActivitySection({
                     )}
                   </View>
                 </Pressable>
-                {own && (
+                {own && !dashboard && (
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel="Activity Note options"
@@ -1035,11 +1163,45 @@ export function LivingActivitySection({
         </View>
       )}
       {own && sonar && <ProfileSonarCard compact row />}
-      {showLower && <LivingActivityHighlights personId={personId} />}
-      {!!error && (
+      {showLower && <UpNextCard personId={personId} />}
+      {!!error && !manage && (
         <Text accessibilityRole="alert" style={styles.error}>
           {error}
         </Text>
+      )}
+      {dashboard && own && (
+        <Sheet title="What are you up to?" visible={manage !== null} onClose={() => { if (!busy) { setManage(null); setSelection(null); } }}>
+          {manage === "home" && (
+            <>
+              {featured && note && <Txt muted>Your activity note is saved. Clear the feature to show it here.</Txt>}
+              <Button secondary title={note ? "Edit activity note" : "Write a quick update"} onPress={() => setManage("note")} />
+              {canFeature && <Button secondary title="Feature an activity" onPress={() => setManage("feature")} />}
+              {activeStatus?.status_attachment && <Button secondary title="Clear featured activity" disabled={busy} onPress={() => void saveFeature(null)} />}
+              {note && <Button secondary title="End activity note" disabled={busy} onPress={() => void perform("end_activity_note", { id: note.id })} />}
+              {(options.length > 0 || current?.type === "beacon") && <Button secondary title="Manage live Beacon" onPress={() => setManage("live")} />}
+            </>
+          )}
+          {manage === "note" && <ActivityNoteEditor inline visible note={note} onBusyChange={setBusy} onClose={() => setManage(null)} />}
+          {manage === "feature" && (
+            <>
+              <Button secondary compact title="Back to activity choices" onPress={() => { setManage("home"); setError(""); }} />
+              <Txt muted>{presenceFor(data, personId)?.sharing === false || activeStatus?.status_sharing === false || activeStatus?.status_note_hidden
+                ? "Your current sharing settings keep this feature hidden."
+                : activeStatus ? "Uses your current status audience and expiry." : "Shared with friends for one hour."}</Txt>
+              {featureOptions.map((item) => (
+                <Button key={`${item.type}:${item.id}`} secondary title={item.title} disabled={busy} onPress={() => void saveFeature({ type: item.type, id: item.id })} />
+              ))}
+              {!featureOptions.length && <Txt muted>No eligible activities to feature.</Txt>}
+            </>
+          )}
+          {manage === "live" && (
+            <>
+              <Button secondary compact title="Back to activity choices" onPress={() => { setManage("home"); setSelection(null); }} />
+              {livePicker}
+            </>
+          )}
+          {!!error && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
+        </Sheet>
       )}
       {editor && (
         <ActivityNoteEditor
@@ -1114,52 +1276,7 @@ export function LivingActivitySection({
           }
         }}
       >
-        {options.map((a) => (
-          <Button
-            key={a.id}
-            secondary={selection !== a.id}
-            title={a.title}
-            onPress={() => setSelection(a.id)}
-          />
-        ))}
-        {selection && (
-          <>
-            <Txt muted>
-              This replaces your Current Activity. An active Activity Note will
-              end and stay in your private history. Only people in this audience
-              who can access the Beacon can see it.
-            </Txt>
-            <AudiencePicker
-              value={currentAudience}
-              id={currentAudienceId}
-              onChange={(audience, id) => {
-                setCurrentAudience(audience);
-                setCurrentAudienceId(id);
-              }}
-            />
-            <Button
-              title="Use as My Current Activity"
-              disabled={busy}
-              onPress={() =>
-                void perform("update_presence", {
-                  show_current_beacon: true,
-                  current_beacon_id: selection,
-                  current_audience: currentAudience,
-                  current_audience_id: currentAudienceId,
-                })
-              }
-            />
-          </>
-        )}
-        {current?.type === "beacon" && (
-          <Button
-            secondary
-            title="Stop sharing Current Beacon"
-            onPress={() =>
-              void perform("update_presence", { show_current_beacon: false })
-            }
-          />
-        )}
+        {livePicker}
       </Sheet>
       <Sheet
         title={current?.activity.title ?? "Activity"}
@@ -1173,58 +1290,31 @@ export function LivingActivitySection({
   );
 }
 
-export function LivingActivityHighlights({ personId }: { personId: string }) {
+export function UpNextCard({ personId }: { personId: string }) {
   const { data, userId } = useBeacon();
-  const now = useNow(1000);
-  const current = currentActivity(data, personId, userId, now);
-  const status = data.activities
-    .filter(
-      (a) => a.owner_id === personId && isStatusNote(a) && activeAt(a, now),
-    )
-    .sort((a, b) => b.starts_at.localeCompare(a.starts_at))[0];
-  const featured = visibleStatusAttachment(data, status, userId, now);
-  const next = personId === userId ? upNext(data, userId, now) : null;
-  const featuredIsCurrent =
-    current?.type === "beacon" &&
-    featured?.type === "beacon" &&
-    featured.id === current.activity.id;
-  const visibleFeatured = featuredIsCurrent ? null : featured;
-  if (!visibleFeatured && !next) return null;
+  const { styles, colors } = useTheme();
+  const now = useNow();
+  if (personId !== userId || data.viewer_id !== userId) return null;
+  const next = upNext(data, userId, now);
 
   return (
-    <View style={{ gap: 12 }}>
-      {visibleFeatured && (
-        <View style={{ gap: 6 }}>
-          <Txt muted>Featured</Txt>
-          <StatusAttachmentPreview
-            compact
-            activity={visibleFeatured}
-            onPress={() =>
-              router.push({
-                pathname:
-                  visibleFeatured.type === "beacon"
-                    ? "/activity/[id]"
-                    : "/council/[id]",
-                params: { id: visibleFeatured.id },
-              })
-            }
-          />
-        </View>
-      )}
-      {next && (
-        <View style={{ gap: 6 }}>
-          <Txt muted>Up Next · Only you</Txt>
-          <StatusAttachmentPreview
-            compact
-            activity={next}
-            onPress={() =>
-              router.push({
-                pathname:
-                  next.type === "beacon" ? "/activity/[id]" : "/council/[id]",
-                params: { id: next.id },
-              })
-            }
-          />
+    <View testID="up-next" style={{ gap: 6 }}>
+      <Text style={styles.label}>Up Next</Text>
+      {next ? (
+        <Pressable accessibilityRole="button" accessibilityLabel={`Open upcoming Beacon: ${next.title}`}
+          onPress={() => router.push({ pathname: "/activity/[id]", params: { id: next.id } })}
+          style={{ flexDirection: "row", alignItems: "center", gap: 10, padding: 10, minHeight: 48, borderRadius: 12, backgroundColor: colors.surfaceRaised }}>
+          <BeaconIcon category={next.category} emoji={next.decoration_emoji} size={34} />
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={styles.label} numberOfLines={2}>{next.title.replace(/^Plan stop \d+\s*:\s*(?=\S)/i, "")}</Text>
+            <Txt muted>{new Date(next.starts_at).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })} · {new Date(next.starts_at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}</Txt>
+          </View>
+          <ChevronRight size={16} color={colors.muted} />
+        </Pressable>
+      ) : (
+        <View style={{ gap: 6, padding: 10, borderRadius: 12, backgroundColor: colors.surfaceRaised }}>
+          <Txt muted>Nothing coming up yet</Txt>
+          <Button compact secondary title="Create Beacon" onPress={() => router.push({ pathname: "/create", params: { editor: "yes" } })} />
         </View>
       )}
     </View>

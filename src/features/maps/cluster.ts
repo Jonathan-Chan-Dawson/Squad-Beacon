@@ -91,7 +91,7 @@ export function clusterPreviewOverflow(memberCount: number, previewCount = 3) {
 }
 
 export function markerVisualSize(kind: MapPointKind, _zoom = 0) {
-  return kind === "beacon" ? 40 : 36;
+  return kind === "beacon" ? 40 : 34;
 }
 
 function validPoint(point: ClusterPoint) {

@@ -11,15 +11,7 @@ import {
 } from "../markerIdentity";
 import { mapBeaconTitle } from "@/src/features/discovery/discoveryCardPresentation";
 import { isBeaconLive } from "@/src/features/beacons/beaconLive";
-import Svg, { Path as CountPath } from "react-native-svg";
-import {
-  CLUSTER_COUNT_PATHS,
-  clusterCountAccessibilityLabel,
-  type ClusterCountPart,
-  type ClusterCountAction,
-} from "../clusterLayout";
 import { ClusterArtworkCache } from "../clusterArtwork";
-import { bloomGeometry } from "../clusterBloom";
 
 import {
   nativeMapMode,
@@ -756,6 +748,7 @@ export default function BeaconMap({
       )
       .map((item) => item.group.members[0].id),
   );
+  const lightingTier = { stack: "close", swarm: "medium", atmosphere: "far", micro: "micro" } as const;
   const beaconLabels = visibleBeaconLabels(
     mapPoints,
     new Set(presentations.flatMap(({ group }) =>
@@ -765,71 +758,6 @@ export default function BeaconMap({
   );
   for (const id of beaconLabels) renderedSingletonIds.add(id);
   const [cameraMoving, setCameraMoving] = useState(false);
-  const [countBadges, setCountBadges] = useState<
-    {
-      item: NativeMapPresentation;
-      x: number;
-      y: number;
-      width: number;
-      height: number;
-      peopleCount: number;
-      beaconTotal: number;
-      parts: ClusterCountPart[];
-      activation: ClusterCountAction;
-      fontSize: number;
-    }[]
-  >([]);
-  useEffect(() => {
-    let active = true;
-    if (!ready || onPick || cameraMoving) return;
-    void Promise.all(
-      presentations.map(async (item) => {
-        const badge = bloomGeometry(item).countBadge;
-        if (!badge) return null;
-        try {
-          const anchor = await map.current?.pointForCoordinate({
-            latitude: item.group.latitude,
-            longitude: item.group.longitude,
-          });
-          return anchor
-            ? {
-                item,
-                x: anchor.x + badge.offset.x,
-                y: anchor.y + badge.offset.y,
-                width: badge.width,
-                height: badge.height,
-                peopleCount: badge.peopleCount,
-                beaconTotal: badge.beaconTotal,
-                parts: badge.parts,
-                activation: badge.activation,
-                fontSize: badge.fontSize,
-              }
-            : null;
-        } catch {
-          return null;
-        }
-      }),
-    ).then((values) => {
-      if (active)
-        setCountBadges(
-          values.filter((value): value is NonNullable<typeof value> => !!value),
-        );
-    });
-    return () => {
-      active = false;
-    };
-  }, [
-    ready,
-    onPick,
-    cameraMoving,
-    presentations,
-    region,
-    mapSize,
-    mapPadding.top,
-    mapPadding.right,
-    mapPadding.bottom,
-    mapPadding.left,
-  ]);
   function selectStackMember(member: ClusterPoint) {
     if (onPick) return;
     if (member.kind === "beacon") {
@@ -865,7 +793,7 @@ export default function BeaconMap({
   );
   const contextActivityIds = new Set(contextPoints.map((point) => point.activityId).filter(Boolean));
   const haloCandidates = new Map<string, { latitude: number; longitude: number; category: Category }>();
-  for (const place of pins) {
+  for (const place of presentationMode === "stack" ? pins : []) {
     const id = place.activity_id;
     if (!renderedSingletonIds.has(`beacon:${id}`) || !markerStates.get(id)?.live ||
         (selectedActivityId && selectedActivityId !== id) ||
@@ -994,7 +922,6 @@ export default function BeaconMap({
         onMapReady={() => setReady(true)}
         onRegionChangeComplete={(nextRegion, details) => {
           if (!isValidMapRegion(nextRegion)) return;
-          setCountBadges([]);
           setCameraMoving(false);
           setRegion(nextRegion);
           setPresentationMode((previous) =>
@@ -1180,6 +1107,10 @@ export default function BeaconMap({
                   categoryColor={categoryColors[category]}
                   icon={point.mapIcon}
                   stopNumber={point.stopNumber}
+                  showProjection={presentationMode === "stack"}
+                  lightingTier={lightingTier[presentationMode]}
+                  compactProjection={presentationMode === "swarm" ||
+                    (presentationMode === "atmosphere" && selectedActivityId === point.activityId)}
                   selected={selectedActivityId === point.activityId}
                   dimmed={false}
                   appearanceKey={appearanceKey}
@@ -1321,6 +1252,10 @@ export default function BeaconMap({
                   (!!selectedActivityId && !selectedPin) ||
                   (contextPoints.some((point) => point.activityId) && !context)
                 }
+                showProjection={presentationMode === "stack"}
+                lightingTier={lightingTier[presentationMode]}
+                compactProjection={presentationMode === "swarm" ||
+                  (presentationMode === "atmosphere" && selectedPin)}
                 streetTime={streetTime}
                 beaconName={!onPick && !context && beaconLabels.has(`beacon:${activity.id}`)
                   ? mapBeaconTitle(activity.title, !!activity.plan_id, activity.plan_step_index).title.trim()
@@ -1408,101 +1343,6 @@ export default function BeaconMap({
         popPlaceKey={pulsePopPlaceKey}
         calm={calm}
       />
-      {!cameraMoving &&
-        !onPick &&
-        countBadges
-          .filter((badge) => presentations.includes(badge.item))
-          .map((badge) => (
-            <Pressable
-              key={`counts:${badge.item.group.id}`}
-              accessibilityRole="button"
-              accessibilityLabel={`${clusterCountAccessibilityLabel(badge.peopleCount, badge.beaconTotal)}. Explore cluster; nearby does not mean attending`}
-              testID="map-cluster-count"
-              onPress={() => {
-                if (badge.activation === "expand")
-                  void pressPresentation(badge.item);
-                else
-                  void pressCluster(
-                    badge.item.group,
-                    false,
-                    badge.activation === "friends" ? "Friends" : undefined,
-                  );
-              }}
-              style={{
-                position: "absolute",
-                left: badge.x - Math.max(44, badge.width) / 2,
-                top: badge.y - 22,
-                width: Math.max(44, badge.width),
-                height: 44,
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <View
-                pointerEvents="none"
-                style={{
-                  width: badge.width,
-                  height: badge.height,
-                  flexDirection: "row",
-                  gap: 2,
-                  alignItems: "center",
-                  justifyContent: "center",
-                  borderRadius: 10,
-                  borderWidth: 1,
-                  borderColor: colors.line,
-                  backgroundColor: colors.white,
-                }}
-              >
-                {badge.parts.map((part, index) => (
-                  <React.Fragment key={part.kind}>
-                    {index > 0 && (
-                      <Text
-                        accessible={false}
-                        style={{ fontSize: badge.fontSize, color: colors.ink }}
-                      >
-                        {" "}
-                        ·{" "}
-                      </Text>
-                    )}
-                    <View
-                      accessible={false}
-                      style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        gap: 3,
-                      }}
-                    >
-                      <Svg
-                        width={badge.fontSize}
-                        height={badge.fontSize}
-                        viewBox="0 0 24 24"
-                        accessible={false}
-                      >
-                        <CountPath
-                          d={CLUSTER_COUNT_PATHS[part.kind]}
-                          fill="none"
-                          stroke={colors.ink}
-                          strokeWidth={1.8}
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                        />
-                      </Svg>
-                      <Text
-                        style={{
-                          fontSize: badge.fontSize,
-                          fontWeight: "700",
-                          fontVariant: ["tabular-nums"],
-                          color: colors.ink,
-                        }}
-                      >
-                        {part.count}
-                      </Text>
-                    </View>
-                  </React.Fragment>
-                ))}
-              </View>
-            </Pressable>
-          ))}
       {!onPick && !hideControls && (
         <View
           style={{ position: "absolute", top: controlsTop, right: 16, gap: 8 }}

@@ -2,6 +2,8 @@ import type { PlanEditorDraft } from "./planEditorModel";
 export function planDraftKey(viewer: string, demo: boolean, token: string) {
   return `beacon.plan-editor.v1:${demo ? "demo" : "live"}:${viewer}:${token}`;
 }
+const resumeKey = (viewer: string, demo: boolean) =>
+  `beacon.plan-editor.resume.v1:${demo ? "demo" : "live"}:${viewer}`;
 
 export function createPlanEditorRepository(io: {
   read: (key: string) => Promise<string | null>;
@@ -9,7 +11,37 @@ export function createPlanEditorRepository(io: {
   remove: (key: string) => Promise<void>;
 }) {
   const queues = new Map<string, Promise<unknown>>();
+  const resumeQueues = new Map<string, Promise<void>>();
   const memory = new Map<string, PlanEditorDraft>();
+  function updateResume(
+    viewer: string,
+    demo: boolean,
+    change: (key: string) => Promise<void>,
+  ) {
+    const key = resumeKey(viewer, demo);
+    const operation = (resumeQueues.get(key) ?? Promise.resolve())
+      .catch(() => {})
+      .then(() => change(key));
+    resumeQueues.set(key, operation);
+    return operation;
+  }
+  function rememberPlanDraft(viewer: string, demo: boolean, token: string) {
+    return updateResume(viewer, demo, (key) => io.write(key, token));
+  }
+  function forgetPlanDraft(viewer: string, demo: boolean, token: string) {
+    return updateResume(viewer, demo, async (key) => {
+      if ((await io.read(key)) === token) await io.remove(key);
+    });
+  }
+  async function resumablePlanDraft(viewer: string, demo: boolean) {
+    const key = resumeKey(viewer, demo);
+    await resumeQueues.get(key)?.catch(() => {});
+    const token = await io.read(key);
+    if (!token || !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(token))
+      return null;
+    const draft = await readPlanDraft(planDraftKey(viewer, demo, token));
+    return draft && !draft.plan_id ? { token, title: draft.title } : null;
+  }
   function cachedPlanDraft(key: string) {
     return memory.get(key);
   }
@@ -80,5 +112,13 @@ export function createPlanEditorRepository(io: {
         await io.remove(`${key}:${old.generation}:${i}`);
   }
 
-  return { cachedPlanDraft, readPlanDraft, writePlanDraft, deletePlanDraft };
+  return {
+    cachedPlanDraft,
+    readPlanDraft,
+    writePlanDraft,
+    deletePlanDraft,
+    rememberPlanDraft,
+    forgetPlanDraft,
+    resumablePlanDraft,
+  };
 }

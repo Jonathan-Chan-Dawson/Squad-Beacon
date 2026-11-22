@@ -1,8 +1,9 @@
 import { expect, test } from "@playwright/test";
+import { startDemoFromEntry } from "./demoEntry";
 
 async function createHome(page: import("@playwright/test").Page) {
   await page.goto("/");
-  await page.getByRole("button", { name: /Explore the demo/ }).click();
+  await startDemoFromEntry(page);
   await page.getByRole("button", { name: "Create", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "+ Create Blank Beacon", exact: true }),
@@ -48,7 +49,7 @@ test("Create stays compact and app templates prefill the Beacon Quick Editor", a
     page.getByLabel("Search aspirations", { exact: true }),
   ).toHaveCount(0);
   await page
-    .getByRole("button", { name: "Advanced Options", exact: true })
+    .getByRole("button", { name: /^Connect an aspiration, / })
     .click();
   await expect(
     page.getByLabel("Search aspirations", { exact: true }),
@@ -59,19 +60,17 @@ test("Plan timeline can create a reusable manual Routine", async ({ page }) => {
   await createHome(page);
   await page.getByRole("button", { name: "Create Plan", exact: true }).click();
   await page
-    .getByLabel("Plan title", { exact: true })
+    .getByLabel("Plan name", { exact: true })
     .fill("Friday test itinerary");
-  await page.getByRole("button", { name: "Add Beacon", exact: true }).click();
+  await page.getByRole("button", { name: "Add existing", exact: true }).click();
   await page
-    .getByRole("button", { name: "Link Existing Beacon", exact: true })
-    .click();
-  await page
-    .getByLabel("Search eligible Beacons", { exact: true })
+    .getByLabel("Search Beacons and decisions", { exact: true })
     .fill("Dinner together");
   await page
     .getByRole("button", { name: "Dinner together", exact: true })
     .click();
-  await page.getByRole("button", { name: "Save Draft", exact: true }).click();
+  await page.getByRole("button", { name: "Create Plan", exact: true }).click();
+  await page.getByRole("button", { name: "Plan details", exact: true }).click();
   await page.getByRole("button", { name: "Repeat Plan", exact: true }).click();
   await page
     .getByRole("button", { name: "End date & reminders", exact: true })
@@ -87,7 +86,7 @@ test("Plan timeline can create a reusable manual Routine", async ({ page }) => {
   await page.getByRole("button", { name: "Run Now", exact: true }).click();
   await expect(page).toHaveURL(/\/plan\//);
   await expect(page).not.toHaveURL(sourceUrl);
-  await expect(page.getByRole("button", { name: "1. Dinner together", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Dinner together", exact: true })).toBeVisible();
 });
 
 test("Create Plan opens the full editor without a standalone Routine setup picker", async ({
@@ -98,10 +97,10 @@ test("Create Plan opens the full editor without a standalone Routine setup picke
     page.getByRole("button", { name: "Create Routine", exact: true }),
   ).toHaveCount(0);
   await page.getByRole("button", { name: "Create Plan", exact: true }).click();
-  await expect(page.getByLabel("Plan title", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Plan name", { exact: true })).toBeVisible();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(
-    page.getByRole("button", { name: "Save Draft", exact: true }),
+    page.getByRole("button", { name: "Create Plan", exact: true }),
   ).toBeVisible();
 });
 
@@ -118,19 +117,16 @@ test("a Suggested Beacon creates a Vote and can add another suggestion with the 
   await page
     .getByLabel("Activity title", { exact: true })
     .fill("Coffee suggestion test");
-  await page.getByRole("button", { name: /^Starts,/ }).click();
-  await page.getByRole("button", { name: "In 30 min", exact: true }).click();
-  await page.getByRole("button", { name: "Done", exact: true }).click();
+  await page.getByRole("button", { name: "Start time: In 30 min", exact: true }).click();
   await page
-    .getByRole("button", { name: "Add to Plan or Council", exact: true })
+    .getByRole("button", { name: "Suggest for a Vote or Draw", exact: true })
     .click();
-  await page.getByRole("button", { name: "Vote / Draw", exact: true }).click();
   await page
     .getByLabel("Decision name (optional)", { exact: true })
     .fill("Friday choices test");
   await page
-    .getByRole("dialog", { name: "Add to Plan or Council", exact: true })
-    .getByRole("button", { name: "Done", exact: true })
+    .getByRole("dialog", { name: "Suggest for a Vote or Draw", exact: true })
+    .getByRole("button", { name: "Apply", exact: true })
     .click();
   await page
     .getByRole("button", { name: "Submit Council Option", exact: true })
@@ -299,18 +295,15 @@ test("My Templates saves, reuses, and edits the existing configuration", async (
     .getByLabel("Search activities or templates", { exact: true })
     .fill("Grocery Run");
   await page.getByRole("button", { name: "Grocery Run", exact: true }).click();
-  await page
-    .getByRole("button", { name: "Advanced Options", exact: true })
-    .click();
+  await page.getByRole("button", { name: "More creation actions", exact: true }).click();
+  await page.getByRole("button", { name: "Save as template", exact: true }).click();
   await page
     .getByLabel("Template name", { exact: true })
     .fill("Weekly groceries");
   await page
     .getByRole("button", { name: "Save as template", exact: true })
     .click();
-  await page
-    .getByRole("button", { name: "Advanced Options", exact: true })
-    .click();
+  await expect(page.getByRole("dialog", { name: "Save as template", exact: true })).toHaveCount(0);
   await returnToHub(page);
   await page.getByRole("button", { name: "My Templates", exact: true }).click();
   await page
@@ -353,16 +346,15 @@ test("a preset Beacon can join an existing Plan through the same editor", async 
     .fill("Grocery Run");
   await page.getByRole("button", { name: "Grocery Run", exact: true }).click();
   await page
-    .getByRole("button", { name: "Add to Plan or Council", exact: true })
+    .getByRole("button", { name: "Add to a Plan", exact: true })
     .click();
-  await page.getByRole("button", { name: "Plan", exact: true }).click();
   await page
     .getByRole("button", { name: /^Friday Night Routine.*First plan$/ })
     .click();
-  await page.getByRole("button", { name: "1", exact: true }).click();
+  await page.getByRole("button", { name: "Before stop 1", exact: true }).click();
   await page
-    .getByRole("dialog", { name: "Add to Plan or Council", exact: true })
-    .getByRole("button", { name: "Done", exact: true })
+    .getByRole("dialog", { name: "Add to a Plan", exact: true })
+    .getByRole("button", { name: "Apply", exact: true })
     .click();
   await page.getByRole("radio", { name: "Online", exact: true }).click();
   await page
@@ -373,6 +365,6 @@ test("a preset Beacon can join an existing Plan through the same editor", async 
     .click();
   await expect(page).toHaveURL(/\/plan\//);
   await expect(
-    page.getByText("Grocery Run", { exact: true }).first(),
+    page.getByRole("button", { name: "1. Grocery Run", exact: true }),
   ).toBeVisible();
 });

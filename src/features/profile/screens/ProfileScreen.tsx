@@ -2,11 +2,12 @@ import {
   PremiumHeaderButton,
   PersonalMembershipSummary,
 } from "../components/PremiumEntry";
-import React, { useCallback, useRef, useState } from "react";
+import React, { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Modal, Pressable, Share, Text, View } from "react-native";
+import Svg, { Circle, Defs, LinearGradient, Stop } from "react-native-svg";
 import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Pencil, QrCode, RadioTower, Settings, Sparkles, X } from "lucide-react-native";
+import { Pencil, RadioTower, Settings, Sparkles, X } from "lucide-react-native";
 import { useBeacon } from "@/src/shared/store";
 import {
   Button,
@@ -16,13 +17,15 @@ import {
   Txt,
   useTheme,
 } from "@/src/shared/ui";
-import { Skeleton, Toast, useReducedMotion } from "@/src/shared/design-system";
+import { Skeleton, useReducedMotion } from "@/src/shared/design-system";
 import { templates, type BeaconTemplate } from "@/src/shared/templates";
-import { startCreationDraft, setCreationDraftField } from "@/src/features/beacons/socialPlanningSession";
-import { formatDurationLabel } from "@/src/features/beacons/createTiming";
+import { useSpontaneityEntry } from "@/src/features/beacons/spontaneity/SpontaneityEntry";
 import { ChatKeyboardFrame } from "@/src/features/messages/ChatKeyboard";
 import { ProfileSurveyContent } from "../ProfileSurvey";
 import { InviteQR } from "@/src/features/people/InviteQR";
+import { BeaconScoreSheet } from "../components/BeaconScoreSheet";
+import { beaconScoreTier } from "../beaconScore";
+import { useBeaconScore } from "../useBeaconScore";
 import {
   ProfileExperience,
   type ProfileTab,
@@ -33,6 +36,10 @@ export default function ProfileScreen() {
 }
 
 const dotColors = ["#8EDDB5", "#AAB8FF", "#F5C481", "#F1A6CF", "#82D7EA"];
+const compactTapCount = new Intl.NumberFormat(undefined, {
+  notation: "compact",
+  maximumFractionDigits: 1,
+});
 const dotQuips = [
   "Tiny Beacon. Big main-character energy.",
   "You found the button with no job description.",
@@ -41,8 +48,8 @@ const dotQuips = [
 ];
 
 function ProfileScreenBody() {
-  const { data, userId, loading, refresh } = useBeacon();
-  const { semanticColors: colors, styles } = useTheme();
+  const { data, userId, loading, refresh, demo } = useBeacon();
+  const { semanticColors: colors, styles, tokens } = useTheme();
   const reducedMotion = useReducedMotion();
   const insets = useSafeAreaInsets();
   const [surveyOpen, setSurveyOpen] = useState(false);
@@ -53,34 +60,68 @@ function ProfileScreenBody() {
   }>();
   const [saved, setSaved] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
-  const taps = useRef(0);
+  const score = useBeaconScore(userId, demo);
+  const [scoreOpen, setScoreOpen] = useState(false);
+  const upgradeToastUntil = useRef(0);
+  const ringId = `tiny-beacon-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
+  const { index: stageIndex, stage, nextStage } = beaconScoreTier(score.points);
+  const progress = nextStage
+    ? (score.points - stage.at + score.tapRemainder / score.tapRate) /
+      (nextStage.at - stage.at)
+    : 1;
   const [dotColor, setDotColor] = useState(dotColors[0]);
   const [dotToast, setDotToast] = useState<{ message: string; recipe?: BeaconTemplate } | null>(null);
   const dismissDotToast = useCallback(() => setDotToast(null), []);
+  const openSpontaneity = useSpontaneityEntry();
+  useEffect(() => {
+    if (!dotToast) return;
+    const timeout = setTimeout(dismissDotToast, dotToast.recipe ? 4500 : 2800);
+    return () => clearTimeout(timeout);
+  }, [dotToast, dismissDotToast]);
+  const announcedStage = useRef<number | null>(null);
+  const tapFeedback = useRef<number | null>(null);
+  useEffect(() => {
+    if (!score.synced && !score.taps) return;
+    const frame = requestAnimationFrame(() => {
+      const previous = announcedStage.current;
+      announcedStage.current = stageIndex;
+      if (previous !== null && stageIndex > previous) {
+        const count = tapFeedback.current;
+        const recipe = count !== null && count % 8 === 0
+          ? templates[Math.floor(Math.random() * templates.length)]
+          : undefined;
+        upgradeToastUntil.current = Date.now() + (recipe ? 4500 : 2800);
+        setDotToast({ message: `${stage.label} unlocked`, recipe });
+      }
+      tapFeedback.current = null;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [score.synced, score.points, score.taps, stageIndex, stage.label]);
   function tapDot() {
+    const count = score.tap();
+    if (count === null) return;
     const roll = Math.random();
     setDotColor((previous) => {
       const choices = dotColors.filter((color) => color !== previous);
       return choices[Math.floor(roll * choices.length)];
     });
-    taps.current += 1;
-    if (taps.current % 4 !== 0) return;
-    if (taps.current % 8 === 0) {
-      const recipe = templates[Math.floor(Math.random() * templates.length)];
+    tapFeedback.current = count;
+    const unlocked = score.tapRemainder + 1 >= score.tapRate &&
+      beaconScoreTier(score.points + 1).index > stageIndex;
+    if (unlocked) return;
+    if (count % 4 !== 0 || Date.now() < upgradeToastUntil.current) return;
+    const recipe = count % 8 === 0
+      ? templates[Math.floor(Math.random() * templates.length)]
+      : undefined;
+    if (recipe) {
       setDotToast({ message: `Plot twist: ${recipe.title}?`, recipe });
     } else {
       setDotToast({ message: dotQuips[Math.floor(Math.random() * dotQuips.length)] });
     }
   }
-  function openSurpriseDraft(recipe: BeaconTemplate) {
-    const token = startCreationDraft(userId);
-    if (!token) return;
-    setCreationDraftField(userId, token, "selectedRecipe", recipe);
-    setCreationDraftField(userId, token, "title", recipe.title);
-    setCreationDraftField(userId, token, "category", recipe.category);
-    setCreationDraftField(userId, token, "duration", formatDurationLabel(recipe.minutes));
+  function openToastQuest() {
     dismissDotToast();
-    router.push({ pathname: "/create", params: { editor: "yes", planSession: token } });
+    openSpontaneity();
   }
   const params = useLocalSearchParams<{ section?: string }>();
   const [tab, setTab] = useState<ProfileTab>(
@@ -155,6 +196,12 @@ function ProfileScreenBody() {
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Tap the tiny Beacon"
+              disabled={!score.ready}
+              aria-valuetext={
+                score.points
+                  ? `${score.points} points, ${stage.label} stage`
+                  : undefined
+              }
               onPress={tapDot}
               style={({ pressed }) => ({
                 width: 44,
@@ -164,11 +211,105 @@ function ProfileScreenBody() {
                 opacity: pressed ? 0.65 : 1,
               })}
             >
-              <View testID="profile-tiny-beacon" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+              <View
+                testID="profile-tiny-beacon"
+                accessibilityElementsHidden
+                importantForAccessibility="no-hide-descendants"
+                style={{
+                  width: 44,
+                  height: 44,
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                {(score.points > 0 || score.taps > 0) && (
+                  <Svg
+                    width={38}
+                    height={38}
+                    viewBox="0 0 40 40"
+                    style={{ position: "absolute" }}
+                  >
+                    <Defs>
+                      <LinearGradient
+                        id={ringId}
+                        x1="0%"
+                        y1="0%"
+                        x2="100%"
+                        y2="100%"
+                      >
+                        <Stop offset="0%" stopColor={dotColor} />
+                        <Stop offset="100%" stopColor={stage.tint} />
+                      </LinearGradient>
+                    </Defs>
+                    {stageIndex >= 2 && (
+                      <Circle
+                        cx={20}
+                        cy={20}
+                        r={19}
+                        stroke={stage.tint}
+                        strokeOpacity={0.45}
+                        fill="none"
+                      />
+                    )}
+                    <Circle
+                      cx={20}
+                      cy={20}
+                      r={15}
+                      stroke={stage.tint}
+                      strokeOpacity={0.35}
+                      strokeWidth={2}
+                      fill="none"
+                    />
+                    <Circle
+                      cx={20}
+                      cy={20}
+                      r={15}
+                      stroke={`url(#${ringId})`}
+                      strokeWidth={Math.min(stageIndex + 2, 5)}
+                      strokeLinecap="round"
+                      strokeDasharray={[94.25, 94.25]}
+                      strokeDashoffset={
+                        94.25 * (1 - Math.max(0.09, progress))
+                      }
+                      rotation={-90}
+                      origin="20, 20"
+                      fill="none"
+                    />
+                  </Svg>
+                )}
                 <RadioTower size={15} color={dotColor} strokeWidth={2} />
+                {(score.points > 0 || score.taps > 0) && (
+                  <View
+                    style={{
+                      position: "absolute",
+                      bottom: 0,
+                      right: 0,
+                      minWidth: 17,
+                      alignItems: "center",
+                      paddingHorizontal: 3,
+                      backgroundColor: colors.surface,
+                      borderColor: stage.tint,
+                      borderWidth: 1,
+                      borderRadius: 9,
+                    }}
+                  >
+                    <Text
+                      testID="profile-tiny-beacon-count"
+                      style={{
+                        color: colors.textPrimary,
+                        fontSize: 9,
+                        fontWeight: "700",
+                        fontVariant: ["tabular-nums"],
+                      }}
+                    >
+                      {score.points < 10_000 ? score.points.toLocaleString() : compactTapCount.format(score.points)}
+                    </Text>
+                  </View>
+                )}
               </View>
             </Pressable>
           }
+          overviewAccessory={<View testID="profile-membership-section"><PersonalMembershipSummary /></View>}
           actions={
             <>
               <Button
@@ -178,30 +319,17 @@ function ProfileScreenBody() {
                 onPress={() => router.push("/profile/edit")}
               />
               <Button
+                title="View score"
+                compact
+                secondary
+                onPress={() => { setScoreOpen(true); void score.refresh(); }}
+              />
+              <Button
                 title="Share profile"
                 compact
                 secondary
                 onPress={() => setShareOpen(true)}
               />
-              <IconButton
-                label="Show profile invitation QR code"
-                onPress={() => setShareOpen(true)}
-              >
-                <QrCode size={21} color={colors.textPrimary} />
-              </IconButton>
-              <View
-                testID="profile-membership-section"
-                style={{
-                  width: "100%",
-                  marginTop: 8,
-                  paddingVertical: 14,
-                  borderTopWidth: 1,
-                  borderBottomWidth: 1,
-                  borderColor: colors.border,
-                }}
-              >
-                <PersonalMembershipSummary />
-              </View>
               {personalizationEntry && (
                 <View style={{ width: "100%", minWidth: 0 }}>
                   {personalizationEntry}
@@ -307,15 +435,29 @@ function ProfileScreenBody() {
         )}
       </Sheet>
     </Screen>
+      <BeaconScoreSheet score={score} visible={scoreOpen} onClose={() => setScoreOpen(false)} />
       {dotToast ? (
-        <View pointerEvents="box-none" style={{ position: "absolute", top: insets.top + 57, right: 12, width: 252, zIndex: 10 }}>
-          <Toast visible message={dotToast.message} onDismiss={dismissDotToast}
-            duration={dotToast.recipe ? 4500 : undefined}
-            action={dotToast.recipe ? {
-              label: "Open surprise draft",
-              onPress: () => { if (dotToast.recipe) openSurpriseDraft(dotToast.recipe); },
-            } : undefined}
-          />
+        <View pointerEvents="box-none" style={{ position: "absolute", bottom: insets.bottom + tokens.layout.tabBarHeight + 16, left: 16, right: 16, alignItems: "center", zIndex: 10 }}>
+          <Pressable
+            accessibilityLiveRegion="polite"
+            accessibilityRole="button"
+            accessibilityLabel={`${dotToast.message}. Open Spontaneity Machine`}
+            onPress={openToastQuest}
+            style={({ pressed }) => ({
+              maxWidth: 360, minHeight: 44, justifyContent: "center", paddingHorizontal: 14,
+              paddingVertical: 8, borderRadius: 18, backgroundColor: colors.surfaceRaised,
+              borderColor: colors.border, borderWidth: 1, opacity: pressed ? 0.75 : 1,
+            })}
+          >
+            <Text numberOfLines={dotToast.recipe ? 1 : 2} style={{ color: colors.textSecondary, fontSize: 13, textAlign: "center" }}>
+              {dotToast.message}
+            </Text>
+            {dotToast.recipe && (
+              <Text style={{ color: colors.accent, fontSize: 13, textAlign: "center", paddingVertical: 8 }}>
+                Open Spontaneity Machine
+              </Text>
+            )}
+          </Pressable>
         </View>
       ) : null}
     </View>

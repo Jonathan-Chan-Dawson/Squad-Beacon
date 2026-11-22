@@ -1,19 +1,19 @@
 import { PlanningKindSelector } from "./PlanningKindSelector";
 import {
-  Clock3,
-  MapPin,
-  Sparkles,
-} from "lucide-react-native";
-import ZonedTimeField from "./ZonedTimeField";
+  PlanningAudienceField,
+  PlanningDateField,
+} from "./PlanningCreationFields";
+import { PlanningChoicesEditor } from "./PlanningChoicesEditor";
+import { flexiblePlanningWindow, planningTimezone } from "./creationTiming";
+import { Chip } from "@/src/shared/design-system";
 import { interestTarget } from "./connected";
 import { PlanningDisclosure, PlanningToggle } from "./PlanningControls";
 import React, { useCallback, useRef, useState } from "react";
-import { Pressable, Text, View, type TextInput } from "react-native";
+import { Text, View, type TextInput } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { randomUUID } from "expo-crypto";
 import {
   Action,
-  AudiencePicker,
   Button,
   Chips,
   Field,
@@ -30,7 +30,6 @@ import {
   setCreationDraftField,
   startCreationDraft,
 } from "@/src/features/beacons/socialPlanningSession";
-import DateField from "./PlanningTimeField";
 import {
   canReadPlanningThread,
   makeBeaconDraft,
@@ -42,6 +41,7 @@ import {
   applyPingStarter,
   composerSession,
   composerMapCoordinate,
+  composerTiming,
   storeComposerSession,
   completeComposerSession,
   pingStarters,
@@ -51,7 +51,7 @@ import type { BeaconDraft, PlanningThread, PlanningThreadKind } from "./types";
 import type { Payload } from "@/src/shared/types";
 
 export function PlanningComposer({ sessionId }: { sessionId: string }) {
-  const { styles, colors } = useTheme();
+  const { styles } = useTheme();
   const { data, userId, act, getViewerEpoch, refresh } = useBeacon();
   const params = useLocalSearchParams<{
     timezone?: string;
@@ -78,15 +78,14 @@ export function PlanningComposer({ sessionId }: { sessionId: string }) {
         ? "vote"
         : "ping";
   const name =
+    kind === "ping" ? "Ping" : kind === "vote" ? "Vote" : "Random Draw";
+  const action =
     kind === "ping"
-      ? "Ping"
+      ? "Send Ping"
       : kind === "vote"
-        ? "Vote Council"
-        : "Draw Council";
+        ? "Start Vote"
+        : "Start Draw";
   const now = useNow();
-  const [details, setDetails] = useState(false);
-  const [starterId, setStarterId] = useState("");
-  const [starterNotice, setStarterNotice] = useState("");
   const titleInput = useRef<TextInput>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -94,6 +93,7 @@ export function PlanningComposer({ sessionId }: { sessionId: string }) {
   const planContext = data.plans.find(
     (p) => p.id === params.returnPlanId && data.viewer_id === userId,
   );
+  const timezone = planningTimezone(planContext?.timezone ?? params.timezone);
   const planIdea = data.plan_stops?.find(
     (s) => s.id === params.planStopId && s.plan_id === planContext?.id,
   );
@@ -107,10 +107,12 @@ export function PlanningComposer({ sessionId }: { sessionId: string }) {
   const [draft, setDraft] = useState(() =>
     structuredClone(
       composerSession(userId ?? "signed-out", sessionId, () => {
-        const startsAt =
-          params.startsAt && Date.parse(params.startsAt) > Date.now() + 120000
-            ? params.startsAt
-            : new Date(Date.now() + 3 * 86400000).toISOString();
+        const createdAt = Date.now();
+        const { startsAt, deadline } = composerTiming(
+          createdAt,
+          params.startsAt,
+          timezone,
+        );
         return {
           title:
             source?.title ??
@@ -130,9 +132,16 @@ export function PlanningComposer({ sessionId }: { sessionId: string }) {
             sourceNote?.audience_id ??
             null,
           startsAt,
-          deadline: new Date(
-            Math.min(Date.now() + 86400000, Date.parse(startsAt) - 60000),
-          ).toISOString(),
+          flexibleTime: startsAt !== params.startsAt,
+          deadline:
+            kind === "ping"
+              ? new Date(
+                  Math.min(
+                    Date.parse(deadline),
+                    Math.ceil((createdAt + 3600000) / 900000) * 900000,
+                  ),
+                ).toISOString()
+              : deadline,
           minutes: "60",
           place: sourcePlace ?? params.placeLabel ?? "",
           coordinate: sourcePlace
@@ -146,7 +155,8 @@ export function PlanningComposer({ sessionId }: { sessionId: string }) {
                   id: randomUUID(),
                   payload: {
                     ...makeBeaconDraft(new Date(startsAt), 60),
-                    ...(planContext ? { timezone: planContext.timezone } : {}),
+                    timezone,
+                    flexible_time: true,
                     title: index === 0 ? (source?.title ?? "") : "",
                     description: source?.description ?? "",
                     category: source?.category ?? "Social",
@@ -172,11 +182,30 @@ export function PlanningComposer({ sessionId }: { sessionId: string }) {
     }, [userId, sessionId]),
   );
   const frozen = !!draft.publication.attempt;
+  const flexibleTime =
+    draft.flexibleTime ??
+    (!params.startsAt && !draft.touched.includes("startsAt"));
+  const optionStarts = draft.options
+    .filter((row) => !row.payload.flexible_time)
+    .map((row) => Date.parse(row.payload.starts_at));
+  const deadlineLimit =
+    kind === "ping"
+      ? flexibleTime
+        ? undefined
+        : Date.parse(draft.startsAt)
+      : optionStarts.length
+        ? Math.min(...optionStarts)
+        : undefined;
+  const titleMissing = error === "Add an idea." || error === "Add a question.";
+  const choicesError =
+    error === "Add at least two choices." ||
+    error === "Give each choice a name.";
   function update<K extends keyof ComposerDraft>(
     key: K,
     value: ComposerDraft[K],
   ) {
     if (frozen || busy) return;
+    setError("");
     change((next) => {
       next[key] = value;
       if (key === "place") next.coordinate = undefined;
@@ -226,7 +255,12 @@ export function PlanningComposer({ sessionId }: { sessionId: string }) {
     option.editorToken = token;
     storeComposerSession(userId ?? "signed-out", sessionId, next);
     setDraft(next);
-    const payload = option.payload;
+    const payload = option.payload.flexible_time
+      ? {
+          ...option.payload,
+          ...flexiblePlanningWindow(draft.deadline, option.payload.timezone),
+        }
+      : option.payload;
     if (!reuse)
       for (const [key, value] of Object.entries({
         title: payload.title,
@@ -256,6 +290,7 @@ export function PlanningComposer({ sessionId }: { sessionId: string }) {
         planningSessionId: sessionId,
         planningOptionId: id,
         planningKind: kind,
+        timezone: payload.timezone,
       },
     });
   }
@@ -282,7 +317,7 @@ export function PlanningComposer({ sessionId }: { sessionId: string }) {
       else {
         if (!draft.title.trim()) {
           titleInput.current?.focus();
-          throw new Error("Add an activity title.");
+          throw new Error(kind === "ping" ? "Add an idea." : "Add a question.");
         }
         if (params.activityNoteId && !source)
           throw new Error(
@@ -299,9 +334,14 @@ export function PlanningComposer({ sessionId }: { sessionId: string }) {
           )
         )
           throw new Error("Choose an audience you can share with.");
+        const fallback = flexiblePlanningWindow(draft.deadline, timezone);
         const beacon = {
-          ...makeBeaconDraft(new Date(draft.startsAt), Number(draft.minutes)),
-          ...(planContext ? { timezone: planContext.timezone } : {}),
+          ...makeBeaconDraft(
+            new Date(flexibleTime ? fallback.starts_at : draft.startsAt),
+            kind === "ping" ? Number(draft.minutes) : 60,
+          ),
+          timezone,
+          ...(flexibleTime ? { flexible_time: true } : {}),
           title: draft.title.trim(),
           description: draft.body,
           category: draft.category,
@@ -321,13 +361,20 @@ export function PlanningComposer({ sessionId }: { sessionId: string }) {
           kind === "ping" ? beacon : undefined,
         );
         if (kind !== "ping" && draft.options.length < 2)
-          throw new Error("Add at least two activity options.");
+          throw new Error("Add at least two choices.");
+        if (
+          kind !== "ping" &&
+          draft.options.some((option) => !option.payload.title.trim())
+        )
+          throw new Error("Give each choice a name.");
         options =
           kind === "ping"
             ? []
             : draft.options.map((option) => {
                 const value = {
                   ...option.payload,
+                  ...(option.payload.flexible_time ? fallback : {}),
+                  title: option.payload.title.trim(),
                   audience: draft.audience,
                   audience_id: draft.audienceId,
                 };
@@ -427,349 +474,304 @@ export function PlanningComposer({ sessionId }: { sessionId: string }) {
 
   return (
     <Screen
-      title={`Create ${name}`}
+      title={name}
       eyebrow=""
       showDemoNotice={false}
       compactHeader
+      footer={
+        <View style={{ gap: 6 }}>
+          {!!error && !titleMissing && !choicesError && (
+            <Text accessibilityRole="alert" style={styles.error}>
+              {error}
+            </Text>
+          )}
+          <Action
+            title={frozen ? "Verify publication" : action}
+            disabled={busy}
+            run={publish}
+          />
+          {frozen && (
+            <Action
+              secondary
+              compact
+              title="Refresh publication state"
+              run={refresh}
+            />
+          )}
+        </View>
+      }
     >
-      <PlanningKindSelector kind={kind} sessionId={sessionId} disabled={frozen || busy} />
+      <PlanningKindSelector
+        kind={kind}
+        sessionId={sessionId}
+        disabled={frozen || busy}
+      />
       <View
         pointerEvents={frozen || busy ? "none" : "auto"}
-        style={{ gap: 14, opacity: frozen ? 0.65 : 1 }}
+        accessibilityElementsHidden={frozen || busy}
+        importantForAccessibility={
+          frozen || busy ? "no-hide-descendants" : "auto"
+        }
+        style={{ gap: 12, opacity: frozen ? 0.65 : 1 }}
       >
-        <Field inputRef={titleInput} label={kind === "ping" ? "What are you thinking?" : "What are we deciding?"}
-          value={draft.title} maxLength={120} editable={!frozen && !busy}
-          onChangeText={(value) => update("title", value)} />
-        {params.returnPlanId ? (
-          <Txt muted>
-            For{" "}
-            {data.plans.find((p) => p.id === params.returnPlanId)?.title ??
-              "your Plan"}{" "}
-            ·{" "}
-            {params.squadId
-              ? (data.squads.find((s) => s.id === params.squadId)?.name ??
-                "Squad")
-              : "Personal"}
-          </Txt>
-        ) : (
-          <AudiencePicker
-            value={draft.audience}
-            id={draft.audienceId}
-            onChange={(audience, id) => {
-              if (frozen || busy) return;
-              change((next) => {
-                next.audience = audience;
-                next.audienceId = id;
-                next.coownerIds = [];
-                if (!next.touched.includes("audience"))
-                  next.touched.push("audience");
-              });
-            }}
-          />
+        <Field
+          inputRef={titleInput}
+          label={
+            kind === "ping"
+              ? "What’s the idea?"
+              : kind === "vote"
+                ? "What are we deciding?"
+                : "What should we pick at random?"
+          }
+          placeholder={
+            kind === "ping"
+              ? "Anyone down for basketball tonight?"
+              : kind === "vote"
+                ? "Where should we eat?"
+                : "What should we play?"
+          }
+          value={draft.title}
+          maxLength={120}
+          editable={!frozen && !busy}
+          onChangeText={(value) => update("title", value)}
+        />
+        {titleMissing && (
+          <Text accessibilityRole="alert" style={styles.error}>
+            {error}
+          </Text>
         )}
-        {error === "Add an activity title." && <Text accessibilityRole="alert" style={styles.error}>{error}</Text>}
-        {kind === "ping" && <Txt muted>Ping uses this audience, not selected individual friends. Anyone nearby does not track people or expand sharing.</Txt>}
         {kind === "ping" ? (
-          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
-            <View style={{ width: "100%", flexDirection: "row", gap: 6 }}>
-              {pingStarters.map((starter) => {
-                const Icon =
-                  starter.id === "free"
-                    ? Clock3
-                    : starter.id === "try"
-                      ? Sparkles
-                      : MapPin;
-                return (
-                  <Pressable
-                    key={starter.id}
-                    accessibilityRole="button"
-                    accessibilityLabel={starter.label}
-                    accessibilityState={{ selected: starterId === starter.id }}
-                    aria-pressed={starterId === starter.id}
-                    style={({ pressed }) => [
-                      styles.card,
-                      {
-                        flex: 1,
-                        minWidth: 0,
-                        minHeight: 56,
-                        backgroundColor: starterId === starter.id ? colors.lime : colors.white,
-                        paddingHorizontal: 3,
-                        paddingVertical: 9,
-                        alignItems: "center",
-                        justifyContent: "center",
-                        gap: 5,
-                        opacity: pressed ? 0.65 : 1,
-                      },
-                    ]}
-                    disabled={frozen || busy}
-                    onPress={() => {
-                      setStarterId(starter.id);
-                      const changed = [!draft.touched.includes("title") && "title", !draft.touched.includes("startsAt") && "activity time", !draft.touched.includes("deadline") && "response deadline"].filter(Boolean);
-                      setStarterNotice(changed.length ? `Starter applied: ${changed.join(", ")}. Your edited fields were kept.` : "Your edited fields were kept.");
-                      change((next) =>
-                        applyPingStarter(next, starter.id, Date.now()),
-                      );
-                      if (starter.id === "nearby") setDetails(true);
-                    }}
-                  >
-                    <Icon size={19} color={colors.green} accessible={false} />
-                    <Text
-                      style={[
-                        styles.label,
-                        { textAlign: "center", color: colors.ink },
-                      ]}
-                    >
-                      {starter.id === "free"
-                        ? "Anyone free?"
-                        : starter.id === "try"
-                          ? "Want to try?"
-                          : "Anyone nearby?"}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-            {!!starterNotice && <Text accessibilityLiveRegion="polite" style={styles.label}>{starterNotice}</Text>}
-          </View>
-        ) : null}
-        {kind === "ping" ? (
-          planContext ? (
-            <ZonedTimeField
-              label="Proposed activity time"
-              value={draft.startsAt}
-              timezone={planContext.timezone}
-              onChange={(value) => update("startsAt", value)}
-            />
-          ) : (
-            <DateField
-              label="Proposed activity time"
-              value={draft.startsAt}
-              onChange={(value) => update("startsAt", value)}
-            />
-          )
-        ) : (
-          <View style={{ gap: 10 }}>
-            <Txt>Options</Txt>
-            {draft.options.map((option) => (
-              <View key={option.id} style={{ gap: 6 }}>
-                <Field
-                  label="Activity option"
-                  value={option.payload.title}
-                  editable={!frozen && !busy}
-                  maxLength={120}
-                  onChangeText={(title) => {
-                    if (busy || frozen) return;
-                    change((next) => {
-                      next.options.find(
-                        (row) => row.id === option.id,
-                      )!.payload.title = title;
-                    });
-                    if (option.editorToken)
-                      setCreationDraftField(
-                        userId,
-                        option.editorToken,
-                        "title",
-                        title,
-                      );
+          <>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+              {pingStarters.map((starter) => (
+                <Chip
+                  key={starter.id}
+                  label={starter.label}
+                  selected={draft.title === starter.title}
+                  disabled={
+                    frozen ||
+                    busy ||
+                    (draft.title.trim() !== "" &&
+                      !pingStarters.some((row) => row.title === draft.title))
+                  }
+                  onPress={() => {
+                    setError("");
+                    change((next) => applyPingStarter(next, starter.id));
                   }}
                 />
-                <Txt muted>
-                  {option.payload.category} ·{" "}
-                  {new Date(option.payload.starts_at).toLocaleString()}
-                </Txt>
-                <View
-                  style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}
-                >
-                  <Button
-                    compact
-                    secondary
-                    title={`Edit details${option.payload.title ? `: ${option.payload.title}` : ""}`}
-                    disabled={frozen || busy}
-                    onPress={() => editOption(option.id)}
-                  />
-                  <Button
-                    compact
-                    secondary
-                    title="Remove option"
-                    disabled={frozen || busy || draft.options.length <= 2}
-                    onPress={() =>
-                      update(
-                        "options",
-                        draft.options.filter((row) => row.id !== option.id),
-                      )
-                    }
-                  />
-                </View>
-              </View>
-            ))}
-            <Button
-              compact
-              secondary
-              title="+ Add Option"
+              ))}
+            </View>
+            <Txt muted>
+              Replies are about interest: Interested · Maybe · Pass.
+            </Txt>
+          </>
+        ) : (
+          <>
+            <PlanningChoicesEditor
+              options={draft.options}
               disabled={frozen || busy}
-              onPress={() =>
+              onDetails={editOption}
+              onChange={(options) => update("options", options)}
+              onTitle={(option, title) => {
+                setError("");
+                change((next) => {
+                  const row = next.options.find(
+                    (value) => value.id === option.id,
+                  );
+                  if (row) row.payload.title = title;
+                });
+                if (option.editorToken)
+                  setCreationDraftField(
+                    userId,
+                    option.editorToken,
+                    "title",
+                    title,
+                  );
+              }}
+              onAdd={() =>
                 update("options", [
                   ...draft.options,
                   {
                     id: randomUUID(),
                     payload: {
                       ...makeBeaconDraft(new Date(draft.startsAt), 60),
-                      ...(planContext
-                        ? { timezone: planContext.timezone }
-                        : {}),
+                      timezone,
+                      flexible_time: true,
                     },
                   },
                 ])
               }
             />
-          </View>
+            {choicesError && (
+              <Text accessibilityRole="alert" style={styles.error}>
+                {error}
+              </Text>
+            )}
+          </>
         )}
         {kind === "vote" &&
           (data.is_demo === true ||
             data.capabilities?.connected_planning === true) && (
             <View style={{ gap: 6 }}>
-              <Txt>How should people choose?</Txt>
+              <Txt>How can people vote?</Txt>
               <Chips
-                options={["Pick One", "I'm Good With…"]}
+                options={["Choose one", "Choose any that work"]}
                 value={
                   draft.voteMethod === "approval"
-                    ? "I'm Good With…"
-                    : "Pick One"
+                    ? "Choose any that work"
+                    : "Choose one"
                 }
-                onChange={(v) =>
+                onChange={(value) =>
                   update(
                     "voteMethod",
-                    v === "Pick One" ? "pick_one" : "approval",
+                    value === "Choose one" ? "pick_one" : "approval",
                   )
                 }
               />
             </View>
           )}
-        <DateField
-          label="Response deadline"
+        <PlanningAudienceField
+          value={draft.audience}
+          id={draft.audienceId}
+          fixedLabel={
+            params.returnPlanId
+              ? (planContext?.title ?? "Your Plan")
+              : undefined
+          }
+          onChange={(audience, id) => {
+            if (frozen || busy) return;
+            setError("");
+            change((next) => {
+              next.audience = audience;
+              next.audienceId = id;
+              next.coownerIds = [];
+              if (!next.touched.includes("audience"))
+                next.touched.push("audience");
+            });
+          }}
+        />
+        {kind === "ping" && (
+          <PlanningDateField
+            label="Activity time"
+            value={flexibleTime ? "" : draft.startsAt}
+            seed={draft.startsAt}
+            timezone={timezone}
+            now={now}
+            min={Math.max(now, Date.parse(draft.deadline))}
+            allowFlexible
+            onChange={(value) => {
+              change((next) => {
+                next.flexibleTime = !value;
+                if (value) next.startsAt = value;
+                if (!next.touched.includes("startsAt"))
+                  next.touched.push("startsAt");
+              });
+              setError("");
+            }}
+          />
+        )}
+        <PlanningDateField
+          label={kind === "draw" ? "Entries close" : "Responses close"}
           value={draft.deadline}
+          timezone={timezone}
+          now={now}
+          min={now}
+          max={deadlineLimit}
           onChange={(value) => update("deadline", value)}
         />
-        {(data.is_demo === true ||
-          data.capabilities?.connected_planning === true) && (
-          <PlanningDisclosure
-            title="Organizer options"
-            summary={`Backup hosting ${(draft.allowBackupHosting ?? draft.audience === "squad") ? "on" : "off"}`}
-          >
-            {kind === "ping" && (
-              <Field
-                label="Need X People · Optional"
-                value={draft.interestTarget ?? ""}
-                keyboardType="number-pad"
-                onChangeText={(v) => update("interestTarget", v)}
-              />
-            )}
-            <PlanningToggle
-              title="Allow Backup Hosting"
-              description="Eligible participants may volunteer if you are unavailable."
-              value={draft.allowBackupHosting ?? draft.audience === "squad"}
-              disabled={frozen || busy}
-              onChange={(v) => update("allowBackupHosting", v)}
-            />
-          </PlanningDisclosure>
+        {kind === "draw" && (
+          <Txt muted>
+            After entries close, you can draw one eligible choice at random.
+          </Txt>
         )}
-        <Button
-          compact
-          secondary
-          title={details ? "Hide activity details" : "Activity details · Optional"}
-          disabled={frozen || busy}
-          onPress={() => setDetails(!details)}
-        />
-        {details ? (
-          <>
-            <Field
-              label="Description · Optional"
-              value={draft.body}
-              multiline
-              maxLength={500}
-              editable={!frozen && !busy}
-              onChangeText={(value) => update("body", value)}
-            />
-            {kind === "ping" ? (
-              <>
-                <Chips
-                  options={
-                    [
-                      "Fitness",
-                      "Study",
-                      "Gaming",
-                      "Creative",
-                      "Social",
-                      "Other",
-                    ] as const
+        <PlanningDisclosure title="More options">
+          <Field
+            label="Description · Optional"
+            value={draft.body}
+            multiline
+            maxLength={500}
+            editable={!frozen && !busy}
+            onChangeText={(value) => update("body", value)}
+          />
+          {kind === "ping" ? (
+            <>
+              <Chips
+                options={
+                  [
+                    "Fitness",
+                    "Study",
+                    "Gaming",
+                    "Creative",
+                    "Social",
+                    "Other",
+                  ] as const
+                }
+                value={draft.category}
+                onChange={(value) => update("category", value)}
+              />
+              <Field
+                label="Duration · minutes"
+                value={draft.minutes}
+                keyboardType="numeric"
+                editable={!frozen && !busy}
+                onChangeText={(value) => update("minutes", value)}
+              />
+              <Field
+                label="Place · Optional"
+                value={draft.place}
+                editable={!frozen && !busy}
+                onChangeText={(value) => update("place", value)}
+              />
+            </>
+          ) : (
+            <View style={{ gap: 6 }}>
+              <Txt>Co-organizers · Optional</Txt>
+              {coowners.map((profile) => (
+                <Button
+                  key={profile.id}
+                  compact
+                  secondary={!draft.coownerIds?.includes(profile.id)}
+                  title={`${draft.coownerIds?.includes(profile.id) ? "✓ " : ""}${profile.name}`}
+                  disabled={busy || frozen}
+                  onPress={() =>
+                    update(
+                      "coownerIds",
+                      draft.coownerIds?.includes(profile.id)
+                        ? draft.coownerIds.filter((id) => id !== profile.id)
+                        : [...(draft.coownerIds ?? []), profile.id],
+                    )
                   }
-                  value={draft.category}
-                  onChange={(value) => update("category", value)}
                 />
+              ))}
+            </View>
+          )}
+          {(data.is_demo === true ||
+            data.capabilities?.connected_planning === true) && (
+            <>
+              {kind === "ping" && (
                 <Field
-                  label="Duration · minutes"
-                  value={draft.minutes}
-                  keyboardType="numeric"
-                  editable={!frozen && !busy}
-                  onChangeText={(value) => update("minutes", value)}
+                  label="Interest target · Optional"
+                  value={draft.interestTarget ?? ""}
+                  keyboardType="number-pad"
+                  onChangeText={(value) => update("interestTarget", value)}
                 />
-                <Field
-                  label="Place · Optional"
-                  value={draft.place}
-                  editable={!frozen && !busy}
-                  onChangeText={(value) => update("place", value)}
-                />
-              </>
-            ) : (
-              <View style={{ gap: 6 }}>
-                <Txt>Co-organizers · Optional</Txt>
-                {coowners.map((profile) => (
-                  <Button
-                    key={profile.id}
-                    compact
-                    secondary={!draft.coownerIds?.includes(profile.id)}
-                    title={`${draft.coownerIds?.includes(profile.id) ? "✓ " : ""}${profile.name}`}
-                    disabled={busy || frozen}
-                    onPress={() =>
-                      update(
-                        "coownerIds",
-                        draft.coownerIds?.includes(profile.id)
-                          ? draft.coownerIds.filter((id) => id !== profile.id)
-                          : [...(draft.coownerIds ?? []), profile.id],
-                      )
-                    }
-                  />
-                ))}
-              </View>
-            )}
-          </>
-        ) : null}
+              )}
+              <PlanningToggle
+                title="Allow backup hosting"
+                description="Eligible participants may volunteer if you are unavailable."
+                value={draft.allowBackupHosting ?? draft.audience === "squad"}
+                disabled={frozen || busy}
+                onChange={(value) => update("allowBackupHosting", value)}
+              />
+            </>
+          )}
+        </PlanningDisclosure>
       </View>
-      {frozen ? (
+      {frozen && (
         <Txt muted>
-          Publication is pending verification. Your submitted setup is locked.
-          Retry uses the original request IDs and submitted values.
+          Verification will retry with your original submitted values.
         </Txt>
-      ) : null}
-      {error ? <Text accessibilityRole="alert">{error}</Text> : null}
-      <Action
-        title={
-          busy
-            ? "Publishing…"
-            : frozen
-              ? "Verify / finish publication"
-              : kind === "ping" ? "Send Ping" : `Create ${name}`
-        }
-        disabled={busy}
-        run={publish}
-      />
-      {frozen ? (
-        <Action secondary title="Refresh publication state" run={refresh} />
-      ) : null}
-      <Txt muted>
-        Draft edits are kept while navigating in this app session. They are not
-        saved across app restarts.
-      </Txt>
+      )}
     </Screen>
   );
 }

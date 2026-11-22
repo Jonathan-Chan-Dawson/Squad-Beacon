@@ -272,7 +272,7 @@ export function DecisionRow({
                 <Txt>{thread.payload.title}</Txt>
               )}
               <Txt muted>
-                {new Date(thread.payload.starts_at).toLocaleString()}
+                {thread.payload.flexible_time ? "Flexible time" : new Date(thread.payload.starts_at).toLocaleString()}
                 {thread.payload.label ? ` · ${thread.payload.label}` : ""}
               </Txt>
             </>

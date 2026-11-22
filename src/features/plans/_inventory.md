@@ -33,7 +33,7 @@ The runner function is executable only by `service_role`; do not call it from a 
 
 - Premium: scheduled multi-Beacon sources require the Routine owner’s verified Plus/Pro tier; single-Beacon recurrence and manual reuse remain Free. Downgrade pauses future generation without removing sources or occurrences; resume is explicit.
 
-- PlanEditorScreen.tsx and app/plan-editor.tsx: full-page staged Plan editing with Idea / Beacon / Decide entry points, searchable existing links, centered ordering, explicit Save Draft / Schedule Plan, and account-isolated durable drafts. Saved organizer routes use the same editor; older backends retain the legacy editor.
+- PlanEditorScreen.tsx and app/plan-editor.tsx: compact staged Plan editing with inline Ideas, Beacon and Ask Group handoffs, searchable existing links, in-place ordering, and explicit Create Plan, Done and Schedule Beacons actions. The account-scoped repository restores local drafts; older backends retain the legacy editor.
 - planEditorModel.ts, planEditorRepository.ts and planEditorStorage.ts: stable stop identities, private Beacon configurations, atomic chunked storage, frozen replay requests and conflict recovery. demoPlanEditor.ts mirrors canonical save/schedule actions.
 - recurrence.ts: typed daily/weekly/monthly date rules with fixed month-day clamping. RoutineScheduleSheet.tsx renders the shared inline controls/previews; LegacyRoutineScheduleSheet.tsx and LegacyRoutinesScreen.tsx support older backends.
 

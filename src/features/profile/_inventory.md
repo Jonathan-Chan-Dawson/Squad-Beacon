@@ -1,6 +1,7 @@
 Profile feature
 
 - screens/ProfileScreen.tsx: identity, profile survey, aspirations, Friends & Lists entry, Beacon Memories, library links, and Widget Studio entry point.
+- Beacon Score combines unlimited tiny Beacon taps with verified participation rewards. Profile owns the private progress sheet, ring and unlock toast. The optional tier badge follows full-profile privacy. Tap streams persist locally and sync to the signed-in account.
 - settings/SettingsScreen.tsx: direct /settings route implementation; owns seven theme palettes and System/Light/Dark appearance, avatar visibility, temporary location links, push and quiet hours, Beacon audience defaults, account actions, and support links.
 - ProfileAvatar.tsx, AvatarToggle.tsx, avatar.ts, avatarArt.ts: avatar display, selection, and presentation.
 - ProfileSurvey.tsx and aspirations.ts: profile survey and optional aspiration helpers.

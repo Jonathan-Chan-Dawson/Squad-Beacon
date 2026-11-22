@@ -163,6 +163,7 @@ export function SharedStatusControl({
   livingLayout = false,
   identityOnly = false,
   renderIdentity,
+  card = false,
   noteAccessory,
 }: {
   compact?: boolean;
@@ -171,6 +172,7 @@ export function SharedStatusControl({
   livingLayout?: boolean;
   identityOnly?: boolean;
   renderIdentity?: (availability: React.ReactNode) => React.ReactNode;
+  card?: boolean;
   noteAccessory?: React.ReactNode;
 }) {
   const { userId, data } = useBeacon();
@@ -186,6 +188,7 @@ export function SharedStatusControl({
       livingLayout={living}
       identityOnly={identityOnly}
       renderIdentity={renderIdentity}
+      card={card}
       noteAccessory={noteAccessory}
     />
   );
@@ -193,6 +196,7 @@ export function SharedStatusControl({
 
 function SharedStatusContent({
   renderIdentity,
+  card,
   noteAccessory,
   identityOnly,
   livingLayout,
@@ -206,6 +210,7 @@ function SharedStatusContent({
   livingLayout: boolean;
   identityOnly: boolean;
   renderIdentity?: (availability: React.ReactNode) => React.ReactNode;
+  card: boolean;
   noteAccessory?: React.ReactNode;
 }) {
   const control = useOwnStatusControl();
@@ -365,7 +370,11 @@ function SharedStatusContent({
     <View>
       <StatusPanel
         headerOverride={
-          livingLayout ? (
+          card ? (
+            <View ref={availabilityAnchor} collapsable={false}>
+              <LivingStatusHeader variant="card" onEditStatus={control.openCurrent} onLegacyAvailability={data.is_demo || data.capabilities?.living_activity ? undefined : () => setAvailabilityOpen(true)} />
+            </View>
+          ) : livingLayout ? (
             <View
               testID={compact ? "home-my-status" : undefined}
               style={{ gap: compact ? 4 : 10 }}

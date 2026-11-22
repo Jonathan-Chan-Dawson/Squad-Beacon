@@ -1,3 +1,5 @@
+import { connectedPlanningEnabled } from "@/src/features/planning/connected";
+import { planningCreationModes } from "@/src/features/planning/PlanningKindSelector";
 import React, {
   useCallback,
   useEffect,
@@ -5,7 +7,15 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { PanResponder, Pressable, Text, View } from "react-native";
+import {
+  KeyboardAvoidingView,
+  PanResponder,
+  Platform,
+  Pressable,
+  Text,
+  View,
+  type TextInput,
+} from "react-native";
 import {
   router,
   Redirect,
@@ -17,37 +27,34 @@ import { randomUUID } from "expo-crypto";
 import {
   ArrowDown,
   ArrowUp,
-  ChevronRight,
+  Check,
   Lightbulb,
   MessageCircle,
   ListChecks,
-  CalendarDays,
   GripVertical,
-  MoreHorizontal,
-  Plus,
   Radio,
   Repeat2,
   Sparkles,
-  X,
+  type LucideIcon,
 } from "lucide-react-native";
 import { useBeacon } from "@/src/shared/store";
-import {
-  Action,
-  Field,
-  IconButton,
-  Screen,
-  Sheet,
-  Chips,
-  Txt,
-  useTheme,
-} from "@/src/shared/ui";
-import { ActivityActionBar } from "@/src/features/activity/ActivityActionBar";
+import { Action, Button, Field, Screen, Txt, useTheme } from "@/src/shared/ui";
+import { MotionPressable } from "@/src/shared/MotionPressable";
 import { PlanChoice } from "./PlanPresentation";
+import { CreationPicker } from "@/src/features/beacons/components/CreationPicker";
+import { PlanningDisclosure } from "@/src/features/planning/PlanningControls";
+import {
+  planningTimeSummary,
+  planningTimezone,
+} from "@/src/features/planning/creationTiming";
+import { useNow } from "@/src/shared/useNow";
+import { canReadBeaconActivity } from "@/src/features/beacons/beaconModules";
 import { canReadPlanningThread } from "@/src/features/planning/domain";
-import { QuickChoiceDialog, ConfirmDialog } from "@/src/shared/Dialogs";
+import { ConfirmDialog } from "@/src/shared/Dialogs";
 import { PremiumPreview } from "@/src/features/profile/settings/PremiumUI";
 import {
   startCreationDraft,
+  hasPlanningDraftField,
   restoreCreationDraft,
   setCreationDraftField,
 } from "@/src/features/beacons/socialPlanningSession";
@@ -63,6 +70,9 @@ import {
   planEditorFromData,
   editorStopsFromTemplate,
   validatePlanEditor,
+  isStagedPlanBeacon,
+  movePlanEditorStop,
+  planStopsForSave,
   type EditorStop,
   type PlanEditorDraft,
 } from "./planEditorModel";
@@ -72,6 +82,9 @@ import {
   planDraftKey,
   readPlanDraft,
   writePlanDraft,
+  rememberPlanDraft,
+  forgetPlanDraft,
+  resumablePlanDraft,
 } from "./planEditorStorage";
 import PlanDateField from "./PlanDateField";
 import { RoutineScheduleSheet } from "./RoutineScheduleSheet";
@@ -103,115 +116,165 @@ function InlineLink({
     </Pressable>
   );
 }
-function ReorderRow({
-  stop,
+function PlanAddAction({
+  label,
+  accessibilityLabel,
+  icon: Icon,
+  onPress,
+}: {
+  label: string;
+  accessibilityLabel?: string;
+  icon: LucideIcon;
+  onPress: () => void;
+}) {
+  const { styles, semanticColors: colors } = useTheme();
+  return (
+    <MotionPressable
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel ?? label}
+      onPress={onPress}
+      style={({ pressed }) => ({
+        flex: 1,
+        minWidth: 0,
+        minHeight: 62,
+        paddingHorizontal: 4,
+        paddingVertical: 8,
+        alignItems: "center",
+        justifyContent: "center",
+        gap: 4,
+        borderRadius: 12,
+        backgroundColor: pressed
+          ? colors.surfaceSelected
+          : colors.surfaceRaised,
+      })}
+    >
+      <Icon size={17} color={colors.accent} />
+      <Text
+        style={[
+          styles.label,
+          { color: colors.textPrimary, textAlign: "center" },
+        ]}
+      >
+        {label}
+      </Text>
+    </MotionPressable>
+  );
+}
+
+function ReorderGrip({
+  title,
   index,
   count,
-  move,
-  selected,
-  onSelect,
+  onDrop,
+  onStep,
 }: {
-  stop: EditorStop;
+  title: string;
   index: number;
   count: number;
-  move: (from: number, to: number) => void;
-  selected: boolean;
-  onSelect: () => void;
+  onDrop: (distance: number, targetId?: string) => void;
+  onStep: (direction: number) => void;
 }) {
   const { semanticColors: c } = useTheme();
+  const [dragging, setDragging] = useState(false);
+  const pointer = useRef<{ id: number; y: number } | null>(null);
   const drag = useMemo(
     () =>
       PanResponder.create({
         onStartShouldSetPanResponder: () => true,
-        onMoveShouldSetPanResponder: () => true,
+        onPanResponderGrant: () => setDragging(true),
         onPanResponderRelease: (_, gesture) => {
-          const to = Math.max(
-            0,
-            Math.min(count - 1, index + Math.round(gesture.dy / 64)),
-          );
-          if (to !== index) move(index, to);
+          setDragging(false);
+          onDrop(gesture.dy);
         },
+        onPanResponderTerminationRequest: () => false,
+        onPanResponderTerminate: () => setDragging(false),
       }),
-    [index, count, move],
+    [onDrop],
   );
+  if (Platform.OS === "web") {
+    const endDrag = () => {
+      pointer.current = null;
+      setDragging(false);
+    };
+    return (
+      <div
+        role="slider"
+        tabIndex={0}
+        aria-label={`Reorder ${title}`}
+        aria-orientation="vertical"
+        aria-valuemin={1}
+        aria-valuemax={count}
+        aria-valuenow={index + 1}
+        onKeyDown={(event) => {
+          if (event.key === "ArrowUp" || event.key === "ArrowDown") {
+            event.preventDefault();
+            onStep(event.key === "ArrowDown" ? 1 : -1);
+          }
+        }}
+        onPointerDown={(event) => {
+          if (event.button !== 0 || pointer.current) return;
+          pointer.current = { id: event.pointerId, y: event.clientY };
+          event.currentTarget.setPointerCapture(event.pointerId);
+          setDragging(true);
+        }}
+        onPointerUp={(event) => {
+          const start = pointer.current;
+          if (!start || start.id !== event.pointerId) return;
+          const row = document
+            .elementFromPoint(event.clientX, event.clientY)
+            ?.closest('[data-testid^="plan-row-"]');
+          const targetId = row
+            ?.getAttribute("data-testid")
+            ?.slice("plan-row-".length);
+          endDrag();
+          onDrop(event.clientY - start.y, targetId);
+        }}
+        onPointerCancel={endDrag}
+        onLostPointerCapture={endDrag}
+        style={{
+          display: "grid",
+          placeItems: "center",
+          minHeight: 48,
+          minWidth: 44,
+          borderRadius: 10,
+          touchAction: "none",
+          userSelect: "none",
+          backgroundColor: dragging ? c.surfaceSelected : "transparent",
+          cursor: dragging ? "grabbing" : "grab",
+        }}
+      >
+        <GripVertical size={19} color={dragging ? c.accent : c.textSecondary} />
+      </div>
+    );
+  }
   return (
     <View
+      {...drag.panHandlers}
+      accessible
+      accessibilityRole="adjustable"
+      accessibilityLabel={`Reorder ${title}`}
+      accessibilityValue={{ min: 1, max: count, now: index + 1 }}
+      accessibilityActions={[
+        { name: "decrement", label: "Move up" },
+        { name: "increment", label: "Move down" },
+      ]}
+      onAccessibilityAction={(event) =>
+        onStep(event.nativeEvent.actionName === "increment" ? 1 : -1)
+      }
       style={{
-        flexDirection: "row",
+        minHeight: 48,
+        minWidth: 44,
         alignItems: "center",
-        gap: 8,
-        minHeight: 64,
-        borderBottomWidth: 1,
-        borderColor: c.border,
+        justifyContent: "center",
+        borderRadius: 10,
+        backgroundColor: dragging ? c.surfaceSelected : "transparent",
       }}
     >
-      <View
-        {...drag.panHandlers}
-        accessible
-        accessibilityRole="adjustable"
-        accessibilityLabel={`Drag ${stop.title} to reorder`}
-        accessibilityActions={[
-          { name: "increment", label: "Move down" },
-          { name: "decrement", label: "Move up" },
-        ]}
-        onAccessibilityAction={(event) =>
-          move(
-            index,
-            Math.max(
-              0,
-              Math.min(
-                count - 1,
-                index + (event.nativeEvent.actionName === "increment" ? 1 : -1),
-              ),
-            ),
-          )
-        }
-        style={{ padding: 12 }}
-      >
-        <GripVertical size={20} color={c.textSecondary} />
-      </View>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`Reorder item ${index + 1}. ${stop.title}`}
-        accessibilityState={{ selected }}
-        onPress={onSelect}
-        style={{ flex: 1, minHeight: 44, justifyContent: "center" }}
-      >
-        <Text
-          numberOfLines={1}
-          style={{ color: c.textPrimary, fontWeight: "600" }}
-        >
-          {index + 1}. {stop.title}
-        </Text>
-        <Text style={{ color: c.textSecondary, fontSize: 12 }}>
-          {stop.kind === "decision"
-            ? "Decision"
-            : stop.kind === "idea"
-              ? "Idea"
-              : "Beacon"}
-        </Text>
-      </Pressable>
-      {selected && (
-        <>
-          <IconButton
-            label={`Move ${stop.title} up`}
-            disabled={index === 0}
-            onPress={() => move(index, index - 1)}
-          >
-            <ArrowUp size={17} color={c.accent} />
-          </IconButton>
-          <IconButton
-            label={`Move ${stop.title} down`}
-            disabled={index === count - 1}
-            onPress={() => move(index, index + 1)}
-          >
-            <ArrowDown size={17} color={c.accent} />
-          </IconButton>
-        </>
-      )}
+      <GripVertical size={19} color={dragging ? c.accent : c.textSecondary} />
     </View>
   );
 }
+
 export default function PlanEditorScreen() {
   const account = useBeacon();
   const params = useLocalSearchParams<{
@@ -226,9 +289,8 @@ export default function PlanEditorScreen() {
     repeat?: string;
     choosePlan?: string;
   }>();
-  const [token] = useState(
-    () => params.draftId ?? (params.id ? `plan:${params.id}` : randomUUID()),
-  );
+  const [generated] = useState(randomUUID);
+  const token = params.id ? `plan:${params.id}` : (params.draftId ?? generated);
   useEffect(() => {
     if (!params.id && !params.draftId) router.setParams({ draftId: token });
   }, [params.id, params.draftId, token]);
@@ -280,11 +342,23 @@ function Editor({
   const { data, userId, demo, act, getViewerEpoch, refresh, getCurrentData } =
     useBeacon();
   const viewer = userId!;
+  const now = useNow();
+  const timezone = planningTimezone();
   const { styles, semanticColors: c } = useTheme();
   const storageViewer = demo
     ? `${viewer}:${data.demo_session_id ?? "fixture"}`
     : viewer;
   const key = planDraftKey(storageViewer, demo, token);
+  const ordinary =
+    !plan &&
+    !params.beaconId &&
+    !params.template &&
+    !params.sourcePlan &&
+    !params.squadId &&
+    !params.startDate &&
+    !params.timezone &&
+    !params.repeat &&
+    !params.choosePlan;
   const initial = (): PlanEditorDraft =>
     plan
       ? planEditorFromData(data, plan, viewer, token)
@@ -311,26 +385,72 @@ function Editor({
     [error, setError] = useState(""),
     [notice, setNotice] = useState("");
   const [choosePlan, setChoosePlan] = useState(params.choosePlan === "yes");
-  const [picker, setPicker] = useState<
-      "existing" | "templates" | "decisions" | null
-    >(null),
-    [query, setQuery] = useState(""),
-    [limit, setLimit] = useState(8);
-  const [composer, setComposer] = useState<"beacon" | "decision" | null>(null),
-    [decisionTab, setDecisionTab] = useState("Create new");
-  const [reordering, setReordering] = useState(false),
-    [reorderRows, setReorderRows] = useState<EditorStop[]>([]),
-    [reorderSelected, setReorderSelected] = useState<string | null>(null);
-  const [selected, setSelected] = useState<string | null>(null),
-    [rowMenu, setRowMenu] = useState<string | null>(null),
-    [tools, setTools] = useState(false),
-    [discard, setDiscard] = useState(false);
-  const [scheduling, setScheduling] = useState(false),
-    [options, setOptions] = useState(false),
-    [repeat, setRepeat] = useState(params.repeat === "yes"),
-    [busy, setBusy] = useState(false);
+  const [picker, setPicker] = useState<"existing" | "templates" | "ask" | null>(
+    null,
+  );
+  const [query, setQuery] = useState("");
+  const [limit, setLimit] = useState(8);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [addingIdea, setAddingIdea] = useState(false);
+  const [idea, setIdea] = useState("");
+  const [removed, setRemoved] = useState<{
+    stop: EditorStop;
+    index: number;
+    nextId?: string;
+  } | null>(null);
+  const [draftState, setDraftState] = useState<
+    "idle" | "saving" | "saved" | "error"
+  >("idle");
+  const [resume, setResume] = useState<{ token: string; title: string } | null>(
+    null,
+  );
+  const [askKind, setAskKind] = useState<
+    (typeof planningCreationModes)[number]["kind"] | null
+  >(null);
+  const [discard, setDiscard] = useState(false);
+  const [scheduling, setScheduling] = useState(false);
+  const [repeat, setRepeat] = useState(params.repeat === "yes");
+  const [busy, setBusy] = useState(false);
   const [conflict, setConflict] = useState<PlanEditorDraft | null>(null);
   const lock = useRef(false);
+  const ideaInput = useRef<TextInput>(null);
+  const rowOffsets = useRef(new Map<string, number>());
+  const visibleStops = draft.stops.filter((stop) => !isStagedPlanBeacon(stop));
+  const full = visibleStops.length >= 30;
+  const locked = busy || !!draft.request;
+
+  useEffect(() => {
+    if (!ordinary) return;
+    let active = true;
+    void resumablePlanDraft(storageViewer, demo)
+      .then((saved) => {
+        if (active) setResume(saved);
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, [ordinary, storageViewer, demo]);
+
+  const checkpoint = async (next: PlanEditorDraft) => {
+    const epoch = getViewerEpoch();
+    setDraftState("saving");
+    try {
+      await writePlanDraft(key, next);
+      if (
+        ordinary &&
+        !next.plan_id &&
+        (next.title.trim() || next.description.trim() || next.stops.length)
+      )
+        await rememberPlanDraft(storageViewer, demo, token);
+      if (epoch === getViewerEpoch() && current.current === next)
+        setDraftState("saved");
+    } catch {
+      if (epoch === getViewerEpoch() && current.current === next)
+        setDraftState("error");
+    }
+  };
   const update = (next: PlanEditorDraft) => {
     if (current.current.request && next.request === current.current.request) {
       setError(
@@ -338,14 +458,12 @@ function Editor({
       );
       return;
     }
+    if (next.handoff) next = { ...next, handoff: undefined };
     current.current = next;
     setDraft(next);
+    setResume(null);
     setNotice("");
-    void writePlanDraft(key, next).catch((e) =>
-      setError(
-        e instanceof Error ? e.message : "Draft storage is unavailable.",
-      ),
-    );
+    void checkpoint(next);
   };
   const provisional: Plan = useMemo(
     () =>
@@ -353,37 +471,54 @@ function Editor({
         id: "draft",
         owner_id: viewer,
         squad_id: draft.squad_id,
-        title: draft.title,
-        description: draft.description,
-        timezone: draft.timezone,
-        start_date: draft.start_date || null,
+        title: "",
+        description: "",
+        timezone: "UTC",
+        start_date: null,
         status: "draft",
-        created_at: new Date().toISOString(),
+        created_at: "",
       },
-    [
-      plan,
-      viewer,
-      draft.squad_id,
-      draft.title,
-      draft.description,
-      draft.timezone,
-      draft.start_date,
-    ],
+    [plan, viewer, draft.squad_id],
   );
   useFocusEffect(
     useCallback(() => {
       let alive = true;
       const epoch = getViewerEpoch();
+      const openingDraft = current.current;
       void readPlanDraft(key)
         .then((saved) => {
-          if (!alive || epoch !== getViewerEpoch()) return;
+          if (
+            !alive ||
+            epoch !== getViewerEpoch() ||
+            lock.current ||
+            current.current !== openingDraft
+          )
+            return;
           if (saved) {
             if (saved.handoff === "decision") {
               const savedId = saved.plan_id;
               const latest = data.plans.find((p) => p.id === savedId);
-              if (latest && planPermissions(data, latest, viewer).editor) {
-                saved = planEditorFromData(data, latest, viewer, token);
-                void writePlanDraft(key, saved);
+              if (
+                latest &&
+                (latest.revision ?? 0) > saved.revision &&
+                planPermissions(data, latest, viewer).editor
+              ) {
+                const refreshed = planEditorFromData(
+                  data,
+                  latest,
+                  viewer,
+                  token,
+                );
+                saved = {
+                  ...refreshed,
+                  stops: [
+                    ...refreshed.stops,
+                    ...saved.stops.filter(isStagedPlanBeacon),
+                  ],
+                };
+                void writePlanDraft(key, saved).catch((failure) =>
+                  setError(failure.message),
+                );
               }
             }
             const a = data.activities.find((a) => a.id === params.beaconId);
@@ -407,6 +542,7 @@ function Editor({
               };
             current.current = saved;
             setDraft(saved);
+            setDraftState((state) => (state === "error" ? state : "saved"));
           } else if (params.template) {
             const template = data.plan_templates.find(
               (t) =>
@@ -497,127 +633,235 @@ function Editor({
       provisional,
     ]),
   );
-  const changeStop = (id: string, changes: Partial<EditorStop>) =>
+  const changeStop = (id: string, changes: Partial<EditorStop>) => {
+    const latest = current.current;
     update({
-      ...draft,
-      stops: draft.stops.map((s) => (s.id === id ? { ...s, ...changes } : s)),
+      ...latest,
+      stops: latest.stops.map((stop) =>
+        stop.id === id ? { ...stop, ...changes } : stop,
+      ),
     });
-  const moveReorder = useCallback(
-    (from: number, to: number) =>
-      setReorderRows((rows) => {
-        const next = [...rows];
-        const [row] = next.splice(from, 1);
-        next.splice(to, 0, row);
-        return next;
-      }),
-    [],
-  );
-  const addIdea = () => {
-    const row: EditorStop = {
-      id: randomUUID(),
-      kind: "idea",
-      title: "",
-      details: "",
-    };
-    update({ ...draft, stops: [...draft.stops, row] });
-    setSelected(row.id);
-    setComposer(null);
   };
-  const editBeacon = async (stop?: EditorStop) => {
-    setComposer(null);
-    setPicker(null);
-    const id = stop?.id ?? randomUUID();
-    const next = stop
-      ? draft
-      : {
-          ...draft,
-          stops: [
-            ...draft.stops,
-            {
-              id,
-              kind: "beacon" as const,
-              title: "New Beacon",
-              details: "",
-              beacon: {},
-              include: false,
-            },
-          ],
-        };
-    await writePlanDraft(key, next);
-    current.current = next;
-    setDraft(next);
-    const session = stop?.creation_token ?? startCreationDraft(viewer);
-    if (stop?.creation_token) {
-      try {
-        await restoreCreationDraft(viewer, stop.creation_token);
-      } catch {
-        /* In-session fields remain available until their first durable checkpoint. */
+  const moveStop = (id: string, targetId: string) => {
+    const latest = current.current;
+    if (lock.current || latest.request) return;
+    const stops = movePlanEditorStop(latest.stops, id, targetId);
+    if (stops !== latest.stops) update({ ...latest, stops });
+  };
+  const dropStop = (id: string, distance: number, targetId?: string) => {
+    if (Math.abs(distance) < 8) return;
+    if (targetId) {
+      moveStop(id, targetId);
+      return;
+    }
+    const origin = rowOffsets.current.get(id);
+    if (origin === undefined) return;
+    const destination = origin + distance;
+    let target = id;
+    let closest = Math.abs(distance);
+    for (const stop of visibleStops) {
+      const top = rowOffsets.current.get(stop.id);
+      if (top === undefined) continue;
+      const delta = Math.abs(top - destination);
+      if (delta < closest) {
+        target = stop.id;
+        closest = delta;
       }
     }
-    const retained = {
-      ...next,
-      stops: next.stops.map((s) =>
-        s.id === id ? { ...s, creation_token: session } : s,
-      ),
-    };
-    await writePlanDraft(key, retained);
-    current.current = retained;
-    setDraft(retained);
-    const values = stop?.beacon ?? {
-      title: stop?.title ?? "",
-      description: stop?.details ?? "",
-      audience: draft.squad_id ? "squad" : "private",
-      audienceId: draft.squad_id ?? "",
-    };
-    const beacon = stop?.beacon;
-    if (beacon)
-      setCreationDraftField(viewer, session, "planBeaconPayload", beacon);
-    const mapped = beacon
-      ? {
-          ...values,
-          audienceId: beacon.audience_id ?? "",
-          starts: beacon.starts_at,
-          ends: beacon.ends_at,
-          when: "Pick time",
-          duration:
-            beacon.starts_at && beacon.ends_at
-              ? `${Math.max(5, Math.round((Date.parse(String(beacon.ends_at)) - Date.parse(String(beacon.starts_at))) / 60000))} min`
-              : undefined,
-          approval: beacon.approval_required ? "Host approval" : "Open joining",
-          target: beacon.target_count ? String(beacon.target_count) : "",
-          url: beacon.online_url ?? "",
-          placeType: beacon.online_url ? "Online" : "In person",
-          pin:
-            beacon.latitude != null && beacon.longitude != null
-              ? { latitude: beacon.latitude, longitude: beacon.longitude }
-              : null,
-          aspirationIds: beacon.aspiration_ids ?? [],
-        }
-      : values;
-    for (const [field, value] of (stop?.creation_token
-      ? []
-      : Object.entries(mapped)
-    ).filter(([, value]) => value !== undefined))
-      setCreationDraftField(viewer, session, field, value);
-    router.push({
-      pathname: "/create",
-      params: {
-        editor: "yes",
-        planSession: session,
-        planDraftKey: key,
-        planDraftStopId: id,
-        timezone: draft.timezone,
-        ...(Array.isArray(beacon?.invitee_ids)
-          ? { inviteeIds: JSON.stringify(beacon.invitee_ids) }
-          : {}),
-        ...(beacon?.starts_at ? { startsAt: String(beacon.starts_at) } : {}),
-        ...(draft.squad_id ? { squadId: draft.squad_id } : {}),
-      },
-    } as Href);
+    moveStop(id, target);
   };
-  const persist = async (schedule = false) => {
+  const addIdea = () => {
+    const title = idea.trim();
+    const latest = current.current;
+    if (
+      !title ||
+      lock.current ||
+      latest.request ||
+      latest.stops.filter((stop) => !isStagedPlanBeacon(stop)).length >= 30
+    )
+      return;
+    update({
+      ...latest,
+      stops: [
+        ...latest.stops,
+        { id: randomUUID(), kind: "idea", title, details: "" },
+      ],
+    });
+    setIdea("");
+    ideaInput.current?.focus();
+  };
+  const removeStop = (id: string) => {
+    const latest = current.current;
+    if (lock.current || latest.request) return;
+    const index = latest.stops.findIndex((row) => row.id === id);
+    if (index < 0) return;
+    setRemoved({
+      stop: latest.stops[index],
+      index,
+      nextId: latest.stops[index + 1]?.id,
+    });
+    if (selected === id) setSelected(null);
+    if (editing === id) setEditing(null);
+    update({
+      ...latest,
+      stops: latest.stops.filter((row) => row.id !== id),
+      removed_stop_ids: data.plan_stops?.some((row) => row.id === id)
+        ? [...new Set([...latest.removed_stop_ids, id])]
+        : latest.removed_stop_ids,
+    });
+  };
+  const undoRemoval = () => {
+    const latest = current.current;
+    if (!removed || lock.current || latest.request) return;
+    if (latest.stops.filter((row) => !isStagedPlanBeacon(row)).length >= 30) {
+      setError("Make room for this item before undoing the removal.");
+      return;
+    }
+    const stops = [...latest.stops];
+    if (
+      stops.some(
+        (row) =>
+          (!!removed.stop.activity_id &&
+            row.activity_id === removed.stop.activity_id) ||
+          (!!removed.stop.thread_id &&
+            row.thread_id === removed.stop.thread_id),
+      )
+    ) {
+      setError("This item is already linked to the Plan.");
+      return;
+    }
+    const next = stops.findIndex((row) => row.id === removed.nextId);
+    stops.splice(
+      next >= 0 ? next : Math.min(removed.index, stops.length),
+      0,
+      removed.stop,
+    );
+    update({
+      ...latest,
+      stops,
+      removed_stop_ids: latest.removed_stop_ids.filter(
+        (id) => id !== removed.stop.id,
+      ),
+    });
+    setRemoved(null);
+  };
+  const editBeacon = async (requested?: EditorStop) => {
+    const latest = current.current;
+    if (lock.current || latest.request || (!requested && full)) return;
+    lock.current = true;
+    setBusy(true);
+    const epoch = getViewerEpoch();
+    try {
+      const stop = requested ?? latest.stops.find(isStagedPlanBeacon);
+      const id = stop?.id ?? randomUUID();
+      const session = stop?.creation_token ?? startCreationDraft(viewer);
+      if (stop?.creation_token) {
+        try {
+          await restoreCreationDraft(viewer, stop.creation_token);
+        } catch {
+          // A new Beacon has no durable child draft until its first checkpoint.
+        }
+      }
+      if (epoch !== getViewerEpoch()) return;
+      const retained: PlanEditorDraft = {
+        ...latest,
+        stops: stop
+          ? latest.stops.map((row) =>
+              row.id === id ? { ...row, creation_token: session } : row,
+            )
+          : [
+              ...latest.stops,
+              {
+                id,
+                kind: "beacon",
+                title: "New Beacon",
+                details: "",
+                beacon: {},
+                include: false,
+                awaiting_beacon: true,
+                creation_token: session,
+              },
+            ],
+      };
+      await writePlanDraft(key, retained);
+      if (epoch !== getViewerEpoch()) return;
+      if (ordinary && !retained.plan_id)
+        await rememberPlanDraft(storageViewer, demo, token);
+      if (epoch !== getViewerEpoch()) return;
+      current.current = retained;
+      setDraft(retained);
+      setDraftState("saved");
+      const values = (stop && !isStagedPlanBeacon(stop)
+        ? stop.beacon
+        : undefined) ?? {
+        title: stop && !isStagedPlanBeacon(stop) ? stop.title : "",
+        description: stop?.details ?? "",
+        audience: draft.squad_id ? "squad" : "private",
+        audienceId: draft.squad_id ?? "",
+      };
+      const beacon =
+        stop && !isStagedPlanBeacon(stop) ? stop.beacon : undefined;
+      if (beacon)
+        setCreationDraftField(viewer, session, "planBeaconPayload", beacon);
+      const mapped = beacon
+        ? {
+            ...values,
+            audienceId: beacon.audience_id ?? "",
+            starts: beacon.starts_at,
+            ends: beacon.ends_at,
+            when: "Pick time",
+            duration:
+              beacon.starts_at && beacon.ends_at
+                ? `${Math.max(5, Math.round((Date.parse(String(beacon.ends_at)) - Date.parse(String(beacon.starts_at))) / 60000))} min`
+                : undefined,
+            approval: beacon.approval_required
+              ? "Host approval"
+              : "Open joining",
+            target: beacon.target_count ? String(beacon.target_count) : "",
+            url: beacon.online_url ?? "",
+            placeType: beacon.online_url ? "Online" : "In person",
+            pin:
+              beacon.latitude != null && beacon.longitude != null
+                ? { latitude: beacon.latitude, longitude: beacon.longitude }
+                : null,
+            aspirationIds: beacon.aspiration_ids ?? [],
+          }
+        : values;
+      for (const [field, value] of (hasPlanningDraftField(
+        viewer,
+        session,
+        "title",
+      )
+        ? []
+        : Object.entries(mapped)
+      ).filter(([, value]) => value !== undefined))
+        setCreationDraftField(viewer, session, field, value);
+      router.push({
+        pathname: "/create",
+        params: {
+          editor: "yes",
+          planSession: session,
+          planDraftKey: key,
+          planDraftStopId: id,
+          timezone: draft.timezone,
+          ...(Array.isArray(beacon?.invitee_ids)
+            ? { inviteeIds: JSON.stringify(beacon.invitee_ids) }
+            : {}),
+          ...(beacon?.starts_at ? { startsAt: String(beacon.starts_at) } : {}),
+          ...(draft.squad_id ? { squadId: draft.squad_id } : {}),
+        },
+      } as Href);
+    } finally {
+      lock.current = false;
+      setBusy(false);
+    }
+  };
+  const persist = async (schedule = false, navigate = true) => {
     if (lock.current) throw new Error("Wait for the current save to finish.");
-    validatePlanEditor(current.current);
+    const { request: pending, ...local } = current.current;
+    const input = { ...local, stops: planStopsForSave(local.stops) };
+    if (!pending) validatePlanEditor(input);
+    setRemoved(null);
     lock.current = true;
     setBusy(true);
     setError("");
@@ -630,15 +874,18 @@ function Editor({
           request: {
             id: randomUUID(),
             payload: {
-              ...next,
+              ...input,
               action: schedule ? "schedule_plan_editor" : "save_plan_editor",
             },
           },
         };
-        update(next);
+        current.current = next;
+        setDraft(next);
       }
       await writePlanDraft(key, next);
+      if (epoch !== getViewerEpoch()) return;
       const request = next.request!;
+      const scheduled = request.payload.action === "schedule_plan_editor";
       const result = await act(
         String(request.payload.action),
         request.payload,
@@ -670,20 +917,27 @@ function Editor({
         ),
       };
       await writePlanDraft(key, saved);
+      if (epoch !== getViewerEpoch()) return;
       current.current = saved;
       setDraft(saved);
-      setNotice(schedule ? "Plan scheduled" : "Draft saved");
+      setDraftState("saved");
+      setNotice(scheduled ? "Beacons scheduled" : "");
+
       setScheduling(false);
       if (!plan) {
         await writePlanDraft(planDraftKey(storageViewer, demo, `plan:${id}`), {
           ...saved,
           token: `plan:${id}`,
         });
+        if (ordinary) await forgetPlanDraft(storageViewer, demo, token);
         await deletePlanDraft(key);
-        router.replace({ pathname: "/plan/[id]", params: { id } });
+        if (epoch !== getViewerEpoch()) return;
+        if (navigate)
+          router.replace({ pathname: "/plan/[id]", params: { id } });
       }
       return id;
     } catch (e) {
+      if (epoch !== getViewerEpoch()) return;
       const message =
         e instanceof Error ? e.message : "Could not save the Plan.";
       if (
@@ -702,14 +956,20 @@ function Editor({
       setBusy(false);
     }
   };
-  const createDecision = async (kind: string) => {
-    const id = await persist();
-    if (!id) return;
-    const savedKey = planDraftKey(storageViewer, demo, `plan:${id}`),
-      saved = await readPlanDraft(savedKey);
-    if (saved)
-      await writePlanDraft(savedKey, { ...saved, handoff: "decision" });
-    setComposer(null);
+  const createDecision = async (
+    kind: (typeof planningCreationModes)[number]["kind"],
+  ) => {
+    const epoch = getViewerEpoch();
+    const id = await persist(false, false);
+    if (!id || epoch !== getViewerEpoch()) return;
+    const savedKey = planDraftKey(storageViewer, demo, `plan:${id}`);
+    const saved = await readPlanDraft(savedKey);
+    if (!saved || epoch !== getViewerEpoch()) return;
+    await writePlanDraft(savedKey, { ...saved, handoff: "decision" });
+    if (epoch !== getViewerEpoch()) return;
+    setPicker(null);
+    setAskKind(null);
+    if (!plan) router.replace({ pathname: "/plan/[id]", params: { id } });
     router.push({
       pathname: "/planning/create",
       params: {
@@ -745,336 +1005,806 @@ function Editor({
         (!!draft.squad_id && t.squad_id === draft.squad_id)) &&
       t.title.toLowerCase().includes(query.toLowerCase()),
   );
-  const picked = draft.stops.find((s) => s.id === rowMenu);
   const routine = data.plan_routines.find(
     (r) => r.plan_id === plan?.id && r.status !== "ended",
   );
+  const addReference = (stop: EditorStop) => {
+    const latest = current.current;
+    if (
+      lock.current ||
+      latest.request ||
+      full ||
+      latest.stops.some(
+        (row) =>
+          (stop.activity_id && row.activity_id === stop.activity_id) ||
+          (stop.thread_id && row.thread_id === stop.thread_id),
+      )
+    )
+      return;
+    update({ ...latest, stops: [...latest.stops, stop] });
+    setPicker(null);
+  };
+  const duplicate = (stop: EditorStop) => {
+    const latest = current.current;
+    if (lock.current || latest.request || full) return;
+    const activity = data.activities.find(
+      (item) => item.id === stop.activity_id,
+    );
+    if (
+      stop.activity_id &&
+      (!activity || !canReadBeaconActivity(data, activity, viewer))
+    )
+      return;
+    if (stop.thread_id && !decisionsForView.has(stop.thread_id)) return;
+    const place =
+      activity && canReadBeaconMeetingDetails(data, activity, viewer)
+        ? data.places.find((item) => item.activity_id === activity.id)
+        : undefined;
+    const copy: EditorStop = {
+      ...stop,
+      id: randomUUID(),
+      creation_token: undefined,
+      awaiting_beacon: undefined,
+      activity_id: null,
+      thread_id: null,
+      kind: activity ? "beacon" : stop.kind === "decision" ? "idea" : stop.kind,
+      ...(activity
+        ? {
+            include: true,
+            beacon: {
+              title: activity.title,
+              description: activity.description,
+              category: activity.category,
+              mode: "squad",
+              timezone: activity.timezone,
+              starts_at: activity.starts_at,
+              ends_at: activity.ends_at,
+              audience: latest.squad_id ? "squad" : "private",
+              audience_id: latest.squad_id,
+              label: place?.label ?? "",
+              online_url: place?.online_url ?? null,
+              latitude: place?.latitude ?? null,
+              longitude: place?.longitude ?? null,
+              approval_required: false,
+              target_count: null,
+            },
+          }
+        : {}),
+    };
+    const index = latest.stops.findIndex((item) => item.id === stop.id);
+    const stops = [...latest.stops];
+    stops.splice(index + 1, 0, copy);
+    update({ ...latest, stops });
+    setSelected(copy.id);
+  };
+  const openPicker = (value: typeof picker) => {
+    setQuery("");
+    setLimit(8);
+    setPicker(value);
+  };
+  const report = (failure: unknown) =>
+    setError(
+      failure instanceof Error ? failure.message : "Could not update the Plan.",
+    );
+  const decisionsForView = new Map(
+    data.planning_threads
+      .filter((thread) => canReadPlanningThread(data, thread, viewer))
+      .map((thread) => [thread.id, thread]),
+  );
+  const matches =
+    picker === "existing"
+      ? candidates.length + decisions.length
+      : templates.length;
+  const beaconDrafts = visibleStops.filter((stop) => stop.kind === "beacon");
+  const done = async () => {
+    const epoch = getViewerEpoch();
+    const scheduled = draft.request?.payload.action === "schedule_plan_editor";
+    if (!(await persist()) || epoch !== getViewerEpoch() || !plan || scheduled)
+      return;
+    if (router.canGoBack()) router.back();
+    else router.replace("/plans");
+  };
   return (
-    <Screen
-      title={plan ? "Your Plan" : "Create Plan"}
-      eyebrow="MAKE TIME TOGETHER"
-      create={false}
-      compactHeader
-      headerAction={
-        <IconButton label="Plan options" onPress={() => setTools(true)}>
-          <MoreHorizontal color={c.textPrimary} size={22} />
-        </IconButton>
-      }
-      footer={
-        repeat ? undefined : (
-          <Action
-            title={
-              draft.request
-                ? "Check saved Plan"
-                : scheduling
-                  ? "Schedule Plan"
-                  : plan?.status === "scheduled"
-                    ? "Save Changes"
-                    : "Save Draft"
-            }
-            disabled={!loaded || busy}
-            run={() => persist(scheduling)}
-          />
-        )
-      }
+    <KeyboardAvoidingView
+      style={{ flex: 1 }}
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      {!loaded ? (
-        <Txt>Restoring your draft…</Txt>
-      ) : (
-        <>
-          {choosePlan && (
-            <View style={{ gap: 8 }}>
-              <Txt>Add this Beacon to a Plan</Txt>
-              <Field
-                label="Find an eligible Plan"
-                value={query}
-                onChangeText={setQuery}
-              />
-              {
-                <InlineLink
-                  label={"Create a new Plan"}
-                  onPress={() => setChoosePlan(false)}
+      <Screen
+        title={plan ? "Edit Plan" : "New Plan"}
+        eyebrow=""
+        create={false}
+        compactHeader
+        footer={
+          !repeat && (
+            <View style={{ gap: 4 }}>
+              {removed && (
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 12,
+                  }}
+                >
+                  <Text
+                    accessibilityLiveRegion="polite"
+                    style={[styles.muted, { flex: 1 }]}
+                  >
+                    Item removed
+                  </Text>
+                  <InlineLink label="Undo" onPress={undoRemoval} />
+                </View>
+              )}
+              {draftState === "saved" && (
+                <View
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 5,
+                  }}
+                >
+                  <Check size={13} color={c.textSecondary} />
+                  <Text accessibilityLiveRegion="polite" style={styles.muted}>
+                    Draft saved
+                  </Text>
+                </View>
+              )}
+              {draftState === "error" && (
+                <Button
+                  secondary
+                  compact
+                  title="Draft could not be saved · Retry"
+                  onPress={() => void checkpoint(current.current)}
                 />
-              }
-              {data.plans
-                .filter(
-                  (p) =>
-                    !p.routine_source &&
-                    planPermissions(data, p, viewer).editor &&
-                    p.title.toLowerCase().includes(query.toLowerCase()) &&
-                    (!params.beaconId ||
-                      data.activities.some(
-                        (a) =>
-                          a.id === params.beaconId &&
-                          compatiblePlanActivity(data, p, a, viewer),
-                      )),
-                )
-                .slice(0, 8)
-                .map((p) => (
-                  <View key={p.id}>
-                    {
+              )}
+              <Action
+                title={
+                  draft.request
+                    ? "Check saved Plan"
+                    : plan
+                      ? "Done"
+                      : "Create Plan"
+                }
+                disabled={!loaded || busy || choosePlan}
+                run={done}
+              />
+            </View>
+          )
+        }
+      >
+        {!loaded ? (
+          <Txt>Restoring your draft…</Txt>
+        ) : (
+          <>
+            {choosePlan && (
+              <View style={{ gap: 8 }}>
+                <Txt>Add this Beacon to a Plan</Txt>
+                <Field
+                  label="Find an eligible Plan"
+                  value={query}
+                  onChangeText={setQuery}
+                />
+                {
+                  <InlineLink
+                    label={"Create a new Plan"}
+                    onPress={() => setChoosePlan(false)}
+                  />
+                }
+                {data.plans
+                  .filter(
+                    (p) =>
+                      !p.routine_source &&
+                      planPermissions(data, p, viewer).editor &&
+                      p.title.toLowerCase().includes(query.toLowerCase()) &&
+                      (!params.beaconId ||
+                        data.activities.some(
+                          (a) =>
+                            a.id === params.beaconId &&
+                            compatiblePlanActivity(data, p, a, viewer),
+                        )),
+                  )
+                  .slice(0, 8)
+                  .map((p) => (
+                    <View key={p.id}>
+                      {
+                        <PlanChoice
+                          title={p.title}
+                          detail={`${p.squad_id ? (data.squads.find((s) => s.id === p.squad_id)?.name ?? "Squad Plan") : "Personal Plan"} · ${p.status === "draft" ? "Draft" : "Saved Plan"}`}
+                          icon={ListChecks}
+                          onPress={() =>
+                            router.replace({
+                              pathname: "/plan/[id]",
+                              params: { id: p.id, beaconId: params.beaconId },
+                            })
+                          }
+                        />
+                      }
+                    </View>
+                  ))}
+              </View>
+            )}
+            {!choosePlan && (
+              <>
+                {resume && resume.token !== token && (
+                  <PlanChoice
+                    title="Resume draft"
+                    detail={resume.title || "Untitled Plan"}
+                    icon={ListChecks}
+                    onPress={() =>
+                      router.replace({
+                        pathname: "/plan-editor",
+                        params: { draftId: resume.token },
+                      })
+                    }
+                  />
+                )}
+                <Field
+                  label="Plan name"
+                  placeholder="A little adventure"
+                  value={draft.title}
+                  maxLength={100}
+                  editable={!locked}
+                  onChangeText={(title) =>
+                    update({ ...current.current, title })
+                  }
+                />
+                <View style={{ gap: 2 }} testID="plan-items">
+                  <Text style={styles.label}>Plan items</Text>
+                  {!visibleStops.length && (
+                    <View style={{ paddingVertical: 10 }}>
+                      <Txt muted>Add an idea to start your list.</Txt>
+                    </View>
+                  )}
+                  {visibleStops.map((stop, index) => {
+                    const expanded = selected === stop.id;
+                    const linked = data.activities.find(
+                      (item) => item.id === stop.activity_id,
+                    );
+                    const activity =
+                      linked && canReadBeaconActivity(data, linked, viewer)
+                        ? linked
+                        : undefined;
+                    const thread = stop.thread_id
+                      ? decisionsForView.get(stop.thread_id)
+                      : undefined;
+                    const mode = planningCreationModes.find(
+                      (item) => item.kind === thread?.kind,
+                    );
+                    const title =
+                      stop.kind === "existing"
+                        ? (activity?.title ?? "Unavailable Beacon")
+                        : stop.kind === "decision"
+                          ? (thread?.title ?? "Unavailable decision")
+                          : stop.title || "Untitled idea";
+                    const detail =
+                      stop.kind === "idea"
+                        ? "Idea · Not scheduled"
+                        : stop.kind === "beacon"
+                          ? "Beacon draft · Unpublished"
+                          : stop.kind === "existing"
+                            ? activity
+                              ? `Beacon · ${activity.status === "cancelled" ? "Cancelled" : planningTimeSummary(activity.starts_at, timezone, now)}`
+                              : "Beacon · Unavailable"
+                            : thread
+                              ? `${mode?.label ?? "Decision"} · ${thread.status === "open" && Date.parse(thread.deadline_at) > now ? "Waiting for responses" : thread.status === "cancelled" ? "Cancelled" : thread.finalized_at || thread.status === "resolved" ? "Result ready" : "Responses closed"}`
+                              : "Decision · Unavailable";
+                    const Icon =
+                      stop.kind === "idea"
+                        ? Lightbulb
+                        : stop.kind === "decision"
+                          ? (mode?.Icon ?? MessageCircle)
+                          : Radio;
+                    const before = visibleStops[index - 1];
+                    const after = visibleStops[index + 1];
+                    return (
+                      <View
+                        key={stop.id}
+                        testID={`plan-row-${stop.id}`}
+                        onLayout={(event) =>
+                          rowOffsets.current.set(
+                            stop.id,
+                            event.nativeEvent.layout.y,
+                          )
+                        }
+                      >
+                        <View
+                          style={{
+                            flexDirection: "row",
+                            alignItems: "center",
+                            gap: 2,
+                          }}
+                        >
+                          {visibleStops.length > 1 && !locked && (
+                            <ReorderGrip
+                              title={title}
+                              index={index}
+                              count={visibleStops.length}
+                              onDrop={(distance, targetId) =>
+                                dropStop(stop.id, distance, targetId)
+                              }
+                              onStep={(direction) => {
+                                const target = direction === 1 ? after : before;
+                                if (target) moveStop(stop.id, target.id);
+                              }}
+                            />
+                          )}
+                          <View style={{ flex: 1, minWidth: 0 }}>
+                            <PlanChoice
+                              title={title}
+                              detail={detail}
+                              icon={Icon}
+                              expanded={expanded}
+                              onPress={() => {
+                                setSelected(expanded ? null : stop.id);
+                                setEditing(null);
+                              }}
+                            />
+                          </View>
+                        </View>
+                        {expanded && (
+                          <View
+                            style={{ paddingLeft: 12, paddingTop: 8, gap: 4 }}
+                          >
+                            {stop.kind === "idea" && editing === stop.id && (
+                              <>
+                                <Field
+                                  label="Idea name"
+                                  value={stop.title}
+                                  maxLength={120}
+                                  editable={!locked}
+                                  onChangeText={(value) =>
+                                    changeStop(stop.id, { title: value })
+                                  }
+                                />
+                                <Field
+                                  label="Idea details"
+                                  value={stop.details}
+                                  maxLength={2000}
+                                  editable={!locked}
+                                  onChangeText={(details) =>
+                                    changeStop(stop.id, { details })
+                                  }
+                                />
+                              </>
+                            )}
+                            {stop.kind === "idea" &&
+                              editing !== stop.id &&
+                              !!stop.details && <Txt muted>{stop.details}</Txt>}
+                            <View
+                              style={{
+                                flexDirection: "row",
+                                flexWrap: "wrap",
+                                columnGap: 16,
+                              }}
+                            >
+                              {stop.kind === "idea" && !locked && (
+                                <>
+                                  <InlineLink
+                                    label={
+                                      editing === stop.id
+                                        ? "Finish editing"
+                                        : "Edit"
+                                    }
+                                    onPress={() =>
+                                      setEditing(
+                                        editing === stop.id ? null : stop.id,
+                                      )
+                                    }
+                                  />
+                                  <InlineLink
+                                    label="Turn into Beacon"
+                                    onPress={() =>
+                                      void editBeacon(stop).catch(report)
+                                    }
+                                  />
+                                </>
+                              )}
+                              {stop.kind === "beacon" && !locked && (
+                                <InlineLink
+                                  label="Edit Beacon"
+                                  onPress={() =>
+                                    void editBeacon(stop).catch(report)
+                                  }
+                                />
+                              )}
+                              {activity && (
+                                <InlineLink
+                                  label="Open Beacon"
+                                  onPress={() =>
+                                    router.push({
+                                      pathname: "/activity/[id]",
+                                      params: { id: activity.id },
+                                    })
+                                  }
+                                />
+                              )}
+                              {thread && (
+                                <InlineLink
+                                  label="Open decision"
+                                  onPress={() =>
+                                    router.push({
+                                      pathname: "/council/[id]",
+                                      params: { id: thread.id },
+                                    })
+                                  }
+                                />
+                              )}
+                              {!locked &&
+                                !full &&
+                                (stop.kind === "idea" ||
+                                  stop.kind === "beacon" ||
+                                  activity ||
+                                  thread) && (
+                                  <InlineLink
+                                    label={
+                                      stop.kind === "idea"
+                                        ? "Duplicate"
+                                        : "Copy as draft"
+                                    }
+                                    onPress={() => duplicate(stop)}
+                                  />
+                                )}
+                              {!locked && (
+                                <InlineLink
+                                  label={
+                                    stop.kind === "existing" ||
+                                    stop.kind === "decision"
+                                      ? "Remove from Plan"
+                                      : "Remove"
+                                  }
+                                  onPress={() => removeStop(stop.id)}
+                                />
+                              )}
+                            </View>
+                            {visibleStops.length > 1 && !locked && (
+                              <View
+                                style={{
+                                  flexDirection: "row",
+                                  flexWrap: "wrap",
+                                  columnGap: 16,
+                                }}
+                              >
+                                {before && (
+                                  <InlineLink
+                                    label="Move up"
+                                    icon={
+                                      <ArrowUp size={15} color={c.accent} />
+                                    }
+                                    onPress={() => moveStop(stop.id, before.id)}
+                                  />
+                                )}
+                                {after && (
+                                  <InlineLink
+                                    label="Move down"
+                                    icon={
+                                      <ArrowDown size={15} color={c.accent} />
+                                    }
+                                    onPress={() => moveStop(stop.id, after.id)}
+                                  />
+                                )}
+                              </View>
+                            )}
+                          </View>
+                        )}
+                      </View>
+                    );
+                  })}
+                </View>
+                <View style={{ gap: 8 }}>
+                  <Text style={styles.label}>Add to Plan</Text>
+                  {full ? (
+                    <Txt muted>This Plan has 30 items.</Txt>
+                  ) : (
+                    !locked && (
+                      <>
+                        <View style={{ flexDirection: "row", gap: 8 }}>
+                          <PlanAddAction
+                            label="Idea"
+                            accessibilityLabel="Add Idea"
+                            icon={Lightbulb}
+                            onPress={() => setAddingIdea(true)}
+                          />
+                          <PlanAddAction
+                            label="Beacon"
+                            accessibilityLabel="Add Beacon"
+                            icon={Radio}
+                            onPress={() => void editBeacon().catch(report)}
+                          />
+                          <PlanAddAction
+                            label="Ask Group"
+                            icon={MessageCircle}
+                            onPress={() => openPicker("ask")}
+                          />
+                        </View>
+                        {addingIdea && (
+                          <View style={{ gap: 4 }}>
+                            <Field
+                              label="Activity idea"
+                              placeholder="Try indoor climbing"
+                              autoFocus
+                              maxLength={120}
+                              inputRef={ideaInput}
+                              value={idea}
+                              onChangeText={setIdea}
+                              onSubmitEditing={addIdea}
+                              returnKeyType="done"
+                              submitBehavior="submit"
+                            />
+                            <View style={{ flexDirection: "row", gap: 12 }}>
+                              <Button
+                                compact
+                                title="Add"
+                                disabled={!idea.trim()}
+                                onPress={addIdea}
+                              />
+                              <Button
+                                compact
+                                secondary
+                                title="Cancel"
+                                onPress={() => {
+                                  setAddingIdea(false);
+                                  setIdea("");
+                                }}
+                              />
+                            </View>
+                          </View>
+                        )}
+                        <InlineLink
+                          label="Add existing"
+                          onPress={() => openPicker("existing")}
+                        />
+                      </>
+                    )
+                  )}
+                </View>
+                {beaconDrafts.length > 0 && (
+                  <InlineLink
+                    label="Schedule Beacons"
+                    onPress={() => setScheduling(true)}
+                  />
+                )}
+                <PlanningDisclosure
+                  title="Plan details"
+                  summary={
+                    draft.squad_id
+                      ? (data.squads.find((item) => item.id === draft.squad_id)
+                          ?.name ?? "Squad Plan")
+                      : undefined
+                  }
+                >
+                  <Field
+                    label="Description · optional"
+                    multiline
+                    maxLength={1000}
+                    value={draft.description}
+                    editable={!locked}
+                    onChangeText={(description) =>
+                      update({ ...current.current, description })
+                    }
+                  />
+                  <PlanDateField
+                    label="Plan date · optional"
+                    value={draft.start_date}
+                    onChange={(start_date) => {
+                      if (!locked) update({ ...current.current, start_date });
+                    }}
+                  />
+                  <Field
+                    label="Timezone"
+                    value={draft.timezone}
+                    editable={!locked}
+                    onChangeText={(value) =>
+                      update({ ...current.current, timezone: value })
+                    }
+                  />
+                  {!plan && !draft.plan_id && !locked && (
+                    <>
+                      <Text style={styles.label}>Who can see this Plan?</Text>
+                      {data.squads
+                        .filter((item) =>
+                          data.squad_members.some(
+                            (member) =>
+                              member.squad_id === item.id &&
+                              member.user_id === viewer,
+                          ),
+                        )
+                        .map((item) => (
+                          <PlanChoice
+                            key={item.id}
+                            title={item.name}
+                            detail="Squad Plan"
+                            icon={MessageCircle}
+                            selected={draft.squad_id === item.id}
+                            onPress={() =>
+                              update({ ...current.current, squad_id: item.id })
+                            }
+                          />
+                        ))}
                       <PlanChoice
-                        title={p.title}
-                        detail={`${p.squad_id ? (data.squads.find((s) => s.id === p.squad_id)?.name ?? "Squad Plan") : "Personal Plan"} · ${p.status === "draft" ? "Draft" : "Saved Plan"}`}
+                        title="Personal Plan"
+                        detail="Only you"
                         icon={ListChecks}
+                        selected={!draft.squad_id}
                         onPress={() =>
-                          router.replace({
-                            pathname: "/plan/[id]",
-                            params: { id: p.id, beaconId: params.beaconId },
+                          update({ ...current.current, squad_id: null })
+                        }
+                      />
+                    </>
+                  )}
+                  <InlineLink
+                    label="Use Template"
+                    icon={<Sparkles size={16} color={c.accent} />}
+                    onPress={() => openPicker("templates")}
+                  />
+                  {plan && (
+                    <>
+                      <PlanPreparation plan={plan} />
+                      <InlineLink
+                        label={routine ? "Repeat settings" : "Repeat Plan"}
+                        icon={<Repeat2 size={16} color={c.accent} />}
+                        onPress={() => setRepeat(true)}
+                      />
+                      <InlineLink
+                        label="Save as Template"
+                        onPress={() =>
+                          void persist()
+                            .then((id) => {
+                              if (!id) return;
+                              return act("save_living_plan_template", {
+                                plan_id: id,
+                              }).then(() => setNotice("Template saved"));
+                            })
+                            .catch(report)
+                        }
+                      />
+                      <InlineLink
+                        label="Sharing & permissions"
+                        onPress={() =>
+                          void persist()
+                            .then((id) => {
+                              if (id)
+                                router.push({
+                                  pathname: "/plan/[id]",
+                                  params: { id, tools: "yes" },
+                                });
+                            })
+                            .catch(report)
+                        }
+                      />
+                      <InlineLink
+                        label="Open Calendar"
+                        onPress={() =>
+                          router.push({
+                            pathname: "/calendar",
+                            params: plan.start_date
+                              ? { date: plan.start_date }
+                              : {},
                           })
                         }
                       />
-                    }
-                  </View>
-                ))}
-            </View>
-          )}
-          <Field
-            label="Plan title"
-            placeholder="A little adventure"
-            value={draft.title}
-            editable={!draft.request}
-            onChangeText={(title) => update({ ...draft, title })}
-          />
-          {
-            <InlineLink
-              label={options ? "Hide details" : "Details & settings"}
-              onPress={() => setOptions(!options)}
-            />
-          }
-          {draft.squad_id && (
-            <Txt muted>
-              {data.squads.find((s) => s.id === draft.squad_id)?.name ??
-                "Squad Plan"}
-            </Txt>
-          )}
-          {options && (
-            <View style={{ gap: 12 }}>
-              <Field
-                label="Details · optional"
-                multiline
-                value={draft.description}
-                onChangeText={(description) =>
-                  update({ ...draft, description })
-                }
-              />
-              <PlanDateField
-                label="Plan date · optional"
-                value={draft.start_date}
-                onChange={(start_date) => update({ ...draft, start_date })}
-              />
-              <Field
-                label="Timezone"
-                value={draft.timezone}
-                onChangeText={(timezone) => update({ ...draft, timezone })}
-              />
-              {!plan &&
-                data.squads
-                  .filter((s) =>
-                    data.squad_members.some(
-                      (m) => m.squad_id === s.id && m.user_id === viewer,
-                    ),
-                  )
-                  .map((s) => (
+                      <InlineLink
+                        label="Open Map"
+                        onPress={() =>
+                          router.push({
+                            pathname: "/",
+                            params: { mapPlan: plan.id },
+                          })
+                        }
+                      />
+                    </>
+                  )}
+                  <InlineLink
+                    label="Template limits & Premium"
+                    onPress={() => router.push("/settings/premium" as Href)}
+                  />
+                  {!locked && (
                     <InlineLink
-                      key={s.id}
-                      label={`${draft.squad_id === s.id ? "✓ " : ""}${s.name}`}
-                      onPress={() => update({ ...draft, squad_id: s.id })}
+                      label="Discard local edits"
+                      onPress={() => setDiscard(true)}
                     />
-                  ))}
-              {!plan && (
-                <InlineLink
-                  label={"Personal Plan"}
-                  onPress={() => update({ ...draft, squad_id: null })}
-                />
-              )}
-            </View>
-          )}
-          {!draft.stops.length && (
-            <View style={{ paddingVertical: 20, gap: 8 }}>
-              <Txt>Where should this Plan take you?</Txt>
-              <Txt muted>
-                Add a quick idea, a Beacon you already have, or something new.
-                Nothing is published until you schedule it.
-              </Txt>
-              {
-                <InlineLink
-                  label={"Use Template"}
-                  onPress={() => {
-                    setPicker("templates");
-                    setQuery("");
-                  }}
-                  icon={<Sparkles size={16} color={c.accent} />}
-                />
-              }
-            </View>
-          )}
-          {plan && <PlanPreparation plan={plan}/>}
-          <View style={{ gap: 10 }}>
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                justifyContent: "space-between",
-              }}
-            >
-              <Text style={styles.label}>Add to your Plan</Text>
-              {draft.stops.length > 1 && (
-                <InlineLink
-                  label="Reorder"
-                  onPress={() => {
-                    setReorderRows([...draft.stops]);
-                    setReorderSelected(null);
-                    setReordering(true);
-                  }}
-                />
-              )}
-            </View>
-            <ActivityActionBar
-              items={[
-                {
-                  label: "Idea",
-                  accessibilityLabel: "Add Idea",
-                  icon: Lightbulb,
-                  onPress: addIdea,
-                },
-                {
-                  label: "Beacon",
-                  accessibilityLabel: "Add Beacon",
-                  icon: Radio,
-                  onPress: () => {
-                    setComposer(composer === "beacon" ? null : "beacon");
-                    setPicker(null);
-                  },
-                },
-                {
-                  label: "Decide",
-                  accessibilityLabel: "Add Decision",
-                  icon: MessageCircle,
-                  onPress: () => {
-                    setComposer(composer === "decision" ? null : "decision");
-                    setDecisionTab("Create new");
-                    setPicker(null);
-                  },
-                },
-              ]}
-            />
-          </View>
-          {composer === "beacon" && (
-            <View
-              style={{
-                gap: 4,
-                padding: 12,
-                borderWidth: 1,
-                borderColor: c.border,
-                borderRadius: 16,
-              }}
-            >
-              <Text style={styles.label}>Add a Beacon</Text>
-              <PlanChoice
-                title="New Beacon"
-                detail="Create an unpublished activity for this Plan"
-                icon={Plus}
-                onPress={() =>
-                  void editBeacon().catch((e) => setError(e.message))
+                  )}
+                </PlanningDisclosure>
+                {plan && (
+                  <RoutineScheduleSheet
+                    plan={plan}
+                    routine={routine}
+                    visible={repeat}
+                    stepSchedule={[]}
+                    act={act}
+                    onClose={() => setRepeat(false)}
+                  />
+                )}
+              </>
+            )}
+            {!!notice && <Txt>{notice}</Txt>}
+            {!!error && (
+              <Text accessibilityRole="alert" style={styles.error}>
+                {error}
+              </Text>
+            )}
+            {(/changed/.test(error) || conflict) && (
+              <InlineLink
+                label={
+                  conflict
+                    ? "Restore my draft edits"
+                    : "Review latest saved version"
                 }
-              />
-              <PlanChoice
-                title="Link Existing Beacon"
-                detail="Search activities already available to you"
-                icon={Radio}
                 onPress={() => {
-                  setPicker("existing");
-                  setQuery("");
-                  setLimit(8);
+                  void (async () => {
+                    if (conflict) {
+                      update({
+                        ...conflict,
+                        revision: draft.revision,
+                        request: undefined,
+                      });
+                      setConflict(null);
+                    } else if (plan) {
+                      setConflict(draft);
+                      await refresh();
+                      const snapshot = getCurrentData(),
+                        latest = snapshot?.plans.find((p) => p.id === plan.id);
+                      if (
+                        !snapshot ||
+                        !latest ||
+                        !planPermissions(snapshot, latest, viewer).editor
+                      )
+                        throw new Error(
+                          "This Plan is no longer available to this account.",
+                        );
+                      update(
+                        planEditorFromData(snapshot, latest, viewer, token),
+                      );
+                    }
+                    setError("");
+                  })().catch((e) => setError(e.message));
                 }}
               />
-            </View>
-          )}
-          {composer === "decision" && (
-            <View
-              style={{
-                gap: 12,
-                padding: 12,
-                borderWidth: 1,
-                borderColor: c.border,
-                borderRadius: 16,
-              }}
-            >
-              <Text style={styles.label}>Add a decision</Text>
-              <Chips
-                options={["Create new", "Link existing"]}
-                value={decisionTab}
-                onChange={(value) => {
-                  setDecisionTab(value);
-                  setPicker(value === "Link existing" ? "decisions" : null);
-                  setQuery("");
-                  setLimit(8);
-                }}
-              />
-              {decisionTab === "Create new" &&
-                (
-                  [
-                    [
-                      "ping",
-                      "Ping",
-                      "Check interest before committing",
-                      MessageCircle,
-                    ],
-                    [
-                      "vote",
-                      "Pick One / Approval Vote",
-                      "Compare choices and pick together",
-                      ListChecks,
-                    ],
-                    [
-                      "draw",
-                      "Surprise Us · Draw",
-                      "Choose from the group’s alternatives",
-                      Sparkles,
-                    ],
-                    [
-                      "time",
-                      "Find a Time",
-                      "Find a time that works together",
-                      CalendarDays,
-                    ],
-                  ] as const
-                ).map(([kind, title, detail, icon]) => (
+            )}
+          </>
+        )}
+        <CreationPicker
+          title={
+            picker === "ask"
+              ? "Ask Group"
+              : picker === "templates"
+                ? "Use Template"
+                : "Add existing"
+          }
+          visible={!!picker}
+          onClose={() => {
+            if (!busy) setPicker(null);
+          }}
+        >
+          {picker === "ask"
+            ? planningCreationModes
+                .filter(
+                  ({ kind }) =>
+                    kind !== "time" || connectedPlanningEnabled(data),
+                )
+                .map(({ kind, label, description, Icon }) => (
                   <PlanChoice
                     key={kind}
-                    title={title}
-                    detail={detail}
-                    icon={icon}
+                    title={label}
+                    detail={description}
+                    icon={Icon}
                     onPress={() => {
-                      // eslint-disable-next-line react-hooks/refs -- This press handler checkpoints the current draft before navigation.
-                      void createDecision(kind).catch((e) =>
-                        setError(e.message),
-                      );
+                      if (locked) return;
+                      if (current.current.plan_id)
+                        void createDecision(kind).catch(report);
+                      else {
+                        setPicker(null);
+                        setAskKind(kind);
+                      }
                     }}
                   />
-                ))}
-            </View>
-          )}
-          {picker && (
-            <View
-              testID="plan-existing-selection"
-              style={{
-                gap: 8,
-                padding: 12,
-                backgroundColor: c.surfaceRaised,
-                borderRadius: 12,
-              }}
-            >
-              <View style={styles.row}>
-                <View style={{ flex: 1 }}>
+                ))
+            : picker && (
+                <View testID="plan-existing-selection" style={{ gap: 8 }}>
                   <Field
                     label={
-                      picker === "existing"
-                        ? "Search eligible Beacons"
-                        : picker === "decisions"
-                          ? "Search eligible decisions"
-                          : "Search Plan templates"
+                      picker === "templates"
+                        ? "Search Plan templates"
+                        : "Search Beacons and decisions"
                     }
                     value={query}
                     onChangeText={(value) => {
@@ -1082,516 +1812,171 @@ function Editor({
                       setLimit(8);
                     }}
                   />
-                </View>
-                <IconButton
-                  label="Close selection"
-                  onPress={() => setPicker(null)}
-                >
-                  <X size={18} color={c.textSecondary} />
-                </IconButton>
-              </View>
-              {picker === "templates" && <PremiumPreview kind="Plan" />}
-              {picker === "existing"
-                ? candidates.slice(0, limit).map((a) => (
-                    <PlanChoice
-                      key={a.id}
-                      title={a.title}
-                      detail={`${a.category} · ${new Date(a.starts_at).toLocaleDateString([], { timeZone: a.timezone })} · ${a.audience === "squad" ? "Squad" : "Your eligible Beacons"}`}
-                      icon={Radio}
-                      onPress={() => {
-                        update({
-                          ...draft,
-                          stops: [
-                            ...draft.stops,
-                            {
-                              id: randomUUID(),
-                              kind: "existing",
-                              title: a.title,
-                              details: "",
-                              activity_id: a.id,
-                            },
-                          ],
-                        });
-                        setPicker(null);
-                        setComposer(null);
-                      }}
-                    />
-                  ))
-                : picker === "decisions"
-                  ? decisions.slice(0, limit).map((t) => (
-                      <PlanChoice
-                        key={t.id}
-                        title={t.title}
-                        detail={`${t.kind === "ping" ? "Ping" : t.kind === "vote" ? "Vote" : t.kind === "draw" ? "Draw" : "Find a Time"} · ${t.status === "open" ? "Open" : "Resolved"} · ${t.audience === "squad" ? "Squad decision" : "Available to you"}`}
-                        icon={
-                          t.kind === "draw"
-                            ? Sparkles
-                            : t.kind === "time"
-                              ? CalendarDays
-                              : MessageCircle
-                        }
-                        onPress={() => {
-                          update({
-                            ...draft,
-                            stops: [
-                              ...draft.stops,
-                              {
+                  {picker === "templates" && <PremiumPreview kind="Plan" />}
+                  {picker === "existing"
+                    ? [
+                        ...candidates.map((activity) => (
+                          <PlanChoice
+                            key={activity.id}
+                            title={activity.title}
+                            detail={`Beacon · ${planningTimeSummary(activity.starts_at, timezone, now)}`}
+                            icon={Radio}
+                            onPress={() =>
+                              addReference({
                                 id: randomUUID(),
-                                kind: "decision",
-                                title: t.title,
+                                kind: "existing",
+                                title: activity.title,
                                 details: "",
-                                thread_id: t.id,
-                              },
-                            ],
-                          });
-                          setPicker(null);
-                          setComposer(null);
-                        }}
-                      />
-                    ))
-                  : templates.slice(0, limit).map((t) => (
-                      <PlanChoice
-                        key={t.id}
-                        title={t.title}
-                        detail={`${t.stops?.length ?? t.steps.length} activities · ${t.squad_id ? "Squad template" : "Your template"}`}
-                        icon={Sparkles}
-                        onPress={() => {
-                          const stops = editorStopsFromTemplate(
-                            t,
-                            draft.squad_id,
-                            randomUUID,
+                                activity_id: activity.id,
+                              })
+                            }
+                          />
+                        )),
+                        ...decisions.map((thread) => {
+                          const mode = planningCreationModes.find(
+                            (item) => item.kind === thread.kind,
                           );
-                          update({
-                            ...draft,
-                            title: draft.title || t.title,
-                            stops: [...draft.stops, ...stops],
-                          });
-                          setPicker(null);
-                        }}
-                      />
-                    ))}
-              {(picker === "existing"
-                ? candidates
-                : picker === "decisions"
-                  ? decisions
-                  : templates
-              ).length > limit && (
-                <InlineLink
-                  label={"Show more"}
-                  onPress={() => setLimit(limit + 8)}
-                />
-              )}
-              {!(
-                picker === "existing"
-                  ? candidates
-                  : picker === "decisions"
-                    ? decisions
-                    : templates
-              ).length && <Txt muted>No matches available.</Txt>}
-            </View>
-          )}
-          <View style={{ gap: 0 }}>
-            {draft.stops.map((s, index) => {
-              const expanded = selected === s.id;
-              const a = data.activities.find((a) => a.id === s.activity_id);
-              return (
-                <View
-                  key={s.id}
-                  style={{
-                    borderLeftWidth: 2,
-                    borderColor: expanded ? c.accent : c.border,
-                    paddingLeft: 16,
-                    paddingVertical: 12,
-                    gap: 8,
-                  }}
-                >
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`${index + 1}. ${s.title || "New idea"}`}
-                    onPress={() => setSelected(expanded ? null : s.id)}
-                    style={{
-                      minHeight: 44,
-                      flexDirection: "row",
-                      gap: 12,
-                      alignItems: "center",
-                    }}
-                  >
-                    <Text style={{ color: c.textSecondary }}>{index + 1}</Text>
-                    {s.kind === "idea" ? (
-                      <Lightbulb size={18} color={c.accent} />
-                    ) : s.kind === "decision" ? (
-                      <MessageCircle size={18} color={c.accent} />
-                    ) : (
-                      <Radio size={18} color={c.accent} />
-                    )}
-                    <View style={{ flex: 1 }}>
-                      <Txt>{s.title || "New idea"}</Txt>
-                      <Txt muted>
-                        {s.kind === "idea"
-                          ? "Quick idea · unscheduled"
-                          : s.kind === "beacon"
-                            ? "Beacon draft · unpublished"
-                            : s.kind === "decision"
-                              ? "Decision"
-                              : "Linked Beacon"}
-                        {a
-                          ? ` · ${new Date(a.starts_at).toLocaleString([], { timeZone: a.timezone })}`
-                          : ""}
-                      </Txt>
-                    </View>
-                    <ChevronRight size={16} color={c.textSecondary} />
-                  </Pressable>
-                  {expanded && (
-                    <View style={{ gap: 8 }}>
-                      {s.kind === "idea" ? (
-                        <>
-                          <Field
-                            label="Activity idea"
-                            value={s.title}
-                            onChangeText={(title) =>
-                              changeStop(s.id, { title })
-                            }
-                          />
-                          <Field
-                            label="Idea details"
-                            value={s.details}
-                            onChangeText={(details) =>
-                              changeStop(s.id, { details })
-                            }
-                          />
-                          {
-                            <InlineLink
-                              label={"Make this a Beacon"}
-                              onPress={() => void editBeacon(s)}
+                          return (
+                            <PlanChoice
+                              key={thread.id}
+                              title={thread.title}
+                              detail={`${mode?.label ?? "Decision"} · ${thread.status === "open" ? "Open" : "Responses closed"}`}
+                              icon={mode?.Icon ?? MessageCircle}
+                              onPress={() =>
+                                addReference({
+                                  id: randomUUID(),
+                                  kind: "decision",
+                                  title: thread.title,
+                                  details: "",
+                                  thread_id: thread.id,
+                                })
+                              }
                             />
-                          }
-                        </>
-                      ) : s.kind === "beacon" ? (
-                        <InlineLink
-                          label={"Edit Beacon draft"}
-                          onPress={() => void editBeacon(s)}
+                          );
+                        }),
+                      ].slice(0, limit)
+                    : templates.slice(0, limit).map((template) => (
+                        <PlanChoice
+                          key={template.id}
+                          title={template.title}
+                          detail={`${template.stops?.length ?? template.steps.length} items`}
+                          icon={Sparkles}
+                          onPress={() => {
+                            const latest = current.current;
+                            const stops = editorStopsFromTemplate(
+                              template,
+                              latest.squad_id,
+                              randomUUID,
+                            );
+                            if (locked) return;
+                            if (
+                              planStopsForSave(latest.stops).length +
+                                stops.length >
+                              30
+                            ) {
+                              setPicker(null);
+                              setError(
+                                "This template would take the Plan over 30 items.",
+                              );
+                              return;
+                            }
+                            update({
+                              ...latest,
+                              title: latest.title || template.title,
+                              stops: [...latest.stops, ...stops],
+                            });
+                            setPicker(null);
+                          }}
                         />
-                      ) : s.kind === "existing" ? (
-                        <InlineLink
-                          label={"Open Beacon"}
-                          onPress={() =>
-                            router.push({
-                              pathname: "/activity/[id]",
-                              params: { id: s.activity_id! },
-                            })
-                          }
-                        />
-                      ) : (
-                        <InlineLink
-                          label={"Open decision"}
-                          onPress={() =>
-                            router.push({
-                              pathname: "/council/[id]",
-                              params: { id: s.thread_id! },
-                            })
-                          }
-                        />
-                      )}
-                      <IconButton
-                        label="Activity options"
-                        onPress={() => setRowMenu(s.id)}
-                      >
-                        <MoreHorizontal size={18} color={c.textSecondary} />
-                      </IconButton>
-                    </View>
+                      ))}
+                  {matches > limit && (
+                    <InlineLink
+                      label="Show more"
+                      onPress={() => setLimit(limit + 8)}
+                    />
                   )}
+                  {!matches && <Txt muted>No matches available.</Txt>}
                 </View>
-              );
-            })}
-          </View>
-          {draft.stops.some((s) => s.kind === "beacon") && (
-            <InlineLink
-              label={
-                scheduling ? "Save as draft instead" : "Schedule activities"
-              }
-              onPress={() => setScheduling(!scheduling)}
-            />
-          )}
-          {scheduling && (
-            <View style={{ gap: 12 }}>
-              <Txt>Select the new Beacons to publish</Txt>
-              <Txt muted>
-                Linked Beacons keep their dates and audiences. Quick Ideas stay
-                unscheduled.
-              </Txt>
-              {draft.stops
-                .filter((s) => s.kind === "beacon")
-                .map((s) => (
-                  <InlineLink
-                    key={s.id}
-                    label={`${s.include ? "✓ " : ""}${s.title} · ${s.beacon?.starts_at ? new Date(String(s.beacon.starts_at)).toLocaleString() : "Choose a time"}`}
-                    onPress={() => changeStop(s.id, { include: !s.include })}
-                  />
-                ))}
+              )}
+        </CreationPicker>
+        <ConfirmDialog
+          title="Save Plan and continue?"
+          message="Save this Plan as a draft before opening the group question. You’ll choose when to send it."
+          visible={!!askKind}
+          confirmLabel="Save and continue"
+          onClose={() => setAskKind(null)}
+          onConfirm={async () => {
+            if (askKind) await createDecision(askKind);
+          }}
+        />
+        <CreationPicker
+          title="Schedule Beacons"
+          visible={scheduling}
+          onClose={() => {
+            if (!busy) setScheduling(false);
+          }}
+          footer={
+            <View style={{ gap: 8 }}>
+              <Action
+                title={
+                  draft.request?.payload.action === "schedule_plan_editor"
+                    ? "Check saved Plan"
+                    : "Confirm schedule"
+                }
+                disabled={
+                  busy ||
+                  (draft.request
+                    ? draft.request.payload.action !== "schedule_plan_editor"
+                    : !beaconDrafts.some((stop) => stop.include))
+                }
+                run={() => persist(true)}
+              />
+              <Button
+                compact
+                secondary
+                title="Close"
+                disabled={busy}
+                onPress={() => setScheduling(false)}
+              />
             </View>
-          )}
-          {plan && (
-            <InlineLink
-              label={
-                repeat
-                  ? "Close repeat settings"
-                  : routine
-                    ? "Repeat settings"
-                    : "Repeat Plan"
+          }
+        >
+          <Txt muted>Choose the Beacon drafts to publish.</Txt>
+          {beaconDrafts.map((stop) => (
+            <PlanChoice
+              key={stop.id}
+              title={stop.title}
+              detail={
+                typeof stop.beacon?.starts_at === "string"
+                  ? planningTimeSummary(stop.beacon.starts_at, timezone, now)
+                  : "Choose a time"
               }
-              onPress={() => setRepeat(!repeat)}
-              icon={<Repeat2 size={16} color={c.accent} />}
-            />
-          )}
-          {plan && (
-            <RoutineScheduleSheet
-              plan={plan}
-              routine={routine}
-              visible={repeat}
-              stepSchedule={[]}
-              act={act}
-              onClose={() => setRepeat(false)}
-            />
-          )}
-          {!!notice && <Txt>{notice}</Txt>}
-          {!!error && (
-            <Text accessibilityRole="alert" style={styles.error}>
-              {error}
-            </Text>
-          )}
-          {(/changed/.test(error) || conflict) && (
-            <InlineLink
-              label={
-                conflict
-                  ? "Restore my draft edits"
-                  : "Review latest saved version"
-              }
+              icon={Radio}
+              selected={!!stop.include}
               onPress={() => {
-                void (async () => {
-                  if (conflict) {
-                    update({
-                      ...conflict,
-                      revision: draft.revision,
-                      request: undefined,
-                    });
-                    setConflict(null);
-                  } else if (plan) {
-                    setConflict(draft);
-                    await refresh();
-                    const snapshot = getCurrentData(),
-                      latest = snapshot?.plans.find((p) => p.id === plan.id);
-                    if (
-                      !snapshot ||
-                      !latest ||
-                      !planPermissions(snapshot, latest, viewer).editor
-                    )
-                      throw new Error(
-                        "This Plan is no longer available to this account.",
-                      );
-                    update(planEditorFromData(snapshot, latest, viewer, token));
-                  }
-                  setError("");
-                })().catch((e) => setError(e.message));
+                if (!locked) changeStop(stop.id, { include: !stop.include });
               }}
             />
-          )}
-        </>
-      )}
-      <Sheet
-        title="Reorder Plan"
-        centered
-        snapHeight={Math.min(620, 240 + reorderRows.length * 64)}
-        visible={reordering}
-        onClose={() => setReordering(false)}
-        maxHeightPercent={78}
-        footer={
-          <Action
-            title="Done"
-            run={async () => {
-              update({ ...draft, stops: reorderRows });
-              setReordering(false);
-            }}
-          />
-        }
-      >
-        <Txt muted>
-          Drag a row, or select it to move it. Ideas, Beacons and decisions stay
-          together.
-        </Txt>
-        {reorderRows.map((stop, index) => (
-          <ReorderRow
-            key={stop.id}
-            stop={stop}
-            index={index}
-            count={reorderRows.length}
-            move={moveReorder}
-            selected={reorderSelected === stop.id}
-            onSelect={() => setReorderSelected(stop.id)}
-          />
-        ))}
-      </Sheet>
-      <QuickChoiceDialog
-        title={picked?.title ?? "Activity options"}
-        visible={!!rowMenu}
-        onClose={() => setRowMenu(null)}
-        items={[
-          {
-            label: "Duplicate as draft",
-            onPress: () => {
-              if (!picked) return;
-              const a = data.activities.find(
-                (a) => a.id === picked.activity_id,
-              );
-              const place =
-                a && canReadBeaconMeetingDetails(data, a, viewer)
-                  ? data.places.find((p) => p.activity_id === a.id)
-                  : undefined;
-              const copy: EditorStop = {
-                ...picked,
-                id: randomUUID(),
-                creation_token: undefined,
-                activity_id: null,
-                thread_id: null,
-                kind: a
-                  ? "beacon"
-                  : picked.kind === "decision"
-                    ? "idea"
-                    : picked.kind,
-                ...(a
-                  ? {
-                      beacon: {
-                        title: a.title,
-                        description: a.description,
-                        category: a.category,
-                        mode: "squad",
-                        timezone: a.timezone,
-                        starts_at: a.starts_at,
-                        ends_at: a.ends_at,
-                        audience: draft.squad_id ? "squad" : "private",
-                        audience_id: draft.squad_id,
-                        label: place?.label ?? "",
-                        online_url: place?.online_url ?? null,
-                        latitude: place?.latitude ?? null,
-                        longitude: place?.longitude ?? null,
-                        approval_required: false,
-                        target_count: null,
-                      },
-                      include: true,
-                    }
-                  : {}),
-              };
-              update({ ...draft, stops: [...draft.stops, copy] });
-            },
-          },
-          {
-            label: "Remove from Plan",
-            destructive: true,
-            onPress: () => {
-              if (!picked) return;
-              update({
-                ...draft,
-                stops: draft.stops.filter((s) => s.id !== picked.id),
-                removed_stop_ids: data.plan_stops?.some(
-                  (s) => s.id === picked.id,
-                )
-                  ? [...draft.removed_stop_ids, picked.id]
-                  : draft.removed_stop_ids,
-              });
-            },
-          },
-        ]}
-      />
-      <QuickChoiceDialog
-        title="Plan options"
-        visible={tools}
-        onClose={() => setTools(false)}
-        items={[
-          {
-            label: "Template limits & Premium",
-            onPress: () => router.push("/settings/premium" as Href),
-          },
-          {
-            label: "Use Template",
-            onPress: () => {
-              setPicker("templates");
-              setQuery("");
-            },
-          },
-          ...(routine && routine.status !== "ended"
-            ? [
-                {
-                  label: "Manage Repeat",
-                  onPress: () => {
-                    setRepeat(true);
-                  },
-                },
-              ]
-            : []),
-          ...(plan
-            ? [
-                {
-                  label: "Save as Template",
-                  onPress: () => {
-                    void persist()
-                      .then(() =>
-                        act("save_living_plan_template", { plan_id: plan.id }),
-                      )
-                      .then(() => setNotice("Template saved"))
-                      .catch((e) => setError(e.message));
-                  },
-                },
-                {
-                  label: "Sharing & permissions",
-                  onPress: () => {
-                    void persist()
-                      .then(() =>
-                        router.push({
-                          pathname: "/plan/[id]",
-                          params: { id: plan.id, tools: "yes" },
-                        }),
-                      )
-                      .catch((e) => setError(e.message));
-                  },
-                },
-                {
-                  label: "Open Calendar",
-                  onPress: () =>
-                    router.push({
-                      pathname: "/calendar",
-                      params: plan.start_date ? { date: plan.start_date } : {},
-                    }),
-                },
-                {
-                  label: "Open Map",
-                  onPress: () =>
-                    router.push({
-                      pathname: "/",
-                      params: { mapPlan: plan.id },
-                    }),
-                },
-              ]
-            : []),
-          {
-            label: "Discard local edits",
-            destructive: true,
-            onPress: () => setDiscard(true),
-          },
-        ]}
-      />
-      <ConfirmDialog
-        title="Discard this draft?"
-        message="Your saved Plan and published Beacons stay available."
-        visible={discard}
-        confirmLabel="Discard draft"
-        destructive
-        onClose={() => setDiscard(false)}
-        onConfirm={async () => {
-          await deletePlanDraft(key);
-          setDiscard(false);
-          if (plan) update(planEditorFromData(data, plan, viewer, token));
-          else router.back();
-        }}
-      />
-    </Screen>
+          ))}
+        </CreationPicker>
+        <ConfirmDialog
+          title="Discard this draft?"
+          message="Your saved Plan and published Beacons stay available."
+          visible={discard}
+          confirmLabel="Discard draft"
+          destructive
+          onClose={() => setDiscard(false)}
+          onConfirm={async () => {
+            if (ordinary) await forgetPlanDraft(storageViewer, demo, token);
+            await deletePlanDraft(key);
+            setDiscard(false);
+            setRemoved(null);
+            if (plan) update(planEditorFromData(data, plan, viewer, token));
+            else if (router.canGoBack()) router.back();
+            else router.replace("/plans");
+          }}
+        />
+      </Screen>
+    </KeyboardAvoidingView>
   );
 }

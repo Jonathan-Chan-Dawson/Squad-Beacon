@@ -52,6 +52,6 @@ test("place creation reuses the Beacon form with venue coordinates and label", a
   await expect(page).toHaveURL(/editor=yes/);
   await expect(page).toHaveURL(/longitude=-87.626/);
   await expect(page.getByRole("textbox", { name: "Where? (optional)", exact: true })).toHaveValue("Willow Courts");
-  await page.getByRole("button", { name: "Advanced Options ↓", exact: true }).click();
+  await page.getByRole("button", { name: "Customize appearance", exact: true }).click();
   await expect(page.getByRole("button", { name: "Edit meeting pin", exact: true })).toBeVisible();
 });

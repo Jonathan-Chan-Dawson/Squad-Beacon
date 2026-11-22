@@ -40,12 +40,14 @@ export function Dialog({
   onClose,
   onDismiss,
   children,
+  header,
   footer,
   busy = false,
   initialFocusLabel,
   initialFocusRef,
 }: DialogProps & {
   footer?: React.ReactNode;
+  header?: React.ReactNode;
   busy?: boolean;
   initialFocusLabel?: string;
   initialFocusRef?: React.RefObject<View | null>;
@@ -188,6 +190,7 @@ export function Dialog({
           >
             {title}
           </Text>
+          {header}
           <ScrollView
             style={{
               flexShrink: 1,

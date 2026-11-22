@@ -1,3 +1,4 @@
+import { PlanningModeMenu } from "@/src/features/planning/PlanningKindSelector";
 import { SemanticEmpty } from "@/src/features/onboarding/OnboardingUI";
 import { BeaconParticipation } from "@/src/features/beacons/useBeaconParticipation";
 import { canReadBeaconActivity } from "@/src/features/beacons/beaconModules";
@@ -282,36 +283,12 @@ function ResponsesContent() {
           {refreshError}
         </Text>
       )}
-      {creating ? (
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-          {(["ping", "vote", "draw", "time"] as const)
-            .filter(
-              (kind) =>
-                kind !== "time" ||
-                data.is_demo === true ||
-                data.capabilities?.connected_planning === true,
-            )
-            .map((kind) => (
-              <Button
-                key={kind}
-                compact
-                secondary
-                title={
-                  kind === "time"
-                    ? "Find a Time"
-                    : kind[0].toUpperCase() + kind.slice(1)
-                }
-                onPress={() => {
-                  setCreating(false);
-                  router.push({
-                    pathname: "/planning/create",
-                    params: { kind, sessionId: randomUUID() },
-                  });
-                }}
-              />
-            ))}
-        </View>
-      ) : null}
+      {creating && (
+        <PlanningModeMenu onSelect={(kind) => {
+          setCreating(false);
+          router.push({ pathname: "/planning/create", params: { kind, sessionId: randomUUID() } });
+        }} />
+      )}
       {params.threadId &&
       !loading &&
       !decisions.some((item) => item.thread.id === params.threadId) ? (

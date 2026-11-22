@@ -13,6 +13,7 @@ import {
   petalBookmarkVisible,
 } from "../clusterBloom";
 import { Marker, Polygon } from "react-native-maps";
+import { MapProjector } from "./MapProjector";
 import { AvatarStatusBadge } from "@/src/features/profile/AvatarStatusBadge";
 import { BeaconPinGlyph } from "./BeaconPinGlyph";
 import { useTheme } from "@/src/shared/ui";
@@ -23,18 +24,15 @@ import type { ClusterPoint } from "../cluster";
 import type { ClusterMemberArtwork } from "../clusterArtwork";
 import {
   beaconPinEmphasis,
+  distantBeaconPinEmphasis,
   COMPACT_BEACON_PIN_RADIUS,
   mapIdentityColors,
   friendLocationLabel,
 } from "../markerIdentity";
 import {
   CLUSTER_COUNT_PATHS,
-  clusterCountWidth,
   CLUSTER_OWNERSHIP_ANCHOR,
   CLUSTER_FRIEND_SHADOW_OPACITY,
-  CLUSTER_MICRO_SHADOW_OPACITY,
-  CLUSTER_FAR_SHADOW_OPACITY,
-  friendGroupUsesCount,
   CLUSTER_SHADOW_OPACITY,
 } from "../clusterLayout";
 import {
@@ -46,7 +44,6 @@ import {
 import {
   BeaconMarkerArtwork,
   BeaconPinLight,
-  BeaconPinTip,
   SavedBookmark,
   FriendMapAvatar,
   useMarkerTracking,
@@ -63,7 +60,6 @@ const MemberArtwork = React.memo(function MemberArtwork({
   compact = false,
   showIdentity = true,
   showSaved = true,
-  lightEnabled = true,
   categoryColors,
   availabilityColors,
   onImageLoad,
@@ -72,7 +68,6 @@ const MemberArtwork = React.memo(function MemberArtwork({
   compact?: boolean;
   showIdentity?: boolean;
   showSaved?: boolean;
-  lightEnabled?: boolean;
   onImageLoad?: () => void;
 }) {
   const { colors } = useTheme();
@@ -87,6 +82,8 @@ const MemberArtwork = React.memo(function MemberArtwork({
   if (model.kind === "beacon" && !compact)
     return (
       <BeaconMarkerArtwork
+        lightEnabled={false}
+        showProjection={false}
         markerState={model.markerState}
         showSaved={showSaved}
         id={model.id.slice(7)}
@@ -99,9 +96,6 @@ const MemberArtwork = React.memo(function MemberArtwork({
     model.kind === "beacon"
       ? categoryColors[model.category]
       : availabilityColors[model.availability];
-  const lighting = lightEnabled && model.kind === "beacon"
-    ? beaconPinEmphasis(model.markerState, false, color, true)
-    : null;
   return (
     <View
       style={{
@@ -110,13 +104,11 @@ const MemberArtwork = React.memo(function MemberArtwork({
         alignItems: "center",
       }}
     >
-      {lighting && <BeaconPinLight lighting={lighting} compact />}
-      {model.kind === "beacon" && <BeaconPinTip color={color} faceBottom={size} compact />}
       <View
         style={{
           width: size,
           height: size,
-          borderRadius: model.kind === "beacon" ? COMPACT_BEACON_PIN_RADIUS : size / 2,
+          borderRadius: size / 2,
           borderWidth: 2,
           borderColor: color,
           backgroundColor: colors.surface,
@@ -257,41 +249,23 @@ function LivingMapPinComponent({
   const { colors } = useTheme();
   const { group, overflow } = presentation;
   const geometry = bloomGeometry(presentation);
-  const countFontSize =
-    presentation.scale === "micro" ? 8 : presentation.scale === "far" ? 9 : 10;
-  const friendCountSize = clusterCountWidth(
-    presentation.people.length,
-    0,
-    countFontSize,
-  );
-  const explorer = !!presentationOpensExplorer(presentation);
+  const explorer = presentationOpensExplorer(presentation);
+  const projectorCategory = categoryColors[geometry.primary[0]?.category ?? "Other"];
+  const projectorBeacon = geometry.projector && !explorer
+    ? members.find((member) => member.id === geometry.primary[0]?.id)
+    : undefined;
+  const projectorLighting = projectorBeacon?.kind === "beacon"
+    ? beaconPinEmphasis(projectorBeacon.markerState, false, projectorCategory)
+    : null;
   const shadowGradientId = React.useId().replace(/:/g, "");
-  const shadowOpacity = geometry.friendsOnly
-    ? CLUSTER_FRIEND_SHADOW_OPACITY
-    : presentation.scale === "micro"
-      ? CLUSTER_MICRO_SHADOW_OPACITY
-      : presentation.scale === "far"
-        ? CLUSTER_FAR_SHADOW_OPACITY
-        : CLUSTER_SHADOW_OPACITY;
+  const shadowOpacity = geometry.friendsOnly ? CLUSTER_FRIEND_SHADOW_OPACITY : CLUSTER_SHADOW_OPACITY;
   const [avatarRevision, setAvatarRevision] = React.useState(0);
   const loaded = useCallback(() => setAvatarRevision((value) => value + 1), []);
-  const tracking = useMarkerTracking(
-    `${appearanceKey}:${geometry.markerSize}:${geometry.satelliteSize}:${presentation.scale}:${presentation.people.length}:${overflow}:${members.map((member) => member.visualRevision).join("|")}:${avatarRevision}:${JSON.stringify(geometry.satelliteOffsets)}:${JSON.stringify(geometry.countBadge)}`,
-  );
-  const badgeStyle = {
-    position: "absolute" as const,
-    bottom: 0,
-    minWidth: presentation.scale === "micro" ? 16 : 24,
-    height: presentation.scale === "micro" ? 14 : 20,
-    paddingHorizontal: 3,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: colors.line,
-    backgroundColor: colors.white,
-    alignItems: "center" as const,
-    justifyContent: "center" as const,
-    zIndex: 40,
-  };
+  const tracking = useMarkerTracking(JSON.stringify([
+    appearanceKey, presentation.scale, overflow, geometry, avatarRevision,
+    members.map((member) => member.visualRevision),
+  ]));
+  const count = geometry.countBadge;
   return (
     <Marker
       coordinate={group}
@@ -341,6 +315,7 @@ function LivingMapPinComponent({
         collapsable={false}
         style={{ width: geometry.size, height: geometry.size }}
       >
+        {!!geometry.shadowSize && (
         <View
           pointerEvents="none"
           testID="cluster-circle-shadow"
@@ -377,59 +352,102 @@ function LivingMapPinComponent({
             />
           </Svg>
         </View>
+        )}
+        {geometry.projector && (
+          <MapProjector
+            kind={explorer ? "cluster" : "beacon"}
+            center={geometry.center + geometry.projector.x}
+            top={geometry.center + geometry.projector.top}
+            height={geometry.projector.height}
+            width={geometry.projector.width}
+            opacity={geometry.projector.opacity}
+            color={projectorLighting?.color ?? projectorCategory}
+          />
+        )}
+        {geometry.dots.map(({ category, offset, size }) => (
+          <View
+            key={category ?? "friends"}
+            testID="cluster-constellation-dot"
+            accessible={false}
+            pointerEvents="none"
+            style={{
+              position: "absolute",
+              left: geometry.center + offset.x - size / 2,
+              top: geometry.center + offset.y - size / 2,
+              width: size,
+              height: size,
+              borderRadius: size / 2,
+              backgroundColor: category ? categoryColors[category] : colors.ink,
+              opacity: category ? 1 : 0.55,
+            }}
+          />
+        ))}
         {geometry.primary.map((point, index) => {
           const model = members.find((member) => member.id === point.id),
             offset = geometry.offsets[index];
           if (!model) return null;
-          const dot =
-            geometry.friendsOnly &&
-            (presentation.scale === "far" || presentation.scale === "micro");
+          const color = model.kind === "beacon"
+            ? categoryColors[model.category] : availabilityColors[model.availability];
+          const accent = !explorer && model.kind === "beacon" && presentation.scale !== "close"
+            ? distantBeaconPinEmphasis(beaconPinEmphasis(model.markerState, false, color), presentation.scale)
+            : null;
+          const faceSize = geometry.markerSize;
           return (
-            <View
-              key={point.id}
-              style={{
-                position: "absolute",
-                left:
-                  geometry.center - (geometry.fullBeacon ? 29 : 16) + offset.x,
-                top:
-                  geometry.center - (geometry.fullBeacon ? 20 : 16) + offset.y,
-                zIndex: 20 - index,
-                transform: geometry.fullBeacon
-                  ? undefined
-                  : [{ scale: geometry.markerSize / 32 }],
-              }}
-            >
-              {dot ? (
+            <React.Fragment key={point.id}>
+              {accent && (accent.beamHeight > 0 || presentation.scale === "medium") && (
                 <View
+                  pointerEvents="none"
                   style={{
-                    width: 32,
-                    height: 32,
-                    borderRadius: 16,
-                    backgroundColor:
-                      availabilityColors[
-                        model.kind === "person" ? model.availability : "unknown"
-                      ],
-                    opacity: presentation.scale === "micro" ? 0.75 : 0.9,
+                    position: "absolute",
+                    alignItems: "center",
+                    width: faceSize,
+                    height: faceSize,
+                    left: geometry.center - faceSize / 2,
+                    top: geometry.center - faceSize / 2,
                   }}
-                />
-              ) : (
-                <MemberArtwork
-                  model={model}
-                  compact={!geometry.fullBeacon}
-                  showIdentity={geometry.markerSize >= 24}
-                  lightEnabled={presentation.scale !== "micro"}
-                  showSaved={petalBookmarkVisible(geometry, index)}
-                  categoryColors={categoryColors}
-                  availabilityColors={availabilityColors}
-                  onImageLoad={loaded}
-                />
+                >
+                  <BeaconPinLight lighting={accent} compact faceSize={faceSize} />
+                </View>
               )}
-            </View>
+              <View
+                style={{
+                  position: "absolute",
+                  left: geometry.center - 16 + offset.x,
+                  top: geometry.center - 16 + offset.y,
+                  zIndex: 20 - index,
+                  transform: [{ scale: faceSize / 32 }],
+                }}
+              >
+                {geometry.distant ? (
+                  <View
+                    testID="map-activity-dot"
+                    style={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: 16,
+                      backgroundColor: color,
+                      opacity: model.kind === "person" ? 0.65 : 1,
+                    }}
+                  />
+                ) : (
+                  <MemberArtwork
+                    model={model}
+                    compact
+                    showIdentity={faceSize >= 24}
+                    showSaved={!explorer || petalBookmarkVisible(geometry, index)}
+                    categoryColors={categoryColors}
+                    availabilityColors={availabilityColors}
+                    onImageLoad={loaded}
+                  />
+                )}
+              </View>
+            </React.Fragment>
           );
         })}
         {geometry.satellites.map((point, index) => {
           const offset = geometry.satelliteOffsets[index],
             s = geometry.satelliteSize;
+          const profile = members.find((member) => member.id === point.id)?.profile;
           return (
             <View
               key={point.id}
@@ -444,90 +462,56 @@ function LivingMapPinComponent({
                 borderRadius: s / 2,
                 borderWidth: 1,
                 borderColor: colors.line,
-                backgroundColor:
-                  s >= 10 ? colors.white : mapIdentityColors.ownership,
-                opacity: presentation.friendsProminent ? 0.8 : 0.62,
+                backgroundColor: colors.surface,
+                opacity: presentation.friendsProminent ? 1 : 0.92,
                 alignItems: "center",
                 justifyContent: "center",
                 zIndex: 30,
               }}
             >
-              {s >= 10 && (
-                <Svg
-                  width={s - 4}
-                  height={s - 4}
-                  style={{ position: "absolute", left: 1, top: 1 }}
-                  viewBox="0 0 24 24"
-                  fill={colors.ink}
-                >
-                  <Circle cx={12} cy={7} r={4} />
-                  <Path d="M5 21v-3a7 7 0 0 1 14 0v3Z" />
-                </Svg>
-              )}
+              {profile && <FriendMapAvatar profile={profile} size={s - 2} onImageLoad={loaded} />}
             </View>
           );
         })}
-        {geometry.friendsOnly &&
-          friendGroupUsesCount(
-            presentation.people.length,
-            presentation.scale,
-          ) && (
-            <View
-              style={{
-                ...badgeStyle,
-                paddingHorizontal: 0,
-                left: geometry.center - friendCountSize / 2,
-                top:
-                  geometry.center -
-                  (presentation.scale === "micro"
-                    ? 7
-                    : presentation.scale === "far"
-                      ? 9
-                      : 10),
-                height:
-                  presentation.scale === "micro"
-                    ? 14
-                    : presentation.scale === "far"
-                      ? 18
-                      : 20,
-                bottom: undefined,
-                minWidth: friendCountSize,
-                opacity:
-                  presentation.scale === "micro"
-                    ? 0.5
-                    : presentation.scale === "far"
-                      ? 0.65
-                      : 1,
-                flexDirection: "row",
-                gap: 2,
-              }}
-            >
-              <Svg
-                width={countFontSize}
-                height={countFontSize}
-                viewBox="0 0 24 24"
-                accessible={false}
-              >
-                <Path
-                  d={CLUSTER_COUNT_PATHS.friends}
-                  fill="none"
-                  stroke={colors.ink}
-                  strokeWidth={1.8}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </Svg>
-              <Text
-                style={{
-                  color: colors.ink,
-                  fontSize: countFontSize,
-                  fontWeight: "700",
-                }}
-              >
-                {presentation.people.length}
-              </Text>
-            </View>
-          )}
+        {count && (
+          <View
+            testID="map-cluster-count"
+            accessible={false}
+            pointerEvents="none"
+            style={{
+              position: "absolute",
+              left: geometry.center + count.offset.x - count.width / 2,
+              top: geometry.center + count.offset.y - count.height / 2,
+              width: count.width,
+              height: count.height,
+              borderRadius: 10,
+              borderWidth: 1,
+              borderColor: colors.line,
+              backgroundColor: colors.white,
+              alignItems: "center",
+              justifyContent: "center",
+              flexDirection: "row",
+              gap: 3,
+              zIndex: 40,
+            }}
+          >
+            {count.parts.map((part, index) => (
+              <React.Fragment key={part.kind}>
+                {index > 0 && <Text style={{ color: colors.ink, fontSize: count.fontSize }}>·</Text>}
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
+                  <Svg width={count.fontSize} height={count.fontSize} viewBox="0 0 24 24">
+                    <Path d={CLUSTER_COUNT_PATHS[part.kind]} fill="none" stroke={colors.ink}
+                      strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" />
+                  </Svg>
+                  <Text style={{ color: colors.ink, fontSize: count.fontSize,
+                    fontWeight: "700", fontVariant: ["tabular-nums"] }}>
+                    {part.count}
+                  </Text>
+                </View>
+              </React.Fragment>
+            ))}
+          </View>
+        )}
       </View>
     </Marker>
   );

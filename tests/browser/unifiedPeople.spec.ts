@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { startDemoFromEntry } from "./demoEntry";
 
 for (const width of [320, 390, 430, 1100]) {
   test(`invitation changes commit only on Done at ${width}px`, async ({
@@ -10,14 +11,13 @@ for (const width of [320, 390, 430, 1100]) {
       colorScheme: width === 430 ? "dark" : "light",
     });
     await page.goto("/create?editor=yes");
-    await page.getByRole("button", { name: /Explore the demo/ }).click();
+    await startDemoFromEntry(page);
     const open = page.getByRole("button", {
-      name: "+ Add People",
-      exact: true,
+      name: /^(?:Add friends|Edit invited friends)$/,
     });
     await open.click();
     const picker = page.getByRole("dialog", {
-      name: "Add People",
+      name: "Invite friends",
       exact: true,
     });
     const jordan = picker.getByRole("checkbox", {
@@ -25,14 +25,14 @@ for (const width of [320, 390, 430, 1100]) {
       exact: true,
     });
     await picker
-      .getByLabel("Search people and groups", { exact: true })
+      .getByLabel("Search friends", { exact: true })
       .fill("Jordan");
     await jordan.click();
     await expect(jordan).toBeChecked();
-    await picker.getByRole("button", { name: "Back", exact: true }).click();
+    await picker.getByRole("button", { name: "Cancel", exact: true }).click();
     await open.click();
     await picker
-      .getByLabel("Search people and groups", { exact: true })
+      .getByLabel("Search friends", { exact: true })
       .fill("Jordan");
     await expect(jordan).not.toBeChecked();
     await jordan.click();
@@ -59,7 +59,7 @@ test("more than 50 is a cancellable recommendation and keeps failed publication 
   await page.goto(
     `/create?${new URLSearchParams({ editor: "yes", inviteeIds: JSON.stringify(ids) })}`,
   );
-  await page.getByRole("button", { name: /Explore the demo/ }).click();
+  await startDemoFromEntry(page);
   await page
     .getByRole("button", { name: "Create Beacon", exact: true })
     .click();
@@ -82,17 +82,17 @@ test("more than 50 is a cancellable recommendation and keeps failed publication 
   await warning
     .getByRole("button", { name: "Review people", exact: true })
     .click();
-  await page.getByRole("button", { name: "+ Add People", exact: true }).click();
+  await page.getByRole("button", { name: /^(?:Add friends|Edit invited friends)$/ }).click();
   await expect(
-    page.getByRole("dialog", { name: "Add People", exact: true }),
-  ).toContainText("51 selected");
+    page.getByRole("dialog", { name: "Invite friends", exact: true }),
+  ).toContainText("Selected · 51");
 });
 
 test("legacy Map location route opens canonical Sonar with explicit recipients", async ({
   page,
 }) => {
   await page.goto("/location?extend=yes");
-  await page.getByRole("button", { name: /Explore the demo/ }).click();
+  await startDemoFromEntry(page);
   const sonar = page.getByRole("dialog", { name: "Start Sonar", exact: true });
   await expect(sonar).toBeVisible();
   await sonar

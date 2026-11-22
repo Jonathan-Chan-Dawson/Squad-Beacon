@@ -171,19 +171,18 @@ test("draft and option identities isolate multiple attempts and accounts across 
   assert.notEqual(composerSession("viewer", "first", initial), first);
 });
 
-test("Ping starters preserve edited fields and audience and always propose a real time", () => {
+test("Ping starters change only the idea and preserve edited copy", () => {
   const draft = initial();
-  draft.title = "My question";
+  draft.title = "";
   draft.audience = "squad";
   draft.audienceId = "squad-one";
-  draft.touched = ["title"];
-  const now = Date.now();
+  const before = structuredClone(draft);
+  applyPingStarter(draft, "free");
+  assert.deepEqual(draft, { ...before, title: "Anyone free to hang out?" });
+  draft.title = "My question";
   for (const id of ["free", "try", "nearby"]) {
-    applyPingStarter(draft, id, now);
-    assert.equal(draft.title, "My question");
-    assert.equal(draft.audienceId, "squad-one");
-    assert.ok(Date.parse(draft.startsAt) > Date.parse(draft.deadline));
-    assert.ok(Date.parse(draft.deadline) > now);
+    applyPingStarter(draft, id);
+    assert.deepEqual(draft, { ...before, title: "My question" });
   }
 });
 

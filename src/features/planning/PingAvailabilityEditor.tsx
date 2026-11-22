@@ -18,7 +18,7 @@ export function PingAvailabilityEditor({
 }: {
   availableAfter?: string | null;
   autoRsvp: boolean;
-  startsAt: string;
+  startsAt?: string;
   onSave: (value: string | null) => Promise<unknown>;
   onClose: () => void;
   inline: boolean;
@@ -82,7 +82,7 @@ export function PingAvailabilityEditor({
             rules.
           </Txt>
         ) : null}
-        {autoRsvp && value && Date.parse(value) > Date.parse(startsAt) ? (
+        {autoRsvp && value && startsAt && Date.parse(value) > Date.parse(startsAt) ? (
           <Txt muted>
             This suggested Beacon starts before your availability. Conversion
             will skip your Auto-RSVP.

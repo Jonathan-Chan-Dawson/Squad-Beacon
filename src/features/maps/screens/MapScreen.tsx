@@ -3590,6 +3590,7 @@ export default function MapScreen() {
         !selectedPlace &&
         !activeSearchVisible &&
         controlsVisible &&
+        !clusterActivityIds &&
         !beaconPreviewOpen ? (
           <View
             testID="map-control-rail"

@@ -1,8 +1,9 @@
 import { followedBeaconIds } from "@/src/features/discovery/beaconTopics";
 import type { PublicBeaconSummary } from "@/src/features/discovery/types";
 import React, { useRef, useState } from "react";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
-import { Info, Maximize2 } from "lucide-react-native";
+import { Pressable, ScrollView, Text, TextInput, View, type ViewStyle } from "react-native";
+import { Info, Maximize2, Search } from "lucide-react-native";
+import { cardPresentation as card } from "@/src/theme/cardPresentation";
 import { useBeacon } from "@/src/shared/store";
 import { useNow } from "@/src/shared/useNow";
 import { Button, useTheme } from "@/src/shared/ui";
@@ -83,6 +84,23 @@ export function MapNearbyPanel({
         .map((row) => [row.activity_id, row]),
     ).values(),
   ];
+  const beaconCount = beacons.length + publicBeacons.length;
+  const matchingBeacons = beacons.filter((activity) => matchesSearch(query, activity.title));
+  const matchingPublicBeacons = publicBeacons.filter((row) => matchesSearch(query, row.title, row.area_label));
+  const matchingPeople = people.filter((person) => matchesSearch(query, person.name, person.username));
+  const hasMatches = compact
+    ? matchingBeacons.length + matchingPublicBeacons.length + matchingPeople.length > 0
+    : tab === "Beacons"
+      ? matchingBeacons.length + matchingPublicBeacons.length > 0
+      : matchingPeople.length > 0;
+  const resultRow: ViewStyle = {
+    minHeight: 48,
+    paddingHorizontal: card.rowGap,
+    paddingVertical: card.inlineGap,
+    gap: card.rowGap,
+    borderRadius: card.smallInsetRadius,
+    backgroundColor: colors.surfaceRaised,
+  };
   return (
     <View style={{ maxHeight: 320, flexShrink: 1 }}>
       <MapTooltipShell testID="map-nearby-panel">
@@ -102,53 +120,51 @@ export function MapNearbyPanel({
           }
         >
           <View style={{ flex: 1 }}>
-            <Text style={[styles.h2, { fontSize: 16 }]}>
-              Nearby {"\u00b7"}{" "}
-              {beacons.length + publicBeacons.length + people.length}
-            </Text>
-            <Text style={styles.muted}>
-              {beacons.length + publicBeacons.length} Beacons · {people.length}{" "}
-              friends nearby
+            <Text accessibilityRole="header" style={[styles.h2, tokens.type.titleSmall]}>
+              Nearby · {beaconCount + people.length}
             </Text>
           </View>
         </MapTooltipHeader>
         {!compact && (
-          <TextInput
-            accessibilityLabel="Search nearby Beacons and friends"
-            value={query}
-            onChangeText={setQuery}
-            placeholder="Search this cluster"
-            placeholderTextColor={colors.muted}
-            style={[
-              styles.input,
-              { minHeight: 36, paddingVertical: 6, fontSize: 13 },
-            ]}
-          />
+          <View style={{ flexDirection: "row", alignItems: "center", gap: card.rowGap, paddingHorizontal: card.rowGap, borderWidth: 1, borderRadius: card.insetRadius, borderColor: colors.line, backgroundColor: colors.bg }}>
+            <Search size={15} color={colors.muted} />
+            <TextInput
+              accessibilityLabel="Search nearby Beacons and friends"
+              value={query}
+              onChangeText={setQuery}
+              placeholder="Search this cluster"
+              placeholderTextColor={colors.muted}
+              style={{ flex: 1, minWidth: 0, minHeight: card.touchTarget, color: colors.ink, ...tokens.type.secondary }}
+            />
+          </View>
         )}
         {!compact && (
           <View
             accessibilityRole="tablist"
             accessibilityLabel="Nearby sections"
-            style={[styles.row, { justifyContent: "flex-start" }]}
+            style={{ flexDirection: "row", gap: card.rowGap, borderBottomWidth: 1, borderColor: colors.line }}
           >
             {(["Beacons", "Friends"] as const).map((value) => (
               <Pressable
                 key={value}
                 accessibilityRole="tab"
-                accessibilityLabel={`${value}, ${value === "Beacons" ? beacons.length + publicBeacons.length : people.length}`}
+                accessibilityLabel={`${value}, ${value === "Beacons" ? beaconCount : people.length}`}
                 aria-selected={tab === value}
                 accessibilityState={{ selected: tab === value }}
                 onPress={() => setTab(value)}
-                style={{
-                  paddingHorizontal: 14,
-                  minHeight: 44,
+                style={({ pressed }) => ({
+                  paddingHorizontal: card.rowGap,
+                  minHeight: card.touchTarget,
                   alignItems: "center",
                   justifyContent: "center",
-                  borderRadius: tokens.radius.button,
-                  backgroundColor: tab === value ? colors.lime : colors.bg,
-                }}
+                  borderBottomWidth: 2,
+                  borderBottomColor: tab === value ? colors.primary : "transparent",
+                  opacity: pressed ? 0.7 : 1,
+                })}
               >
-                <Text style={styles.body}>{value}</Text>
+                <Text style={[tokens.type.secondary, { color: tab === value ? colors.primary : colors.muted, fontWeight: "600" }]}>
+                  {value} {value === "Beacons" ? beaconCount : people.length}
+                </Text>
               </Pressable>
             ))}
           </View>
@@ -166,8 +182,7 @@ export function MapNearbyPanel({
           }}
         >
           {(compact || tab === "Beacons") &&
-            beacons
-              .filter((activity) => matchesSearch(query, activity.title))
+            matchingBeacons
               .slice(0, compact || expanded || query ? undefined : 3)
               .map((activity) => {
                 const place =
@@ -180,17 +195,17 @@ export function MapNearbyPanel({
                     accessibilityRole="button"
                     accessibilityLabel={`Select ${activity.title} Beacon`}
                     onPress={() => onBeacon(activity.id)}
-                    style={[styles.row, { paddingVertical: 4, minHeight: 48 }]}
+                    style={({ pressed }) => [styles.row, resultRow, { opacity: pressed ? 0.74 : 1 }]}
                   >
-                    <ActivityBadge category={activity.category} size={28} />
+                    <ActivityBadge category={activity.category} size={32} />
                     <View style={{ flex: 1, minWidth: 0 }}>
                       <Text
                         numberOfLines={1}
-                        style={[styles.body, { fontSize: 13 }]}
+                        style={[styles.body, tokens.type.secondary, { fontWeight: "600" }]}
                       >
                         {activity.title}
                       </Text>
-                      <Text style={styles.muted}>
+                      <Text style={[styles.muted, tokens.type.caption]}>
                         {beaconPreviewWhen(activity, now)}
                       </Text>
                       <Text
@@ -206,8 +221,7 @@ export function MapNearbyPanel({
                 );
               })}
           {(compact || tab === "Beacons") &&
-            publicBeacons
-              .filter((row) => matchesSearch(query, row.title, row.area_label))
+            matchingPublicBeacons
               .slice(
                 0,
                 compact || expanded || query
@@ -220,24 +234,21 @@ export function MapNearbyPanel({
                   accessibilityRole="button"
                   accessibilityLabel={`Preview ${row.title} public Beacon`}
                   onPress={() => onPublicBeacon?.(row.activity_id)}
-                  style={[styles.row, { paddingVertical: 4, minHeight: 48 }]}
+                  style={({ pressed }) => [styles.row, resultRow, { opacity: pressed ? 0.74 : 1 }]}
                 >
-                  <ActivityBadge category={row.category} size={28} />
+                  <ActivityBadge category={row.category} size={32} />
                   <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text numberOfLines={1} style={styles.body}>
+                    <Text numberOfLines={1} style={[styles.body, tokens.type.secondary, { fontWeight: "600" }]}>
                       {row.title}
                     </Text>
-                    <Text style={styles.muted}>
+                    <Text style={[styles.muted, tokens.type.caption]}>
                       Public {"\u00b7"} {row.area_label}
                     </Text>
                   </View>
                 </Pressable>
               ))}
           {(compact || tab === "Friends") &&
-            people
-              .filter((person) =>
-                matchesSearch(query, person.name, person.username),
-              )
+            matchingPeople
               .slice(0, compact || expanded || query ? undefined : 3)
               .map((person) => (
                 <Pressable
@@ -245,13 +256,13 @@ export function MapNearbyPanel({
                   accessibilityRole="button"
                   accessibilityLabel={`View ${person.name}'s profile`}
                   onPress={() => onPerson(person.id)}
-                  style={[styles.row, { paddingVertical: 4, minHeight: 48 }]}
+                  style={({ pressed }) => [styles.row, resultRow, { opacity: pressed ? 0.74 : 1 }]}
                 >
                   <ProfileAvatar profile={person} size={32} />
-                  <View style={{ flex: 1 }}>
+                  <View style={{ flex: 1, minWidth: 0 }}>
                     <Text
                       numberOfLines={1}
-                      style={[styles.body, { fontSize: 13 }]}
+                      style={[styles.body, tokens.type.secondary, { fontWeight: "600" }]}
                     >
                       {person.name}
                     </Text>
@@ -277,15 +288,7 @@ export function MapNearbyPanel({
                 />
               </View>
             )}
-          {!(
-            tab === "Beacons"
-              ? [...beacons, ...publicBeacons].filter((activity) =>
-                  matchesSearch(query, activity.title),
-                )
-              : people.filter((person) =>
-                  matchesSearch(query, person.name, person.username),
-                )
-          ).length && (
+          {!hasMatches && (
             <Text style={styles.muted}>No matching {tab.toLowerCase()}.</Text>
           )}
         </ScrollView>

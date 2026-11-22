@@ -155,7 +155,7 @@ test("selection, live participation, ownership, friendship and Squads have disti
   assert.equal(owned.level, 3);
   assert.equal(owned.color, "#F3B932");
   const levels = [selected, live, owned, friend, squad];
-  assert.deepEqual(levels.map(({ beamHeight }) => beamHeight), [32, 21, 15, 12, 14]);
+  assert.deepEqual(levels.map(({ beamHeight }) => beamHeight), [38, 26, 19, 15, 18]);
   assert.ok(levels.slice(1).every(({ glowOpacity }, i) => glowOpacity < levels[i].glowOpacity));
 });
 

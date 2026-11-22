@@ -1,13 +1,36 @@
 import { expect, test, type Page } from "@playwright/test";
+import { startDemoFromEntry } from "./demoEntry";
 
 async function openPlanning(page: Page) {
-  await page.goto("/");
-  await page.getByRole("button", { name: /Explore the demo/ }).click();
+  await page.goto("/auth/sign-in");
+  await startDemoFromEntry(page);
   await page.getByRole("tab", { name: "Squads", exact: true }).click();
   await page
     .getByRole("button", { name: /Responses & Invitations, \d+ pending/ })
     .click();
 }
+
+test("Create explains each planning mode and opens its editor directly", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 720 });
+  await page.goto("/create");
+  await startDemoFromEntry(page);
+  for (const [mode, description] of [
+    ["Ping", "See who’s interested"],
+    ["Find a Time", "See when people are free"],
+    ["Vote", "Let the group choose"],
+    ["Random Draw", "Pick a choice at random"],
+  ]) {
+    const entry = page.getByRole("button", { name: mode, exact: true });
+    await expect(entry).toContainText(description);
+    await expect(entry).toBeInViewport();
+  }
+  await page.getByRole("button", { name: "Ping", exact: true }).click();
+  const audience = page.getByRole("button", { name: "Who can respond? · Friends", exact: true });
+  await audience.click();
+  await page.getByRole("radio", { name: "Only me · Private to you", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Who can respond? · Only me", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Send Ping", exact: true })).toBeInViewport();
+});
 
 test("ordinary Council links focus the inbox while explicit management links remain dedicated", async ({
   page,
@@ -34,13 +57,13 @@ test("new same-type drafts use independent sessions", async ({ page }) => {
   await page.getByRole("button", { name: "Ping", exact: true }).click();
   const first = new URL(page.url()).searchParams.get("sessionId");
   await page
-    .getByLabel("What are you thinking?", { exact: true })
+    .getByLabel("What’s the idea?", { exact: true })
     .fill("Keep draft one");
   await page.getByRole("button", { name: "Back", exact: true }).click();
   await page.getByRole("button", { name: "+ New", exact: true }).click();
   await page.getByRole("button", { name: "Ping", exact: true }).click();
   await expect(
-    page.getByLabel("What are you thinking?", { exact: true }),
+    page.getByLabel("What’s the idea?", { exact: true }),
   ).toHaveValue("");
   expect(new URL(page.url()).searchParams.get("sessionId")).not.toBe(first);
 });
@@ -107,11 +130,11 @@ test("Ping creation uses the focused composer and preserves conversion managemen
   await page.getByRole("button", { name: "+ New", exact: true }).click();
   await page.getByRole("button", { name: "Ping", exact: true }).click();
   await page
-    .getByLabel("What are you thinking?", { exact: true })
+    .getByLabel("What’s the idea?", { exact: true })
     .fill("Trail after work?");
-  await page.getByRole("button", { name: "Anyone Free?", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Anyone free?", exact: true })).toBeDisabled();
   await expect(
-    page.getByLabel("What are you thinking?", { exact: true }),
+    page.getByLabel("What’s the idea?", { exact: true }),
   ).toHaveValue("Trail after work?");
   await page.getByRole("button", { name: "Send Ping", exact: true }).click();
   await expect(page).toHaveURL(/activity-created/);
@@ -150,8 +173,9 @@ test("Council option handoffs keep unsaved edits and publish only after returnin
     .nth(1)
     .fill("Bowling");
   await page
-    .getByRole("button", { name: "Edit details: Basketball", exact: true })
+    .getByRole("button", { name: "More for Basketball", exact: true })
     .click();
+  await page.getByRole("button", { name: "Edit details", exact: true }).click();
   await page
     .getByLabel("Activity title", { exact: true })
     .fill("Basketball at the park");
@@ -160,8 +184,9 @@ test("Council option handoffs keep unsaved edits and publish only after returnin
     page.getByLabel("What are we deciding?", { exact: true }),
   ).toHaveValue("Pick a crew plan");
   await page
-    .getByRole("button", { name: "Edit details: Basketball", exact: true })
+    .getByRole("button", { name: "More for Basketball", exact: true })
     .click();
+  await page.getByRole("button", { name: "Edit details", exact: true }).click();
   await expect(page.getByLabel("Activity title", { exact: true })).toHaveValue(
     "Basketball at the park",
   );
@@ -172,7 +197,7 @@ test("Council option handoffs keep unsaved edits and publish only after returnin
     page.getByLabel("Activity option", { exact: true }).nth(0),
   ).toHaveValue("Basketball at the park");
   await page
-    .getByRole("button", { name: "Create Vote Council", exact: true })
+    .getByRole("button", { name: "Start Vote", exact: true })
     .click();
   await expect(page).toHaveURL(/activity-created/);
 });
@@ -208,14 +233,16 @@ for (const [width, theme] of [[320, "dark"], [390, "light"], [430, "dark"]] as c
     await openPlanning(page);
     await page.getByRole("button", { name: "+ New", exact: true }).click();
     await page.getByRole("button", { name: "Ping", exact: true }).click();
-    const title = page.getByLabel("What are you thinking?", { exact: true });
-    await title.fill("Coffee after work");
-    const starter = page.getByRole("button", { name: "Anyone Free?", exact: true });
+    const title = page.getByLabel("What’s the idea?", { exact: true });
+    const starter = page.getByRole("button", { name: "Anyone free?", exact: true });
     await starter.click();
-    await expect(starter).toHaveAttribute("aria-pressed", "true");
-    await expect(title).toHaveValue("Coffee after work");
-    await expect(page.getByText(/Starter applied:/)).toBeVisible();
-    await expect(page.getByText(/Ping uses this audience/)).toBeVisible();
+    await expect(starter).toHaveAttribute("aria-selected", "true");
+    await expect(title).toHaveValue("Anyone free to hang out?");
+    await title.fill("Coffee after work");
+    await expect(starter).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Who can respond? · Friends" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Activity time · Flexible" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "More options" })).toHaveAttribute("aria-expanded", "false");
     await expect(page.getByRole("button", { name: "Send Ping", exact: true })).toHaveCount(1);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({ path: `.expo/ping-composer-${width}.png`, animations: "disabled" });
@@ -232,10 +259,10 @@ for (const [width, theme] of [[320, "dark"], [390, "light"]] as const) {
     await page.getByRole("button", { name: "Ping", exact: true }).click();
     const modes = page.getByRole("tablist", { name: "Planning type", exact: true });
     await expect(modes.getByRole("tab")).toHaveCount(4);
-    await page.getByLabel("What are you thinking?", { exact: true }).fill("Coffee together");
-    await modes.getByRole("tab", { name: "Find a time", exact: true }).click();
-    await expect(page.getByLabel("Activity title", { exact: true })).toHaveValue("Coffee together");
-    await page.getByLabel("Activity title", { exact: true }).fill("Time draft");
+    await page.getByLabel("What’s the idea?", { exact: true }).fill("Coffee together");
+    await modes.getByRole("tab", { name: "Time", exact: true }).click();
+    await expect(page.getByLabel("What are you planning?", { exact: true })).toHaveValue("Coffee together");
+    await page.getByLabel("What are you planning?", { exact: true }).fill("Time draft");
     await modes.getByRole("tab", { name: "Vote", exact: true }).click();
     await expect(page.getByLabel("What are we deciding?", { exact: true })).toHaveValue("Time draft");
     await page.getByLabel("Activity option", { exact: true }).first().fill("Bowling");
@@ -243,10 +270,10 @@ for (const [width, theme] of [[320, "dark"], [390, "light"]] as const) {
     await expect(page.getByLabel("Activity option", { exact: true }).first()).not.toHaveValue("Bowling");
     await modes.getByRole("tab", { name: "Vote", exact: true }).click();
     await expect(page.getByLabel("Activity option", { exact: true }).first()).toHaveValue("Bowling");
-    await modes.getByRole("tab", { name: "Find a time", exact: true }).click();
-    await expect(page.getByLabel("Activity title", { exact: true })).toHaveValue("Time draft");
+    await modes.getByRole("tab", { name: "Time", exact: true }).click();
+    await expect(page.getByLabel("What are you planning?", { exact: true })).toHaveValue("Time draft");
     await modes.getByRole("tab", { name: "Ping", exact: true }).click();
-    await expect(page.getByLabel("What are you thinking?", { exact: true })).toHaveValue("Coffee together");
+    await expect(page.getByLabel("What’s the idea?", { exact: true })).toHaveValue("Coffee together");
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.screenshot({ path: `.expo/compact-planning-create-${width}.png`, animations: "disabled" });
     await page.getByRole("button", { name: "Back", exact: true }).click();

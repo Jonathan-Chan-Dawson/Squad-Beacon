@@ -5,6 +5,7 @@ import type { BeaconControlValues } from "../controls";
 import { DECORATION_ACCENTS, DECORATION_EMOJIS } from "../controls";
 import type { Category } from "@/src/shared/types";
 import { BeaconIcon } from "./BeaconIcon";
+import { BeaconSkinPreview } from "./BeaconSkinPreview";
 import {
   BeaconCardArtwork,
   beaconArtworkStyles,
@@ -14,15 +15,20 @@ import {
 export function CardAppearancePreview({
   category,
   value,
+  background,
+  onBackgroundChange,
 }: {
   category: Category;
   value: BeaconControlValues;
+  background?: BeaconArtworkStyle;
+  onBackgroundChange?: (background: BeaconArtworkStyle) => void;
 }) {
   const { styles } = useTheme();
-  const [variant, setVariant] = useState<BeaconArtworkStyle>("Constellation");
+  const [localBackground, setLocalBackground] = useState<BeaconArtworkStyle>("Constellation");
+  const variant = background ?? localBackground;
   return (
     <View style={{ gap: 8 }}>
-      <Text style={styles.label}>Card Appearance · Preview only</Text>
+      <Text style={styles.label}>Card background · Preview only</Text>
       <View style={[styles.card, styles.row, { borderRadius: 12 }]}>
         <BeaconCardArtwork
           category={category}
@@ -44,7 +50,7 @@ export function CardAppearancePreview({
         accessibilityPrefix="Card background"
         options={beaconArtworkStyles}
         value={variant}
-        onChange={setVariant}
+        onChange={onBackgroundChange ?? setLocalBackground}
       />
     </View>
   );
@@ -54,15 +60,19 @@ export function CreationAppearance({
   category,
   value,
   onChange,
+  background,
+  onBackgroundChange,
 }: {
   category: Category;
   value: BeaconControlValues;
   onChange: (value: BeaconControlValues) => void;
+  background?: BeaconArtworkStyle;
+  onBackgroundChange?: (background: BeaconArtworkStyle) => void;
 }) {
   const { styles } = useTheme();
   return (
     <View style={{ gap: 8 }}>
-      <Text style={styles.label}>Artwork</Text>
+      <Text style={styles.label}>Activity icon</Text>
       <Button
         compact
         secondary
@@ -91,7 +101,13 @@ export function CreationAppearance({
           })
         }
       />
-      <CardAppearancePreview category={category} value={value} />
+      <CardAppearancePreview
+        category={category}
+        value={value}
+        background={background}
+        onBackgroundChange={onBackgroundChange}
+      />
+      <BeaconSkinPreview category={category} />
     </View>
   );
 }

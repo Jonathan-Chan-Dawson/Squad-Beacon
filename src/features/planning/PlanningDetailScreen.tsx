@@ -151,7 +151,7 @@ export default function PlanningDetailScreen({
             <Text style={styles.h2}>{proposal.payload.title}</Text>
             <Text style={styles.muted}>
               {proposal.payload.category} ·{" "}
-              {dateLabel(proposal.payload.starts_at)}
+              {proposal.payload.flexible_time ? "Flexible time" : dateLabel(proposal.payload.starts_at)}
             </Text>
             <Text style={styles.muted}>
               Suggested by {author?.name ?? "A member"}
@@ -309,7 +309,7 @@ export default function PlanningDetailScreen({
           <Text style={styles.label}>IF CONVERTED TO A BEACON</Text>
           <Text style={styles.h2}>{thread.payload.title}</Text>
           <Txt muted>
-            {thread.payload.category} · {dateLabel(thread.payload.starts_at)}
+            {thread.payload.category} · {thread.payload.flexible_time ? "Flexible time" : dateLabel(thread.payload.starts_at)}
           </Txt>
           {thread.payload.label ? (
             <Txt muted>{thread.payload.label}</Txt>

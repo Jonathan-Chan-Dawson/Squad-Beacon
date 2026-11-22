@@ -214,7 +214,7 @@ test("invitee editing preserves form and returning to Plan resumes the draft", a
   await page
     .getByLabel("Activity title", { exact: true })
     .fill("Dinner with my people");
-  await page.getByRole("button", { name: /Add People/, exact: false }).click();
+  await page.getByRole("button", { name: "Edit invited friends", exact: true }).click();
   await expect(page.getByRole("checkbox", { checked: true })).toHaveCount(2);
   await page.getByRole("button", { name: "Done", exact: true }).click();
   await expect(page.getByLabel("Activity title", { exact: true })).toHaveValue(

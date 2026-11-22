@@ -16,6 +16,7 @@ export type EditorStop = {
   beacon?: Payload;
   include?: boolean;
   creation_token?: string;
+  awaiting_beacon?: true;
 };
 export type PlanEditorDraft = {
   version: 1;
@@ -32,6 +33,35 @@ export type PlanEditorDraft = {
   handoff?: "decision";
   request?: { id: string; payload: Payload };
 };
+
+export function isStagedPlanBeacon(stop: EditorStop) {
+  return stop.awaiting_beacon === true && !!stop.creation_token;
+}
+
+export function planStopsForSave(stops: EditorStop[]) {
+  return stops
+    .filter((stop) => !isStagedPlanBeacon(stop))
+    .map((stop) => {
+      if (!stop.awaiting_beacon) return stop;
+      const saved = { ...stop };
+      delete saved.awaiting_beacon;
+      return saved;
+    });
+}
+
+export function movePlanEditorStop(
+  stops: EditorStop[],
+  id: string,
+  targetId: string,
+) {
+  const from = stops.findIndex((stop) => stop.id === id);
+  const to = stops.findIndex((stop) => stop.id === targetId);
+  if (from < 0 || to < 0 || from === to) return stops;
+  const reordered = [...stops];
+  const [stop] = reordered.splice(from, 1);
+  reordered.splice(to, 0, stop);
+  return reordered;
+}
 export function editorStopsFromTemplate(
   template: PlanTemplate,
   squadId: string | null,

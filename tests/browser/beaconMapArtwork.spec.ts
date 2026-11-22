@@ -35,7 +35,7 @@ for (const appearance of ["light", "dark"] as const) {
     const map = page.getByLabel("Beacon map", { exact: true });
     const selectedPin = map.locator('button[aria-label^="Map: Plan stop 1: Coffee together"]');
     await expect(selectedPin).toHaveAttribute("aria-current", "true");
-    await expect(selectedPin.getByTestId("beacon-marker-beam")).toHaveCSS("height", "32px");
+    await expect(selectedPin.getByTestId("beacon-marker-beam")).toHaveCSS("height", "38px");
     await expect(selectedPin.getByTestId("beacon-marker-beam")).toHaveCSS("background-image", /linear-gradient.*255, 254, 244/);
     await expect(selectedPin.getByTestId("beacon-marker-glow")).toHaveCSS("box-shadow", /0px 0px 36px/);
     await expect(selectedPin.getByTestId("beacon-marker-glow")).toHaveAttribute("data-lighting-level", "1");
@@ -115,7 +115,7 @@ for (const appearance of ["light", "dark"] as const) {
     const artStop = map.getByRole("button", { name: /^Plan stop 2:/i });
     await expect(artStop.getByTestId("beacon-marker-glow")).toHaveAttribute("data-lighting-level", "3");
     await artStop.getByTestId("beacon-marker-glow").click();
-    await expect(artStop.getByTestId("beacon-marker-beam")).toHaveCSS("height", "32px");
+    await expect(artStop.getByTestId("beacon-marker-beam")).toHaveCSS("height", "38px");
     await expect(artStop).toHaveAttribute("aria-current", "true");
     await expect(directions).toHaveCount(2);
     await close.click();
@@ -131,7 +131,7 @@ test("Free hosts can choose and reset a built-in Map icon in Create", async ({
   await enterDemo(page);
   await page.getByRole("button", { name: "Create", exact: true }).click();
   await page.getByRole("button", { name: "+ Create Blank Beacon", exact: true }).click();
-  await page.getByRole("button", { name: "Choose artwork", exact: true }).click();
+  await page.getByRole("button", { name: "Customize appearance", exact: true }).click();
   const appearance = page.getByRole("dialog", {
     name: "Appearance",
     exact: true,

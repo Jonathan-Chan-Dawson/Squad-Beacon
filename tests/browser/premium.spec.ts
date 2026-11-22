@@ -147,9 +147,12 @@ test("Free template quota explains limits and Plus unlocks a new save without lo
   await page
     .getByLabel("Activity title", { exact: true })
     .fill("A saved favorite");
-  await page
-    .getByRole("button", { name: "Advanced Options", exact: true })
-    .click();
+  const openSave = async () => {
+    await page.getByRole("button", { name: "More creation actions", exact: true }).click();
+    await page.getByRole("button", { name: "Save as template", exact: true }).click();
+    await expect(page.getByRole("dialog", { name: "Save as template" })).toBeVisible();
+  };
+  await openSave();
   await page.getByLabel("Template name", { exact: true }).fill("My favorite");
   const usage = page.getByText(/\d+\/10 personal Beacon templates/);
   const initial = Number((await usage.innerText()).match(/(\d+)\/10/)![1]);
@@ -157,6 +160,8 @@ test("Free template quota explains limits and Plus unlocks a new save without lo
     await page
       .getByRole("button", { name: "Save as template", exact: true })
       .click();
+    await expect(page.getByRole("dialog", { name: "Save as template" })).toHaveCount(0);
+    await openSave();
     await expect(usage).toContainText(`${used + 1}/10`);
   }
   await page
@@ -178,13 +183,13 @@ test("Free template quota explains limits and Plus unlocks a new save without lo
   // Restored drafts deliberately reopen optional sections collapsed.
   const templateName = page.getByLabel("Template name", { exact: true });
   if (!(await templateName.isVisible()))
-    await page
-      .getByRole("button", { name: "Advanced Options", exact: true })
-      .click();
+    await openSave();
   await expect(templateName).toHaveValue("My favorite");
   await page
     .getByRole("button", { name: "Save as template", exact: true })
     .click();
+  await expect(page.getByRole("dialog", { name: "Save as template" })).toHaveCount(0);
+  await openSave();
   await expect(
     page.getByText(/11\/50 personal Beacon templates/),
   ).toBeVisible();

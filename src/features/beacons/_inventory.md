@@ -21,13 +21,14 @@ Beacons feature
 - controls.ts, permissions.ts: organizer roles/capabilities and authorization helpers.
 - createTiming.ts, focusTimer.ts: duration/deadline and local focus timer helpers.
 - CreateHome.tsx: compact creation launcher with blank first, diverse For You, Recent, direct activity search, and saved-template reuse/editing. Compact secondary Plan/Routine entries retain canonical routes. The focused editor in screens/CreateScreen.tsx owns persistence and placement.
+- spontaneity/: one local Side Quest catalog shared by the full Machine and the inline Surprise Me preview. The Machine seeds existing Beacon and Ping sessions, while the inline preview updates the current Beacon draft only after confirmation.
 - app/beacon-templates.tsx opens the full-screen catalog/My Templates browser through the existing creation controller; CreateHome owns category/search presentation and template callbacks. The former template bottom sheet is removed.
 - templateBrowser.ts: presentation-only template families referencing stable IDs in shared/templates.ts; six core families and seventeen additional families use one catalog, including cross-listed Music, Photography, Home and Classes presets. No saved-template migration.
 - Remaining redesign extensions (2026-10-13): shared status-reaction registry/picker; atomic own-status service and legacy StatusPanel route; bounded Routine projection DTO/read hook; transactional selected-invitation creation with frozen request UUID/reconciliation. Chronological Supabase migrations 202610130001 through 004 are source-only pending hosted rollout. Existing template, status-conversion and map/date handoffs remain supported.
 
 - components/CreationLocationInput.tsx, socialPlanningSession.ts: web/native debounced Places suggestions and account-scoped editor/Map location round trips; only location changes on confirm, and completed/account-switched drafts reject results.
 
-- livingActivity.ts, demoLivingActivity.ts, components/feed/LivingActivitySection.tsx: owner-first authorized Current Activity, independent Activity Note lifecycle, compact profile presence, direct editor, and contextual planning handoffs. Beacons places the editable note beside the avatar, above a separate activity card and the retained My Activity divider.
+- livingActivity.ts, demoLivingActivity.ts, components/feed/LivingActivitySection.tsx: authorized Current Activity, independent Activity Notes, and shared Beacons home and Profile Overview activity cards. Up Next selects the owner’s next eligible Beacon.
 
 - creationDraftStorage.ts, draftSnapshot.ts: versioned account-owned local draft snapshots, size-safe native storage chunks, serialized commits, validation, and frozen canonical publication recovery. Publication is blocked when its initial checkpoint fails.
 - components/CreationControls.tsx, creationModules.ts: compact disclosure rows, real module switches/configuration, and explicit recommendations; People & Access separates visibility, eligible invitations, delivery effects, approval, capacity, and post-publication role management.
@@ -37,13 +38,11 @@ Beacons feature
 
 - components/BeaconOrganizerRoles.tsx: post-publication People entry for canonical approved-Going role grants/removal, with existing owner/co-owner hierarchy and server authorization.
 
-- Pass 1.1: CreationPeople/CreationCapacity provide flat inline access, invitees, primary association and capacity; CreationDisclosure controls one major optional section at a time; CreationAppearance shares inline and focused artwork controls.
+- CreationPeople and CreationCapacity provide inline visibility and joining with a focused community picker. CreationPicker provides centered web dialogs and native sheets for creation controls. CreationAppearance owns the editor’s single artwork entry.
 - CreationSavedDrafts shows three recent pills, all-draft browsing and confirmed removal. creationDraftRepository preserves the version-1 format behind injectable IO, validated summaries, and queued fail-closed user deletion; trusted completion cleanup remains separate.
-- Live creationOptionalSection is retained across Map handoffs but omitted from durable snapshots, so resumed saved drafts begin with optional sections collapsed.
+- CreationInvitees hosts the existing SocialSelector with staged decisions in a centered web dialog and a full-screen native picker. Saved drafts retain actual invitation and tool selections.
 
-- Focused mobile polish: CreationPeople uses mutually exclusive inline visibility/community/joining panels; CreationInvitees hosts the existing SocialSelector in a full-screen modal with local gesture/sheet support. Saved draft pill styling is compact without changing storage or recovery.
-
-- components/ActivityCategoryChoices.tsx, components/BeaconTimingEditor.tsx and creationPublicListing.ts: compact category grid and optional activity ideas; staged creation/manage timing; recoverable opt-in public discovery after authoritative publication.
+- components/ActivityCategoryChoices.tsx, components/CreationTimingFields.tsx, BeaconTimingEditor.tsx and creationPublicListing.ts: category choices, inline creation timing, staged published-Beacon timing, and recoverable opt-in public discovery.
 
 - beaconCardShortcuts.ts and components/BeaconCardShortcuts.tsx: viewer-checked reactions/comments, one Chat/host-message or Memories shortcut, counted Tools and authorized Map actions in More across readable cards; public projections remain separate.
 

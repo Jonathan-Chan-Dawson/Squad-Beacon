@@ -13,11 +13,11 @@ import {
 } from "@/src/features/beacons/beaconModules";
 import { useBeacon } from "@/src/shared/store";
 import { useNow } from "@/src/shared/useNow";
-import { useTheme } from "@/src/shared/ui";
+import { DiscoveryContextNote } from "@/src/features/discovery/DiscoveryContextNote";
 import { router } from "expo-router";
 import { shareBeaconInvitation } from "@/src/features/sharing/shareBeacon";
 import React from "react";
-import { Text, View } from "react-native";
+import { View } from "react-native";
 import { MapTooltipClose } from "./MapTooltipShell";
 import type { MapContextFilter } from "./contextFilters";
 import type { MapBeaconFeature } from "./mapBeaconFeatures";
@@ -42,7 +42,6 @@ export function MapTooltip({
   onClose(): void;
 }) {
   const { data, userId, act } = useBeacon();
-  const { colors, styles } = useTheme();
   const now = useNow();
   const communityAssociations = useBeaconCommunityAssociations();
   const activity = data.activities.find((row) => row.id === beaconId);
@@ -139,17 +138,7 @@ export function MapTooltip({
           ) ? (
             <View style={{ gap: 4 }}>
               {visibleReason ? (
-                <Text
-                  numberOfLines={2}
-                  style={{
-                    ...styles.muted,
-                    color: colors.textSecondary,
-                    fontSize: 12,
-                    lineHeight: 17,
-                  }}
-                >
-                  {visibleReason}
-                </Text>
+                <DiscoveryContextNote label={visibleReason} />
               ) : null}
               <BeaconCommunityRow activityId={activity.id} compact tooltip />
             </View>

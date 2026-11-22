@@ -1,3 +1,4 @@
+import { startDemoFromEntry } from "./demoEntry";
 import { test, expect } from "@playwright/test";
 
 test.beforeEach(async ({ page }) => {
@@ -83,15 +84,17 @@ test("saved Plan creation is consumed once and unfinished edits survive Back", a
   );
   await page.getByRole("button", { name: /Explore the demo/ }).click();
   await page
-    .getByLabel("Plan title", { exact: true })
+    .getByLabel("Plan name", { exact: true })
     .fill("Workspace acceptance Plan");
-  await page.getByRole("button", { name: "Save Draft", exact: true }).click();
+  await page.getByRole("button", { name: "Create Plan", exact: true }).click();
   await expect(page).toHaveURL(/\/plan\//);
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await page.getByRole("button", { name: "Add Idea", exact: true }).click();
   await page
     .getByLabel("Activity idea", { exact: true })
     .fill("Keep this thought");
+  await page.getByRole("button", { name: "Add", exact: true }).click();
+  await expect(page.getByText("Draft saved", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Back", exact: true }).click();
   await expect(
     page.getByRole("tab", { name: "Plans", exact: true }),
@@ -101,21 +104,15 @@ test("saved Plan creation is consumed once and unfinished edits survive Back", a
     .last()
     .click();
   await expect(
-    page.getByRole("button", { name: "1. Keep this thought", exact: true }),
+    page.getByRole("button", { name: "Keep this thought", exact: true }),
   ).toBeVisible();
   await page
-    .getByRole("button", { name: "1. Keep this thought", exact: true })
+    .getByRole("button", { name: "Keep this thought", exact: true })
     .click();
-  await page
-    .getByRole("button", { name: "Activity options", exact: true })
-    .click();
-  await expect(
-    page.getByRole("dialog", { name: "Keep this thought", exact: true }),
-  ).toBeVisible();
-  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Turn into Beacon", exact: true })).toBeVisible();
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(
-    page.getByRole("button", { name: "1. Keep this thought", exact: true }),
+    page.getByRole("button", { name: "Keep this thought", exact: true }),
   ).toBeVisible();
 });
 
@@ -196,21 +193,21 @@ for (const kind of ["vote", "draw", "time"] as const) {
     page,
   }) => {
     await page.goto("/plans?create=yes");
-    await page.getByRole("button", { name: /Explore the demo/ }).click();
+    await startDemoFromEntry(page);
     await page
-      .getByLabel("Plan title", { exact: true })
+      .getByLabel("Plan name", { exact: true })
       .fill(`Decision ${kind} Plan`);
-    await page.getByRole("button", { name: "Save Draft", exact: true }).click();
+    await page.getByRole("button", { name: "Create Plan", exact: true }).click();
     await page
-      .getByRole("button", { name: "Add Decision", exact: true })
+      .getByRole("button", { name: "Ask Group", exact: true })
       .click();
     await page
       .getByRole("button", {
         name:
           kind === "vote"
-            ? "Pick One / Approval Vote"
+            ? "Vote"
             : kind === "draw"
-              ? "Surprise Us \u00b7 Draw"
+              ? "Random Draw"
               : "Find a Time",
         exact: true,
       })
@@ -218,7 +215,7 @@ for (const kind of ["vote", "draw", "time"] as const) {
     const title = `Choice ${kind}`;
     await page
       .getByLabel(
-        kind === "time" ? "Activity title" : "What are we deciding?",
+        kind === "time" ? "What are you planning?" : kind === "draw" ? "What should we pick at random?" : "What are we deciding?",
         { exact: true },
       )
       .fill(title);
@@ -231,20 +228,25 @@ for (const kind of ["vote", "draw", "time"] as const) {
         .getByLabel("Activity option", { exact: true })
         .nth(1)
         .fill("Walk");
+    } else {
+      for (let i = 0; i < 2; i++) {
+        await page.getByRole("button", { name: "Add a time", exact: true }).click();
+        await page.getByRole("button", { name: "Add this time", exact: true }).click();
+      }
     }
     await page
       .getByRole("button", {
         name:
           kind === "time"
-            ? "Create Find a Time"
+            ? "Send Time Poll"
             : kind === "vote"
-              ? "Create Vote Council"
-              : "Create Draw Council",
+              ? "Start Vote"
+              : "Start Draw",
         exact: true,
       })
       .click();
     await expect(
-      page.getByRole("button", { name: `1. ${title}`, exact: true }),
+      page.getByRole("button", { name: `${title}`, exact: true }),
     ).toBeVisible();
     await expect(page).toHaveURL(/\/plan\//);
   });
@@ -256,12 +258,11 @@ test("a new Beacon stays unpublished until the Plan is explicitly scheduled", as
   await page.goto("/plans?create=yes");
   await page.getByRole("button", { name: /Explore the demo/ }).click();
   await page
-    .getByLabel("Plan title", { exact: true })
+    .getByLabel("Plan name", { exact: true })
     .fill("Linked Beacon Plan");
-  await page.getByRole("button", { name: "Save Draft", exact: true }).click();
+  await page.getByRole("button", { name: "Create Plan", exact: true }).click();
   await page.getByRole("button", { name: "Add Beacon", exact: true }).click();
-  await page.getByRole("button", { name: "New Beacon", exact: true }).click();
-  await page
+    await page
     .getByLabel("Activity title", { exact: true })
     .fill("Plan online hangout");
   await page.getByRole("radio", { name: "Online", exact: true }).click();
@@ -270,22 +271,22 @@ test("a new Beacon stays unpublished until the Plan is explicitly scheduled", as
     .fill("https://example.com/hangout");
   await page.getByRole("button", { name: "Add to Plan", exact: true }).click();
   await expect(
-    page.getByRole("button", { name: "1. Plan online hangout", exact: true }),
+    page.getByRole("button", { name: "Plan online hangout", exact: true }),
   ).toBeVisible();
   await expect(page).toHaveURL(/\/plan\//);
   await expect(
-    page.getByText("Beacon draft \u00b7 unpublished", { exact: true }),
+    page.getByText("Beacon draft \u00b7 Unpublished", { exact: true }),
   ).toBeVisible();
   await page
-    .getByRole("button", { name: "Schedule activities", exact: true })
+    .getByRole("button", { name: "Schedule Beacons", exact: true })
     .click();
   await page
-    .getByRole("button", { name: "Schedule Plan", exact: true })
+    .getByRole("button", { name: "Confirm schedule", exact: true })
     .click();
   await expect(
     page
-      .getByRole("button", { name: "1. Plan online hangout", exact: true })
-      .getByText(/^Linked Beacon/),
+      .getByRole("button", { name: "Plan online hangout", exact: true })
+      .getByText(/^Beacon · /),
   ).toBeVisible();
 });
 
@@ -295,15 +296,15 @@ test("a Squad Plan is saved under its audience and immediately visible from All"
   await page.goto("/plans?create=yes");
   await page.getByRole("button", { name: /Explore the demo/ }).click();
   await page
-    .getByLabel("Plan title", { exact: true })
+    .getByLabel("Plan name", { exact: true })
     .fill("Squad workspace Plan");
   await page
-    .getByRole("button", { name: "Details & settings", exact: true })
+    .getByRole("button", { name: "Plan details", exact: true })
     .click();
   await page
     .getByRole("button", { name: "The training crew", exact: true })
     .click();
-  await page.getByRole("button", { name: "Save Draft", exact: true }).click();
+  await page.getByRole("button", { name: "Create Plan", exact: true }).click();
   await expect(
     page.getByText("The training crew", { exact: true }),
   ).toBeVisible();
@@ -318,7 +319,8 @@ test("a Squad Plan is saved under its audience and immediately visible from All"
 test("Calendar scheduling uses compact choices and preserves selected date and timezone", async ({
   page,
 }) => {
-  await page.goto("/calendar?date=2026-11-15");
+  const date = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10);
+  await page.goto(`/calendar?date=${date}`);
   await page.getByRole("button", { name: /Explore the demo/ }).click();
   await page.getByRole("button", { name: "+ Schedule", exact: true }).click();
   await page.screenshot({
@@ -326,8 +328,8 @@ test("Calendar scheduling uses compact choices and preserves selected date and t
     fullPage: true,
   });
   await page.getByRole("button", { name: "Plan", exact: true }).click();
-  await expect(page.getByLabel("Plan title", { exact: true })).toBeVisible();
-  await expect(page).toHaveURL(/startDate=2026-11-15/);
+  await expect(page.getByLabel("Plan name", { exact: true })).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`startDate=${date}`));
   await expect(page).toHaveURL(/timezone=America/);
 });
 

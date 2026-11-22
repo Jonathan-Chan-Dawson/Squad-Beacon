@@ -133,12 +133,14 @@ export function StatusViewer({
   visible,
   onClose,
   onDismiss,
+  primaryAction,
   children,
 }: {
   personId: string | null;
   visible: boolean;
   onClose(): void;
   onDismiss?(): void;
+  primaryAction?: React.ReactNode;
   children?: React.ReactNode;
 }) {
   const { data, userId } = useBeacon();
@@ -435,6 +437,7 @@ export function StatusViewer({
               onPress={() => openCurrentBeacon(currentBeacon.activity.id)}
             />
           ) : null}
+          {primaryAction}
           {children && (
             <Pressable
               accessibilityRole="button"

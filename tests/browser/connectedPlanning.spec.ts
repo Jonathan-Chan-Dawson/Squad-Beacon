@@ -1,8 +1,9 @@
 import { test, expect } from "@playwright/test";
+import { startDemoFromEntry } from "./demoEntry";
 
 test.beforeEach(async ({ page }) => {
-  await page.goto("/");
-  await page.getByRole("button", { name: /Explore the demo/ }).click();
+  await page.goto("/auth/sign-in");
+  await startDemoFromEntry(page);
 });
 
 for (const width of [320, 390, 1100]) {
@@ -17,11 +18,22 @@ test(`Find a Time saves independent answers and finalizes without publishing at 
   await page.getByRole("button", { name: "+ New", exact: true }).click();
   await page.getByRole("button", { name: "Find a Time", exact: true }).click();
   await page
-    .getByLabel("Activity title", { exact: true })
+    .getByLabel("What are you planning?", { exact: true })
     .fill("Find a court time");
-  await page
-    .getByRole("button", { name: "Create Find a Time", exact: true })
-    .click();
+  const send = page.getByRole("button", { name: "Send Time Poll", exact: true });
+  await send.click();
+  await expect(page.getByText("Choose 2 to 10 proposed times.")).toBeVisible();
+  const addTime = page.getByRole("button", { name: "Add a time", exact: true });
+  await addTime.click();
+  const timePicker = page.getByRole("dialog", { name: "Add a time", exact: true });
+  await timePicker.getByRole("button", { name: "Close", exact: true }).click();
+  await expect(page.getByRole("button", { name: /· Edit time$/ })).toHaveCount(0);
+  for (let i = 0; i < 2; i++) {
+    await addTime.click();
+    await timePicker.getByRole("button", { name: "Add this time", exact: true }).click();
+  }
+  await expect(page.getByRole("button", { name: /· Edit time$/ })).toHaveCount(2);
+  await send.click();
   await expect(page).toHaveURL(/responses/);
   await expect(
     page.getByRole("button", { name: "Decisions", exact: true }),
@@ -113,10 +125,10 @@ test("approval choices require Save and retain multiple saved choices", async ({
   await titles.nth(0).fill("Bowling");
   await titles.nth(1).fill("Coffee");
   await page
-    .getByRole("button", { name: "I'm Good With…", exact: true })
+    .getByRole("button", { name: "Choose any that work", exact: true })
     .click();
   await page
-    .getByRole("button", { name: "Create Vote Council", exact: true })
+    .getByRole("button", { name: "Start Vote", exact: true })
     .click();
   await expect(page).toHaveURL(/activity-created/);
   await page.getByRole("button", { name: "Not Now", exact: true }).click();

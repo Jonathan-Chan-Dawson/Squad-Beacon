@@ -7,7 +7,7 @@ import {
   filterSocialFriends,
   availabilityLabel,
   homeFriendAvailability,
-  prioritizeOpenEndedAvailability,
+  prioritizeFreeFriends,
 } from "../src/features/beacons/socialFriends";
 import { parseViewerDeviceDefaults } from "../src/features/profile/settings/beaconDefaults";
 import {
@@ -140,7 +140,7 @@ test("future availability is not free now and expired notes disappear", () => {
   assert.match(homeFriendAvailability(future, now) ?? "", /^Free from/);
   const openEnded = { ...future, id: "open", availability: "available" as const, until: undefined };
   const timed = { ...openEnded, id: "timed", until: new Date(now + 60_000).toISOString() };
-  assert.deepEqual(prioritizeOpenEndedAvailability([timed, future, openEnded]).map((row) => row.id), ["open", "timed", future.id]);
+  assert.deepEqual(prioritizeFreeFriends([future, timed, openEnded]).map((row) => row.id), ["open", "timed", future.id]);
   assert.equal(homeFriendAvailability({ ...future, note: undefined }, now), null);
   assert.equal(homeFriendAvailability({ ...future, availability: "available", until: undefined }, now), "Free to hang");
   assert.equal(homeFriendAvailability({ ...future, availability: "unavailable", until: undefined }, now), "Busy right now");

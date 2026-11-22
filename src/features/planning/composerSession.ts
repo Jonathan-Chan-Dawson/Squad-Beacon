@@ -1,5 +1,5 @@
 import { makeBeaconDraft } from "./domain";
-import { suggestedSlots } from "./connected";
+import { flexiblePlanningWindow, planningTimezone } from "./creationTiming";
 import type { BeaconDraft } from "./types";
 import type { PlanningCreationSession } from "./creationSession";
 import type { Audience } from "@/src/shared/types";
@@ -12,6 +12,7 @@ export type ComposerOption = {
 export type ComposerDraft = {
   recoveryToken?: string;
   timeSlots?: import("./types").PlanningSlot[];
+  timeSlotTimezone?: string;
   allowBackupHosting?: boolean;
   voteMethod?: "pick_one" | "approval";
   interestTarget?: string;
@@ -20,6 +21,7 @@ export type ComposerDraft = {
   audience: Audience;
   audienceId: string | null;
   startsAt: string;
+  flexibleTime?: boolean;
   deadline: string;
   minutes: string;
   place: string;
@@ -52,6 +54,23 @@ export function composerSession(
 export function completeComposerSession(viewer: string, id: string) {
   sessions.delete(`${viewer}:${id}`);
 }
+
+export function composerTiming(
+  now: number,
+  proposed?: string,
+  timezone = planningTimezone(),
+) {
+  const startsAt =
+    proposed && Date.parse(proposed) > now + 120000
+      ? proposed
+      : flexiblePlanningWindow("", timezone, now).starts_at;
+  return {
+    startsAt,
+    deadline: new Date(
+      Math.min(now + 86400000, Date.parse(startsAt) - 60000),
+    ).toISOString(),
+  };
+}
 export function saveComposerOption(
   viewer: string,
   id: string,
@@ -79,38 +98,28 @@ export function saveComposerOption(
 export const pingStarters = [
   {
     id: "free",
-    label: "Anyone Free?",
+    label: "Anyone free?",
     title: "Anyone free to hang out?",
-    hours: 3,
-    closeHours: 1,
   },
   {
     id: "try",
-    label: "Want to Try?",
+    label: "Want to try?",
     title: "Anyone interested in trying something new?",
-    hours: 72,
-    closeHours: 24,
   },
   {
     id: "nearby",
-    label: "Anyone Nearby?",
+    label: "Coffee?",
     title: "Anyone around for coffee?",
-    hours: 2,
-    closeHours: 0.5,
   },
 ] as const;
-export function applyPingStarter(
-  draft: ComposerDraft,
-  id: string,
-  now: number,
-) {
+export function applyPingStarter(draft: ComposerDraft, id: string) {
   const starter = pingStarters.find((row) => row.id === id);
   if (!starter) return;
-  if (!draft.touched.includes("title")) draft.title = starter.title;
-  if (!draft.touched.includes("startsAt"))
-    draft.startsAt = new Date(now + starter.hours * 3600000).toISOString();
-  if (!draft.touched.includes("deadline"))
-    draft.deadline = new Date(now + starter.closeHours * 3600000).toISOString();
+  if (
+    !draft.title.trim() ||
+    pingStarters.some((row) => row.title === draft.title)
+  )
+    draft.title = starter.title;
 }
 
 /** Accept only a complete, bounded Map handoff; older drafts remain location-free. */
@@ -129,9 +138,20 @@ export function composerMapCoordinate(latitude?: string, longitude?: string) {
 // A creation flow owns independent drafts for each type. Publication data is never copied.
 type CreationKind = "ping" | "time" | "vote" | "draw";
 const modeSessions = new Map<string, Partial<Record<CreationKind, string>>>();
-export function switchComposerKind(viewer: string, flow: string, current: CreationKind, sessionId: string, target: CreationKind, newId: () => string, timezone?: string) {
+export function switchComposerKind(
+  viewer: string,
+  flow: string,
+  current: CreationKind,
+  sessionId: string,
+  target: CreationKind,
+  newId: () => string,
+  timezone?: string,
+) {
   const source = sessions.get(`${viewer}:${sessionId}`);
-  if (!source || source.publication.attempt) throw new Error("Finish or verify this publication before switching types.");
+  if (!source || source.publication.attempt)
+    throw new Error(
+      "Finish or verify this publication before switching types.",
+    );
   const key = `${viewer}:${flow}`;
   const modes = modeSessions.get(key) ?? {};
   modes[current] = sessionId;
@@ -141,15 +161,33 @@ export function switchComposerKind(viewer: string, flow: string, current: Creati
   const id = newId();
   const payload = {
     ...makeBeaconDraft(new Date(source.startsAt), Number(source.minutes) || 60),
-    title: source.title, description: source.body, category: source.category,
-    audience: source.audience, audience_id: source.audienceId, label: source.place,
-    latitude: source.coordinate?.latitude ?? null, longitude: source.coordinate?.longitude ?? null,
-    timezone: timezone ?? source.timeSlots?.[0]?.timezone ?? source.options[0]?.payload.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone,
+    title: source.title,
+    description: source.body,
+    category: source.category,
+    audience: source.audience,
+    audience_id: source.audienceId,
+    label: source.place,
+    latitude: source.coordinate?.latitude ?? null,
+    longitude: source.coordinate?.longitude ?? null,
+    timezone:
+      timezone ??
+      source.timeSlots?.[0]?.timezone ??
+      source.options[0]?.payload.timezone ??
+      Intl.DateTimeFormat().resolvedOptions().timeZone,
   };
   const draft: ComposerDraft = {
-    ...structuredClone(source), publication: {}, recoveryToken: undefined,
-    options: target === "vote" || target === "draw" ? [0, 1].map((index) => ({ id: newId(), payload: { ...payload, title: index === 0 ? source.title : "" } })) : [],
-    timeSlots: target === "time" ? suggestedSlots(Math.max(Date.now(), Date.parse(source.deadline)), newId, payload) : undefined,
+    ...structuredClone(source),
+    publication: {},
+    recoveryToken: undefined,
+    options:
+      target === "vote" || target === "draw"
+        ? [0, 1].map(() => ({
+            id: newId(),
+            payload: { ...payload, flexible_time: true, title: "" },
+          }))
+        : [],
+    timeSlots: target === "time" ? [] : undefined,
+    timeSlotTimezone: target === "time" ? payload.timezone : undefined,
     interestTarget: target === "ping" ? source.interestTarget : undefined,
     voteMethod: undefined,
   };

@@ -117,7 +117,7 @@ test("hosted projections never fall back to a readable note behind an inaccessib
     null,
   );
 });
-test("Up Next is owner-only and a Featured duplicate does not cause a substitute", () => {
+test("Up Next is owner-only and retains a future Beacon when it is featured", () => {
   let data = makeDemo();
   const now = Date.now();
   const upcoming = {
@@ -140,7 +140,7 @@ test("Up Next is owner-only and a Featured duplicate does not cause a substitute
     status_attachment: { type: "beacon", id: upcoming.id },
     status_presentation: "activity_only",
   });
-  assert.equal(upNext(data, DEMO_ID, Date.now()), null);
+  assert.equal(upNext(data, DEMO_ID, Date.now())?.id, upcoming.id);
   assert.equal(upNext(data, "another-person", Date.now()), null);
 });
 test("Council retries retain the decision and completed options after a partial failure", async () => {

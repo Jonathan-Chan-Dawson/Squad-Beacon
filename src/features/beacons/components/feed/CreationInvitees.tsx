@@ -19,6 +19,7 @@ import { useReducedMotion } from "@/src/shared/design-system";
 import { socialFriends } from "../../socialFriends";
 import { UserRoundPlus } from "lucide-react-native";
 import { SocialSelector } from "@/src/features/people/components/SocialSelector";
+import { Dialog } from "@/src/shared/Dialogs";
 import { DialogPortal } from "@/src/shared/DialogPortal";
 import { useOverlayPresence, useTopOverlay } from "@/src/shared/overlays";
 import {
@@ -43,15 +44,18 @@ export function CreationInvitees({
   const [draftIds, setDraftIds] = useState<string[]>([]);
   const overlayId = useId();
   const dialogRef = useRef<View>(null);
-  const returnFocus = useRef<HTMLElement | null>(null);
-  useOverlayPresence(overlayId, open, "Add People");
+  const fullscreen = Platform.OS !== "web";
+  useOverlayPresence(overlayId, open && fullscreen, "Invite friends");
   const top = useTopOverlay(overlayId);
   const closePicker = useCallback(() => setOpen(false), []);
   const focus = useCallback(() => focusOverlay(dialogRef, "Cancel"), []);
-  useOverlayKeyboardFocus(dialogRef, open && top, closePicker, focus);
+  useOverlayKeyboardFocus(
+    dialogRef,
+    open && fullscreen && top,
+    closePicker,
+    focus,
+  );
   const openPicker = () => {
-    if (Platform.OS === "web" && typeof document !== "undefined")
-      returnFocus.current = document.activeElement as HTMLElement;
     setDraftIds([...ids]);
     setOpen(true);
   };
@@ -66,6 +70,50 @@ export function CreationInvitees({
   const unavailable = (open ? draftIds : ids).filter(
     (id) => !friends.some((friend) => friend.id === id),
   );
+  const apply = () => {
+    onChange(draftIds);
+    closePicker();
+  };
+  const pickerContent = open ? (
+    <>
+      <Txt muted>Invitations send when you create the Beacon.</Txt>
+      {draftIds.length > 50 && (
+        <Txt muted>Review this list before sending more than 50 invitations.</Txt>
+      )}
+      {!!unavailable.length && (
+        <PlanningDisclosure
+          title="Unavailable invitations"
+          summary={`${unavailable.length} people need review`}
+        >
+          {unavailable.map((id) => (
+            <Button
+              key={id}
+              compact
+              secondary
+              title="Remove unavailable friend"
+              onPress={() =>
+                setDraftIds(draftIds.filter((value) => value !== id))
+              }
+            />
+          ))}
+        </PlanningDisclosure>
+      )}
+      <SocialSelector
+        groupBehavior="filterFriends"
+        friends={friends}
+        selected={draftIds.map((id) => ({ kind: "friend", id }))}
+        onChange={(rows) => {
+          const ids = rows
+            .filter((row) => row.kind === "friend")
+            .map((row) => row.id);
+          setDraftIds(ids);
+        }}
+        supportedKinds={["friend"]}
+        compactFilters
+        bulk
+      />
+    </>
+  ) : null;
   return (
     <View>
       <View
@@ -78,7 +126,7 @@ export function CreationInvitees({
         <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
           {!ids.length ? (
             <Text style={[styles.muted, { fontSize: 12 }]}>
-              No invitations yet
+              Invitations are sent when you create the Beacon.
             </Text>
           ) : null}
           <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
@@ -126,14 +174,24 @@ export function CreationInvitees({
             ) : null}
           </View>
           {ids.length ? (
-            <Text style={[styles.muted, { fontSize: 12 }]}>
-              {ids.length} selected
-            </Text>
+            <View>
+              {ids.length === 1 && (
+                <Text numberOfLines={1} style={styles.body}>
+                  {friends.find((friend) => friend.id === ids[0])?.name ??
+                    "Unavailable friend"}
+                </Text>
+              )}
+              <Text style={[styles.muted, { fontSize: 12 }]}>
+                {ids.length} selected
+              </Text>
+            </View>
           ) : null}
         </View>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={"+ Add People"}
+          accessibilityLabel={
+            ids.length ? "Edit invited friends" : "Add friends"
+          }
           onPress={openPicker}
           style={{
             minHeight: 44,
@@ -150,7 +208,7 @@ export function CreationInvitees({
         >
           <UserRoundPlus size={16} color={colors.ink} />
           <Text style={[styles.body, { fontSize: 13, fontWeight: "500" }]}>
-            Add People
+            {ids.length ? "Edit" : "Add friends"}
           </Text>
         </Pressable>
       </View>
@@ -160,124 +218,95 @@ export function CreationInvitees({
           or remove them before publishing.
         </Txt>
       ) : null}
-      <DialogPortal
-        visible={open}
-        presentationStyle="fullScreen"
-        animationType={reducedMotion ? "none" : "fade"}
-        onRequestClose={() => setOpen(false)}
-        onShow={focus}
-        onDismiss={() =>
-          requestAnimationFrame(() => {
-            if (returnFocus.current?.isConnected)
-              returnFocus.current.focus({ preventScroll: true });
-            returnFocus.current = null;
-          })
-        }
-      >
-        <GestureHandlerRootView style={{ flex: 1 }}>
-          <BottomSheetModalProvider>
-            <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }}>
-              <KeyboardAvoidingView
-                behavior={Platform.OS === "ios" ? "padding" : "height"}
-                style={{ flex: 1 }}
-              >
-                <View
-                  ref={dialogRef}
-                  aria-hidden={!top}
-                  pointerEvents={top ? "auto" : "none"}
-                  accessibilityViewIsModal
-                  role="dialog"
-                  aria-modal
-                  accessibilityLabel="Add People"
+      {!fullscreen ? (
+        <Dialog
+          title="Invite friends"
+          visible={open}
+          onClose={closePicker}
+          footer={
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "flex-end",
+                gap: 8,
+              }}
+            >
+              <Button compact secondary title="Cancel" onPress={closePicker} />
+              <Button compact title="Done" onPress={apply} />
+            </View>
+          }
+        >
+          {pickerContent}
+        </Dialog>
+      ) : (
+        <DialogPortal
+          visible={open}
+          presentationStyle="fullScreen"
+          animationType={reducedMotion ? "none" : "fade"}
+          onRequestClose={closePicker}
+          onShow={focus}
+        >
+          <GestureHandlerRootView style={{ flex: 1 }}>
+            <BottomSheetModalProvider>
+              <SafeAreaView style={{ flex: 1, backgroundColor: colors.bg }}>
+                <KeyboardAvoidingView
+                  behavior={Platform.OS === "ios" ? "padding" : "height"}
                   style={{ flex: 1 }}
                 >
                   <View
-                    style={{
-                      paddingHorizontal: 16,
-                      paddingVertical: 8,
-                      borderBottomWidth: 1,
-                      borderColor: colors.line,
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: 8,
-                    }}
+                    ref={dialogRef}
+                    aria-hidden={!top}
+                    pointerEvents={top ? "auto" : "none"}
+                    accessibilityViewIsModal
+                    role="dialog"
+                    aria-modal
+                    accessibilityLabel="Invite friends"
+                    style={{ flex: 1 }}
                   >
-                    <Button
-                      compact
-                      secondary
-                      title="Cancel"
-                      onPress={() => setOpen(false)}
-                    />
-                    <Text
-                      accessibilityRole="header"
-                      style={[styles.h2, { flex: 1 }]}
+                    <View
+                      style={{
+                        paddingHorizontal: 16,
+                        paddingVertical: 8,
+                        borderBottomWidth: 1,
+                        borderColor: colors.line,
+                        flexDirection: "row",
+                        alignItems: "center",
+                        gap: 8,
+                      }}
                     >
-                      Add People
-                    </Text>
-                    <Button
-                      compact
-                      title="Done"
-                      onPress={() => {
-                        onChange(draftIds);
-                        setOpen(false);
-                      }}
-                    />
-                  </View>
-                  <ScrollView
-                    keyboardShouldPersistTaps="handled"
-                    contentContainerStyle={{
-                      padding: 16,
-                      gap: 12,
-                      width: "100%",
-                      maxWidth: 720,
-                      alignSelf: "center",
-                    }}
-                  >
-                    <Txt muted>
-                      {draftIds.length} selected · Invitations send when you
-                      publish. We recommend 50 or fewer; larger selections can
-                      be reviewed before publishing.
-                    </Txt>
-                    {!!unavailable.length && (
-                      <PlanningDisclosure
-                        title="Unavailable invitations"
-                        summary={`${unavailable.length} people need review`}
+                      <Button
+                        compact
+                        secondary
+                        title="Cancel"
+                        onPress={() => setOpen(false)}
+                      />
+                      <Text
+                        accessibilityRole="header"
+                        style={[styles.h2, { flex: 1 }]}
                       >
-                        {unavailable.map((id) => (
-                          <Button
-                            key={id}
-                            compact
-                            secondary
-                            title="Remove unavailable friend"
-                            onPress={() =>
-                              setDraftIds(
-                                draftIds.filter((value) => value !== id),
-                              )
-                            }
-                          />
-                        ))}
-                      </PlanningDisclosure>
-                    )}
-                    <SocialSelector
-                      groupBehavior="filterFriends"
-                      friends={friends}
-                      selected={draftIds.map((id) => ({ kind: "friend", id }))}
-                      onChange={(rows) => {
-                        const ids = rows
-                          .filter((row) => row.kind === "friend")
-                          .map((row) => row.id);
-                        setDraftIds(ids);
+                        Invite friends
+                      </Text>
+                      <Button compact title="Done" onPress={apply} />
+                    </View>
+                    <ScrollView
+                      keyboardShouldPersistTaps="handled"
+                      contentContainerStyle={{
+                        padding: 16,
+                        gap: 12,
+                        width: "100%",
+                        maxWidth: 720,
+                        alignSelf: "center",
                       }}
-                      supportedKinds={["friend"]}
-                      bulk
-                    />
-                  </ScrollView>
-                </View>
-              </KeyboardAvoidingView>
-            </SafeAreaView>
-          </BottomSheetModalProvider>
-        </GestureHandlerRootView>
-      </DialogPortal>
+                    >
+                      {pickerContent}
+                    </ScrollView>
+                  </View>
+                </KeyboardAvoidingView>
+              </SafeAreaView>
+            </BottomSheetModalProvider>
+          </GestureHandlerRootView>
+        </DialogPortal>
+      )}
     </View>
   );
 }

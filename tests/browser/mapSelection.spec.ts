@@ -29,7 +29,7 @@ async function enter(page: Page, dark: boolean) {
     );
     localStorage.setItem("beacon.appearance", dark ? "dark" : "light");
   }, dark);
-  await page.goto("/");
+  await page.goto("/auth/sign-in");
   const demo = page.getByRole("button", { name: /Explore the demo/ });
   await expect
     .poll(
@@ -341,8 +341,8 @@ test("public selection stays coarse and anchored without changing the area", asy
 
 test("cluster Info preserves selection and explicit Zoom to Fit still moves the camera", async ({
   page,
-}) => {
-  await page.setViewportSize({ width: 375, height: 844 });
+}, info) => {
+  await page.setViewportSize({ width: 720, height: 900 });
   await page.emulateMedia({ reducedMotion: "reduce" });
   await enter(page, true);
   const before = await camera(page);
@@ -350,6 +350,7 @@ test("cluster Info preserves selection and explicit Zoom to Fit still moves the 
     page,
     page.locator('[data-testid="map-constellation"][role="button"]'),
   );
+  await page.screenshot({ path: info.outputPath("projector-neighborhood.png") });
   await cluster.click();
   const explorer = page.getByTestId("map-nearby-panel");
   await expect(explorer).toBeVisible();
@@ -360,6 +361,8 @@ test("cluster Info preserves selection and explicit Zoom to Fit still moves the 
   await page.getByRole("button", { name: "Zoom to fit", exact: true }).click();
   await expect.poll(() => camera(page)).not.toBe(before);
   await expect(explorer).toBeVisible();
+  await explorer.getByRole("button", { name: "Close Nearby", exact: true }).click();
+  await expect(explorer).toHaveCount(0);
 });
 
 test("saving a Map Beacon refreshes its Bookmark without moving the camera", async ({

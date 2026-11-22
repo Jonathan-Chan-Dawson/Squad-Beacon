@@ -9,9 +9,6 @@ import { router, useFocusEffect, useLocalSearchParams, type Href } from "expo-ro
 import {
   Eye,
   Radio,
-  Vote,
-  Dices,
-  CalendarClock,
   Pencil,
   ChevronRight,
   Sparkles,
@@ -46,6 +43,8 @@ import {
   familyTemplates,
   type TemplateFamily,
 } from "./templateBrowser";
+import { SpontaneityEntry } from "./spontaneity/SpontaneityEntry";
+import { PlanningModeMenu } from "@/src/features/planning/PlanningKindSelector";
 import { useBeacon } from "@/src/shared/store";
 import { creationHandoffParams } from "./createHandoff";
 import {
@@ -665,15 +664,14 @@ export function CreateHome({
           </View>
           <View style={{ flex: 1, gap: 3 }}>
             <Text style={styles.h2}>Create a Beacon</Text>
-            <Text style={styles.label}>Your people. A real plan.</Text>
+            <Text style={styles.muted}>Set a plan and invite people to join.</Text>
           </View>
         </View>
-        <Txt muted>Bring people together for an activity.</Txt>
         <Button compact title="+ Create Blank Beacon" onPress={onBlank} />
-        <Button compact secondary title="Create Ping" icon={<Radio size={18} color={colors.green} />}
-          onPress={() => router.push({ pathname: "/planning/create", params: { ...context, kind: "ping", sessionId: randomUUID() } })} />
-        <Text style={styles.label}>Have an idea? Send a Ping to see who is interested.</Text>
       </View>
+      <PlanningModeMenu onSelect={(kind) =>
+        router.push({ pathname: "/planning/create", params: { ...context, kind, sessionId: randomUUID() } })
+      } />
       {selectedFriends.length ||
       context.statusSourceId ||
       context.planId ||
@@ -714,22 +712,9 @@ export function CreateHome({
           onPress={() => onClearStatusSource?.()}
         />
       ) : null}
-      <View style={{ flexDirection: "row", gap: 6, flexWrap: "wrap" }}>
-        {[
-          { key: "vote", title: "Voting", Icon: Vote },
-          { key: "draw", title: "Draw", Icon: Dices },
-          ...(data.is_demo || data.capabilities?.connected_planning ? [{ key: "time", title: "Find time", Icon: CalendarClock }] : []),
-          { key: "note", title: "Activity note", Icon: Pencil },
-        ].map(({ key, title, Icon }) => (
-          <Pressable key={key} accessibilityRole="button" accessibilityLabel={key === "vote" ? "Vote Council" : key === "draw" ? "Draw Council" : key === "time" ? "Find a Time" : "Activity Note"}
-            onPress={() => key === "note" ? router.push("/activity-note") : router.push({ pathname: "/planning/create", params: { ...context, kind: key, sessionId: randomUUID() } })}
-            style={({ pressed }) => [styles.card, { flex: 1, minWidth: 60, minHeight: 60, padding: 5, alignItems: "center", justifyContent: "center", gap: 4, opacity: pressed ? 0.7 : 1 }]}>
-            <Icon size={18} color={colors.green} />
-            <Text style={[styles.label, { textAlign: "center" }]}>{title}</Text>
-          </Pressable>
-        ))}
-      </View>
+      <SpontaneityEntry />
       <Text style={styles.h2}>Quick Access</Text>
+      <Button compact secondary title="Activity Note" icon={<Pencil size={17} color={colors.green} />} onPress={() => router.push("/activity-note")} />
       <CreationSavedDrafts key={userId} savedToken={routeContext.savedDraft} />
       <Field
         label="Search activities or templates"

@@ -12,6 +12,7 @@ import { useBeacon } from "@/src/shared/store";
 import { useNow } from "@/src/shared/useNow";
 import { Button, Chips, Field, Txt, useTheme } from "@/src/shared/ui";
 import { BeaconIcon } from "../BeaconIcon";
+import { cardPresentation } from "@/src/theme/cardPresentation";
 import {
   eligibleStatusAttachments,
   resolveStatusAttachment,
@@ -67,24 +68,25 @@ export function StatusAttachmentPreview({
       accessibilityLabel={`${activity.type}: ${activity.title}`}
       disabled={!onPress}
       onPress={onPress}
-      style={{
+      style={({ pressed }) => ({
         flexDirection: "row",
         alignItems: "center",
-        gap: compact ? 8 : 12,
-        padding: embedded || compact ? 0 : 12,
-        borderRadius: 16,
+        gap: compact ? cardPresentation.rowGap : cardPresentation.groupGap,
+        padding: embedded || compact ? 0 : cardPresentation.groupGap,
+        borderRadius: cardPresentation.listRadius,
         backgroundColor:
           embedded || compact ? "transparent" : colors.green + "12",
         borderWidth: embedded || compact ? 0 : 1,
         borderColor: colors.line,
         minHeight: compact ? 56 : 64,
-      }}
+        opacity: pressed ? 0.72 : 1,
+      })}
     >
       <View
         style={{
           width: compact ? 34 : embedded ? 48 : 40,
           height: compact ? 34 : embedded ? 54 : 40,
-          borderRadius: 12,
+          borderRadius: cardPresentation.insetRadius,
           backgroundColor: categoryStyle.tint,
           overflow: "hidden",
           flexShrink: 0,
@@ -126,7 +128,7 @@ export function StatusAttachmentPreview({
             color: colors.ink,
             fontSize: compact ? 14 : 15,
             lineHeight: compact ? 19 : undefined,
-            fontWeight: compact ? "500" : "600",
+            fontWeight: "600",
           }}
         >
           {activity.title}

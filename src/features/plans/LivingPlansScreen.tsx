@@ -1,3 +1,5 @@
+import { connectedPlanningEnabled } from "@/src/features/planning/connected";
+import { planningCreationModes } from "@/src/features/planning/PlanningKindSelector";
 import { PremiumPreview } from "@/src/features/profile/settings/PremiumUI";
 import { ActivityActionBar } from "@/src/features/activity/ActivityActionBar";
 import { GuestShareButton } from "@/src/features/sharing/GuestShareSheet";
@@ -31,7 +33,6 @@ import {
   Copy,
   Trash2,
   Plus,
-  ListChecks,
   CalendarDays,
   Map,
   Route,
@@ -1390,35 +1391,12 @@ function PlanTimeline({ planId }: { planId: string }) {
         visible={mode === "decision"}
         onClose={() => setMode(null)}
       >
-        {(
-          [
-            ["ping", "Ping"],
-            ["vote", "Pick One / Approval Vote"],
-            ["draw", "Surprise Us · Draw"],
-            ["time", "Find a Time"],
-          ] as const
-        ).map(([kind, label]) => (
+        {planningCreationModes.filter(({ kind }) => kind !== "time" || connectedPlanningEnabled(data)).map(({ kind, label, description, Icon }) => (
           <PlanChoice
             key={kind}
             title={label}
-            icon={
-              kind === "ping"
-                ? MessageCircle
-                : kind === "time"
-                  ? CalendarDays
-                  : kind === "draw"
-                    ? Sparkles
-                    : ListChecks
-            }
-            detail={
-              kind === "ping"
-                ? "Check interest without committing attendance"
-                : kind === "time"
-                  ? "Find a time that works together"
-                  : kind === "draw"
-                    ? "Choose from the group's alternatives"
-                    : "Compare choices and pick together"
-            }
+            icon={Icon}
+            detail={description}
             onPress={() => {
               setMode(null);
               router.push({

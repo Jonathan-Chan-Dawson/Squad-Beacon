@@ -210,10 +210,10 @@ export function DiscoveryBeaconCard({
                   accessibilityRole="button"
                   accessibilityLabel={`${mapTitle.context}: ${planContext.onShowOnMap ? "Show" : "Open"} ${planContext.title}${planContext.onShowOnMap ? " on Map" : ""}`}
                   onPress={planContext.onShowOnMap ?? planContext.onPress}
-                  style={{ minHeight: 44, flexDirection: "row", alignItems: "center", gap: 3, flexShrink: 0 }}
+                  style={{ minHeight: 44, flexDirection: "row", alignItems: "center", gap: 3, flexShrink: 1, minWidth: 0 }}
                 >
                   <Route size={11} color={colors.accent} />
-                  <Text style={{ color: colors.textSecondary, fontSize: 10, fontWeight: "600" }}>
+                  <Text numberOfLines={1} style={{ flexShrink: 1, color: colors.textSecondary, fontSize: 10, fontWeight: "600" }}>
                     {mapTitle.context}
                   </Text>
                 </Pressable>
@@ -314,6 +314,7 @@ export function DiscoveryBeaconCard({
       testID={`discovery-beacon-card-${activityId}`}
       style={{
         padding: 16,
+        paddingTop: 12,
         gap: 12,
         borderWidth: 1,
         borderColor: colors.border,
@@ -386,7 +387,6 @@ export function DiscoveryBeaconCard({
           <View
             style={{
               flexDirection: "row",
-              flexWrap: "wrap",
               alignItems: "center",
               justifyContent: "space-between",
               gap: 4,
@@ -397,11 +397,10 @@ export function DiscoveryBeaconCard({
               style={{
                 flexGrow: 1,
                 flexShrink: 1,
-                flexBasis: 100,
+                flexBasis: 0,
                 minWidth: 0,
                 flexDirection: "row",
                 alignItems: "center",
-                flexWrap: "wrap",
                 gap: 4,
               }}
             >
@@ -425,6 +424,8 @@ export function DiscoveryBeaconCard({
                   />
                   <Text
                     testID="discovery-timing"
+                    numberOfLines={1}
+                    accessibilityLabel={displayWhenLabel}
                     style={{
                       color: isLive ? colors.accent : categoryToken.color,
                       fontSize: 11,

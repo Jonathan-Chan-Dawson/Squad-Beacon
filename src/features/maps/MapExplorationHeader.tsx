@@ -256,12 +256,14 @@ export function MapExplorationHeader({
       >
         <ScrollView
           horizontal
-          showsHorizontalScrollIndicator={false}
-          style={{ flex: 1, minWidth: 0 }}
+          accessibilityLabel="Map quick filters"
+          showsHorizontalScrollIndicator={size.width < 420}
+          style={{ flex: 1, minWidth: 0, borderRightWidth: 1, borderRightColor: colors.outline }}
           contentContainerStyle={{
             gap: 4,
             alignItems: "center",
             minHeight: 44,
+            paddingRight: 4,
           }}
           onScrollBeginDrag={() => onMenuChange(null)}
         >
@@ -304,7 +306,7 @@ export function MapExplorationHeader({
               onPress={() => onQuickFilter("Friends")}
               style={{
                 minHeight: 44,
-                paddingLeft: 12,
+                paddingLeft: 6,
                 paddingRight: 3,
                 justifyContent: "center",
               }}
@@ -386,8 +388,8 @@ export function MapExplorationHeader({
           style={{
             flexDirection: "row",
             alignItems: "center",
-            gap: 8,
-            paddingRight: 5,
+            gap: size.width < 420 ? 4 : 8,
+            paddingRight: 4,
             flexShrink: 0,
           }}
         >

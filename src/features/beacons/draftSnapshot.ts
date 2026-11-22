@@ -1,7 +1,7 @@
 import { beaconPinImage, beaconPinSymbol } from "@/src/features/maps/beaconPinArtwork";
 import {validateToolSettings} from "./premiumTools";
 import { validateBeaconControlValues } from "./controls";
-import { durationMinutesForLabel } from "./createTiming";
+import { durationMinutesForLabel, fixedHalfHourStart } from "./createTiming";
 
 const record = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === "object" && !Array.isArray(value);
@@ -120,7 +120,7 @@ export function parseCreationSnapshot(
     placeType: ["In person", "Online"],
     addTo: ["Standalone", "Plan", "Vote / Draw"],
     kind: ["Beacon", "Squad", "Status"],
-    when: ["Now", "In 30 min", "Pick time"],
+    when: ["Now", "In 30 min", fixedHalfHourStart, "Later today", "Tomorrow", "Pick time"],
   };
   for (const [key, allowed] of Object.entries(enums))
     if (key in value.fields && !allowed.includes(String(value.fields[key])))

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { KeyboardAvoidingView, Platform } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { randomUUID } from "expo-crypto";
 import { useBeacon } from "@/src/shared/store";
@@ -20,8 +21,15 @@ export default function PlanningCreateRoute() {
         <Txt>Loading your audience…</Txt>
       </Screen>
     );
-  if (params.kind === "time") return <TimeFinderComposer key={`${userId}:${sessionId}`} sessionId={sessionId}/>;
+  const key = `${userId}:${sessionId}`;
   return (
-    <PlanningComposer key={`${userId}:${sessionId}`} sessionId={sessionId} />
+    <KeyboardAvoidingView
+      behavior={Platform.OS === "ios" ? "padding" : undefined}
+      style={{ flex: 1, minHeight: 0 }}
+    >
+      {params.kind === "time"
+        ? <TimeFinderComposer key={key} sessionId={sessionId} />
+        : <PlanningComposer key={key} sessionId={sessionId} />}
+    </KeyboardAvoidingView>
   );
 }

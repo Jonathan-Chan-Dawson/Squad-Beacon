@@ -1,5 +1,7 @@
 Supabase database and functions
 
+- `20261120205048_beacon_score.sql`: private award ledger, idempotent tap streams, and permission-scoped tier badge. Profile sync settles eligible post-launch rewards. Apply in order before using live Beacon Score.
+
 - `20261117224032_guest_discovery_onboarding.sql`: explicit host opt-in for signed-out discovery, owner-only settings and bounded summary search/exact-ID lookup. Existing public publishing is still authenticated; guest publishing starts off and is deleted with the public preview. Source-only until separately applied to the hosted backend.
 
 - templates/confirmation.html and templates/recovery.html: reviewed token-hash email templates using hosted Site URL. Copy into hosted Auth email settings only after the HTTPS confirmation route is deployed; source files do not change hosted configuration.

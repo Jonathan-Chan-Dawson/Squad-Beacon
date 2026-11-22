@@ -1,4 +1,25 @@
 import { expect, test } from "@playwright/test";
+import { startDemoFromEntry } from "./demoEntry";
+
+test("returning from Find a Time preserves the Beacon timing choices", async ({ page }) => {
+  await page.goto("/create?editor=yes&timezone=America%2FChicago");
+  await startDemoFromEntry(page);
+  const title = page.getByLabel("Activity title", { exact: true });
+  await title.fill("After-work hangout");
+  const timing = page.getByTestId("inline-beacon-timing");
+  const preset = timing.getByRole("button", { name: "Start time: In 30 min", exact: true });
+  const duration = timing.getByRole("radio", { name: "2 hours", exact: true });
+  await preset.click();
+  await duration.click();
+
+  await page.getByRole("button", { name: "Let friends choose a time", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Find a Time", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Back", exact: true }).click();
+
+  await expect(title).toHaveValue("After-work hangout");
+  await expect(preset).toHaveAttribute("aria-selected", "true");
+  await expect(duration).toBeChecked();
+});
 
 test("calendar, selected friends, place search, and Map cancellation preserve one draft", async ({
   page,
@@ -13,37 +34,42 @@ test("calendar, selected friends, place search, and Map cancellation preserve on
     placeLabel: "Campus meeting point",
   });
   await page.goto(`/create?${query}`);
-  await page.getByRole("button", { name: /Explore the demo/ }).click();
+  await startDemoFromEntry(page);
   await page
     .getByLabel("Activity title", { exact: true })
     .fill("Calendar and Map handoff");
   await expect(
-    page.getByRole("button", { name: /^Starts, Dec 25, 3:00 PM/ }),
+    page.getByTestId("inline-beacon-timing").getByText(/Dec 25 · 3:00 PM/),
   ).toBeVisible();
-  await expect(page.getByText("1/20 selected", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Modules", exact: true }).click();
+  const selectedFriend = page.getByRole("button", {
+    name: "Remove Jordan Ellis",
+    exact: true,
+  });
+  await expect(selectedFriend).toBeVisible();
+  await page.getByRole("button", { name: /^Beacon tools,/ }).click();
   await page.getByRole("switch", { name: "Checklist", exact: true }).check();
+  await page.getByRole("dialog", { name: "Configure Beacon tools" }).getByRole("button", { name: "Done" }).click();
   await page
     .getByRole("button", { name: "Adjust on Map", exact: true })
     .click();
   await page
-    .getByRole("button", { name: "Cancel location selection", exact: true })
+    .getByRole("button", { name: "Cancel location placement", exact: true })
     .click();
   await expect(page.getByLabel("Activity title", { exact: true })).toHaveValue(
     "Calendar and Map handoff",
   );
-  await expect(
-    page.getByRole("button", { name: "Modules", exact: true }),
-  ).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByRole("button", { name: /^Beacon tools,.*Checklist/ })).toBeVisible();
+  await page.getByRole("button", { name: /^Beacon tools,/ }).click();
   await expect(
     page.getByRole("switch", { name: "Checklist", exact: true }),
   ).toBeChecked();
+  await page.getByRole("dialog", { name: "Configure Beacon tools" }).getByRole("button", { name: "Done" }).click();
 
   await expect(
     page.getByText("Campus meeting point", { exact: true }),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: /^Starts, Dec 25, 3:00 PM/ }),
+    page.getByTestId("inline-beacon-timing").getByText(/Dec 25 · 3:00 PM/),
   ).toBeVisible();
   await page
     .getByRole("button", { name: "Change location", exact: true })
@@ -53,7 +79,7 @@ test("calendar, selected friends, place search, and Map cancellation preserve on
     .getByRole("button", { name: "Choose Auburn", exact: true })
     .click();
   await expect(page.getByText("Auburn", { exact: true })).toBeVisible();
-  await expect(page.getByText("1/20 selected", { exact: true })).toBeVisible();
+  await expect(selectedFriend).toBeVisible();
   await page.getByRole("button", { name: "Preview", exact: true }).click();
   const review = page.getByRole("dialog", {
     name: "Review your Beacon",
@@ -77,7 +103,7 @@ test("storage failure blocks publication and reports that recovery is not saved"
     };
   });
   await page.goto("/create?editor=yes");
-  await page.getByRole("button", { name: /Explore the demo/ }).click();
+  await startDemoFromEntry(page);
   await page
     .getByLabel("Activity title", { exact: true })
     .fill("Storage failure check");
@@ -103,7 +129,7 @@ test("tablet layout and larger browser text retain a reachable footer and scroll
 }) => {
   await page.setViewportSize({ width: 1024, height: 900 });
   await page.goto("/create?editor=yes");
-  await page.getByRole("button", { name: /Explore the demo/ }).click();
+  await startDemoFromEntry(page);
   await page
     .getByLabel("Activity title", { exact: true })
     .fill("A long title for a larger display and larger text");
@@ -118,14 +144,12 @@ test("tablet layout and larger browser text retain a reachable footer and scroll
     path: ".expo/creation-polish/editor-tablet-large-text.png",
   });
   await page
-    .getByRole("button", { name: "Advanced Options", exact: true })
+    .getByRole("button", { name: "Add a description", exact: true })
     .click();
   await page
     .getByLabel("Description & details", { exact: true })
     .fill("Extra instructions and things to bring.");
-  await page
-    .getByRole("button", { name: "Advanced Options", exact: true })
-    .click();
+
   await expect(
     page.getByRole("button", { name: "Preview", exact: true }),
   ).toBeInViewport();
@@ -135,7 +159,7 @@ test("organizer roles are granted and removed only through the post-publication 
   page,
 }) => {
   await page.goto("/activity/demo-you-showcase-live");
-  await page.getByRole("button", { name: /Explore the demo/ }).click();
+  await startDemoFromEntry(page);
   await page.getByRole("tab", { name: "People", exact: true }).click();
   await page
     .getByRole("button", { name: "Organizer roles", exact: true })

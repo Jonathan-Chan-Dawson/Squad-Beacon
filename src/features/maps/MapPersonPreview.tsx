@@ -25,6 +25,7 @@ import {
   MapTooltipClose,
   MapTooltipButton,
 } from "./MapTooltipShell";
+import { cardPresentation as card } from "@/src/theme/cardPresentation";
 import { mapTooltip } from "./tooltipConstants";
 import { visibleSoloActivity } from "./soloActivity";
 
@@ -108,7 +109,7 @@ export function MapPersonPreview({
     ? Math.max(0, Math.floor((now - Date.parse(location.updated_at)) / 60000))
     : null;
   return (
-    <MapTooltipShell testID="map-person-preview">
+    <MapTooltipShell testID="map-person-preview" gap={card.inlineGap}>
       <MapTooltipHeader
         controls={
           <MapTooltipClose label="Close person preview" onClose={onClose} />
@@ -240,7 +241,7 @@ export function MapPersonPreview({
         </Text>
       )}
       {solo && (
-        <View testID="map-solo-activity" style={{ gap: 6 }}>
+        <View testID="map-solo-activity" style={{ gap: card.inlineGap, padding: card.rowGap, borderRadius: card.insetRadius, backgroundColor: colors.surfaceRaised }}>
           <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
             <ActivityBadge category={solo.category} size={26} />
             <Text
@@ -277,13 +278,13 @@ export function MapPersonPreview({
           style={{
             flexDirection: "row",
             alignItems: "center",
-            gap: 8,
-            padding: 8,
+            gap: card.rowGap,
+            padding: card.rowGap,
             minHeight: 48,
             borderWidth: 1,
             borderColor: colors.line,
             backgroundColor: colors.bg,
-            borderRadius: 12,
+            borderRadius: card.insetRadius,
           }}
         >
           <ActivityBadge category={linkedBeacon.category} size={28} />
@@ -304,7 +305,7 @@ export function MapPersonPreview({
           <ChevronRight size={17} color={colors.green} />
         </Pressable>
       )}
-      <View style={{ flexDirection: "row", gap: 6 }}>
+      <View style={{ flexDirection: "row", gap: card.rowGap }}>
         {selection.canMessage ? (
           <View style={{ flex: 1 }}>
             <MapTooltipButton

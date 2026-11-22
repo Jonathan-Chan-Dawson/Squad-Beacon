@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { composerSession, storeComposerSession, switchComposerKind, type ComposerDraft } from "../src/features/planning/composerSession";
-import { validateSlots } from "../src/features/planning/connected";
+import { flexiblePlanningWindow, planningTimeSummary } from "../src/features/planning/creationTiming";
 
 let counter = 0;
 const id = () => `mode-${++counter}`;
@@ -44,8 +44,8 @@ test("different modes do not copy options, recovery tokens or publication state"
   assert.deepEqual(read("a", draw).publication, {});
   const time = switchComposerKind("a", root, "draw", draw, "time", id, "America/Chicago");
   assert.equal(read("a", time).options.length, 0);
-  assert.equal(read("a", time).timeSlots?.[0].timezone, "America/Chicago");
-  validateSlots(read("a", time).timeSlots!, read("a", time).deadline);
+  assert.equal(read("a", time).timeSlotTimezone, "America/Chicago");
+  assert.deepEqual(read("a", time).timeSlots, []);
 });
 
 test("mode maps isolate accounts and independent creation flows", () => {
@@ -62,4 +62,15 @@ test("frozen publication cannot switch modes", () => {
   const root = id(); const draft = seed("a", root);
   draft.publication.attempt = {} as NonNullable<ComposerDraft["publication"]["attempt"]>;
   assert.throws(() => switchComposerKind("a", root, "ping", root, "vote", id), /verify this publication/);
+});
+
+test("flexible review seeds and relative labels follow the local calendar across daylight saving time", () => {
+  const now = Date.parse("2026-03-07T23:00:00Z");
+  const deadline = "2026-03-08T20:00:00Z";
+  const window = flexiblePlanningWindow(deadline, "America/Chicago", now);
+  assert.deepEqual(window, {
+    starts_at: "2026-03-11T23:00:00.000Z",
+    ends_at: "2026-03-12T00:00:00.000Z",
+  });
+  assert.match(planningTimeSummary(deadline, "America/Chicago", now), /^Tomorrow · /);
 });

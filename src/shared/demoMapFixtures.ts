@@ -1,4 +1,148 @@
-import type { Activity, Data } from "./types";
+import type { Activity, Category, Data } from "./types";
+
+// Fictional activity around real cities. Auburn has a tighter campus core
+// so the demo shows regional summaries as well as dense, walkable clusters.
+const REGIONAL_HUBS = [
+  ["auburn", "Auburn University, AL", 32.603, -85.486, "America/Chicago"],
+  ["atlanta", "Atlanta, GA", 33.778, -84.385, "America/New_York"],
+  ["nashville", "Nashville, TN", 36.157, -86.783, "America/Chicago"],
+  ["miami", "Miami, FL", 25.779, -80.198, "America/New_York"],
+  ["new-york", "New York, NY", 40.734, -73.991, "America/New_York"],
+  ["boston", "Boston, MA", 42.354, -71.071, "America/New_York"],
+  ["minneapolis", "Minneapolis, MN", 44.977, -93.265, "America/Chicago"],
+  ["austin", "Austin, TX", 30.274, -97.748, "America/Chicago"],
+  ["denver", "Denver, CO", 39.74, -104.98, "America/Denver"],
+  ["los-angeles", "Los Angeles, CA", 34.053, -118.245, "America/Los_Angeles"],
+  ["san-francisco", "San Francisco, CA", 37.769, -122.439, "America/Los_Angeles"],
+  ["seattle", "Seattle, WA", 47.614, -122.331, "America/Los_Angeles"],
+  ["anchorage", "Anchorage, AK", 61.218, -149.9, "America/Anchorage"],
+  ["phoenix", "Phoenix, AZ", 33.448, -112.074, "America/Phoenix"],
+  ["little-rock", "Little Rock, AR", 34.747, -92.289, "America/Chicago"],
+  ["hartford", "Hartford, CT", 41.765, -72.674, "America/New_York"],
+  ["wilmington", "Wilmington, DE", 39.74, -75.551, "America/New_York"],
+  ["washington", "Washington, DC", 38.909, -77.034, "America/New_York"],
+  ["honolulu", "Honolulu, HI", 21.31, -157.858, "Pacific/Honolulu"],
+  ["boise", "Boise, ID", 43.616, -116.202, "America/Boise"],
+  ["indianapolis", "Indianapolis, IN", 39.769, -86.158, "America/Indiana/Indianapolis"],
+  ["des-moines", "Des Moines, IA", 41.588, -93.623, "America/Chicago"],
+  ["wichita", "Wichita, KS", 37.687, -97.337, "America/Chicago"],
+  ["louisville", "Louisville, KY", 38.253, -85.753, "America/New_York"],
+  ["new-orleans", "New Orleans, LA", 29.951, -90.071, "America/Chicago"],
+  ["portland-me", "Portland, ME", 43.661, -70.262, "America/New_York"],
+  ["baltimore", "Baltimore, MD", 39.295, -76.614, "America/New_York"],
+  ["detroit", "Detroit, MI", 42.334, -83.05, "America/Detroit"],
+  ["jackson", "Jackson, MS", 32.3, -90.185, "America/Chicago"],
+  ["st-louis", "St. Louis, MO", 38.636, -90.251, "America/Chicago"],
+  ["missoula", "Missoula, MT", 46.872, -114.002, "America/Denver"],
+  ["omaha", "Omaha, NE", 41.258, -95.936, "America/Chicago"],
+  ["las-vegas", "Las Vegas, NV", 36.17, -115.14, "America/Los_Angeles"],
+  ["manchester", "Manchester, NH", 42.992, -71.463, "America/New_York"],
+  ["jersey-city", "Jersey City, NJ", 40.725, -74.058, "America/New_York"],
+  ["albuquerque", "Albuquerque, NM", 35.085, -106.651, "America/Denver"],
+  ["raleigh", "Raleigh, NC", 35.78, -78.639, "America/New_York"],
+  ["fargo", "Fargo, ND", 46.877, -96.791, "America/Chicago"],
+  ["columbus", "Columbus, OH", 39.969, -83.002, "America/New_York"],
+  ["oklahoma-city", "Oklahoma City, OK", 35.467, -97.516, "America/Chicago"],
+  ["portland-or", "Portland, OR", 45.523, -122.682, "America/Los_Angeles"],
+  ["philadelphia", "Philadelphia, PA", 39.953, -75.165, "America/New_York"],
+  ["providence", "Providence, RI", 41.825, -71.413, "America/New_York"],
+  ["greenville", "Greenville, SC", 34.85, -82.399, "America/New_York"],
+  ["sioux-falls", "Sioux Falls, SD", 43.548, -96.731, "America/Chicago"],
+  ["salt-lake-city", "Salt Lake City, UT", 40.761, -111.891, "America/Denver"],
+  ["burlington", "Burlington, VT", 44.477, -73.208, "America/New_York"],
+  ["richmond", "Richmond, VA", 37.541, -77.436, "America/New_York"],
+  ["morgantown", "Morgantown, WV", 39.631, -79.955, "America/New_York"],
+  ["madison", "Madison, WI", 43.074, -89.401, "America/Chicago"],
+  ["cheyenne", "Cheyenne, WY", 41.14, -104.818, "America/Denver"],
+] as const;
+
+const STATEWIDE_BEACON_CITIES = [
+  ["gary", "Gary, IN", 41.59, -87.34, "America/Chicago"],
+  ["valparaiso", "Valparaiso, IN", 41.47, -87.06, "America/Chicago"],
+  ["south-bend", "South Bend, IN", 41.68, -86.25, "America/Indiana/Indianapolis"],
+  ["elkhart", "Elkhart, IN", 41.68, -85.97, "America/Indiana/Indianapolis"],
+  ["fort-wayne", "Fort Wayne, IN", 41.08, -85.14, "America/Indiana/Indianapolis"],
+  ["lafayette", "Lafayette, IN", 40.42, -86.89, "America/Indiana/Indianapolis"],
+  ["kokomo", "Kokomo, IN", 40.49, -86.13, "America/Indiana/Indianapolis"],
+  ["muncie", "Muncie, IN", 40.19, -85.39, "America/Indiana/Indianapolis"],
+  ["terre-haute", "Terre Haute, IN", 39.47, -87.41, "America/Indiana/Indianapolis"],
+  ["bloomington", "Bloomington, IN", 39.17, -86.53, "America/Indiana/Indianapolis"],
+  ["columbus-in", "Columbus, IN", 39.2, -85.92, "America/Indiana/Indianapolis"],
+  ["richmond-in", "Richmond, IN", 39.83, -84.89, "America/Indiana/Indianapolis"],
+  ["evansville", "Evansville, IN", 37.97, -87.57, "America/Chicago"],
+  ["new-albany", "New Albany, IN", 38.29, -85.82, "America/Indiana/Indianapolis"],
+  ["toledo", "Toledo, OH", 41.65, -83.54, "America/New_York"],
+  ["sandusky", "Sandusky, OH", 41.45, -82.71, "America/New_York"],
+  ["cleveland", "Cleveland, OH", 41.5, -81.69, "America/New_York"],
+  ["akron", "Akron, OH", 41.08, -81.52, "America/New_York"],
+  ["youngstown", "Youngstown, OH", 41.1, -80.65, "America/New_York"],
+  ["canton", "Canton, OH", 40.8, -81.38, "America/New_York"],
+  ["mansfield", "Mansfield, OH", 40.76, -82.52, "America/New_York"],
+  ["lima", "Lima, OH", 40.74, -84.1, "America/New_York"],
+  ["findlay", "Findlay, OH", 41.04, -83.65, "America/New_York"],
+  ["dayton", "Dayton, OH", 39.76, -84.19, "America/New_York"],
+  ["springfield-oh", "Springfield, OH", 39.93, -83.81, "America/New_York"],
+  ["cincinnati", "Cincinnati, OH", 39.1, -84.51, "America/New_York"],
+  ["athens-oh", "Athens, OH", 39.33, -82.1, "America/New_York"],
+  ["marietta", "Marietta, OH", 39.42, -81.45, "America/New_York"],
+  ["portsmouth", "Portsmouth, OH", 38.73, -82.99, "America/New_York"],
+  ["birmingham", "Birmingham, AL", 33.52, -86.81, "America/Chicago"],
+  ["huntsville", "Huntsville, AL", 34.73, -86.59, "America/Chicago"],
+  ["decatur", "Decatur, AL", 34.61, -86.98, "America/Chicago"],
+  ["florence", "Florence, AL", 34.8, -87.68, "America/Chicago"],
+  ["tuscaloosa", "Tuscaloosa, AL", 33.21, -87.57, "America/Chicago"],
+  ["montgomery", "Montgomery, AL", 32.38, -86.3, "America/Chicago"],
+  ["anniston", "Anniston, AL", 33.66, -85.83, "America/Chicago"],
+  ["dothan", "Dothan, AL", 31.22, -85.39, "America/Chicago"],
+  ["mobile", "Mobile, AL", 30.69, -88.04, "America/Chicago"],
+] as const;
+
+const STANDALONE_BEACON_CITIES = [
+  ["bar-harbor", "Bar Harbor, ME", 44.39, -68.2, "America/New_York"],
+  ["plattsburgh", "Plattsburgh, NY", 44.7, -73.45, "America/New_York"],
+  ["corning", "Corning, NY", 42.14, -77.05, "America/New_York"],
+  ["cape-may", "Cape May, NJ", 38.94, -74.91, "America/New_York"],
+  ["beaufort", "Beaufort, NC", 34.72, -76.66, "America/New_York"],
+  ["savannah", "Savannah, GA", 32.08, -81.09, "America/New_York"],
+  ["key-west", "Key West, FL", 24.56, -81.79, "America/New_York"],
+  ["natchez", "Natchez, MS", 31.56, -91.4, "America/Chicago"],
+  ["hot-springs", "Hot Springs, AR", 34.51, -93.05, "America/Chicago"],
+  ["marfa", "Marfa, TX", 30.31, -104.02, "America/Chicago"],
+  ["dodge-city", "Dodge City, KS", 37.75, -100.02, "America/Chicago"],
+  ["north-platte", "North Platte, NE", 41.14, -100.76, "America/Chicago"],
+  ["decorah", "Decorah, IA", 43.3, -91.79, "America/Chicago"],
+  ["duluth", "Duluth, MN", 46.79, -92.1, "America/Chicago"],
+  ["marquette", "Marquette, MI", 46.54, -87.4, "America/Detroit"],
+  ["medora", "Medora, ND", 46.91, -103.52, "America/Denver"],
+  ["sheridan", "Sheridan, WY", 44.8, -106.96, "America/Denver"],
+  ["durango", "Durango, CO", 37.27, -107.88, "America/Denver"],
+  ["moab", "Moab, UT", 38.57, -109.55, "America/Denver"],
+  ["flagstaff", "Flagstaff, AZ", 35.2, -111.65, "America/Phoenix"],
+  ["taos", "Taos, NM", 36.41, -105.57, "America/Denver"],
+  ["ely", "Ely, NV", 39.25, -114.89, "America/Los_Angeles"],
+  ["bishop", "Bishop, CA", 37.36, -118.4, "America/Los_Angeles"],
+  ["eureka", "Eureka, CA", 40.8, -124.16, "America/Los_Angeles"],
+  ["bend", "Bend, OR", 44.06, -121.31, "America/Los_Angeles"],
+  ["walla-walla", "Walla Walla, WA", 46.07, -118.34, "America/Los_Angeles"],
+  ["sandpoint", "Sandpoint, ID", 48.28, -116.55, "America/Los_Angeles"],
+  ["sitka", "Sitka, AK", 57.05, -135.33, "America/Sitka"],
+  ["hilo", "Hilo, HI", 19.72, -155.09, "Pacific/Honolulu"],
+] as const;
+
+const REGIONAL_EVENTS = [
+  ["Library study sprint", "Study", "Campus library"],
+  ["Pickup basketball", "Fitness", "Recreation courts"],
+  ["Coffee and conversation", "Social", "Neighborhood cafe"],
+  ["Outdoor sketch circle", "Creative", "Arts plaza"],
+  ["Board game meetup", "Gaming", "Game lounge"],
+  ["Volunteer garden hour", "Other", "Community garden"],
+  ["Easy group run", "Fitness", "Greenway trailhead"],
+  ["Street photography walk", "Creative", "Main square"],
+  ["Lunch and language exchange", "Social", "Food hall"],
+  ["Open study table", "Study", "Reading room"],
+  ["Co-op game night", "Gaming", "Student commons"],
+  ["Bike repair meetup", "Other", "Community workshop"],
+] as const satisfies readonly (readonly [string, Category, string])[];
 
 /** Fictional Map stress examples only; never used for connected accounts. */
 export function addDemoMapFixtures(data: Data, viewer: string, now: number) {
@@ -56,12 +200,12 @@ export function addDemoMapFixtures(data: Data, viewer: string, now: number) {
     }
   }
   organization.member_count = 1 + data.organization_members.filter(row => row.organization_id === organization.id && row.status === "active").length;
-  const event = (id: string, title: string, start: number, end: number, latitude: number, longitude: number, patch: Partial<Activity> = {}) => {
+  const event = (id: string, title: string, start: number, end: number, latitude: number, longitude: number, patch: Partial<Activity> = {}, placeLabel = title) => {
     const activity: Activity = { ...base, id, owner_id: "maya", title, description: "A distinct demo Map example.", category: "Social",
       mode: "squad", audience: "friends", audience_id: null, starts_at: at(start), ends_at: at(end),
       available: false, approval_required: false, plan_id: null, plan_step_index: null, goal_id: null, habit_id: null, aspiration_ids: [], ...patch };
     data.activities.push(activity);
-    data.places.push({ activity_id: id, label: title, latitude, longitude, online_url: null });
+    data.places.push({ activity_id: id, label: placeLabel, latitude, longitude, online_url: null });
     return activity;
   };
   event("map-past-origami", "Morning origami swap", -4, -2, 41.887, -87.638);
@@ -113,4 +257,78 @@ export function addDemoMapFixtures(data: Data, viewer: string, now: number) {
   }
   data.activity_social_links.push({ activity_id: concert.id, entity_type: "organization", entity_id: organization.id,
     created_by: "maya", created_at: at(0) });
+
+  const publishRegionalBeacon = (activity: Activity, area: string, latitude: number, longitude: number) => {
+    // The public summary exposes only rounded coordinates.
+    data.public_beacons.push({
+      activity_id: activity.id, title: activity.title, category: activity.category, interest_tags: [activity.category],
+      starts_at: activity.starts_at, ends_at: activity.ends_at, area_label: area,
+      coarse_lat: Math.round(latitude * 100) / 100, coarse_lng: Math.round(longitude * 100) / 100,
+      requires_approval: false, capacity_limit: null, capacity_policy: "soft", accepted_seat_count: 1, closed: false,
+    });
+  };
+
+  for (const [regionIndex, [region, area, centerLat, centerLng, timezone]] of REGIONAL_HUBS.entries()) {
+    const campus = region === "auburn";
+    const regionalFriendCount = campus ? 36 : 12;
+    const point = (index: number) => {
+      const tightlyGrouped = index % 3 !== 2;
+      const spread = campus ? (tightlyGrouped ? 0.002 : 0.011) : (tightlyGrouped ? 0.007 : 0.085);
+      return [centerLat + (random() - 0.5) * spread, centerLng + (random() - 0.5) * spread] as const;
+    };
+    const friendId = (index: number) => `map-region-${region}-friend-${index}`;
+    for (let i = 0; i < regionalFriendCount; i++) {
+      const id = friendId(i);
+      const [latitude, longitude] = point(i);
+      const slot = regionIndex * 13 + i;
+      const givenName = firstNames[slot % firstNames.length];
+      const familyName = lastNames[(regionIndex + Math.floor(i / firstNames.length)) % lastNames.length];
+      const category = categories[(i + regionIndex) % categories.length];
+      data.profiles.push({
+        ...profile, id, username: `${region}.friend${i}`, name: `${givenName} ${familyName}`,
+        bio: `Based near ${area}.`, interests: [category], featured_activity_id: null,
+        avatar_seed: (slot * 53 + 7) % 216, avatar_style: "illustrated", profile_visibility: "friends",
+      });
+      data.friendships.push({ id: `friend-${id}`, sender_id: viewer, recipient_id: id, status: "accepted" });
+      data.locations.push({ id: `loc-${id}`, owner_id: id, latitude, longitude, updated_at: at(-(i % 5) * 0.1), expires_at: at(8) });
+      if (i % 4 !== 3) {
+        event(`map-region-${region}-status-${i}`, statuses[(i + regionIndex) % statuses.length], -0.1, i % 4 === 1 ? 0.15 : 2,
+          latitude, longitude, { owner_id: id, mode: "solo", solo_purpose: "status_note", available: i % 4 !== 2, category, timezone });
+      }
+    }
+    const beaconCount = campus ? 24 : 8;
+    for (let i = 0; i < beaconCount; i++) {
+      const isPublic = i % 3 === 2;
+      const [title, category, place] = REGIONAL_EVENTS[(i + regionIndex * 2) % REGIONAL_EVENTS.length];
+      const [latitude, longitude] = point(i);
+      const start = i % 4 === 0 ? -0.25 : i % 4 + 0.5;
+      const activity = event(`map-region-${region}-beacon-${i}`, title, start, start + 2, latitude, longitude, {
+        owner_id: friendId(i), category, timezone, audience: isPublic ? "private" : "friends",
+        description: `A fictional demo meetup near ${area}.`,
+      }, `${place} · ${area}`);
+      if (isPublic) publishRegionalBeacon(activity, area, latitude, longitude);
+    }
+  }
+
+  // The Midwest has a continuous trail from Chicago across both states.
+  // The standalone cities intentionally get no extra nearby friend pins.
+  const spread = [...STATEWIDE_BEACON_CITIES, ...STANDALONE_BEACON_CITIES];
+  for (const [cityIndex, [city, area, centerLat, centerLng, timezone]] of spread.entries()) {
+    const standalone = cityIndex >= STATEWIDE_BEACON_CITIES.length;
+    const count = standalone ? 1 : city === "birmingham" ? 8 : 3;
+    for (let i = 0; i < count; i++) {
+      const [title, category, place] = REGIONAL_EVENTS[(cityIndex + i * 5) % REGIONAL_EVENTS.length];
+      const offset = count === 1 ? 0 : i - (count - 1) / 2;
+      const latitude = centerLat + offset * 0.008;
+      const longitude = centerLng + (i % 2 ? 1 : -1) * offset * 0.011;
+      const isPublic = standalone ? cityIndex % 3 === 0 : i % 3 === 1;
+      const start = i === 0 && cityIndex % 2 === 0 ? -0.35 : 0.5 + (cityIndex + i) % 8;
+      const activity = event(`map-spread-${city}-${i}`, title, start, start + 2, latitude, longitude, {
+        owner_id: `map-friend-${(cityIndex * 7 + i) % friendCount}`,
+        category, timezone, audience: isPublic ? "private" : "friends",
+        description: `A fictional demo meetup near ${area}.`,
+      }, `${place} · ${area}`);
+      if (isPublic) publishRegionalBeacon(activity, area, latitude, longitude);
+    }
+  }
 }

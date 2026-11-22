@@ -30,10 +30,10 @@ export const BEACON_PIN_RADIUS = 13;
 export const COMPACT_BEACON_PIN_RADIUS = 9;
 export const BEACON_PIN_TIP = { halfWidth: 9, height: 12, overlap: 2 };
 export const COMPACT_BEACON_PIN_TIP = { halfWidth: 6, height: 7, overlap: 2 };
-export const BEACON_PIN_LIGHT_INSET = 33;
+export const BEACON_PIN_LIGHT_INSET = 38;
 export const BEACON_SELECTED_SCALE = 1.25;
-export const BEACON_SELECTED_BEAM_HEIGHT = 32;
-export const BEACON_LIVE_BEAM_HEIGHT = 21;
+export const BEACON_SELECTED_BEAM_HEIGHT = 38;
+export const BEACON_LIVE_BEAM_HEIGHT = 26;
 const LIVE_BEACON_COLOR = "#F18432";
 
 export function beaconPinEmphasis(
@@ -43,18 +43,36 @@ export function beaconPinEmphasis(
   compact = false,
 ) {
   if (selected)
-    return { level: 1, color: "#E6AE45", core: "#FFFEF4", beamHeight: BEACON_SELECTED_BEAM_HEIGHT, beamWidth: 25, coreWidth: 5, beamOpacity: 1, glowOpacity: 0.98 };
+    return { level: 1, color: "#E6AE45", core: "#FFFEF4", beamHeight: BEACON_SELECTED_BEAM_HEIGHT, beamWidth: 30, coreWidth: 6, beamOpacity: 1, glowOpacity: 0.98 };
   if (state?.participatingLive)
-    return { level: 2, color: LIVE_BEACON_COLOR, core: "#FFDD9C", beamHeight: compact ? 22 : BEACON_LIVE_BEAM_HEIGHT, beamWidth: compact ? 16 : 18, coreWidth: 4, beamOpacity: compact ? 0.84 : 0.89, glowOpacity: compact ? 0.61 : 0.73 };
+    return { level: 2, color: LIVE_BEACON_COLOR, core: "#FFDD9C", beamHeight: compact ? 27 : BEACON_LIVE_BEAM_HEIGHT, beamWidth: compact ? 19 : 22, coreWidth: 5, beamOpacity: compact ? 0.9 : 0.96, glowOpacity: compact ? 0.67 : 0.81 };
   if (state?.owned)
-    return { level: 3, color: "#F3B932", core: "#FFF1AD", beamHeight: compact ? 17 : 15, beamWidth: 14, coreWidth: 3, beamOpacity: 0.77, glowOpacity: compact ? 0.44 : 0.51 };
+    return { level: 3, color: "#F3B932", core: "#FFF1AD", beamHeight: compact ? 21 : 19, beamWidth: 17, coreWidth: 4, beamOpacity: 0.88, glowOpacity: compact ? 0.48 : 0.6 };
   if (state?.friendHosted)
-    return { level: 4, color: "#6DAFE5", core: "#CBEAFF", beamHeight: compact ? 14 : 12, beamWidth: 11, coreWidth: compact ? 3 : 2, beamOpacity: 0.65, glowOpacity: compact ? 0.27 : 0.29 };
+    return { level: 4, color: "#6DAFE5", core: "#CBEAFF", beamHeight: compact ? 17 : 15, beamWidth: 11, coreWidth: compact ? 3 : 2, beamOpacity: 0.65, glowOpacity: compact ? 0.27 : 0.29 };
   if (state?.squadHosted)
-    return { level: 5, color: "#67C49B", core: "#C9F5E0", beamHeight: compact ? 16 : 14, beamWidth: compact ? 12 : 10, coreWidth: compact ? 3 : 2, beamOpacity: 0.63, glowOpacity: compact ? 0.26 : 0.28 };
+    return { level: 5, color: "#67C49B", core: "#C9F5E0", beamHeight: compact ? 20 : 18, beamWidth: compact ? 12 : 10, coreWidth: compact ? 3 : 2, beamOpacity: 0.63, glowOpacity: compact ? 0.26 : 0.28 };
   if (!compact && state?.saved)
     return { level: 0, color: categoryColor, core: categoryColor, beamHeight: 0, beamWidth: 0, coreWidth: 0, beamOpacity: 0, glowOpacity: 0.18 };
   return null;
+}
+
+/** Scale the established priority effect as the map zooms out. */
+export function distantBeaconPinEmphasis(
+  lighting: ReturnType<typeof beaconPinEmphasis>,
+  tier: "medium" | "far" | "micro",
+) {
+  if (!lighting) return null;
+  const priority = lighting.level >= 1 && lighting.level <= 3;
+  const beam = tier !== "micro" && priority ? (tier === "far" ? 0.32 : 0.66) : 0;
+  return {
+    ...lighting,
+    beamHeight: Math.round(lighting.beamHeight * beam),
+    beamWidth: Math.round(lighting.beamWidth * (tier === "far" ? 0.6 : 0.8)),
+    coreWidth: Math.max(1, Math.round(lighting.coreWidth * (tier === "far" ? 0.55 : 0.75))),
+    beamOpacity: lighting.beamOpacity * (tier === "far" ? 0.8 : 0.9),
+    glowOpacity: lighting.glowOpacity * (tier === "medium" ? 0.8 : tier === "far" ? 0.48 : 0.35),
+  };
 }
 
 export function beaconPulseStyle(

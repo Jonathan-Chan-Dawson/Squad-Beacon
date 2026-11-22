@@ -4,6 +4,7 @@ export type DateTimeFieldProps = {
   label: string;
   value: string;
   timezone?: string;
+  showTimezone?: boolean;
   onChange(value: string): void;
   onValidityChange?(valid: boolean): void;
 };

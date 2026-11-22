@@ -3,6 +3,7 @@ import { Pressable, Text, View } from "react-native";
 import type { Activity } from "@/src/shared/types";
 import { useTheme } from "@/src/shared/ui";
 import { BeaconIcon } from "../BeaconIcon";
+import { cardPresentation } from "@/src/theme/cardPresentation";
 
 export type CurrentBeaconRole = "hosting" | "cohosting" | "going";
 
@@ -50,7 +51,7 @@ export function CurrentBeaconPreview({
   featured?: boolean;
   compact?: boolean;
 }) {
-  const { colors } = useTheme();
+  const { colors, tokens } = useTheme();
   const iconSize = featured || compact ? 34 : 44;
   const iconGlyphSize = featured || compact ? 24 : 30;
   const content = (
@@ -59,8 +60,8 @@ export function CurrentBeaconPreview({
         style={{
           width: iconSize,
           height: iconSize,
-          borderRadius: 12,
-          backgroundColor: colors.green + "12",
+          borderRadius: cardPresentation.insetRadius,
+          backgroundColor: tokens.categories[activity.category].tint,
           alignItems: "center",
           justifyContent: "center",
         }}
@@ -83,11 +84,10 @@ export function CurrentBeaconPreview({
           {featured ? "Featured · Happening now" : "Happening now"}
         </Text>
         <Text
-          numberOfLines={1}
+          numberOfLines={2}
           style={{
             color: colors.ink,
-            fontSize: 14,
-            lineHeight: 19,
+            ...tokens.type.secondary,
             fontWeight: "600",
           }}
         >
@@ -111,7 +111,7 @@ export function CurrentBeaconPreview({
         style={{
           flexDirection: "row",
           alignItems: "center",
-          gap: 10,
+          gap: cardPresentation.rowGap,
           minHeight: iconSize + 8,
           paddingVertical: 4,
         }}
@@ -129,11 +129,11 @@ export function CurrentBeaconPreview({
       style={({ pressed }) => ({
         flexDirection: "row",
         alignItems: "center",
-        gap: 9,
-        minHeight: iconSize + 8,
+        gap: cardPresentation.rowGap,
+        minHeight: Math.max(cardPresentation.touchTarget, iconSize + 8),
         paddingHorizontal: compact ? 3 : 7,
         paddingVertical: 4,
-        borderRadius: 14,
+        borderRadius: cardPresentation.insetRadius,
         backgroundColor: featured ? colors.green + "0A" : "transparent",
         opacity: pressed ? 0.72 : 1,
       })}

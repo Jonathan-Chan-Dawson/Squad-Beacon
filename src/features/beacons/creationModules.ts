@@ -7,7 +7,7 @@ export type CreationModuleField = {
 export const creationModules: {
   field: CreationModuleField;
   name: string;
-  family: "Social" | "Tools" | "Media";
+  family: "Social" | "Collaboration" | "Media";
   description: string;
   icon: string;
 }[] = [
@@ -42,28 +42,28 @@ export const creationModules: {
   {
     field: "enable_checklist",
     name: "Checklist",
-    family: "Tools",
+    family: "Collaboration",
     description: "Shared sections, tasks, and things to bring.",
     icon: "☑",
   },
   {
     field: "enable_journal",
     name: "Beacon Sketchboard",
-    family: "Tools",
+    family: "Collaboration",
     description: "Private notes or intentionally shared ideas.",
     icon: "✎",
   },
   {
     field: "enable_focus",
     name: "Timer",
-    family: "Tools",
+    family: "Collaboration",
     description: "A countdown or Pomodoro session.",
     icon: "◷",
   },
   {
     field: "enable_scoreboard",
     name: "Teams / Scoreboard",
-    family: "Tools",
+    family: "Collaboration",
     description: "Split into teams and keep score.",
     icon: "⚑",
   },

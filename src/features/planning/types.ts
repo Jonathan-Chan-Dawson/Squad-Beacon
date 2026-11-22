@@ -17,6 +17,8 @@ export interface BeaconDraft {
   starts_at: string;
   ends_at: string;
   timezone: string;
+  /** The stored times seed Beacon review. A specific activity time is still open. */
+  flexible_time?: boolean;
   approval_required: boolean;
   audience: Audience;
   audience_id: ID | null;

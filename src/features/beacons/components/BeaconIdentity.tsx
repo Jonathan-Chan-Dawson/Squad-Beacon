@@ -1,6 +1,7 @@
 import React from "react";
 import { Text, View } from "react-native";
 import { ActivityBadge } from "../ActivityBadge";
+import { BeaconIcon } from "./BeaconIcon";
 import type { Category } from "@/src/shared/types";
 import { useTheme } from "@/src/shared/ui";
 
@@ -9,10 +10,12 @@ export function BeaconIdentity({
   title,
   category,
   subtitle,
+  emoji,
 }: {
   title: string;
   category: Category;
   subtitle?: string;
+  emoji?: string | null;
 }) {
   const { styles } = useTheme();
   return (
@@ -25,7 +28,7 @@ export function BeaconIdentity({
         gap: 10,
       }}
     >
-      <ActivityBadge category={category} size={36} />
+      {emoji ? <BeaconIcon category={category} emoji={emoji} size={36} /> : <ActivityBadge category={category} size={36} />}
       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
         <Text style={styles.h2}>{title}</Text>
         {subtitle ? <Text style={styles.muted}>{subtitle}</Text> : null}

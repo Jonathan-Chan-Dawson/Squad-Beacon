@@ -22,6 +22,7 @@ export function SocialChoiceRow({
   expanded,
   compact = false,
   multiple = true,
+  showAddIndicator = true,
   accessibilityLabel = label,
   onPress,
 }: {
@@ -34,6 +35,7 @@ export function SocialChoiceRow({
   expanded?: boolean;
   compact?: boolean;
   multiple?: boolean;
+  showAddIndicator?: boolean;
   accessibilityLabel?: string;
   onPress: () => void;
 }) {
@@ -129,9 +131,9 @@ export function SocialChoiceRow({
         >
           {selected ? (
             <Check size={15} color={colors.onAccent} />
-          ) : (
+          ) : showAddIndicator ? (
             <Plus size={15} color={colors.textSecondary} />
-          )}
+          ) : null}
         </View>
       )}
     </Pressable>

@@ -1,9 +1,12 @@
 import { expect, test, type Page } from "@playwright/test";
+import { mockOnboardingAccount } from "./onboardingAccount";
+import { startDemoFromEntry } from "./demoEntry";
 
 async function startDemo(page: Page) {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/");
-  await page.getByRole("button", { name: /Explore the demo/ }).click();
+  await mockOnboardingAccount(page, { signedOut: true });
+  await page.goto("/auth/sign-in");
+  await startDemoFromEntry(page);
 }
 
 type SettledMapMarker = {
@@ -32,10 +35,12 @@ async function findStableUnobstructedMarker(
             const clusterSize = (element: Element) => {
               const counts = element
                 .getAttribute("aria-label")
-                ?.match(/^Map cluster: (\d+) beacons, (\d+) people/);
+                ?.match(/^Map cluster: (\d+) beacons, (\d+) nearby friends/);
               return counts ? Number(counts[1]) + Number(counts[2]) : 1;
             };
             const item = [...items]
+              // Small clusters open the compact list without search or tabs.
+              .filter((element) => clusterSize(element) > 5)
               .sort((a, b) => clusterSize(a) - clusterSize(b))
               .find((element) => {
                 const bounds = element.getBoundingClientRect();
@@ -106,6 +111,7 @@ test("constellation opens searchable Beacons and nearby Friends and selects an e
     '[role="button"][data-testid="map-constellation"]:not([data-friend-count="0"])',
     "aria-label",
   );
+  await page.screenshot({ path: test.info().outputPath("projector-map.png") });
   await page.mouse.click(settled.x, settled.y);
   const panel = page.getByTestId("map-nearby-panel");
   await expect(panel).toBeVisible();
@@ -113,6 +119,8 @@ test("constellation opens searchable Beacons and nearby Friends and selects an e
     page.locator(".leaflet-control-scale-line").first(),
   ).toBeVisible();
   await expect(panel.getByRole("tab", { name: /^Beacons,/ })).toBeVisible();
+  await expect(page.getByTestId("map-control-rail")).toHaveCount(0);
+  await panel.screenshot({ path: test.info().outputPath("nearby.png") });
   await panel.getByRole("tab", { name: /^Friends,/ }).click();
   await expect(
     panel.getByRole("button", { name: /^View .* profile$/ }).first(),
@@ -133,6 +141,7 @@ test("constellation opens searchable Beacons and nearby Friends and selects an e
     .click();
   await expect(page.getByTestId("map-person-preview")).toBeVisible();
   await expect(panel).toHaveCount(0);
+  await expect(page.getByTestId("map-control-rail")).toBeVisible();
   const preview = await page.getByTestId("map-person-preview").boundingBox();
   expect(preview!.x).toBeGreaterThanOrEqual(16);
   expect(preview!.x + preview!.width).toBeLessThanOrEqual(374);

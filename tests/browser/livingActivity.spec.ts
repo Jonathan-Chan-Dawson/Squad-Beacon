@@ -9,14 +9,15 @@ async function profile(page: Page) {
   await page.goto("/auth/sign-in");
   await startDemoFromEntry(page);
   await page.getByRole("tab", { name: "Profile", exact: true }).click();
-  await expect(page.getByTestId("add-activity-note")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Add activity", exact: true })).toBeVisible();
 }
 async function shareNote(page: Page) {
-  await page.getByTestId("add-activity-note").click();
+  await page.getByRole("button", { name: "Add activity", exact: true }).click();
   const editor = page.getByRole("dialog", {
-    name: "What are you doing?",
+    name: "What are you up to?",
     exact: true,
   });
+  await editor.getByRole("button", { name: "Write a quick update", exact: true }).click();
   await editor
     .getByRole("textbox", { name: "What are you up to?", exact: true })
     .fill("Shooting hoops");
@@ -50,8 +51,8 @@ test("compact empty state, direct editing, independent Status and availability, 
   await profile(page);
   for (const width of [320, 375, 430, 1024]) {
     await page.setViewportSize({ width, height: 1000 });
-    const row = page.getByTestId("add-activity-note");
-    await expect(row.getByRole("button")).toHaveCount(0);
+    const row = page.getByRole("button", { name: "Add activity", exact: true });
+    await expect(row).toBeEnabled();
     const box = await row.boundingBox();
     expect(box!.height).toBeLessThanOrEqual(96);
     const edit = await page
@@ -75,12 +76,13 @@ test("compact empty state, direct editing, independent Status and availability, 
   await page.setViewportSize({ width: 375, height: 1000 });
   await shareNote(page);
   await page
-    .getByRole("button", { name: "Edit Activity Note", exact: true })
+    .getByRole("button", { name: "Edit activity", exact: true })
     .click();
   const editor = page.getByRole("dialog", {
-    name: "Edit Activity Note",
+    name: "What are you up to?",
     exact: true,
   });
+  await editor.getByRole("button", { name: "Edit activity note", exact: true }).click();
   await expect(
     editor.getByRole("textbox", { name: "What are you up to?", exact: true }),
   ).toHaveValue("Shooting hoops");
@@ -145,6 +147,29 @@ test("compact empty state, direct editing, independent Status and availability, 
   expect(errors).toEqual([]);
 });
 
+test("featured activity takes precedence and clearing it reveals the same note on both screens", async ({ page }) => {
+  await profile(page);
+  await shareNote(page);
+  const current = page.getByTestId("current-activity-section")
+    .and(page.locator(':not([data-testid="home-personal-timeline"] *)'));
+  await current.getByRole("button", { name: "Edit activity", exact: true }).click();
+  const editor = page.getByRole("dialog", { name: "What are you up to?", exact: true });
+  await editor.getByRole("button", { name: "Feature an activity", exact: true }).click();
+  await editor.getByRole("button", { name: "Camera walk & a little coffee", exact: true }).click();
+  await expect(editor).toHaveCount(0);
+  await expect(current).toContainText("Camera walk & a little coffee");
+  await expect(current).not.toContainText("Shooting hoops");
+
+  await page.getByRole("tab", { name: "Beacons", exact: true }).and(page.locator(':not([data-testid="profile-tabs"] *)')).click();
+  const home = page.getByTestId("home-personal-timeline");
+  await expect(home.getByTestId("current-activity-section")).toContainText("Camera walk & a little coffee");
+  await home.getByRole("button", { name: "Edit activity", exact: true }).click();
+  await editor.getByRole("button", { name: "Clear featured activity", exact: true }).click();
+  await expect(home.getByTestId("current-activity-section")).toContainText("Shooting hoops");
+  await page.getByRole("tab", { name: "Profile", exact: true }).click();
+  await expect(current).toContainText("Shooting hoops");
+});
+
 test("Do with others creates an independent Ping and offers featuring without replacing the note", async ({
   page,
 }) => {
@@ -158,7 +183,7 @@ test("Do with others creates an independent Ping and offers featuring without re
     exact: true,
   });
   await expect(
-    page.getByRole("dialog", { name: "Edit Activity Note", exact: true }),
+    page.getByRole("dialog", { name: "What are you up to?", exact: true }),
   ).toHaveCount(0);
   await page.screenshot({ path: ".expo/pass3/do-with-others.png" });
   await sheet.getByRole("button", { name: "Ping", exact: true }).click();
@@ -169,7 +194,7 @@ test("Do with others creates an independent Ping and offers featuring without re
   ).toHaveCount(0);
   await expect(
     editor.getByRole("textbox", {
-      name: "What are you thinking?",
+      name: "What’s the idea?",
       exact: true,
     }),
   ).toHaveValue("Shooting hoops");
@@ -255,10 +280,10 @@ test("Council setup requires two options and retains the Activity Note", async (
     page.getByRole("dialog", { name: "Do with others", exact: true }),
   ).toHaveCount(0);
   await editor
-    .getByRole("button", { name: "Create Vote Council", exact: true })
+    .getByRole("button", { name: "Start Vote", exact: true })
     .click();
   await expect(
-    editor.getByText("Give the beacon a title (up to 120 characters).", {
+    editor.getByText("Give each choice a name.", {
       exact: true,
     }),
   ).toBeVisible();
@@ -267,7 +292,7 @@ test("Council setup requires two options and retains the Activity Note", async (
     .nth(1)
     .fill("Go for a walk");
   await editor
-    .getByRole("button", { name: "Create Vote Council", exact: true })
+    .getByRole("button", { name: "Start Vote", exact: true })
     .click();
   await page.getByRole("button", { name: "Not Now", exact: true }).click();
   await expect(page.getByText("Go for a walk", { exact: true })).toBeVisible();
@@ -282,15 +307,10 @@ test("explicit Current Beacon takeover preserves the Status Note and never resur
 }) => {
   await profile(page);
   await shareNote(page);
-  await page
-    .getByRole("button", { name: "Activity Note options", exact: true })
-    .click();
-  await page
-    .getByRole("dialog", { name: "Activity Note", exact: true })
-    .getByRole("button", { name: "Switch to live Beacon", exact: true })
-    .click();
+  await page.getByRole("button", { name: "Edit activity", exact: true }).click();
+  await page.getByRole("button", { name: "Manage live Beacon", exact: true }).click();
   const picker = page.getByRole("dialog", {
-    name: "Choose live Beacon",
+    name: "What are you up to?",
     exact: true,
   });
   await picker
@@ -311,13 +331,14 @@ test("explicit Current Beacon takeover preserves the Status Note and never resur
   ).toContainText("Camera walk & a little coffee");
   await page.screenshot({ path: ".expo/pass3/live.png", fullPage: true });
   await page
-    .getByRole("button", { name: "Manage Current Activity", exact: true })
+    .getByRole("button", { name: "Edit activity", exact: true })
     .click();
+  await picker.getByRole("button", { name: "Manage live Beacon", exact: true }).click();
   await picker
     .getByRole("button", { name: "Stop sharing Current Beacon", exact: true })
     .click();
   await expect(
-    page.getByTestId("add-activity-note").filter({ visible: true }),
+    page.getByRole("button", { name: "Add activity", exact: true }).filter({ visible: true }),
   ).toBeVisible();
   await expect(
     page.getByTestId("living-status-message").filter({ visible: true }),
@@ -338,14 +359,15 @@ for (const appearance of ["light", "dark"]) {
       { appearance },
     );
     await profile(page);
-    const add = page.getByTestId("add-activity-note");
+    const add = page.getByRole("button", { name: "Add activity", exact: true });
     await add.focus();
     await page.keyboard.press("Enter");
     const editor = page.getByRole("dialog", {
-      name: "What are you doing?",
+      name: "What are you up to?",
       exact: true,
     });
     await expect(editor).toBeVisible();
+    await editor.getByRole("button", { name: "Write a quick update", exact: true }).click();
     await editor
       .getByRole("textbox", { name: "What are you up to?", exact: true })
       .fill("A quiet afternoon working on my creative project");
@@ -432,7 +454,7 @@ test("paused owner controls and visitor Profile expose no owner creation afforda
     .click();
   await expect(page.getByTestId("person-profile-identity")).toBeVisible();
   await expect(
-    page.getByTestId("add-activity-note").filter({ visible: true }),
+    page.getByRole("button", { name: "Add activity", exact: true }).filter({ visible: true }),
   ).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: "Do with others", exact: true }),

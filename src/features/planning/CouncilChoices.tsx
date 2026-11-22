@@ -69,7 +69,7 @@ export function CouncilProposalReview({
               {p.payload.title}
             </Text>
             <Text style={styles.muted}>
-              {new Date(p.payload.starts_at).toLocaleString([], {
+              {p.payload.flexible_time ? "Flexible time" : new Date(p.payload.starts_at).toLocaleString([], {
                 month: "short",
                 day: "numeric",
                 hour: "numeric",
@@ -237,7 +237,7 @@ export function CouncilChoices({
               checked: selected,
               disabled: !eligible || busy,
             }}
-            accessibilityLabel={`${option.payload.title}, ${new Date(option.payload.starts_at).toLocaleString()}${option.payload.label ? `, ${option.payload.label}` : ""}`}
+            accessibilityLabel={`${option.payload.title}${option.payload.flexible_time ? "" : `, ${new Date(option.payload.starts_at).toLocaleString()}`}${option.payload.label ? `, ${option.payload.label}` : ""}`}
             disabled={!eligible || busy}
             onPress={() => {
               if (approval) {
@@ -266,15 +266,13 @@ export function CouncilChoices({
             <BeaconIcon category={option.payload.category} size={32} />
             <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
               <Text numberOfLines={compact ? 2 : undefined} style={styles.body}>{option.payload.title}</Text>
-              <Text numberOfLines={1} style={styles.muted}>
-                {new Date(option.payload.starts_at).toLocaleString([], {
-                  month: "short",
-                  day: "numeric",
-                  hour: "numeric",
-                  minute: "2-digit",
-                })}
-                {option.payload.label ? ` · ${option.payload.label}` : ""}
-              </Text>
+              {(!option.payload.flexible_time || !!option.payload.label) && (
+                <Text numberOfLines={1} style={styles.muted}>
+                  {option.payload.flexible_time ? option.payload.label : new Date(option.payload.starts_at).toLocaleString([], {
+                    month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+                  }) + (option.payload.label ? ` · ${option.payload.label}` : "")}
+                </Text>
+              )}
               {isNew && <Txt muted>New since your vote</Txt>}
               {showCounts && (
                 <Txt muted>

@@ -320,6 +320,7 @@ export function IconButton({
 export function Action({
   title,
   accessibilityLabel,
+  icon,
   run,
   secondary = false,
   disabled = false,
@@ -328,6 +329,7 @@ export function Action({
 }: {
   title: string;
   accessibilityLabel?: string;
+  icon?: React.ReactNode;
   run: () => Promise<unknown>;
   secondary?: boolean;
   disabled?: boolean;
@@ -342,6 +344,7 @@ export function Action({
     <View style={{ gap: tokens.space.sm }}>
       <Button
         title={busy ? "Working…" : title}
+        icon={busy ? undefined : icon}
         accessibilityLabel={busy ? "Working…" : accessibilityLabel}
         disabled={busy || disabled}
         compact={compact}
@@ -538,6 +541,7 @@ export function Sheet({
   children,
   maxHeightPercent = 94,
   snapHeight,
+  header,
   footer,
   centered = false,
   scrollable = true,
@@ -549,6 +553,7 @@ export function Sheet({
   children: React.ReactNode;
   maxHeightPercent?: number;
   snapHeight?: number;
+  header?: React.ReactNode;
   footer?: React.ReactNode;
   centered?: boolean;
   scrollable?: boolean;
@@ -963,6 +968,11 @@ export function Sheet({
               <X color={colors.textPrimary} />
             </IconButton>
           </View>
+          {header && (
+            <View style={{ gap: tokens.space.sm, paddingHorizontal: tokens.space.md, paddingBottom: tokens.space.sm }}>
+              {header}
+            </View>
+          )}
         </View>
         <View
           style={{
@@ -983,6 +993,7 @@ export function Screen({
   children,
   scroll = true,
   compactHeader = false,
+  compactTitleStart = false,
   iconOnlyBack = false,
   scrollRequest,
   scrollPositionRef,
@@ -999,6 +1010,7 @@ export function Screen({
   scroll?: boolean;
   /** Use a compact single-row back/title/action header on focused screens. */
   compactHeader?: boolean;
+  compactTitleStart?: boolean;
   iconOnlyBack?: boolean;
   scrollRequest?: { y: number; sequence: number };
   scrollPositionRef?: React.MutableRefObject<number>;
@@ -1134,6 +1146,18 @@ export function Screen({
     back ? headerBackWidth : 0,
     action && !stackHeaderAction ? headerActionWidth : 0,
   );
+  const alignCompactTitleStart =
+    narrowHeader && (
+      compactTitleStart ||
+      (!back && !!action &&
+        width - 2 * (tokens.layout.screenGutter + headerSideWidth + tokens.space.sm) < 120)
+    );
+  const compactTitleLeft = alignCompactTitleStart
+    ? (back ? headerBackWidth + tokens.space.sm : 0)
+    : headerSideWidth + tokens.space.sm;
+  const compactTitleRight = alignCompactTitleStart
+    ? (action && !stackHeaderAction ? headerActionWidth + tokens.space.sm : 0)
+    : headerSideWidth + tokens.space.sm;
 
   return (
     <SafeAreaView edges={["top"]} style={styles.screen}>
@@ -1260,8 +1284,9 @@ export function Screen({
                     {
                       flex: 1,
                       minWidth: 0,
-                      textAlign: "center",
-                      marginHorizontal: headerSideWidth + tokens.space.sm,
+                      textAlign: alignCompactTitleStart ? "left" : "center",
+                      marginLeft: compactTitleLeft,
+                      marginRight: compactTitleRight,
                       fontSize: narrowHeader ? 18 : tokens.type.title.fontSize,
                       lineHeight:
                         (narrowHeader ? 22 : tokens.type.title.lineHeight) *

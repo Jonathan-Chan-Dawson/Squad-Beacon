@@ -14,20 +14,19 @@ for (const appearance of ["dark", "light"] as const) {
     await page.getByRole("button", { name: /Explore the demo/ }).click();
     await page.getByRole("button", { name: "+ New Plan", exact: true }).click();
     await page
-      .getByLabel("Plan title", { exact: true })
+      .getByLabel("Plan name", { exact: true })
       .fill("Saturday tiny adventure");
     await page.getByRole("button", { name: "Add Idea", exact: true }).click();
     await page.getByLabel("Activity idea", { exact: true }).fill("Try a cafe");
+    await page.getByRole("button", { name: "Add", exact: true }).click();
     await page
-      .getByRole("button", { name: "Activity options", exact: true })
+      .getByRole("button", { name: "Try a cafe", exact: true })
       .click();
     await page
-      .getByRole("button", { name: "Duplicate as draft", exact: true })
+      .getByRole("button", { name: "Duplicate", exact: true })
       .click();
-    await expect(
-      page.getByRole("button", { name: "2. Try a cafe", exact: true }),
-    ).toBeVisible();
-    await page.getByRole("button", { name: "Save Draft", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Try a cafe", exact: true })).toHaveCount(2);
+    await page.getByRole("button", { name: "Create Plan", exact: true }).click();
     await page.getByRole("button", { name: "Back", exact: true }).click();
     await expect(
       page.getByRole("tab", { name: "Plans", exact: true }),
@@ -36,11 +35,9 @@ for (const appearance of ["dark", "light"] as const) {
       .getByRole("button", { name: "Saturday tiny adventure", exact: true })
       .last()
       .click();
-    await expect(
-      page.getByRole("button", { name: "1. Try a cafe", exact: true }),
-    ).toBeVisible();
-    await expect(page.getByText(/Quick idea · unscheduled/)).toHaveCount(2);
-    await expect(page.getByText(/Linked Beacon/)).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Try a cafe", exact: true })).toHaveCount(2);
+    await expect(page.getByText(/Idea · Not scheduled/)).toHaveCount(2);
+    await expect(page.getByText(/Beacon · /)).toHaveCount(0);
     for (const width of [320, 390, 430, 1024]) {
       await page.setViewportSize({ width, height: 844 });
       await expect(
@@ -66,19 +63,20 @@ test("a Plan decision uses the existing Ping composer and returns to its stop", 
   await page.getByRole("button", { name: /Explore the demo/ }).click();
   await page.getByRole("button", { name: "Create Plan", exact: true }).click();
   await page
-    .getByLabel("Plan title", { exact: true })
+    .getByLabel("Plan name", { exact: true })
     .fill("Decide our afternoon");
-  await page.getByRole("button", { name: "Add Decision", exact: true }).click();
+  await page.getByRole("button", { name: "Ask Group", exact: true }).click();
   await page.getByRole("button", { name: "Ping", exact: true }).click();
+  await page.getByRole("button", { name: "Save and continue", exact: true }).click();
   await page
-    .getByLabel("What are you thinking?", { exact: true })
+    .getByLabel("What’s the idea?", { exact: true })
     .fill("Cafe or walk?");
   await page.getByRole("button", { name: "Send Ping", exact: true }).click();
   await expect(page).toHaveURL(/\/plan\//);
   await expect(
-    page.getByRole("button", { name: "1. Cafe or walk?", exact: true }),
+    page.getByRole("button", { name: "Cafe or walk?", exact: true }),
   ).toBeVisible();
-  await expect(page.getByText("Decision", { exact: true })).toBeVisible();
+  await expect(page.getByText("Ping · Waiting for responses", { exact: true })).toBeVisible();
 });
 
 test("repeat a favorite Beacon through the shared inline Routine editor", async ({
@@ -109,5 +107,5 @@ test("repeat a favorite Beacon through the shared inline Routine editor", async 
     .click();
   await page.getByRole("button", { name: "Run Now", exact: true }).click();
   await expect(page).toHaveURL(/\/plan\//);
-  await expect(page.getByText(/Linked Beacon/)).toBeVisible();
+  await expect(page.getByText(/Beacon · /)).toBeVisible();
 });

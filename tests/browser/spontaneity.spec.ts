@@ -1,0 +1,73 @@
+import { expect, test } from "@playwright/test";
+import { startDemoFromEntry } from "./demoEntry";
+
+const shortcut = "I'm Bored, open Spontaneity Machine";
+
+test("Machine opens from Beacons and Create, then preserves edited quests across editor handoffs", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 844 });
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/auth/sign-in");
+  await startDemoFromEntry(page);
+  await page.getByRole("tab", { name: "Beacons", exact: true }).click();
+  await page.getByRole("button", { name: shortcut, exact: true }).click();
+  await expect(page).toHaveURL(/\/spontaneity$/);
+  await page.getByRole("button", { name: "Back", exact: true }).click();
+  await expect(page.getByTestId("beacons-header-column")).toBeVisible();
+
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("button", { name: shortcut, exact: true }).click();
+  await expect(page).toHaveURL(/\/spontaneity$/);
+  const button = (name: string) => page.getByRole("button", { name, exact: true });
+  await button("Chill").click();
+  await button("More options").click();
+  await button("Activity filter: Study").click();
+  await expect(page.getByText("No quests match these filters.")).toBeVisible();
+  await button("Clear activity filter").click();
+  await button("More options").click();
+  await button("Generate Side Quest").click();
+  const first = await page.getByTestId("side-quest-title").innerText();
+  await button("Try Another").click();
+  await expect(page.getByTestId("side-quest-title")).not.toHaveText(first);
+  await button("Edit idea").click();
+  await page.getByLabel("Quest title", { exact: true }).fill("Coffee and campus stories");
+  await page.getByLabel("Quest description", { exact: true }).fill("Bring one good Auburn story.");
+  await button("Try Another").click();
+  await button("Keep Idea").click();
+  await button("Done editing").click();
+  await button("Create Beacon").click();
+  await expect(page.getByLabel("Activity title", { exact: true })).toHaveValue("Coffee and campus stories");
+  await button("Back").click();
+  await expect(page.getByTestId("side-quest-title")).toHaveText("Coffee and campus stories");
+  await button("Start Ping").click();
+  await expect(page.getByLabel("What’s the idea?", { exact: true })).toHaveValue("Coffee and campus stories");
+  await page.getByRole("button", { name: /^Activity details/ }).click();
+  await expect(page.getByLabel(/^Description/)).toHaveValue("Bring one good Auburn story.");
+  await button("Back").click();
+  await expect(page.getByTestId("side-quest-title")).toHaveText("Coffee and campus stories");
+  await button("Back").click();
+  await expect(page.getByRole("button", { name: shortcut, exact: true })).toBeVisible();
+});
+
+test("inline Surprise Me previews, rerolls and applies without replacing selected people", async ({ page }) => {
+  await page.goto("/create?editor=yes&inviteeIds=%5B%22jordan%22%5D&placeLabel=Campus");
+  await startDemoFromEntry(page);
+  const title = page.getByLabel("Activity title", { exact: true });
+  const preview = page.getByTestId("quick-quest-preview");
+  const roll = page.getByRole("button", { name: "Surprise Me", exact: true });
+  await title.fill("My existing draft");
+  await roll.click();
+  await expect(title).toHaveValue("My existing draft");
+  await expect(preview.getByText(/replaces the title and description/)).toBeVisible();
+  await preview.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(title).toHaveValue("My existing draft");
+  await roll.click();
+  const suggested = preview.getByTestId("side-quest-title");
+  const first = await suggested.innerText();
+  await preview.getByRole("button", { name: "Reroll", exact: true }).click();
+  await expect(suggested).not.toHaveText(first);
+  const next = await suggested.innerText();
+  await preview.getByRole("button", { name: "Use This Idea", exact: true }).click();
+  await expect(title).toHaveValue(next);
+  await expect(page.getByRole("button", { name: "Remove Jordan Ellis", exact: true })).toBeVisible();
+  await expect(page.getByLabel("Meeting place", { exact: true })).toHaveValue("Campus");
+});

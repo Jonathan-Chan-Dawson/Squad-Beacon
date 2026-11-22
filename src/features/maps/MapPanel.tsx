@@ -5,6 +5,7 @@ import { router } from "expo-router";
 import { BeaconMusicLink } from "@/src/features/beacons/BeaconMusicLink";
 import { BeaconSheetPeople } from "./BeaconSheetPeople";
 import { MapRelationshipActions } from "./MapRelationshipActions";
+import { cardPresentation } from "@/src/theme/cardPresentation";
 import type { MapContextFilter } from "./contextFilters";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -402,19 +403,20 @@ export function MapPanel({
         style={{
           flexDirection: "row",
           alignItems: "center",
-          gap: tokens.space.sm,
-          paddingHorizontal: 12,
-          paddingVertical: 8,
+          gap: cardPresentation.rowGap,
+          paddingHorizontal: cardPresentation.groupGap,
+          paddingVertical: cardPresentation.inlineGap,
         }}
       >
         <Text
           accessibilityRole="header"
           style={[
             styles.h2,
-            { flex: 1, minWidth: 0, flexShrink: 1, fontSize: 16 },
+            tokens.type.titleSmall,
+            { flex: 1, minWidth: 0, flexShrink: 1 },
           ]}
           ellipsizeMode="tail"
-          numberOfLines={1}
+          numberOfLines={collapsed ? 1 : 2}
         >
           {activity.title}
         </Text>
@@ -558,7 +560,7 @@ export function MapPanel({
                 />
               )}
               {activeFeature === "overview" && !focusedPerson && (
-                <View style={{ gap: tokens.space.md }}>
+                <View style={{ gap: cardPresentation.groupGap }}>
                   <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
                     {Platform.OS !== "web" && place && !place.online_url && place.latitude != null && place.longitude != null && <BeaconLocationPreview latitude={place.latitude} longitude={place.longitude} label={place.label} compact onPress={() => onFocusLocation?.(activity.id)} />}
                     <View style={{ flex: 1, minWidth: 0 }}><Text style={styles.muted}>{activityWhen(activity, new Date(now))}</Text>

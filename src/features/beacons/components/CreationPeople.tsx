@@ -9,8 +9,13 @@ import { AudiencePicker, Button, Field, Txt, useTheme } from "@/src/shared/ui";
 import type { SocialEntityType } from "@/src/features/social/types";
 import type { Audience } from "@/src/shared/types";
 import type { BeaconControlValues } from "../controls";
-import { CreationSwitch } from "./CreationControls";
+import { CreationRow, CreationSwitch } from "./CreationControls";
 import { CreationDisclosure } from "./CreationDisclosure";
+import {
+  communityTypeLabel,
+  communityTypePlural,
+} from "@/src/features/social/communityPresentation";
+import { CreationPicker } from "./CreationPicker";
 import { CommunityAvatar } from "@/src/features/people/components/CommunityAvatar";
 
 export function CreationLink({
@@ -44,19 +49,23 @@ function Choice({
   selected,
   onPress,
   detail,
+  icon,
 }: {
   title: string;
   selected: boolean;
   onPress: () => void;
   detail?: string;
+  icon?: React.ReactNode;
 }) {
   return (
     <SocialChoiceRow
       label={title}
       detail={detail}
+      icon={icon}
       selected={selected}
       onPress={onPress}
       multiple={false}
+      showAddIndicator={false}
     />
   );
 }
@@ -156,7 +165,7 @@ export function CreationCapacity({
   );
 }
 export type CreationPeoplePanel =
-  "none" | "visibility" | "community" | "joining";
+  "none" | "visibility" | "community" | "joining" | "listing";
 export type CreationCommunityChoice = {
   entity_type: SocialEntityType;
   entity_id: string;
@@ -170,6 +179,7 @@ export function CreationPeople({
   onAudience,
   invitations,
   community,
+  communityDetails,
   communityChoices,
   selectedCommunity,
   onCommunity,
@@ -180,6 +190,7 @@ export function CreationPeople({
   notice,
   capacityRef,
   review,
+  listing,
   panel,
   onPanel,
 }: {
@@ -189,6 +200,7 @@ export function CreationPeople({
   onAudience: (value: Audience, id: string | null) => void;
   invitations: React.ReactNode;
   community?: string;
+  communityDetails?: React.ReactNode;
   communityChoices: CreationCommunityChoice[];
   selectedCommunity: {
     entity_type: SocialEntityType;
@@ -204,21 +216,20 @@ export function CreationPeople({
   notice?: string;
   capacityRef?: React.Ref<TextInput>;
   review?: React.ReactNode;
+  listing?: React.ReactNode;
   panel: CreationPeoplePanel;
   onPanel: (value: CreationPeoplePanel) => void;
 }) {
   const { styles, colors } = useTheme();
   const [query, setQuery] = useState("");
   const [communityKind, setCommunityKind] = useState("all");
-  const [limit, setLimit] = useState(6);
   const toggle = (value: CreationPeoplePanel) =>
     onPanel(panel === value ? "none" : value);
-  const kind = (value: SocialEntityType) =>
-    value === "organization"
-      ? "Network"
-      : value === "space"
-        ? "Organization"
-        : "Squad";
+  const closeCommunity = () => {
+    onPanel("none");
+    setQuery("");
+    setCommunityKind("all");
+  };
   const selected = (row: CreationCommunityChoice) =>
     row.entity_type === selectedCommunity?.entity_type &&
     row.entity_id === selectedCommunity.entity_id;
@@ -233,7 +244,7 @@ export function CreationPeople({
       (row) => communityKind === "all" || row.entity_type === communityKind,
     )
     .filter((row) =>
-      `${row.name} ${kind(row.entity_type)}`
+      `${row.name} ${communityTypeLabel(row.entity_type)}`
         .toLowerCase()
         .includes(query.trim().toLowerCase()),
     );
@@ -247,7 +258,7 @@ export function CreationPeople({
       }}
     >
       <Text accessibilityRole="header" style={styles.h2}>
-        People & Community
+        People & Access
       </Text>
       <CreationDisclosure
         compact
@@ -277,88 +288,92 @@ export function CreationPeople({
           paddingBottom: 4,
         }}
       >
-        <Text style={styles.label}>Invite People</Text>
+        <Text style={styles.label}>Invite friends</Text>
         {invitations}
       </View>
-      <CreationDisclosure
-        compact
+      <CreationRow
         title="Community"
         icon={
-          selectedCommunity ? (
+          selectedCommunity && (
             <CommunityAvatar type={selectedCommunity.entity_type} size={26} />
+          )
+        }
+        detail={community ?? "None"}
+        onPress={() => toggle("community")}
+      />
+      {communityDetails}
+      <CreationPicker
+        title="Choose a community"
+        visible={panel === "community"}
+        onClose={closeCommunity}
+        initialFocusLabel="Search communities"
+        footer={
+          selectedCommunity ? (
+            <View
+              style={{
+                flexDirection: "row",
+                justifyContent: "flex-end",
+                gap: 8,
+              }}
+            >
+              <Button
+                compact
+                secondary
+                title="Clear community"
+                onPress={() => {
+                  onCommunity(null);
+                  closeCommunity();
+                }}
+              />
+              <Button compact title="Close picker" onPress={closeCommunity} />
+            </View>
           ) : undefined
         }
-        summary={community ?? "No community selected"}
-        open={panel === "community"}
-        onToggle={() => toggle("community")}
+        header={
+          <View style={{ gap: 6 }}>
+            <Txt muted>
+              Optional · Linking a community keeps access and invitations as
+              selected.
+            </Txt>
+            <Field
+              label="Search communities"
+              value={query}
+              onChangeText={setQuery}
+            />
+            <SocialCategoryRail
+              value={communityKind}
+              onChange={setCommunityKind}
+              items={[
+                { value: "all", label: "All" },
+                ...(["squad", "space", "organization"] as const).map(
+                  (type) => ({ value: type, label: communityTypePlural(type) }),
+                ),
+              ]}
+            />
+          </View>
+        }
       >
-        <Field
-          label="Search communities"
-          value={query}
-          onChangeText={(value) => {
-            setQuery(value);
-            setLimit(6);
-          }}
-          placeholder="Squads, Organizations, Networks…"
-        />
-        <SocialCategoryRail
-          value={communityKind}
-          onChange={(value) => {
-            setCommunityKind(value);
-            setLimit(6);
-          }}
-          items={[
-            { value: "all", label: "All" },
-            ...(["squad", "space", "organization"] as const)
-              .filter((type) =>
-                communityChoices.some((row) => row.entity_type === type),
-              )
-              .map((type) => ({ value: type, label: kind(type) + "s" })),
-          ]}
-        />
-        <Choice
-          title="No community selected"
-          selected={!selectedCommunity}
-          onPress={() => {
-            onCommunity(null);
-            onPanel("none");
-          }}
-        />
-        {choices.slice(0, limit).map((row) => (
+        {choices.map((row) => (
           <Choice
-            key={`${row.entity_type}:${row.entity_id}`}
+            key={row.entity_type + ":" + row.entity_id}
             title={row.name}
-            detail={kind(row.entity_type)}
+            detail={communityTypeLabel(row.entity_type)}
+            icon={<CommunityAvatar type={row.entity_type} size={28} />}
             selected={selected(row)}
             onPress={() => {
               onCommunity({
                 entity_type: row.entity_type,
                 entity_id: row.entity_id,
               });
-              onPanel("none");
+              closeCommunity();
             }}
           />
         ))}
-        {!choices.length ? <Txt muted>No matching communities.</Txt> : null}
-        {choices.length > limit ? (
-          <CreationLink
-            title="Show more communities"
-            onPress={() => setLimit(limit + 6)}
-          />
-        ) : null}
-        {selectedCommunity ? (
-          <CreationLink
-            title="Clear community"
-            onPress={() => {
-              onCommunity(null);
-              onPanel("none");
-            }}
-          />
-        ) : null}
-      </CreationDisclosure>
+        {!choices.length && <Txt muted>No matching communities.</Txt>}
+      </CreationPicker>
       <CreationDisclosure
         compact
-        title="Joining & Capacity"
+        title="Joining"
         summary={`${approval === "Host approval" ? "Host Approval" : "Open Joining"} · ${controls.capacity_limit == null ? "Unlimited" : `${controls.capacity_limit} spots`}${controls.capacity_policy === "strict" ? " · Enforced" : ""}`}
         open={panel === "joining"}
         onToggle={() => toggle("joining")}
@@ -376,16 +391,8 @@ export function CreationPeople({
           onChange={onControls}
           inputRef={capacityRef}
         />
-        <Txt muted>
-          Invitations send only to selected eligible friends on publication. We
-          recommend 50 or fewer. Community association does not change access or
-          invite members.
-        </Txt>
-        <Txt muted>
-          After creating, open People → Organizer roles. People must be approved
-          and Going before receiving a role. Invitations never grant leadership.
-        </Txt>
       </CreationDisclosure>
+      {listing}
       {review}
     </View>
   );

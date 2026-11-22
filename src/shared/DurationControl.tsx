@@ -21,12 +21,14 @@ export function DurationControl({
   minimum = 1,
   maximum,
   presets = [30, 60, 120],
+  label = "Duration",
 }: {
   value: number;
   onChange(minutes: number): void;
   minimum?: number;
   maximum?: number;
   presets?: number[];
+  label?: string;
 }) {
   const { styles, semanticColors: colors } = useTheme();
   const [custom, setCustom] = useState(!presets.includes(value));
@@ -49,7 +51,7 @@ export function DurationControl({
     <View style={{ gap: 6 }}>
       <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
         <Clock3 size={16} color={colors.textSecondary} />
-        <Text style={styles.label}>Duration</Text>
+        <Text style={styles.label}>{label}</Text>
       </View>
       <View
         accessibilityRole="radiogroup"

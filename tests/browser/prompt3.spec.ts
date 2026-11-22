@@ -1,15 +1,16 @@
 import { expect, test } from "@playwright/test";
+import { startDemoFromEntry } from "./demoEntry";
 
 for (const width of [320, 430]) {
   test(`group members expand in place at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 844 });
     await page.goto("/create?editor=yes");
-    await page.getByRole("button", { name: /Explore the demo/ }).click();
+    await startDemoFromEntry(page);
     await page
-      .getByRole("button", { name: "+ Add People", exact: true })
+      .getByRole("button", { name: /^(?:Add friends|Edit invited friends)$/ })
       .click();
     const picker = page.getByRole("dialog", {
-      name: "Add People",
+      name: "Invite friends",
       exact: true,
     });
     await picker.getByRole("button", { name: "Squads", exact: true }).click();
@@ -47,7 +48,7 @@ for (const width of [320, 430]) {
       ).toBeChecked();
       await picker.getByRole("button", { name: "Done", exact: true }).click();
       await page
-        .getByRole("button", { name: "+ Add People", exact: true })
+        .getByRole("button", { name: /^(?:Add friends|Edit invited friends)$/ })
         .click();
       await picker
         .getByRole("button", { name: "Selected · 1", exact: true })

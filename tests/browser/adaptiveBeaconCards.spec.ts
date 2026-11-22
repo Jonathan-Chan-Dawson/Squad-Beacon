@@ -1,4 +1,12 @@
 import { expect, test, type Page } from "@playwright/test";
+import { mockOnboardingAccount } from "./onboardingAccount";
+import { startDemoFromEntry } from "./demoEntry";
+
+async function enterDemo(page: Page) {
+  await mockOnboardingAccount(page, { signedOut: true });
+  await page.goto("/auth/sign-in");
+  await startDemoFromEntry(page);
+}
 
 async function setAppearance(page: Page, appearance: "Light" | "Dark") {
   await page.getByRole("tab", { name: "Profile", exact: true }).click();
@@ -8,8 +16,7 @@ async function setAppearance(page: Page, appearance: "Light" | "Dark") {
 }
 
 async function openBrowse(page: Page, appearance: "Light" | "Dark") {
-  await page.goto("/");
-  await page.getByRole("button", { name: /Explore the demo/ }).click();
+  await enterDemo(page);
   await setAppearance(page, appearance);
   await page.getByRole("tab", { name: "Beacons", exact: true }).last().click();
   await page
@@ -19,8 +26,7 @@ async function openBrowse(page: Page, appearance: "Light" | "Dark") {
 }
 
 async function openMap(page: Page, appearance: "Light" | "Dark") {
-  await page.goto("/");
-  await page.getByRole("button", { name: /Explore the demo/ }).click();
+  await enterDemo(page);
   await setAppearance(page, appearance);
   await page.getByRole("tab", { name: "Map", exact: true }).last().click();
 }
@@ -329,7 +335,8 @@ test("Map public preview stays safe and scrollable at phone width", async ({
   const preview = page.getByTestId("map-public-preview");
   await expect(preview).toContainText("Lakefront Summer Lights concert");
   await expect(preview).toContainText(/approximate area/i);
-  await expect(preview).not.toContainText("Hosted by");
+  await expect(preview).toContainText("Hosted by Lakefront Collective");
+  await expect(preview.getByRole("button", { name: /^Beacon tools/ })).toHaveCount(0);
   await expect(
     preview.getByRole("button", { name: "Close map preview", exact: true }),
   ).toBeVisible();

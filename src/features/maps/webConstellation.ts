@@ -1,12 +1,14 @@
+import { appendBeaconUpperBeam, appendMapProjector } from "./projector";
+import {
+  beaconPinEmphasis,
+  distantBeaconPinEmphasis,
+  type BeaconMarkerState,
+} from "./markerIdentity";
 import {
   clusterCountParts,
   clusterCountAccessibilityLabel,
   CLUSTER_COUNT_PATHS,
-  clusterCountWidth,
   CLUSTER_FRIEND_SHADOW_OPACITY,
-  CLUSTER_MICRO_SHADOW_OPACITY,
-  CLUSTER_FAR_SHADOW_OPACITY,
-  friendGroupUsesCount,
   CLUSTER_SHADOW_OPACITY,
 } from "./clusterLayout";
 import {
@@ -21,19 +23,17 @@ import {
 } from "./nativeMapPresentation";
 
 type Options = {
-  member: (point: ClusterPoint, full?: boolean) => HTMLButtonElement;
+  member: (point: ClusterPoint) => HTMLButtonElement;
   open: (section?: "Beacons" | "Friends") => void;
   ink: string;
   friendColor?: (point: ClusterPoint) => string;
+  friendAvatar?: (point: ClusterPoint) => string | undefined;
   surface: string;
   line: string;
-  ownership: string;
-  categoryColor: (point: ClusterPoint) => string;
-  reducedMotion: boolean;
+  categoryColor: (category: NonNullable<ClusterPoint["category"]>) => string;
+  beaconState?: (point: ClusterPoint) => BeaconMarkerState | undefined;
 };
-const personSvg =
-  '<svg aria-hidden="true" viewBox="0 0 24 24" width="100%" height="100%" fill="currentColor" style="display:block;flex:none"><circle cx="12" cy="7" r="4"/><path d="M5 21v-3a7 7 0 0 1 14 0v3Z"/></svg>';
-/** Same bloom metrics, preview limits and satellites as native; no density disks or avatar piles. */
+/** The foreground, density marks, and count positions use the same geometry as native. */
 export function webConstellation(
   presentation: NativeMapPresentation,
   options: Options,
@@ -58,26 +58,67 @@ export function webConstellation(
   hit.style.cssText =
     "position:absolute;inset:0;border-radius:50%;pointer-events:auto;cursor:pointer;";
   node.append(hit);
-  const shadow = document.createElement("span");
-  shadow.dataset.testid = "cluster-circle-shadow";
-  shadow.setAttribute("aria-hidden", "true");
-  const shadowOpacity = geometry.friendsOnly
-    ? CLUSTER_FRIEND_SHADOW_OPACITY
-    : presentation.scale === "micro"
-      ? CLUSTER_MICRO_SHADOW_OPACITY
-      : presentation.scale === "far"
-        ? CLUSTER_FAR_SHADOW_OPACITY
-        : CLUSTER_SHADOW_OPACITY;
-  shadow.style.cssText = `position:absolute;left:${geometry.shadowLeft}px;top:${geometry.shadowTop}px;width:${geometry.shadowSize}px;height:${geometry.shadowSize}px;border-radius:50%;background:radial-gradient(circle,rgba(0,0,0,${shadowOpacity}) 0%,rgba(0,0,0,${shadowOpacity * 0.5}) 55%,rgba(0,0,0,0) 100%);pointer-events:none;`;
-  node.append(shadow);
+  if (geometry.shadowSize) {
+    const shadow = document.createElement("span");
+    shadow.dataset.testid = "cluster-circle-shadow";
+    shadow.setAttribute("aria-hidden", "true");
+    const opacity = geometry.friendsOnly
+      ? CLUSTER_FRIEND_SHADOW_OPACITY
+      : CLUSTER_SHADOW_OPACITY;
+    shadow.style.cssText = `position:absolute;left:${geometry.shadowLeft}px;top:${geometry.shadowTop}px;width:${geometry.shadowSize}px;height:${geometry.shadowSize}px;border-radius:50%;background:radial-gradient(circle,rgba(0,0,0,${opacity}),transparent 72%);pointer-events:none;`;
+    node.append(shadow);
+  }
+  const projector = geometry.projector;
+  if (projector) {
+    const primary = geometry.primary[0];
+    const categoryTone = options.categoryColor(primary.category ?? "Other");
+    const light = explorer ? null : beaconPinEmphasis(options.beaconState?.(primary), false, categoryTone);
+    appendMapProjector(
+      node,
+      light?.color ?? categoryTone,
+      center + projector.top,
+      projector.height,
+      projector.width,
+      projector.opacity,
+      explorer ? "cluster" : "beacon",
+      center + projector.x,
+    );
+  }
+  geometry.dots.forEach(({ category, offset, size }) => {
+    const dot = document.createElement("span");
+    dot.dataset.testid = "cluster-constellation-dot";
+    dot.dataset.category = category ?? "friends";
+    dot.setAttribute("aria-hidden", "true");
+    const color = category ? options.categoryColor(category) : options.ink;
+    dot.style.cssText = `position:absolute;left:${center + offset.x - size / 2}px;top:${center + offset.y - size / 2}px;width:${size}px;height:${size}px;border-radius:50%;background:${color};opacity:${category ? 1 : 0.55};pointer-events:none;`;
+    node.append(dot);
+  });
+  const appendFriendAvatar = (marker: HTMLElement, point: ClusterPoint) => {
+    const source = options.friendAvatar?.(point);
+    if (!source) return;
+    const avatar = document.createElement("img");
+    avatar.src = source;
+    avatar.alt = "";
+    avatar.style.cssText =
+      "width:100%;height:100%;border-radius:50%;object-fit:cover;display:block;";
+    marker.append(avatar);
+  };
   const items: HTMLElement[] = [];
-  const primary = explorer
-    ? geometry.primary
-    : presentation.beacons.length
-      ? presentation.beacons
-      : presentation.people;
-  primary.forEach((point, index) => {
-    const artwork = options.member(point, geometry.fullBeacon);
+  geometry.primary.forEach((point, index) => {
+    const accent =
+      !explorer && point.kind === "beacon" && presentation.scale !== "close"
+        ? distantBeaconPinEmphasis(
+            beaconPinEmphasis(
+              options.beaconState?.(point),
+              false,
+              options.categoryColor(point.category ?? "Other"),
+            ),
+            presentation.scale,
+          )
+        : null;
+    if (accent?.beamHeight)
+      appendBeaconUpperBeam(node, accent, center - markerSize / 2, center);
+    const artwork = options.member(point);
     let item: HTMLElement = artwork;
     if (explorer) {
       item = document.createElement("span");
@@ -99,23 +140,29 @@ export function webConstellation(
       transform: `scale(${markerSize / 32})`,
       transformOrigin: "50% 50%",
     });
-    if (geometry.fullBeacon) {
-      item.style.left = `${center - 29}px`;
-      item.style.top = `${center - 20}px`;
-      item.style.width = "58px";
-      item.style.height = "56px";
+    if (!explorer) {
+      item.style.width = "44px";
+      item.style.height = "44px";
+      item.style.inset = `${center - 22}px auto auto ${center - 22}px`;
       item.style.transform = "none";
-    }
-    if (index >= geometry.primary.length) item.style.display = "none";
-    // Far friend presence is a dot, never a misleading tiny avatar/attendance badge.
-    if (
-      geometry.friendsOnly &&
-      (presentation.scale === "far" || presentation.scale === "micro")
-    ) {
-      item.replaceChildren();
-      item.style.borderRadius = "50%";
-      item.style.background = options.friendColor?.(point) ?? options.ink;
-      item.style.opacity = presentation.scale === "micro" ? ".75" : ".9";
+      item.style.justifyContent = "center";
+      if (geometry.distant) {
+        const dot = document.createElement("span");
+        dot.dataset.testid = "map-activity-dot";
+        const person = point.kind === "person";
+        const color = person
+          ? (options.friendColor?.(point) ?? options.ink)
+          : options.categoryColor(point.category ?? "Other");
+        dot.style.cssText = `width:${markerSize}px;height:${markerSize}px;border-radius:50%;background:${color};opacity:${person ? 0.65 : 1};`;
+        if (accent?.beamHeight) {
+          const opacity = Math.round(accent.glowOpacity * 255).toString(16).padStart(2, "0");
+          dot.style.boxShadow = `0 0 5px ${accent.color}${opacity}`;
+        }
+        item.replaceChildren(dot);
+      } else {
+        const face = item.firstElementChild as HTMLElement | null;
+        if (face) face.style.transform = `scale(${markerSize / 32})`;
+      }
     }
     // Identity decorations never enlarge or obscure the established cluster footprint.
     if (markerSize < 24)
@@ -124,15 +171,6 @@ export function webConstellation(
         .forEach((decoration) => decoration.remove());
     if (!petalBookmarkVisible(geometry, index))
       item.querySelector('[data-testid="beacon-saved-bookmark"]')?.remove();
-    if (presentation.scale === "micro") {
-      item.querySelector('[data-testid="beacon-marker-beam"]')?.remove();
-      const glow = item.querySelector<HTMLElement>('[data-testid="beacon-marker-glow"]');
-      if (glow) {
-        glow.style.boxShadow = "none";
-        delete glow.dataset.testid;
-        delete glow.dataset.lightingLevel;
-      }
-    }
     items.push(item);
     node.append(item);
   });
@@ -144,11 +182,7 @@ export function webConstellation(
     dot.dataset.memberId = point.id;
     dot.setAttribute("aria-hidden", "true");
     dot.style.cssText = `position:absolute;left:${center + offset.x - s / 2}px;top:${center + offset.y - s / 2}px;width:${s}px;height:${s}px;box-sizing:border-box;border-radius:50%;background:${options.surface};color:${options.ink};border:1px solid ${options.line};padding:1px;display:flex;align-items:center;justify-content:center;line-height:0;z-index:30;pointer-events:none;opacity:${presentation.friendsProminent ? 0.8 : 0.62};`;
-    if (s >= 10) dot.innerHTML = personSvg;
-    else {
-      dot.style.background = options.friendColor?.(point) ?? options.ownership;
-      dot.style.borderColor = options.surface;
-    }
+    appendFriendAvatar(dot, point);
     node.append(dot);
   });
   const badge = (text: string, side: "left" | "right", label: string) => {
@@ -232,15 +266,8 @@ export function webConstellation(
       `${clusterCountAccessibilityLabel(anchor.peopleCount, anchor.beaconTotal)}. Nearby does not mean attending. ${presentation.group.members.length <= 5 ? "Choose from nearby items" : "Open searchable cluster explorer"}`,
     );
   };
-  if (
-    geometry.countBadge ||
-    (!explorer && presentation.people.length && presentation.beacons.length)
-  ) {
-    clusterBadge = badge(
-      geometry.countBadge?.text ?? "",
-      "right",
-      "Explore cluster",
-    );
+  if (geometry.countBadge) {
+    clusterBadge = badge(geometry.countBadge.text, "right", "Explore cluster");
     clusterBadge.dataset.testid = "map-cluster-count";
     clusterBadge.dataset.clusterCount = "true";
     clusterBadge.style.minWidth = "0";
@@ -254,52 +281,6 @@ export function webConstellation(
     };
     node.append(clusterBadge);
     restoreCount();
-  }
-  if (
-    geometry.friendsOnly &&
-    friendGroupUsesCount(presentation.people.length, presentation.scale)
-  ) {
-    const count = badge(
-      "",
-      "right",
-      `${presentation.people.length} nearby friends; open cluster explorer`,
-    );
-    const fontSize =
-      presentation.scale === "micro"
-        ? 8
-        : presentation.scale === "far"
-          ? 9
-          : 10;
-    count.style.minWidth = `${clusterCountWidth(presentation.people.length, 0, fontSize)}px`;
-    count.style.padding = "0";
-    renderCount(
-      count,
-      clusterCountParts(presentation.people.length, 0),
-      fontSize,
-    );
-    count.style.boxSizing = "border-box";
-    count.style.left = "50%";
-    count.style.right = "auto";
-    count.style.bottom = "auto";
-    count.style.top = "50%";
-    count.style.transform = "translate(-50%,-50%)";
-    if (presentation.scale === "micro") {
-      count.style.height = "14px";
-      count.style.font = "700 8px/12px system-ui";
-      count.style.opacity = ".5";
-    }
-    count.dataset.testid = "cluster-friend-count";
-    count.dataset.friends = "true";
-    count.onclick = (event) => {
-      event.stopPropagation();
-      options.open("Friends");
-    };
-    if (presentation.scale === "far") {
-      count.style.height = "18px";
-      count.style.font = "700 9px/16px system-ui";
-      count.style.opacity = ".65";
-    }
-    node.append(count);
   }
   node.addEventListener(
     "click",
