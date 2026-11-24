@@ -1,3 +1,4 @@
+import { rewardsHref } from "@/src/features/beacons/rewardLooks";
 import { ChatKeyboardFrame } from "@/src/features/messages/ChatKeyboard";
 import { MiniAvatar } from "@/src/features/people/MiniAvatar";
 import {
@@ -618,6 +619,7 @@ function Editor({ profile }: { profile: Profile }) {
             {error}
           </Text>
         )}
+        <Button compact secondary title="Shop profile looks" disabled={locked} onPress={() => router.push(rewardsHref("profile", userId ?? undefined))} />
         <Button
           title={busy ? "Saving…" : "Save profile"}
           disabled={locked || !dirty || !draft.name.trim()}

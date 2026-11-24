@@ -1,3 +1,4 @@
+import { rewardTint } from "../../rewardLooks";
 import {
   LivingStatusHeader,
   LivingActivitySection,
@@ -367,7 +368,7 @@ function SharedStatusContent({
       ? statusAudienceLabel(data, userId, saved.audience, saved.audienceId)
       : "Friends";
   return (
-    <View>
+    <View style={{ borderRadius: 14, backgroundColor: userId ? rewardTint(data.equipped_looks?.[userId]?.status) : undefined }}>
       <StatusPanel
         headerOverride={
           card ? (

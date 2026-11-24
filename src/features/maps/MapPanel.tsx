@@ -2,6 +2,7 @@ import { BeaconCommunityRow } from "@/src/features/discovery/BeaconCommunityRow"
 import { BeaconLocationPreview } from "./components/BeaconLocationPreview";
 import PlanningDetailScreen from "@/src/features/planning/PlanningDetailScreen";
 import { router } from "expo-router";
+import { rewardsHref } from "@/src/features/beacons/rewardLooks";
 import { BeaconMusicLink } from "@/src/features/beacons/BeaconMusicLink";
 import { BeaconSheetPeople } from "./BeaconSheetPeople";
 import { MapRelationshipActions } from "./MapRelationshipActions";
@@ -471,6 +472,9 @@ export function MapPanel({
       >
         <MapBeaconRsvp activity={activity} />
         {activeTab === "overview" && !collapsed ? <BeaconCommunityRow activityId={activity.id} /> : null}
+        {activeTab === "overview" && !collapsed && activity.owner_id === userId && (
+          <Button compact secondary title="Customize Beacon appearance" onPress={() => router.push(rewardsHref("activity", activity.id))} />
+        )}
         {collapsed && (
           <Button
             title={Platform.OS !== "web" ? "Expand overview" : "Open Beacon overview"}

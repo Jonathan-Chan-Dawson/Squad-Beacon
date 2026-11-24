@@ -67,7 +67,18 @@ test("public Beacon continuation survives reload but expires, clears and never s
     assert.equal(consumeEntryIntent(), "/");
   }
   saved = JSON.stringify({ destination: path, expires: Date.now() - 1 });
-  assert.equal(consumeEntryIntent(), "/");
+  assert.equal(consumeEntryIntent(), "/activities?entryExpired=1");
+  rememberEntryIntent("/create", { draftId: "private-draft", kind: "ping" });
+  assert.equal(JSON.parse(saved).destination, "/create");
+  const sanitizedCreate = saved;
+  assert.equal(consumeEntryIntent(), "/create?draftId=private-draft&kind=ping");
+  saved = sanitizedCreate;
+  assert.equal(consumeEntryIntent(), "/create");
+  for (const privatePath of ["/guest-claim", "/plan/private-plan", "/discover/other"]) {
+    rememberEntryIntent(privatePath, { token: "secret" });
+    assert.equal(saved, "");
+    assert.equal(consumeEntryIntent(), `${privatePath}?token=secret`);
+  }
   rememberEntryIntent(path, {});
   clearEntryIntent();
   assert.equal(consumeEntryIntent(), "/");

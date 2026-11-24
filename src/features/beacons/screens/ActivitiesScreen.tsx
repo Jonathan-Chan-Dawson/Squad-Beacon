@@ -3,6 +3,7 @@ import { SpontaneityEntry } from "../spontaneity/SpontaneityEntry";
 import { UpNextCard, LivingActivitySection } from "../components/feed/LivingActivitySection";
 import { homePresentation } from "@/src/features/onboarding/presentation";
 import { useOnboarding } from "@/src/features/onboarding/runtime";
+import { GuestBeaconsWelcome } from "@/src/features/onboarding/GuestBeaconsWelcome";
 import {
   HomeInvitation,
   SemanticEmpty,
@@ -102,6 +103,7 @@ export default function ActivitiesScreen() {
     filter?: string;
     participation?: string;
     confirmed?: string;
+    entryExpired?: string;
   }>();
   const [refreshing, setRefreshing] = useState(false);
   const [requestError, setRequestError] = useState("");
@@ -491,22 +493,28 @@ export default function ActivitiesScreen() {
             >
               Beacons
             </Text>
-            {userId && <SpontaneityEntry compact />}
-            <PremiumHeaderButton />
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Open calendar"
-              onPress={() => router.push("/calendar" as Href)}
-              style={{
-                width: tokens.layout.minTapTarget,
-                height: tokens.layout.minTapTarget,
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <CalendarDays size={22} color={designColors.textSecondary} />
-            </Pressable>
-            <InboxButton />
+            {userId ? (
+              <>
+                <SpontaneityEntry compact />
+                <PremiumHeaderButton />
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Open calendar"
+                  onPress={() => router.push("/calendar" as Href)}
+                  style={{
+                    width: tokens.layout.minTapTarget,
+                    height: tokens.layout.minTapTarget,
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <CalendarDays size={22} color={designColors.textSecondary} />
+                </Pressable>
+                <InboxButton />
+              </>
+            ) : !loading ? (
+              <HomeAction title="Sign in" plain onPress={() => router.push("/auth/sign-in")} />
+            ) : null}
           </View>
         </GlassBar>
       </View>
@@ -555,6 +563,15 @@ export default function ActivitiesScreen() {
             />
           </View>
         ) : null}
+        {params.entryExpired === "1" && (
+          <Text accessibilityRole="alert" style={{ color: designColors.textSecondary }}>
+            Your saved link expired. You can start again from Beacons.
+          </Text>
+        )}
+        {!userId && !loading && <GuestBeaconsWelcome />}
+        {home.kind === "welcome" && (
+          <HomeInvitation welcome friends={home.friends} />
+        )}
         {userId ? (
           <View
             testID="home-friends-section"
@@ -577,17 +594,13 @@ export default function ActivitiesScreen() {
             )}
           </View>
         )}
-        {home.kind === "welcome" ||
-        (!hasPersonal && home.kind === "compact") ? (
-          <HomeInvitation
-            welcome={home.kind === "welcome"}
-            friends={home.friends}
-          />
+        {userId && !hasPersonal && home.kind === "compact" ? (
+          <HomeInvitation welcome={false} friends={home.friends} />
         ) : null}
         {home.kind === "loading" ? (
           <Skeleton height={160} borderRadius={12} />
         ) : null}
-        {nowPreview.length || upcomingPreview.length ? (
+        {userId && (nowPreview.length || upcomingPreview.length) ? (
           <View
             testID="home-explore-beacons"
             style={{
@@ -683,7 +696,7 @@ export default function ActivitiesScreen() {
             ))}
           </View>
         ) : null}
-        {home.kind === "compact" &&
+        {userId && home.kind === "compact" &&
         !nowPreview.length &&
         !upcomingPreview.length &&
         (exploration.query.trim() ||
@@ -710,62 +723,66 @@ export default function ActivitiesScreen() {
             }}
           />
         ) : null}
-        <View
-          collapsable={false}
-          style={{
-            borderTopWidth: 1,
-            borderTopColor: designColors.border,
-            marginTop: 6,
-            paddingTop: 12,
-          }}
-        >
-          <Text
-            accessibilityRole="header"
-            style={{
-              color: designColors.textPrimary,
-              ...tokens.type.secondary,
-              fontWeight: "500",
-            }}
-          >
-            Saved &amp; Tools
-          </Text>
+        {userId ? (
           <View
-            testID="saved-tools-entry"
+            collapsable={false}
             style={{
-              flexDirection: "row",
-              flexWrap: "wrap",
-              gap: 8,
-              paddingTop: 6,
+              borderTopWidth: 1,
+              borderTopColor: designColors.border,
+              marginTop: 6,
+              paddingTop: 12,
             }}
           >
-            {(
-              [
-                { title: "Plans", path: "/plans", icon: CalendarDays },
-                {
-                  title: "Saved",
-                  path: "/my-collection?section=saved",
-                  icon: Bookmark,
-                },
-                {
-                  title: "Templates",
-                  path: "/my-collection?section=templates",
-                  icon: LayoutTemplate,
-                },
-                { title: "Library", path: "/library", icon: FolderOpen },
-              ] as const
-            ).map(({ title, path, icon: Icon }) => (
-              <View key={title} style={{ flexGrow: 1, flexBasis: "40%" }}>
-                <HomeAction
-                  title={title}
-                  stretch
-                  outlined
-                  icon={<Icon size={16} color={designColors.accent} />}
-                  onPress={() => router.push(path as Href)}
-                />
-              </View>
-            ))}
+            <Text
+              accessibilityRole="header"
+              style={{
+                color: designColors.textPrimary,
+                ...tokens.type.secondary,
+                fontWeight: "500",
+              }}
+            >
+              Saved &amp; Tools
+            </Text>
+            <View
+              testID="saved-tools-entry"
+              style={{
+                flexDirection: "row",
+                flexWrap: "wrap",
+                gap: 8,
+                paddingTop: 6,
+              }}
+            >
+              {(
+                [
+                  { title: "Plans", path: "/plans", icon: CalendarDays },
+                  {
+                    title: "Saved",
+                    path: "/my-collection?section=saved",
+                    icon: Bookmark,
+                  },
+                  {
+                    title: "Templates",
+                    path: "/my-collection?section=templates",
+                    icon: LayoutTemplate,
+                  },
+                  { title: "Library", path: "/library", icon: FolderOpen },
+                ] as const
+              ).map(({ title, path, icon: Icon }) => (
+                <View key={title} style={{ flexGrow: 1, flexBasis: "40%" }}>
+                  <HomeAction
+                    title={title}
+                    stretch
+                    outlined
+                    icon={<Icon size={16} color={designColors.accent} />}
+                    onPress={() => router.push(path as Href)}
+                  />
+                </View>
+              ))}
+            </View>
           </View>
-        </View>
+        ) : !loading ? (
+          <HomeAction title="Help & Tips" onPress={() => router.push("/help")} />
+        ) : null}
       </ScrollView>
       <Sheet
         title="Your response"

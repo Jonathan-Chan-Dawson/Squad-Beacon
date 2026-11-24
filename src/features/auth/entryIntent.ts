@@ -1,14 +1,22 @@
-// Private entry routes remain in memory. Only a public Beacon continuation can
-// survive a reload/email callback, without storing tokens or personal data.
+// Private entry routes remain in memory. Persist only sanitized public Beacon or Create paths.
 let pending: string | null = null;
 let storage: { read(): string | null; write(value: string): void } | undefined;
 export function setEntryIntentStorage(next: typeof storage) {
   storage = next;
 }
+function isReloadSafe(destination: unknown): destination is string {
+  return (
+    typeof destination === "string" &&
+    (destination === "/create" ||
+      /^\/discover\/[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(
+        destination,
+      ))
+  );
+}
 function persist(destination: string | null) {
   try {
     storage?.write(
-      destination && /^\/discover\/[0-9a-f-]{36}$/i.test(destination)
+      isReloadSafe(destination)
         ? JSON.stringify({ destination, expires: Date.now() + 86400000 })
         : "",
     );
@@ -46,8 +54,7 @@ export function rememberEntryIntent(
         search.append(key, part);
   }
   pending = path + (search.size ? `?${search}` : "");
-  // Dynamic router params are redundant for the public exact-ID route.
-  persist(path.startsWith("/discover/") ? path.replace(/\/$/, "") : null);
+  persist(path.replace(/\/$/, ""));
 }
 export function consumeEntryIntent() {
   let saved: string | null = null;
@@ -55,10 +62,13 @@ export function consumeEntryIntent() {
     const parsed = JSON.parse(storage?.read() || "null");
     if (
       parsed &&
-      parsed.expires > Date.now() &&
-      /^\/discover\/[0-9a-f-]{36}$/i.test(parsed.destination)
+      isReloadSafe(parsed.destination) &&
+      Number.isFinite(parsed.expires)
     )
-      saved = parsed.destination;
+      saved =
+        parsed.expires > Date.now()
+          ? parsed.destination
+          : "/activities?entryExpired=1";
   } catch {
     /* Invalid or unavailable storage is ignored. */
   }

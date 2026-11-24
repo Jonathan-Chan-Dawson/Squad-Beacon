@@ -1,3 +1,5 @@
+import { useBeacon } from "@/src/shared/store";
+import { rewardTint } from "@/src/features/beacons/rewardLooks";
 import type { SquadIconKey } from "@/src/shared/types";
 import React from "react";
 import { Pressable, Text, View } from "react-native";
@@ -94,6 +96,8 @@ export function SocialDirectorySummaryCard(
 ) {
   const { styles, colors, semanticColors: c } = useTheme();
   const { summary } = props;
+  const { data } = useBeacon();
+  const cosmetic = rewardTint(data.equipped_looks?.[summary.entity_id]?.community);
 
   if (props.compact) {
     return (
@@ -105,7 +109,7 @@ export function SocialDirectorySummaryCard(
           padding: 12,
           marginBottom: 8,
           borderRadius: 14,
-          backgroundColor: c.surfaceRaised,
+          backgroundColor: cosmetic ?? c.surfaceRaised,
           borderWidth: 1,
           borderColor: c.border,
         }}
@@ -178,7 +182,7 @@ export function SocialDirectorySummaryCard(
     <View
       style={
         props.discoveryCard
-          ? [styles.card, { padding: 12, gap: 10 }]
+          ? [styles.card, { padding: 12, gap: 10 }, cosmetic ? { backgroundColor: cosmetic } : undefined]
           : {
               gap: 8,
               paddingVertical: 10,

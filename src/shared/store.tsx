@@ -410,6 +410,8 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
   }, [session, demo, refresh, setData]);
   const act = useCallback(
     async (action: string, payload: Payload = {}, requestId?: string) => {
+      if (!demo && action.startsWith("demo_rewards_"))
+        throw new Error("Open the demo to use demo Coins.");
       if (demo) {
         const baseData = dataRef.current;
         if (baseData.viewer_id !== DEMO_ID)

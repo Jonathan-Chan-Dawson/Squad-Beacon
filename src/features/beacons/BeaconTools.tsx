@@ -1,3 +1,5 @@
+import { rewardsHref } from "./rewardLooks";
+import { router } from "expo-router";
 import { PlanningDisclosure } from "@/src/features/planning/PlanningControls";
 import { TaskCoordination } from "./components/TaskCoordination";
 import { useChecklistPages } from "./useChecklistPages";
@@ -510,6 +512,9 @@ export function BeaconTools({
 
   return (
     <View style={{ gap: 10 }}>
+      {!section && userId === activity.owner_id && activity.mode !== "solo" && (
+        <Button compact secondary title="Shop Beacon looks" onPress={() => router.push(rewardsHref("activity", activity.id))} />
+      )}
       {allowed && checklistEnabled ? (
         <View
           style={[

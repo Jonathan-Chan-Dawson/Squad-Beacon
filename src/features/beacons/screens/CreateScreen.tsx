@@ -21,6 +21,7 @@ import {
 import { useCommunityTopics } from "@/src/features/discovery/useCommunityTopics";
 import { BeaconMapIconEditor } from "../components/BeaconMapIconEditor";
 import { CreationAppearance } from "../components/CreationAppearance";
+import { rewardsHref } from "../rewardLooks";
 import { BeaconCardArtwork, type BeaconArtworkStyle } from "../components/BeaconCardArtwork";
 import { CreationDisclosure } from "../components/CreationDisclosure";
 import { validCreationMeetingLink } from "../creationValidation";
@@ -2345,6 +2346,10 @@ function CreateEditor({ templateBrowser = false }: { templateBrowser?: boolean }
           onChange={setBeaconControls}
           background={previewBackground}
           onBackgroundChange={setPreviewBackground}
+          onOpenShop={() => {
+            setAppearanceOpen(false);
+            router.push(rewardsHref("activity"));
+          }}
         />
         {mapIconEditor}
           {canUseAppearance&&<View style={{gap:8}}><Txt>Additional Beacon styles</Txt>{audience==="squad"&&tierRank(appearanceContext.tier)>tierRank(personalAppearance.tier)&&<Txt muted>Unlocked by {data.squads.find(s=>s.id===audienceId)?.name??"your Squad"}</Txt>}<Chips options={["Standard","Sunrise","Ocean"]} value={premiumAppearance?.style==="sunrise"?"Sunrise":premiumAppearance?.style==="ocean"?"Ocean":"Standard"} onChange={v=>setPremiumAppearance(v==="Standard"&&!premiumAppearance?.layout?null:{...premiumAppearance,style:v.toLowerCase() as ToolSettings["style"]})}/>{appearanceTier==="pro"&&<Chips options={["Standard layout","Preparation","Session"]} value={premiumAppearance?.layout==="preparation"?"Preparation":premiumAppearance?.layout==="session"?"Session":"Standard layout"} onChange={v=>setPremiumAppearance({...premiumAppearance,layout:v==="Preparation"?"preparation":v==="Session"?"session":"standard"})}/>}</View>}

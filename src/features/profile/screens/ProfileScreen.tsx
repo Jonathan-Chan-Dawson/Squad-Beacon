@@ -5,7 +5,7 @@ import {
 import React, { useCallback, useEffect, useId, useRef, useState } from "react";
 import { Modal, Pressable, Share, Text, View } from "react-native";
 import Svg, { Circle, Defs, LinearGradient, Stop } from "react-native-svg";
-import { router, useLocalSearchParams } from "expo-router";
+import { router, useLocalSearchParams, type Href } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Pencil, RadioTower, Settings, Sparkles, X } from "lucide-react-native";
 import { useBeacon } from "@/src/shared/store";
@@ -18,7 +18,7 @@ import {
   useTheme,
 } from "@/src/shared/ui";
 import { Skeleton, useReducedMotion } from "@/src/shared/design-system";
-import { templates, type BeaconTemplate } from "@/src/shared/templates";
+import type { BeaconTemplate } from "@/src/shared/templates";
 import { useSpontaneityEntry } from "@/src/features/beacons/spontaneity/SpontaneityEntry";
 import { ChatKeyboardFrame } from "@/src/features/messages/ChatKeyboard";
 import { ProfileSurveyContent } from "../ProfileSurvey";
@@ -35,18 +35,6 @@ export default function ProfileScreen() {
   return <ProfileScreenBody key={`${userId}:${viewerEpoch}:${demo}`} />;
 }
 
-const dotColors = ["#8EDDB5", "#AAB8FF", "#F5C481", "#F1A6CF", "#82D7EA"];
-const compactTapCount = new Intl.NumberFormat(undefined, {
-  notation: "compact",
-  maximumFractionDigits: 1,
-});
-const dotQuips = [
-  "Tiny Beacon. Big main-character energy.",
-  "You found the button with no job description.",
-  "The Beacon has changed outfits.",
-  "Congrats. You’ve picked up a signal.",
-];
-
 function ProfileScreenBody() {
   const { data, userId, loading, refresh, demo } = useBeacon();
   const { semanticColors: colors, styles, tokens } = useTheme();
@@ -62,14 +50,13 @@ function ProfileScreenBody() {
   const [shareOpen, setShareOpen] = useState(false);
   const score = useBeaconScore(userId, demo);
   const [scoreOpen, setScoreOpen] = useState(false);
-  const upgradeToastUntil = useRef(0);
   const ringId = `tiny-beacon-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
   const { index: stageIndex, stage, nextStage } = beaconScoreTier(score.points);
   const progress = nextStage
-    ? (score.points - stage.at + score.tapRemainder / score.tapRate) /
+    ? (score.points - stage.at) /
       (nextStage.at - stage.at)
     : 1;
-  const [dotColor, setDotColor] = useState(dotColors[0]);
+  const dotColor = stage.tint;
   const [dotToast, setDotToast] = useState<{ message: string; recipe?: BeaconTemplate } | null>(null);
   const dismissDotToast = useCallback(() => setDotToast(null), []);
   const openSpontaneity = useSpontaneityEntry();
@@ -79,45 +66,18 @@ function ProfileScreenBody() {
     return () => clearTimeout(timeout);
   }, [dotToast, dismissDotToast]);
   const announcedStage = useRef<number | null>(null);
-  const tapFeedback = useRef<number | null>(null);
   useEffect(() => {
-    if (!score.synced && !score.taps) return;
+    if (!score.synced) return;
     const frame = requestAnimationFrame(() => {
       const previous = announcedStage.current;
       announcedStage.current = stageIndex;
-      if (previous !== null && stageIndex > previous) {
-        const count = tapFeedback.current;
-        const recipe = count !== null && count % 8 === 0
-          ? templates[Math.floor(Math.random() * templates.length)]
-          : undefined;
-        upgradeToastUntil.current = Date.now() + (recipe ? 4500 : 2800);
-        setDotToast({ message: `${stage.label} unlocked`, recipe });
-      }
-      tapFeedback.current = null;
+      if (previous !== null && stageIndex > previous)
+        setDotToast({ message: `Level ${stageIndex + 1} unlocked` });
     });
     return () => cancelAnimationFrame(frame);
-  }, [score.synced, score.points, score.taps, stageIndex, stage.label]);
+  }, [score.synced, stageIndex]);
   function tapDot() {
-    const count = score.tap();
-    if (count === null) return;
-    const roll = Math.random();
-    setDotColor((previous) => {
-      const choices = dotColors.filter((color) => color !== previous);
-      return choices[Math.floor(roll * choices.length)];
-    });
-    tapFeedback.current = count;
-    const unlocked = score.tapRemainder + 1 >= score.tapRate &&
-      beaconScoreTier(score.points + 1).index > stageIndex;
-    if (unlocked) return;
-    if (count % 4 !== 0 || Date.now() < upgradeToastUntil.current) return;
-    const recipe = count % 8 === 0
-      ? templates[Math.floor(Math.random() * templates.length)]
-      : undefined;
-    if (recipe) {
-      setDotToast({ message: `Plot twist: ${recipe.title}?`, recipe });
-    } else {
-      setDotToast({ message: dotQuips[Math.floor(Math.random() * dotQuips.length)] });
-    }
+    router.push("/beacon-shop?mini=true" as Href);
   }
   function openToastQuest() {
     dismissDotToast();
@@ -195,11 +155,11 @@ function ProfileScreenBody() {
           noteAccessory={
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Tap the tiny Beacon"
+              accessibilityLabel="Open Mini Beacon"
               disabled={!score.ready}
               aria-valuetext={
                 score.points
-                  ? `${score.points} points, ${stage.label} stage`
+                  ? `${score.points} XP, level ${stageIndex + 1}`
                   : undefined
               }
               onPress={tapDot}
@@ -222,7 +182,7 @@ function ProfileScreenBody() {
                   justifyContent: "center",
                 }}
               >
-                {(score.points > 0 || score.taps > 0) && (
+                {(score.points > 0) && (
                   <Svg
                     width={38}
                     height={38}
@@ -278,7 +238,7 @@ function ProfileScreenBody() {
                   </Svg>
                 )}
                 <RadioTower size={15} color={dotColor} strokeWidth={2} />
-                {(score.points > 0 || score.taps > 0) && (
+                {(score.points > 0) && (
                   <View
                     style={{
                       position: "absolute",
@@ -302,7 +262,7 @@ function ProfileScreenBody() {
                         fontVariant: ["tabular-nums"],
                       }}
                     >
-                      {score.points < 10_000 ? score.points.toLocaleString() : compactTapCount.format(score.points)}
+                      {score.points < 10_000 ? score.points.toLocaleString() : Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 }).format(score.points)}
                     </Text>
                   </View>
                 )}
@@ -324,6 +284,7 @@ function ProfileScreenBody() {
                 secondary
                 onPress={() => { setScoreOpen(true); void score.refresh(); }}
               />
+              <Button compact secondary title="Rewards and looks" onPress={() => router.push("/beacon-shop" as Href)} />
               <Button
                 title="Share profile"
                 compact

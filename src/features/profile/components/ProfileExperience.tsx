@@ -21,6 +21,7 @@ import {
 } from "lucide-react-native";
 import type { Profile } from "@/src/shared/types";
 import { useBeacon } from "@/src/shared/store";
+import { rewardTint } from "@/src/features/beacons/rewardLooks";
 import { useNow } from "@/src/shared/useNow";
 import { activityWhen, friendAvailabilityState } from "@/src/shared/domain";
 import { Button, Field, Sheet, Txt, useTheme } from "@/src/shared/ui";
@@ -425,7 +426,8 @@ export function ProfileExperience({
     <View ref={sectionRoot} style={{ gap: 14 }}>
       <View
         testID={own ? "profile-identity" : "person-profile-identity"}
-        style={{ gap: 10, padding: 2, overflow: "hidden", borderRadius: 22 }}
+        style={{ gap: 10, padding: 2, overflow: "hidden", borderRadius: 22,
+          backgroundColor: rewardTint(data.equipped_looks?.[profile.id]?.profile) }}
       >
         <Svg
           pointerEvents="none"

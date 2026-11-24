@@ -446,6 +446,7 @@ export interface ProfileVisibilityGrant {
   target_id: ID;
 }
 export interface Data {
+  equipped_looks?: Record<string, Partial<Record<string, string>>>;
   beacon_topics?: import("@/src/features/discovery/beaconTopics").CommunityTopic[];
   beacon_topic_assignments?: { activity_id: string; topic_id: string }[];
   beacon_topic_follows?: import("@/src/features/discovery/beaconTopics").BeaconTopicFollow[];
@@ -532,6 +533,7 @@ export interface Data {
   premium?: import("./entitlements").EntitlementSnapshot;
   demo_session_id?: string;
   demo_premium_tier?: import("./entitlements").PremiumTier;
+  demo_rewards?: { balance: number; owned: string[] };
   is_demo?: boolean;
   viewer_id?: ID | null;
   location_recipients?: string[];
@@ -677,6 +679,7 @@ export function normalizeData(value: Partial<Data> | null | undefined): Data {
   data.capabilities.squad_boosts = data.is_demo === true || value?.capabilities?.squad_boosts === true;
   data.capabilities.premium = data.is_demo === true || value?.capabilities?.premium === true;
   if (!data.is_demo) {data.demo_premium_tier=undefined; data.demo_squad_boosts=undefined; data.demo_boost_clock=undefined;}
+  if (!data.is_demo) data.demo_rewards = undefined;
   data.capabilities.living_plans = data.is_demo === true || value?.capabilities?.living_plans === true;
   data.capabilities.collaborative_plans = data.is_demo === true || value?.capabilities?.collaborative_plans === true;
   data.capabilities.repeatable_plans = data.is_demo === true || value?.capabilities?.repeatable_plans === true;

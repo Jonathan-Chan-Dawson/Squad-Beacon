@@ -241,7 +241,7 @@ export function LivingPlansScreen() {
         revealSequence ? { y: 0, sequence: revealSequence } : undefined
       }
     >
-      <ContextTip name="plan" />
+      <ContextTip name="plan" proactive />
       <Chips
         value={filter === "All" || filter === "Personal" ? filter : "Squad"}
         options={["All", "Personal", "Squad"]}

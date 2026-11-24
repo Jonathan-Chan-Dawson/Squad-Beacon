@@ -1,4 +1,5 @@
 import { MapProjector } from "./MapProjector";
+import type { beaconMapLook } from "@/src/features/beacons/rewardLooks";
 import { beaconProjectionDimensions } from "../projector";
 import {
   EMPTY_MARKER_STATE,
@@ -355,6 +356,7 @@ export function BeaconMarkerArtwork({
   lightingTier = "close",
   raisedPin = false,
   stopNumber,
+  cosmetic,
 }: {
   id: string;
   lightEnabled?: boolean;
@@ -363,6 +365,7 @@ export function BeaconMarkerArtwork({
   lightingTier?: "close" | "medium" | "far" | "micro";
   raisedPin?: boolean;
   stopNumber?: number;
+  cosmetic?: ReturnType<typeof beaconMapLook>;
   category: Category;
   categoryColor: string;
   selected?: boolean;
@@ -400,7 +403,7 @@ export function BeaconMarkerArtwork({
         {upperLight && <BeaconPinLight lighting={upperLight} inset={pinInset} compact={lightingTier !== "close"} faceSize={visualSize} />}
         {projection ? (
           <MapProjector kind="beacon" center={raisedPin && selected ? 58 : beaconName ? BEACON_NAME_MAX_WIDTH / 2 : raisedPin && lighting?.level === 2 ? 33 : 29}
-            color={lighting?.color ?? categoryColor} top={pinInset + visualSize - 5}
+            color={cosmetic?.beam ?? lighting?.color ?? categoryColor} top={pinInset + visualSize - 5}
             {...projection} />
         ) : showProjection ? <BeaconPinTip color={categoryColor} faceBottom={pinInset + visualSize} /> : null}
         <View
@@ -409,7 +412,7 @@ export function BeaconMarkerArtwork({
             height: visualSize,
             borderRadius: visualSize / 2,
             borderWidth: 2,
-            borderColor: categoryColor,
+            borderColor: cosmetic?.frame ?? categoryColor,
             backgroundColor: colors.surface,
             alignItems: "center",
             justifyContent: "center",
@@ -496,10 +499,12 @@ function BeaconMapPinComponent({
   markerState,
   icon,
   stopNumber,
+  cosmetic,
 }: {
   id: string;
   icon?: string | null;
   stopNumber?: number;
+  cosmetic?: ReturnType<typeof beaconMapLook>;
   title: string;
   coordinate: { latitude: number; longitude: number };
   category: Category;
@@ -525,7 +530,7 @@ function BeaconMapPinComponent({
     (showProjection || compactProjection ? NATIVE_PROJECTION_ROOM : 0);
   const label = `${stopNumber ? `Plan stop ${stopNumber}` : "Map"}: ${title}${stateLabel ? `, ${stateLabel}` : ""}`;
   const tracking = useMarkerTracking(
-    `${JSON.stringify(markerState)}:${id}:${categoryColor}:${selected}:${dimmed}:${streetTime ?? ""}:${beaconName ?? ""}:${appearanceKey}:${dot}:${showProjection}:${compactProjection}:${lightingTier}:${icon ?? ""}:${stopNumber ?? ""}`,
+    `${JSON.stringify(markerState)}:${id}:${categoryColor}:${selected}:${dimmed}:${streetTime ?? ""}:${beaconName ?? ""}:${appearanceKey}:${dot}:${showProjection}:${compactProjection}:${lightingTier}:${icon ?? ""}:${stopNumber ?? ""}:${cosmetic?.frame ?? ""}:${cosmetic?.beam ?? ""}`,
   );
   if (dot)
     return (
@@ -591,6 +596,7 @@ function BeaconMapPinComponent({
         streetTime={streetTime}
         beaconName={beaconName}
         markerState={markerState}
+        cosmetic={cosmetic}
         stopNumber={stopNumber}
       />
     </Marker>
@@ -609,6 +615,8 @@ export const BeaconMapPin = React.memo(
     left.icon === right.icon &&
     left.stopNumber === right.stopNumber &&
     left.categoryColor === right.categoryColor &&
+    left.cosmetic?.frame === right.cosmetic?.frame &&
+    left.cosmetic?.beam === right.cosmetic?.beam &&
     left.selected === right.selected &&
     left.dimmed === right.dimmed &&
     left.streetTime === right.streetTime &&

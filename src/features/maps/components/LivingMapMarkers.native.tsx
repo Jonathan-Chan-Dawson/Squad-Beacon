@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useRef } from "react";
+import { beaconMapLook, type EquippedLooks } from "@/src/features/beacons/rewardLooks";
 import { BackHandler, Pressable, Text, View } from "react-native";
 import Svg, {
   Circle,
@@ -63,12 +64,14 @@ const MemberArtwork = React.memo(function MemberArtwork({
   categoryColors,
   availabilityColors,
   onImageLoad,
+  frame,
 }: Omit<ArtworkProps, "members"> & {
   model: ClusterMemberArtwork;
   compact?: boolean;
   showIdentity?: boolean;
   showSaved?: boolean;
   onImageLoad?: () => void;
+  frame?: string;
 }) {
   const { colors } = useTheme();
   const loaded = useRef<string | null>(null);
@@ -110,7 +113,7 @@ const MemberArtwork = React.memo(function MemberArtwork({
           height: size,
           borderRadius: size / 2,
           borderWidth: 2,
-          borderColor: color,
+          borderColor: frame ?? color,
           backgroundColor: colors.surface,
           alignItems: "center",
           justifyContent: "center",
@@ -240,9 +243,11 @@ function LivingMapPinComponent({
   members,
   categoryColors,
   availabilityColors,
+  equippedLooks,
 }: ArtworkProps & {
   presentation: NativeMapPresentation;
   appearanceKey: string;
+  equippedLooks?: Record<string, EquippedLooks>;
   onPress: (presentation: NativeMapPresentation) => void;
   onMember: (member: ClusterPoint) => void;
 }) {
@@ -257,13 +262,14 @@ function LivingMapPinComponent({
   const projectorLighting = projectorBeacon?.kind === "beacon"
     ? beaconPinEmphasis(projectorBeacon.markerState, false, projectorCategory)
     : null;
+  const projectorLook = projectorBeacon ? beaconMapLook(equippedLooks?.[projectorBeacon.id.slice(7)]) : undefined;
   const shadowGradientId = React.useId().replace(/:/g, "");
   const shadowOpacity = geometry.friendsOnly ? CLUSTER_FRIEND_SHADOW_OPACITY : CLUSTER_SHADOW_OPACITY;
   const [avatarRevision, setAvatarRevision] = React.useState(0);
   const loaded = useCallback(() => setAvatarRevision((value) => value + 1), []);
   const tracking = useMarkerTracking(JSON.stringify([
     appearanceKey, presentation.scale, overflow, geometry, avatarRevision,
-    members.map((member) => member.visualRevision),
+    members.map((member) => [member.visualRevision, equippedLooks?.[member.id.slice(7)]]),
   ]));
   const count = geometry.countBadge;
   return (
@@ -361,7 +367,7 @@ function LivingMapPinComponent({
             height={geometry.projector.height}
             width={geometry.projector.width}
             opacity={geometry.projector.opacity}
-            color={projectorLighting?.color ?? projectorCategory}
+            color={projectorLook?.beam ?? projectorLighting?.color ?? projectorCategory}
           />
         )}
         {geometry.dots.map(({ category, offset, size }) => (
@@ -432,6 +438,7 @@ function LivingMapPinComponent({
                 ) : (
                   <MemberArtwork
                     model={model}
+                    frame={model.kind === "beacon" ? beaconMapLook(equippedLooks?.[point.id.slice(7)]).frame : undefined}
                     compact
                     showIdentity={faceSize >= 24}
                     showSaved={!explorer || petalBookmarkVisible(geometry, index)}
@@ -522,6 +529,7 @@ export const LivingMapPin = React.memo(
   (a, b) =>
     a.presentation === b.presentation &&
     a.appearanceKey === b.appearanceKey &&
+    a.equippedLooks === b.equippedLooks &&
     a.onPress === b.onPress &&
     a.onMember === b.onMember &&
     a.categoryColors === b.categoryColors &&

@@ -1,6 +1,7 @@
 import { demoBeaconTopics, demoSetBeaconTopic } from "@/src/features/discovery/demoBeaconTopics";
 import { beaconPinImage, beaconPinSymbol } from "@/src/features/maps/beaconPinArtwork";
 import { demoRoundScore } from "@/src/features/beacons/roundScoring";
+import { applyDemoRewards } from "@/src/features/beacons/demoRewards";
 import { demoHostingAction } from "@/src/features/beacons/hosting";
 import { demoTaskCoordination } from "@/src/features/beacons/taskCoordination";
 import {demoBoostAction,reconcileDemoBoosts} from "@/src/features/people/squadBoosts";
@@ -3742,6 +3743,8 @@ function demoBaseAction(previous: Data, action: string, payload: Payload): Data 
 }
 export function demoAction(previous: Data, action: string, payload: Payload): Data {
  if (payload.expected_actor_id && payload.expected_actor_id !== DEMO_ID) throw new Error("Your account changed.");
+ const rewards = applyDemoRewards(previous, DEMO_ID, action, payload);
+ if (rewards) return rewards;
  const topicChange = demoBeaconTopics(previous, DEMO_ID, action, payload);
  if (topicChange) return topicChange;
  if (action === "set_beacon_map_icon") {

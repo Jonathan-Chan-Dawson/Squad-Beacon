@@ -1,3 +1,4 @@
+import { rewardsHref, rewardTint } from "@/src/features/beacons/rewardLooks";
 import { CommunityBeaconTopics } from "@/src/features/discovery/CommunityBeaconTopics";
 import { useCommunityTopicSelection } from "@/src/features/discovery/useCommunityTopics";
 import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
@@ -1630,6 +1631,9 @@ export default function OrganizationScreen() {
                   : "Public profile settings"}
               </Txt>
             </View>
+          <View style={{ backgroundColor: rewardTint(data.equipped_looks?.[organization.id]?.community), borderRadius: 12 }}>
+            {canManageCurrentNetworkSettings && <Button compact secondary title="Shop community looks" onPress={() => router.push(rewardsHref("organization", organization.id))} />}
+          </View>
             {canManageCurrentNetworkSettings && <CommunityBeaconTopics type="organization" entity={organization.id} manage browse={false} />}
             {settingsSections
               .filter((section) =>

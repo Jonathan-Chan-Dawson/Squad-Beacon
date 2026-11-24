@@ -1,3 +1,4 @@
+import { rewardsHref, rewardTint } from "@/src/features/beacons/rewardLooks";
 import { CommunityBeaconTopics } from "@/src/features/discovery/CommunityBeaconTopics";
 import { useCommunityTopicSelection } from "@/src/features/discovery/useCommunityTopics";
 import { CommunityActivityRow } from "@/src/features/social/CommunityActivityRow";
@@ -1081,6 +1082,9 @@ export default function SquadProfileScreen() {
             <Txt muted>
               Your role: {isOwner ? "Owner" : (viewerRole ?? "Member")}
             </Txt>
+          </View>
+          <View style={{ backgroundColor: rewardTint(data.equipped_looks?.[activeSquadId]?.community), borderRadius: 12 }}>
+            {isAdmin && <Button compact secondary title="Shop community looks" onPress={() => router.push(rewardsHref("squad", activeSquadId))} />}
           </View>
           {isAdmin && <CommunityBeaconTopics type="squad" entity={activeSquadId} manage browse={false} />}
           {settingsCategories.map((category) => (

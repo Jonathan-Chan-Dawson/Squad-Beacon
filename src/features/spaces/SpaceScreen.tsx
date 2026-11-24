@@ -1,3 +1,4 @@
+import { rewardsHref, rewardTint } from "@/src/features/beacons/rewardLooks";
 import { CommunityBeaconTopics } from "@/src/features/discovery/CommunityBeaconTopics";
 import { useCommunityTopicSelection } from "@/src/features/discovery/useCommunityTopics";
 import { CommunityActivityRow } from "@/src/features/social/CommunityActivityRow";
@@ -598,6 +599,9 @@ export default function SpaceScreen() {
                 ? `Your role: ${viewerRole}`
                 : "Public profile settings"}
             </Txt>
+          </View>
+          <View style={{ backgroundColor: rewardTint(data.equipped_looks?.[id]?.community), borderRadius: 12 }}>
+            {manageable && <Button compact secondary title="Shop community looks" onPress={() => router.push(rewardsHref("space", id))} />}
           </View>
           {manageable && <CommunityBeaconTopics type="space" entity={id} manage browse={false} />}
           {settingsSections

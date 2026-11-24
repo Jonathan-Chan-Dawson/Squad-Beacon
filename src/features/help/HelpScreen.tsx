@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import { router, type Href } from "expo-router";
+import { router, useLocalSearchParams, type Href } from "expo-router";
 import { ChevronDown, ChevronRight } from "lucide-react-native";
 import { Button, Field, Screen, Txt, useTheme } from "@/src/shared/ui";
 import { matchesSearch } from "@/src/shared/search";
@@ -83,6 +83,8 @@ const topics: { title: string; answer: string; link: string; path: Href }[] = [
 ];
 export default function HelpScreen() {
   const { styles, colors } = useTheme();
+  const { tour } = useLocalSearchParams<{ tour?: string }>();
+  const [tourOpen, setTourOpen] = useState(tour === "yes");
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
   const visible = topics.filter((topic) =>
@@ -91,6 +93,40 @@ export default function HelpScreen() {
   return (
     <Screen title="A friendly field guide" eyebrow="HELP & TIPS" create={false}>
       <Txt muted>A few useful answers. Follow your curiosity.</Txt>
+      {!query.trim() && (
+        <View style={{ gap: 8 }}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ expanded: tourOpen }}
+            style={{ flexDirection: "row", alignItems: "center", minHeight: 48, gap: 8 }}
+            onPress={() => setTourOpen(!tourOpen)}
+          >
+            <Text style={[styles.h2, { flex: 1 }]}>Quick Tour</Text>
+            {tourOpen ? <ChevronDown size={18} color={colors.muted} /> : <ChevronRight size={18} color={colors.muted} />}
+          </Pressable>
+          {tourOpen && ([
+            ["Discover", "Browse activities nearby or look around the Map.", "/browse-beacons"],
+            ["Create", "Make a Beacon or send a Ping to see who’s interested.", "/create"],
+            ["Connect", "Keep your group’s conversations and activities together in Squads.", "/squads"],
+            ["Your Activity", "Find your upcoming activities, Plans, and calendar.", "/your-activity"],
+          ] as const).map(([label, body, path]) => (
+            <Pressable
+              key={label}
+              accessibilityRole="button"
+              accessibilityLabel={label}
+              accessibilityHint={body}
+              onPress={() => router.push(path)}
+              style={{ alignItems: "center", flexDirection: "row", gap: 12, minHeight: 56, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.line }}
+            >
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text style={[styles.h2, { fontSize: 16 }]}>{label}</Text>
+                <Txt muted>{body}</Txt>
+              </View>
+              <ChevronRight size={18} color={colors.muted} />
+            </Pressable>
+          ))}
+        </View>
+      )}
       <Field
         label="Search Help"
         value={query}

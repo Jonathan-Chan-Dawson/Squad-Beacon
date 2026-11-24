@@ -1,6 +1,9 @@
 Supabase database and functions
 
 - `20261120205048_beacon_score.sql`: private award ledger, idempotent tap streams, and permission-scoped tier badge. Profile sync settles eligible post-launch rewards. Apply in order before using live Beacon Score.
+- `20261122160000_beacon_note_score.sql`: daily note publication awards and deduplicated note reaction XP.
+- `20261122160100_beacon_shop.sql`: earned Coin ledger, provisional catalog and atomic ownership unlocks. Purchases start disabled.
+- `20261123230124_beacon_rewards_v3.sql`: additive level, quest, Mini Beacon and cosmetic rollout. It preserves existing ledger values, publishes authorized looks in the snapshot and leaves the existing `purchases_enabled` switch in place.
 
 - `20261117224032_guest_discovery_onboarding.sql`: explicit host opt-in for signed-out discovery, owner-only settings and bounded summary search/exact-ID lookup. Existing public publishing is still authenticated; guest publishing starts off and is deleted with the public preview. Source-only until separately applied to the hosted backend.
 

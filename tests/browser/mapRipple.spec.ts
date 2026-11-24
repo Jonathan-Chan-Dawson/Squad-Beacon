@@ -108,18 +108,32 @@ const script = ts.transpileModule(
 ).outputText;
 const css = readFileSync("components/leaflet.web.css", "utf8");
 
-test("Beacon skin previews are selectable from Customize appearance", async ({ page }, info) => {
+test("Demo Coins can unlock Beacon looks from Customize appearance", async ({ page }, info) => {
+  test.setTimeout(90000);
+  const rewardRequests: string[] = [];
+  page.on("request", (request) => {
+    if (request.url().includes("/rpc/beacon_rewards")) rewardRequests.push(request.url());
+  });
   await page.goto("/auth/sign-in");
   await page.getByRole("button", { name: /Explore the demo/ }).click();
   await page.getByRole("button", { name: "Create", exact: true }).click();
   await page.getByRole("button", { name: "+ Create Blank Beacon", exact: true }).click();
+  await page.getByLabel("Activity title", { exact: true }).fill("Chicago after dark");
   await page.getByRole("button", { name: "Customize appearance", exact: true }).click();
   const appearance = page.getByRole("dialog", { name: "Customize appearance", exact: true });
-  await appearance.getByRole("button", { name: "Preview Beacon skins" }).click();
-  await appearance.getByRole("button", { name: "Legendary", exact: true }).click();
-  await expect(appearance.getByText("Gold frame and crown accent")).toBeVisible();
-  await expect(appearance.getByText(/Purchases and equipping are unavailable/)).toBeVisible();
-  await appearance.screenshot({ path: info.outputPath("skin-preview.png") });
+  await appearance.getByRole("button", { name: "Shop Beacon looks" }).click();
+  await page.getByRole("button", { name: "Preview Legendary", exact: true }).click();
+  const preview = page.getByRole("dialog", { name: "Legendary" });
+  await preview.getByRole("button", { name: "Add demo Coins" }).click();
+  await expect(page.getByText("5,000 Coins", { exact: true })).toBeVisible();
+  await preview.getByRole("button", { name: "Buy", exact: true }).click();
+  await preview.getByRole("button", { name: "Confirm", exact: true }).click();
+  await expect(preview.getByText("Owned", { exact: true })).toBeVisible();
+  await expect(page.getByText("1,500 Coins", { exact: true })).toBeVisible();
+  await page.screenshot({ path: info.outputPath("skin-preview.png") });
+  await page.goBack();
+  await expect(page.getByLabel("Activity title", { exact: true })).toHaveValue("Chicago after dark");
+  expect(rewardRequests).toEqual([]);
 });
 
 test("a friend keeps a recognizable 34px avatar and a larger target without projection", async ({ page }) => {

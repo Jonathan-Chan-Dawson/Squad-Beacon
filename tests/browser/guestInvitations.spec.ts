@@ -45,10 +45,12 @@ test("new guest verifies, requests approval, returns and changes response", asyn
   await page.getByLabel("Date of birth").fill("1990-01-01");
   await page.getByRole("button",{ name:"Verify and continue" }).click();
   await expect(page.getByRole("button",{ name:"Going",exact:true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Keep responses when you join" })).toHaveCount(0);
   const cookies = await context.cookies();
   expect(cookies.find(c => c.name === "__Host-sb-guest")).toMatchObject({ httpOnly:true,secure:true,sameSite:"Lax" });
   await page.getByRole("button",{ name:"Going",exact:true }).click();
   await expect(page.getByRole("status").filter({ hasText:"Your response:" })).toHaveText("Your response: Pending organizer approval");
+  await expect(page.getByRole("link", { name: "Keep responses when you join" })).toBeVisible();
   expect(state.response).toBe("requested");
   await page.reload();
   await expect(page.getByText("Your response: Pending organizer approval")).toBeVisible();

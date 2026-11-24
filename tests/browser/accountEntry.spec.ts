@@ -50,6 +50,7 @@ test("new signed-out account signs in, completes only required setup and enters 
     noProfile: true,
   });
   await page.goto("/activities");
+  await expect(page.getByTestId("visitor-welcome")).toBeVisible();
   await signIn(page);
   await expect(
     page.getByText("Just the basics, then you’re in."),
@@ -59,8 +60,9 @@ test("new signed-out account signs in, completes only required setup and enters 
   await page
     .getByRole("button", { name: "Enter Squad Beacon", exact: true })
     .click();
-  await page.getByRole("tab", { name: "Beacons", exact: true }).click();
-  await expect(page.getByTestId("onboarding-welcome")).toBeVisible();
+  await page.getByLabel("Beacons", { exact: true }).press("Enter");
+  await expect(page.getByTestId("onboarding-returning")).toBeVisible();
+  await expect(page.getByTestId("onboarding-welcome")).toHaveCount(0);
   await expect(survey(page)).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: "Explore Beacons", exact: true }),
@@ -168,7 +170,9 @@ test("sign-out and another account reject delayed progress from the first accoun
     eligible: false,
   });
   await signIn(page);
-  await page.getByRole("tab", { name: "Beacons", exact: true }).click();
+  await expect(page.getByLabel("Search settings", { exact: true })).toBeVisible();
+  await page.goBack();
+  await page.getByLabel("Beacons", { exact: true }).press("Enter");
   await expect(page.getByTestId("onboarding-returning")).toBeVisible();
   first.releaseProgress();
   await expect.poll(() => first.completedReads).toBeGreaterThan(0);
@@ -504,10 +508,10 @@ for (const appearance of ["light", "dark"] as const) {
       await page
         .getByRole("button", { name: "Enter Squad Beacon", exact: true })
         .click();
-      await page.getByRole("tab", { name: "Beacons", exact: true }).click();
+      await page.getByLabel("Beacons", { exact: true }).press("Enter");
       await expect(page.getByTestId("onboarding-welcome")).toBeVisible();
       await capture("first-entry");
-      await page.getByRole("tab", { name: "Profile", exact: true }).click();
+      await page.getByLabel("Profile", { exact: true }).press("Enter");
       const name = await page
         .getByRole("heading", { name: "New Person", exact: true })
         .boundingBox();

@@ -29,6 +29,8 @@ import {
 import { BeaconPinGlyph } from "@/src/features/maps/components/BeaconPinGlyph";
 import { CommunityArtwork } from "@/src/features/people/components/CommunityCard";
 import type { SocialEntityType } from "@/src/features/social/types";
+import { useBeacon } from "@/src/shared/store";
+import { rewardTint } from "@/src/features/beacons/rewardLooks";
 
 export type DiscoveryBeaconCardProps = {
   /** Map-only density. Browse and homepage cards retain their default treatment. */
@@ -113,6 +115,8 @@ export function DiscoveryBeaconCard({
   feedback,
 }: DiscoveryBeaconCardProps) {
   const { colors, tokens } = useDesignTheme();
+  const { data } = useBeacon();
+  const cosmetic = rewardTint(data.equipped_looks?.[activityId]?.card);
   const hasLinkedContext = !!planContext?.title.trim() || !!communityContext;
   const contextBlockStyle = {
     minWidth: 0,
@@ -183,7 +187,7 @@ export function DiscoveryBeaconCard({
         <View
           testID="map-beacon-identity"
           style={{
-            backgroundColor: headerColor,
+            backgroundColor: cosmetic ?? headerColor,
             borderRadius: 14,
             paddingLeft: 10,
             paddingRight: 3,
@@ -319,7 +323,7 @@ export function DiscoveryBeaconCard({
         borderWidth: 1,
         borderColor: colors.border,
         borderRadius: 14,
-        backgroundColor: colors.surface,
+        backgroundColor: cosmetic ?? colors.surface,
       }}
     >
       <BeaconCardArtwork

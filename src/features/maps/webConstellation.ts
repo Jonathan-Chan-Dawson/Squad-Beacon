@@ -31,6 +31,7 @@ type Options = {
   surface: string;
   line: string;
   categoryColor: (category: NonNullable<ClusterPoint["category"]>) => string;
+  beaconProjectionColor?: (point: ClusterPoint) => string | undefined;
   beaconState?: (point: ClusterPoint) => BeaconMarkerState | undefined;
 };
 /** The foreground, density marks, and count positions use the same geometry as native. */
@@ -75,7 +76,7 @@ export function webConstellation(
     const light = explorer ? null : beaconPinEmphasis(options.beaconState?.(primary), false, categoryTone);
     appendMapProjector(
       node,
-      light?.color ?? categoryTone,
+      (!explorer ? options.beaconProjectionColor?.(primary) : undefined) ?? light?.color ?? categoryTone,
       center + projector.top,
       projector.height,
       projector.width,

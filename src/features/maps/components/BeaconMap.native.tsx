@@ -9,6 +9,7 @@ import {
   beaconPulseStyle,
   BEACON_SELECTED_SCALE,
 } from "../markerIdentity";
+import { beaconMapLook } from "@/src/features/beacons/rewardLooks";
 import { mapBeaconTitle } from "@/src/features/discovery/discoveryCardPresentation";
 import { isBeaconLive } from "@/src/features/beacons/beaconLive";
 import { ClusterArtworkCache } from "../clusterArtwork";
@@ -1210,6 +1211,7 @@ export default function BeaconMap({
               categoryColors={categoryColors}
               availabilityColors={availabilityColors}
               appearanceKey={clusterAppearanceKey}
+              equippedLooks={identityData.equipped_looks}
               onPress={handlePresentation}
               onMember={handleMember}
             />
@@ -1247,6 +1249,7 @@ export default function BeaconMap({
                 category={activity.category}
                 icon={zoom >= 14 || selectedPin ? activity.map_icon : undefined}
                 categoryColor={categoryColors[activity.category]}
+                cosmetic={beaconMapLook(identityData.equipped_looks?.[activity.id])}
                 selected={selectedPin}
                 dimmed={
                   (!!selectedActivityId && !selectedPin) ||

@@ -35,6 +35,7 @@ import {
 } from "../nativeMapPresentation";
 import { appendBeaconUpperBeam, appendMapProjector, beaconProjectionDimensions } from "../projector";
 import { webConstellation } from "../webConstellation";
+import { beaconMapLook } from "@/src/features/beacons/rewardLooks";
 import type { ClusterPoint } from "../cluster";
 import { useDesignTheme } from "@/src/theme";
 import { miniAvatarSvg, avatarSeed } from "@/src/features/profile/avatarArt";
@@ -754,6 +755,7 @@ export default function BeaconMap(props: MapProps) {
       customIcon?: string | null,
       stopNumber?: number,
       beaconName?: string,
+      cosmetic?: ReturnType<typeof beaconMapLook>,
     ): HTMLButtonElement | Leaflet.Marker => {
       if (cacheKey && !detached) {
         const revision = JSON.stringify([
@@ -774,6 +776,7 @@ export default function BeaconMap(props: MapProps) {
           customIcon,
           stopNumber,
           beaconName,
+          cosmetic,
           colors.white,
           colors.ink,
           colors.line,
@@ -811,6 +814,7 @@ export default function BeaconMap(props: MapProps) {
               customIcon,
               stopNumber,
               beaconName,
+              cosmetic,
             ) as Leaflet.Marker,
           click,
         ) as Leaflet.Marker;
@@ -898,7 +902,7 @@ export default function BeaconMap(props: MapProps) {
         if (!detached && upperLight?.beamHeight)
           appendBeaconUpperBeam(node, upperLight, pinInset);
         if (projection)
-          appendMapProjector(node, lighting?.color ?? tone,
+          appendMapProjector(node, cosmetic?.beam ?? lighting?.color ?? tone,
             pinInset + visualSize - 5,
             projection.height,
             projection.width,
@@ -914,6 +918,7 @@ export default function BeaconMap(props: MapProps) {
         const badge = document.createElement("span");
         if (!dot) addBeaconGlyph(badge, text as Category, compact ? 17 : 22, compact ? undefined : customIcon);
         badge.style.cssText = `position:relative;box-sizing:border-box;flex-shrink:0;width:${visualSize}px;height:${visualSize}px;border:${dot ? 1 : compact ? 2 : 3}px solid ${dot ? colors.white : tone};border-radius:${visualSize / 2}px;background:${dot ? tone : colors.surface};display:flex;align-items:center;justify-content:center;box-shadow:${dot ? "none" : `0 0 10px ${tone}85,0 3px 10px #172c2940`};font-size:${compact ? 20 : 22}px;`;
+        if (!dot && cosmetic?.frame) badge.style.borderColor = cosmetic.frame;
         if (upperLight) {
           const { level, color, glowOpacity } = upperLight;
           const inner = Math.round(glowOpacity * (street && !compact ? 255 : 120)).toString(16).padStart(2, "0");
@@ -1264,6 +1269,11 @@ export default function BeaconMap(props: MapProps) {
         !!activity && ownsMapBeacon(identityData, activity, identityViewer),
         true,
         false,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        beaconMapLook(identityData.equipped_looks?.[id]),
       ) as HTMLButtonElement;
     };
     for (const presentation of presentations.filter(
@@ -1304,6 +1314,7 @@ export default function BeaconMap(props: MapProps) {
         presentationArtworkPoints(presentation).map((point) => [
           point.id,
           models.get(point.id)?.revision,
+          identityData.equipped_looks?.[point.id.slice(7)],
           contextsById.get(point.id.slice(7))?.title,
         ]),
         presentation.mode === "swarm" ? cluster.members : null,
@@ -1347,6 +1358,7 @@ export default function BeaconMap(props: MapProps) {
               return "data:image/svg+xml;charset=utf-8," + encodeURIComponent(miniAvatarSvg(seed));
             },
             categoryColor: (category) => categories[category].color,
+            beaconProjectionColor: (point) => beaconMapLook(identityData.equipped_looks?.[point.id.slice(7)]).beam,
             beaconState: (point) => !dimmed && !onPick ? models.get(point.id)?.markerState : undefined,
           });
           rendered.node.setAttribute(
@@ -1430,6 +1442,7 @@ export default function BeaconMap(props: MapProps) {
             beaconLabels.has(`beacon:${a.id}`)
             ? mapBeaconTitle(a.title, !!a.plan_id, a.plan_step_index).title.trim()
             : undefined,
+          beaconMapLook(identityData.equipped_looks?.[a.id]),
         );
     });
     const labelIds = visibleFriendLabels(

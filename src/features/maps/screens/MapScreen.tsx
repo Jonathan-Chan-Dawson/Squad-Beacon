@@ -1,3 +1,4 @@
+import { recordRewardDiscovery } from "@/src/features/beacons/rewardLooks";
 import { SurprisePreviewActions } from "../SurprisePreviewActions";
 import {
   selectedBeaconCategories,
@@ -332,6 +333,7 @@ export default function MapScreen() {
   );
 
   const params = useLocalSearchParams<{
+    rewardDiscovery?: string;
     beacon?: string;
     person?: string;
     created?: string;
@@ -350,6 +352,10 @@ export default function MapScreen() {
     placeLabel?: string;
     timezone?: string;
   }>();
+  useEffect(() => {
+    if (params.rewardDiscovery && mapIsFocused && userId && !demo && !loading)
+      void recordRewardDiscovery(userId, "map").catch(() => {});
+  }, [demo, loading, mapIsFocused, params.rewardDiscovery, userId]);
   const insets = useSafeAreaInsets();
   const { height, width } = useWindowDimensions();
   const [mapSize, setMapSize] = useState({ width, height });
@@ -1897,6 +1903,7 @@ export default function MapScreen() {
     )
       return;
     uiHaptics.light();
+    if (!demo) void recordRewardDiscovery(userId, "map", id).catch(() => {});
     setPulsePlace(null);
     setContextPoint(null);
     clearRouteSelection();

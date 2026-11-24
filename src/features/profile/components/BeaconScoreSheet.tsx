@@ -1,9 +1,9 @@
 import React from "react";
+import { router, type Href } from "expo-router";
 import { View } from "react-native";
-import { Action, Sheet, Txt } from "@/src/shared/ui";
+import { Action, Button, Sheet, Txt } from "@/src/shared/ui";
 import { beaconScoreTier, scoreRewardLabels } from "../beaconScore";
 import type { useBeaconScore } from "../useBeaconScore";
-import { BeaconSkinPreview } from "@/src/features/beacons/components/BeaconSkinPreview";
 
 export function BeaconScoreSheet({
   score,
@@ -19,22 +19,19 @@ export function BeaconScoreSheet({
     <Sheet title="Beacon Score" visible={visible} onClose={onClose}>
       <View style={{ gap: 12 }}>
         <Txt>
-          {score.points.toLocaleString()} points · {stage.label} · Level{" "}
+          {score.points.toLocaleString()} XP · {stage.label} · Level{" "}
           {index + 1}
         </Txt>
         <Txt muted>
           {nextStage
-            ? `${(nextStage.at - score.points).toLocaleString()} points to ${nextStage.label}`
+            ? `${(nextStage.at - score.points).toLocaleString()} XP to ${nextStage.label}`
             : "Highest tier reached. Your score can keep growing."}
         </Txt>
         {score.offline && (
           <Txt muted>
-            Score couldn’t sync. Taps are saved on this device for retry.
+            XP couldn’t sync. Try again when you’re online.
           </Txt>
         )}
-        <Txt muted>
-          {score.taps.toLocaleString()} lifetime taps on this device
-        </Txt>
         <Action
           title={
             score.showBadge ? "Hide tier on profile" : "Show tier on profile"
@@ -44,22 +41,26 @@ export function BeaconScoreSheet({
           secondary
           compact
         />
-        <BeaconSkinPreview />
-        <Txt>How you earn points</Txt>
+        <Button
+          compact
+          secondary
+          title="Open Rewards"
+          onPress={() => {
+            onClose();
+            router.push("/beacon-shop" as Href);
+          }}
+        />
+        <Txt>How you earn XP</Txt>
         <Txt muted>
-          {score.tapRate === 1
-            ? "+1 per tap, with no daily limit"
-            : `+1 every ${score.tapRate} taps · ${score.tapRate - score.tapRemainder} to your next point`}
+          A qualifying hosted Beacon earns both hosting and attendance points.
         </Txt>
-        {score.tapRate > 1 && <Txt muted>Tap rewards improve every three levels. At Level 22, every tap earns a point.</Txt>}
-        <Txt muted>A qualifying hosted Beacon earns both hosting and attendance points.</Txt>
         {Object.entries(score.rewards).map(([kind, points]) => (
           <Txt key={kind} muted>
             +{points.toLocaleString()} ·{" "}
             {scoreRewardLabels[kind as keyof typeof scoreRewardLabels]}
           </Txt>
         ))}
-        <Txt>Recent points</Txt>
+        <Txt>Recent XP</Txt>
         {score.history.length ? (
           score.history.map((award) => (
             <Txt key={award.id} muted>
@@ -70,7 +71,7 @@ export function BeaconScoreSheet({
             </Txt>
           ))
         ) : (
-          <Txt muted>No synced points yet.</Txt>
+          <Txt muted>No synced XP yet.</Txt>
         )}
       </View>
     </Sheet>

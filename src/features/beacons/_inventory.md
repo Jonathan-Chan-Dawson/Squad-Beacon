@@ -39,6 +39,8 @@ Beacons feature
 - components/BeaconOrganizerRoles.tsx: post-publication People entry for canonical approved-Going role grants/removal, with existing owner/co-owner hierarchy and server authorization.
 
 - CreationPeople and CreationCapacity provide inline visibility and joining with a focused community picker. CreationPicker provides centered web dialogs and native sheets for creation controls. CreationAppearance owns the editor’s single artwork entry.
+- BeaconShopScreen.tsx handles Rewards, Quests, and contextual equipping. BeaconShopCatalog.tsx renders the filterable catalog, cosmetic previews, and Coin labels. rewardLooks.ts defines appearance tokens. The server wallet remains authoritative.
+- demoRewards.ts handles Coins and cosmetic unlocks in the local demo session.
 - CreationSavedDrafts shows three recent pills, all-draft browsing and confirmed removal. creationDraftRepository preserves the version-1 format behind injectable IO, validated summaries, and queued fail-closed user deletion; trusted completion cleanup remains separate.
 - CreationInvitees hosts the existing SocialSelector with staged decisions in a centered web dialog and a full-screen native picker. Saved drafts retain actual invitation and tool selections.
 

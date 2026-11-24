@@ -1,6 +1,6 @@
-import React, { useCallback } from "react";
+import React, { useCallback, useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import { router } from "expo-router";
+import { router, useFocusEffect } from "expo-router";
 import { Info, X } from "lucide-react-native";
 import { EmptyState, Toast, useDesignTheme } from "@/src/shared/design-system";
 import { actionNoticeMessage } from "@/src/shared/actionNotice";
@@ -10,6 +10,27 @@ import { BeaconIllustration, type IllustrationKey } from "./illustrations";
 import { getCopy, type CopyKey } from "./copy";
 import { useOnboarding } from "./runtime";
 import type { OnboardingKey } from "./progress";
+
+export function WelcomeCard({ onExplore, onTour, onDismiss }: {
+  onExplore: () => void;
+  onTour: () => void;
+  onDismiss: () => void;
+}) {
+  return (
+    <EmptyState
+      density="section"
+      alignment="start"
+      title="Make a plan. Bring your people."
+      body="Find something to do nearby, or get your crew together."
+      icon={<BeaconIllustration name="welcome" size={52} />}
+      action={{ label: "Explore Beacons", onPress: onExplore }}
+      secondaryActions={[
+        { label: "Show me around", onPress: onTour },
+        { label: "Not now", onPress: onDismiss },
+      ]}
+    />
+  );
+}
 
 export function SemanticEmpty({
   name,
@@ -87,28 +108,10 @@ export function HomeInvitation({
         </Pressable>
       ) : null}
       {intro ? (
-        <SemanticEmpty
-          name="welcome.newAccount"
-          density="hero"
-          illustration="welcome"
-          action={{
-            label: "Explore Beacons",
-            onPress: () => router.push("/browse-beacons"),
-          }}
-          secondaryActions={[
-            {
-              label: "Find People",
-              onPress: () => router.push("/find-friends"),
-            },
-            {
-              label: "Create Beacon",
-              onPress: () =>
-                router.push({
-                  pathname: "/create",
-                  params: { kind: "beacon" },
-                }),
-            },
-          ]}
+        <WelcomeCard
+          onExplore={() => router.push("/browse-beacons")}
+          onTour={() => router.push({ pathname: "/help", params: { tour: "yes" } })}
+          onDismiss={() => void mark("welcome.dismissed.v1")}
         />
       ) : (
         <ReturningInvitation friends={friends} />
@@ -185,11 +188,26 @@ export const tipCopy = {
     "Location sharing is optional, temporary and limited to your chosen people.",
   routine: "Repeat a Plan or Beacon on a schedule.",
 } as const;
-export function ContextTip({ name }: { name: keyof typeof tipCopy }) {
-  const { keys, status, mark } = useOnboarding();
+let showedSessionTip = false;
+
+export function ContextTip({ name, proactive = false }: { name: keyof typeof tipCopy; proactive?: boolean }) {
+  const { keys, status, mark, firstEntrySession } = useOnboarding();
+  const { demo } = useBeacon();
   const { colors, tokens } = useDesignTheme();
+  const [showTip, setShowTip] = useState(false);
   const key: OnboardingKey = `tip.${name}.v1`;
-  if (status !== "ready" || keys.has(key)) return null;
+  const eligible = status === "ready" && !keys.has(key);
+  useFocusEffect(useCallback(() => {
+    if (!proactive || !eligible || (!demo && firstEntrySession)) return;
+    if (!demo && showedSessionTip) return;
+    if (!demo) showedSessionTip = true;
+    setShowTip(true);
+  }, [demo, eligible, firstEntrySession, proactive]));
+
+  if (!proactive) {
+    return <Text style={{ color: colors.textSecondary, ...tokens.type.secondary }}>{tipCopy[name]}</Text>;
+  }
+  if (!eligible || !showTip || (!demo && firstEntrySession)) return null;
   return (
     <View
       style={{

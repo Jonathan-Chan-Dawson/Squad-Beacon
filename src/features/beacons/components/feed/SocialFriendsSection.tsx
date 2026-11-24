@@ -1,3 +1,4 @@
+import { rewardTint } from "@/src/features/beacons/rewardLooks";
 import React, {
   useCallback,
   useEffect,
@@ -514,6 +515,8 @@ function FriendCard({
   onOpenBeacon: (id: string) => void;
 }) {
   const { colors, tokens } = useDesignTheme();
+  const { data } = useBeacon();
+  const looks = data.equipped_looks?.[friend.id];
   const status =
     tokens.availability[
       friend.availability === "ending-soon" ? "endingSoon" : friend.availability
@@ -549,7 +552,7 @@ function FriendCard({
       borderRadius: 12,
       borderWidth: 1,
       borderColor: colors.border,
-      backgroundColor: colors.surfaceRaised,
+      backgroundColor: rewardTint(looks?.profile_card) ?? colors.surfaceRaised,
     }}>
       <Pressable
         testID={"social-friend-" + friend.id}
@@ -610,7 +613,8 @@ function FriendCard({
           </View>
         ) : null}
         {friend.statusText ? (
-          <Text numberOfLines={2} style={{ color: colors.textSecondary, ...tokens.type.secondary }}>
+          <Text numberOfLines={2} style={{ color: colors.textSecondary, ...tokens.type.secondary,
+            backgroundColor: rewardTint(looks?.status), borderRadius: 6 }}>
             {friend.statusText}
           </Text>
         ) : null}

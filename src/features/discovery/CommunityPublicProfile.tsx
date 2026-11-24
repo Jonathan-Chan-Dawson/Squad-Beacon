@@ -1,5 +1,8 @@
 import { openCommunityProfile } from "@/src/features/social/communityNavigation";
 import React from "react";
+import { router } from "expo-router";
+import { useBeacon } from "@/src/shared/store";
+import { rewardsHref, rewardTint } from "@/src/features/beacons/rewardLooks";
 import { Text, View } from "react-native";
 import { CommunityAvatar } from "@/src/features/people/components/CommunityAvatar";
 import { ProfileSection } from "@/src/features/people/components/ProfilePrimitives";
@@ -9,7 +12,7 @@ import { CommunityPublicRelatedCommunities } from "./CommunityPublicRelatedCommu
 import { communityTypeLabel } from "@/src/features/social/communityPresentation";
 import { RelationshipDisclosure } from "@/src/features/social/CommunityProfileAccess";
 import type { SocialDirectorySummary } from "@/src/features/social/types";
-import { Txt, useTheme } from "@/src/shared/ui";
+import { Button, Txt, useTheme } from "@/src/shared/ui";
 
 /** A profile built exclusively from the safe summary returned by the directory RPC. */
 export function CommunityPublicProfile({
@@ -20,6 +23,14 @@ export function CommunityPublicProfile({
   onSummaryChanged?: () => Promise<void> | void;
 }) {
   const { styles } = useTheme();
+  const { data, userId } = useBeacon();
+  const id = summary.entity_id;
+  const role = summary.entity_type === "squad"
+    ? data.squad_members.find((row) => row.squad_id === id && row.user_id === userId)?.role
+    : summary.entity_type === "space"
+      ? data.space_members.find((row) => row.space_id === id && row.user_id === userId)?.role
+      : data.organization_members.find((row) => row.organization_id === id && row.user_id === userId)?.role;
+  const tint = rewardTint(data.equipped_looks?.[id]?.community);
   const parentContext =
     summary.parent_type && summary.parent_id
       ? [{ parentType: summary.parent_type, parentId: summary.parent_id }]
@@ -27,7 +38,7 @@ export function CommunityPublicProfile({
 
   return (
     <View style={{ gap: 12 }} testID="community-public-profile">
-      <View style={[styles.row, { gap: 12 }]}>
+      <View style={[styles.row, { gap: 12, backgroundColor: tint, borderRadius: 14 }]}>
         <CommunityAvatar type={summary.entity_type} size={52} />
         <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
           <Text style={styles.h2}>{summary.name}</Text>
@@ -55,6 +66,9 @@ export function CommunityPublicProfile({
         onChanged={onSummaryChanged}
         allowCancel
       />
+      {(role === "owner" || role === "coowner" || role === "admin") && (
+        <Button compact secondary title="Shop community looks" onPress={() => router.push(rewardsHref(summary.entity_type, id))} />
+      )}
 
       {summary.description.trim() ? (
         <ProfileSection title="About">

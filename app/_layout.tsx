@@ -1,8 +1,13 @@
 import { useNotificationHandling } from "@/src/platform/notifications";
-import React, { useEffect } from "react";
+import React, { useEffect, useRef } from "react";
 import { setCreationDraftAccount } from "@/src/features/beacons/socialPlanningSession";
 import { PreferencesProvider } from "@/src/shared/preferences";
-import { usePathname, useGlobalSearchParams } from "expo-router";
+import {
+  router,
+  usePathname,
+  useGlobalSearchParams,
+  useRootNavigationState,
+} from "expo-router";
 import { rememberEntryIntent } from "@/src/features/auth/entryIntent";
 import { Platform } from "react-native";
 import { AppSystemBars, SystemBarsProvider } from "@/src/shared/SystemBars";
@@ -22,6 +27,7 @@ import { WidgetPreferencesProvider } from "@/src/features/widgets/preferences";
 import { WidgetSync } from "@/src/features/widgets/WidgetRuntime";
 import { ExplorationProvider } from "@/src/shared/exploration";
 import { OnboardingProvider } from "@/src/features/onboarding/runtime";
+import { reserveFirstVisitorEntry } from "@/src/features/onboarding/visitorEntry";
 import { FirstSuccessNotice } from "@/src/features/onboarding/OnboardingUI";
 import { ChatKeyboardProvider } from "@/src/features/messages/ChatKeyboard";
 // Keep lab controls out of production dependency graphs.
@@ -30,12 +36,29 @@ const DeveloperLab = __DEV__
     require("@/src/features/onboarding/DeveloperLab").DeveloperLab
   : () => null;
 export { ErrorBoundary } from "expo-router";
-function Navigation() {
+function Navigation({
+  startupDecidedRef,
+}: {
+  startupDecidedRef: React.RefObject<boolean>;
+}) {
   const account = useBeacon();
   const { refresh } = account;
   const readiness = accountReadiness(account);
   const pathname = usePathname();
   const query = JSON.stringify(useGlobalSearchParams());
+  const navigationKey = useRootNavigationState()?.key;
+  useEffect(() => {
+    if (!navigationKey || startupDecidedRef.current) return;
+    if (pathname !== "/" || query !== "{}") {
+      startupDecidedRef.current = true;
+      return;
+    }
+    if (readiness.state === "loading") return;
+    startupDecidedRef.current = true;
+    if (readiness.state === "ready") reserveFirstVisitorEntry();
+    if (readiness.state === "signed-out" && reserveFirstVisitorEntry())
+      router.replace("/activities");
+  }, [navigationKey, pathname, query, readiness.state, startupDecidedRef]);
   useEffect(() => {
     // Capture incoming routes, not readiness changes caused by sign-out.
     rememberEntryIntent(pathname, JSON.parse(query));
@@ -53,6 +76,7 @@ function renderAccountScreen(name: string, children: React.ReactNode) {
 }
 function AppRuntime() {
   const { userId, demo, viewerEpoch } = useBeacon();
+  const startupDecidedRef = useRef(false);
   useEffect(() => {
     if (Platform.OS !== "web") setCreationDraftAccount(userId);
   }, [userId]);
@@ -67,7 +91,7 @@ function AppRuntime() {
               <WidgetSync />
               <AppSystemBars />
               <SheetIsolation>
-                <Navigation />
+                <Navigation startupDecidedRef={startupDecidedRef} />
                 <FirstSuccessNotice />
                 {__DEV__ && demo ? <DeveloperLab /> : null}
               </SheetIsolation>

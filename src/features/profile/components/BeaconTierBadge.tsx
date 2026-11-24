@@ -3,7 +3,7 @@ import { useFocusEffect } from "expo-router";
 import { Txt } from "@/src/shared/ui";
 import { useBeacon } from "@/src/shared/store";
 import { supabase } from "@/src/shared/supabase";
-import { scoreTiers } from "../beaconScore";
+import { beaconScoreStage } from "../beaconScore";
 
 export function BeaconTierBadge({ personId }: { personId: string }) {
   const { userId, viewerEpoch, demo, getViewerEpoch } = useBeacon();
@@ -49,7 +49,7 @@ export function BeaconTierBadge({ personId }: { personId: string }) {
     result.viewer === userId &&
     result.epoch === viewerEpoch &&
     result.tier != null
-      ? scoreTiers[result.tier]
+      ? beaconScoreStage(result.tier)
       : null;
   return tier ? <Txt muted>Beacon tier · {tier.label}</Txt> : null;
 }

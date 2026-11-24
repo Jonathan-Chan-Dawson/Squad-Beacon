@@ -9,6 +9,7 @@ import { usePreferences } from "@/src/shared/preferences";
 import { supabase } from "@/src/shared/supabase";
 import { useBeacon } from "@/src/shared/store";
 import { canViewProfile } from "@/src/features/profile/privacy";
+import { getRewardLook } from "@/src/features/beacons/rewardLooks";
 export function ProfileAvatar({
   profile,
   size = 42,
@@ -78,10 +79,14 @@ export function ProfileAvatar({
         size={size}
       />
     );
-  return status && status !== "unknown" ? (
+  const ring = profile && canReadPhoto ? getRewardLook(data.equipped_looks?.[profile.id]?.ring) : undefined;
+  return ring || (status && status !== "unknown") ? (
     <View style={{ width: size, height: size }}>
       {avatar}
-      <AvatarStatusBadge state={status} size={size >= 64 ? 16 : 12} />
+      {ring && <View testID="equipped-avatar-ring" pointerEvents="none" style={{
+        position: "absolute", inset: -2, borderWidth: 2, borderRadius: size, borderColor: ring.color,
+      }} />}
+      {status && status !== "unknown" && <AvatarStatusBadge state={status} size={size >= 64 ? 16 : 12} />}
     </View>
   ) : (
     avatar

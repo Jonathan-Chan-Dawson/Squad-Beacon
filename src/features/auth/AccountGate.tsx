@@ -20,6 +20,7 @@ export function AccountGate({
   const publicRoute =
     name.startsWith("auth/") ||
     name === "legal" ||
+    name === "help" ||
     name.startsWith("g/") ||
     name === "invite";
   const signedOutBrowsing =

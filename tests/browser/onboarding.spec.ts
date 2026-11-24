@@ -43,12 +43,12 @@ test("fresh home has one useful introduction; dismissal and account context rema
   await scenario(page, "fresh");
   await expect(
     visibleId(page, "onboarding-welcome").getByText(
-      "Your next story starts here.",
+      "Make a plan. Bring your people.",
       { exact: true },
     ),
   ).toBeVisible();
-  await expect(visibleId(page, "home-personal-timeline")).toHaveCount(0);
-  await expect(visibleId(page, "home-friends-section")).toHaveCount(0);
+  await expect(visibleId(page, "home-personal-timeline")).toBeVisible();
+  await expect(visibleId(page, "home-friends-section")).toBeVisible();
   await page
     .getByRole("button", { name: "Dismiss welcome", exact: true })
     .click();
@@ -234,7 +234,7 @@ test("phone compositions, themes and restrained personality", async ({
     fullPage: true,
   });
   await page
-    .getByText("Your next story starts here.", { exact: true })
+    .getByText("Make a plan. Bring your people.", { exact: true })
     .evaluate((node) => {
       node.textContent =
         "Your next unforgettable shared adventure begins with a little possibility right here.";

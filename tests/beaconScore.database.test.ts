@@ -2,13 +2,65 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { guestDatabase, guestIds } from "./guestDatabase";
 import {
-  beaconScoreTier,
+  scoreTiers,
   applyScoreTaps,
   scoreRewards,
 } from "../src/features/profile/beaconScore";
 
+test("note XP is daily, note reactions deduplicate, and Coins convert only eligible Score", async () => {
+  const { db, role, beacon } = await guestDatabase("20261122160100_beacon_shop.sql");
+  const { host, member } = guestIds;
+  try {
+    const group = await beacon();
+    await db.exec("update private.beacon_coin_policy set cutover=now()-interval '1 day'");
+    await db.query("update public.activities set starts_at=now()-interval '2 hours',ends_at=now()-interval '1 hour' where id=$1", [group]);
+    await role("root", host);
+    const publish = async (purpose: "activity_note" | "status_note") =>
+      (await db.query<{ id: string }>(
+        "insert into public.activities(owner_id,title,category,mode,solo_purpose,starts_at,ends_at,timezone,audience,enable_reactions) values($1,'Note','Social','solo',$2,now()-interval '1 minute',now()+interval '1 hour','UTC','friends',true) returning id",
+        [host, purpose],
+      )).rows[0].id;
+    await publish("activity_note");
+    await publish("activity_note");
+    const status = await publish("status_note");
+    await publish("status_note");
+    await role("root", member);
+    await db.query("insert into public.reactions(activity_id,user_id,emoji) values($1,$2,'👍')", [status, member]);
+    await db.query("delete from public.reactions where activity_id=$1 and user_id=$2", [status, member]);
+    await db.query("insert into public.reactions(activity_id,user_id,emoji) values($1,$2,'❤️')", [status, member]);
+    await role("root");
+    const { rows } = await db.query<{ kind: string; points: number }>(
+      "select kind,sum(points)::integer points from private.beacon_score_awards where owner_id=$1 group by kind order by kind",
+      [host],
+    );
+    assert.deepEqual(rows, [
+      { kind: "activity_note", points: 250 }, { kind: "note_reaction", points: 10 }, { kind: "status_note", points: 250 },
+    ]);
+    await db.query("insert into private.premium_grants(owner_id,tier) values($1,'plus')", [host]);
+    await db.query("insert into private.beacon_score_awards(owner_id,kind,source,points) values($1,'host',$2,500),($1,'joined','ignored',100)", [host, group]);
+    await role("authenticated", host);
+    const wallet = async (item: string | null = null, price = 1000) =>
+      (await db.query<{ result: { balance: number; catalog: { id: string; owned: boolean }[] } }>(
+        "select public.beacon_shop($1,$2,$3) result", [host, item, price],
+      )).rows[0].result;
+    assert.equal((await wallet()).balance, 7500);
+    await assert.rejects(wallet("ember-beam"), /in preview/);
+    await assert.rejects(db.query("select public.beacon_shop($1)", [member]), /Sign in/);
+    await role("root");
+    await db.exec("update private.beacon_coin_policy set purchases_enabled=true");
+    await role("authenticated", host);
+    await assert.rejects(wallet("ember-beam", 900), /price changed/);
+    assert.equal((await wallet("ember-beam")).balance, 6500);
+    const replay = await wallet("ember-beam");
+    assert.equal(replay.balance, 6500);
+    assert.equal(replay.catalog.find((item) => item.id === "ember-beam")?.owned, true);
+  } finally {
+    await db.close();
+  }
+});
+
 test("Beacon Score settles eligible activity once and only shares opted-in tiers", async () => {
-  const { db, role, beacon } = await guestDatabase();
+  const { db, role, beacon } = await guestDatabase("20261122160100_beacon_shop.sql");
   try {
     const { host, member } = guestIds;
     const finished = await beacon();
@@ -127,7 +179,7 @@ test("Beacon Score settles eligible activity once and only shares opted-in tiers
     await role("authenticated", member);
     assert.equal(
       (await tier()).rows[0].tier,
-      beaconScoreTier(hosted.total).index,
+      scoreTiers.findIndex(({ at }) => at > hosted.total) - 1,
     );
     await role("authenticated", host);
     assert.equal((await sync(host, 1, 4_996_757)).total, 5_000_000);

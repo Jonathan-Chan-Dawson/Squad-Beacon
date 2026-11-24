@@ -88,6 +88,51 @@ test.beforeEach(async ({ page }) => {
   );
 });
 
+test("the first ordinary visit opens public Beacons and the tour stays replayable", async ({ page }) => {
+  await guest(page);
+  await page.goto("/");
+  await expect(page).toHaveURL(/\/activities$/);
+  const welcome = page.getByTestId("visitor-welcome");
+  await expect(welcome.getByText("Make a plan. Bring your people.")).toBeVisible();
+  await expect(page.getByTestId("visitor-discovery").getByText("Coffee in the neighborhood")).toBeVisible();
+  await expect(page.getByTestId("saved-tools-entry")).toHaveCount(0);
+  await welcome.getByRole("button", { name: "Show me around" }).click();
+  await expect(page).toHaveURL(/\/help\?tour=yes$/);
+  await expect(page.getByRole("button", { name: "Connect", exact: true })).toBeVisible();
+  await page.goto("/");
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByTestId("full-map-screen")).toBeVisible();
+  await page.goto("/activities");
+  await expect(page.getByTestId("visitor-discovery")).toBeVisible();
+  await expect(welcome).toHaveCount(0);
+  await page.getByRole("button", { name: "Help & Tips" }).click();
+  await page.getByRole("button", { name: "Quick Tour" }).click();
+  await expect(page.getByRole("button", { name: "Connect", exact: true })).toBeVisible();
+});
+
+test("signing in from the visitor welcome does not show a second welcome", async ({ page }) => {
+  const { account } = await guest(page);
+  await page.goto("/activities");
+  await expect(page.getByTestId("visitor-welcome")).toBeVisible();
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await enterAccount(page);
+  await expect(page).toHaveURL(/\/activities$/);
+  await expect(page.locator('[data-testid="saved-tools-entry"]:visible')).toBeVisible();
+  await expect(page.locator('[data-testid="onboarding-returning"]:visible')).toBeVisible();
+  await expect.poll(() => account.keys.has("welcome.dismissed.v1")).toBe(true);
+  await expect(page.getByTestId("onboarding-welcome")).toHaveCount(0);
+  await expect(page.getByTestId("visitor-welcome")).toHaveCount(0);
+});
+
+test("email confirmation restores Create without private draft parameters", async ({ page }) => {
+  await guest(page);
+  await page.goto("/create?kind=ping&draftId=private-draft");
+  await expect(page.getByRole("button", { name: "Sign in", exact: true }).last()).toBeVisible();
+  await page.goto("/auth/confirm?token_hash=fixture-email&type=email");
+  await page.getByRole("button", { name: "Confirm and continue", exact: true }).click();
+  await expect(page).toHaveURL(/\/create$/);
+});
+
 test("signed-out visitors see the original Map, tabs and Create button", async ({
   page,
 }) => {
@@ -112,7 +157,7 @@ test("signed-out visitors see the original Map, tabs and Create button", async (
   await expect(page.getByLabel("Email", { exact: true })).toBeVisible();
 });
 
-test("the original Beacons home and Browse work signed out", async ({
+test("the Beacons home and full Browse directory work signed out", async ({
   page,
 }) => {
   const runtime = await guest(page);
@@ -121,9 +166,13 @@ test("the original Beacons home and Browse work signed out", async ({
   await page
     .getByRole("button", { name: "Explore Beacons", exact: true })
     .click();
-  await expect(page.getByTestId("browse-beacons-screen")).toBeVisible();
+  await expect(page).toHaveURL(/\/activities$/);
+  await expect(page.getByTestId("visitor-welcome")).toHaveCount(0);
+  await page.getByRole("button", { name: "Browse all", exact: true }).click();
+  const directory = page.getByTestId("browse-beacons-screen");
+  await expect(directory).toBeVisible();
   await expect(
-    page.getByText("Coffee in the neighborhood", { exact: true }),
+    directory.getByText("Coffee in the neighborhood", { exact: true }),
   ).toBeVisible();
   expect(runtime.account.snapshotReads).toBe(0);
   await page
@@ -194,7 +243,7 @@ test("demo is already signed in and its Create and Profile work without real log
     page.getByRole("button", { name: "Edit profile", exact: true }),
   ).toBeVisible();
   await expect(page.getByLabel("Email", { exact: true })).toHaveCount(0);
-  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await page.getByRole("button", { name: "Create", exact: true }).press("Enter");
   await expect(page.getByLabel("Email", { exact: true })).toHaveCount(0);
 });
 
@@ -209,7 +258,7 @@ for (const width of [320, 390]) {
         (value) => localStorage.setItem("beacon.appearance", value),
         mode,
       );
-      await page.goto("/");
+      await page.goto("/?mapDiscovery=yes");
       await expect(page.getByTestId("full-map-screen")).toBeVisible();
       await expect(
         page.getByRole("button", { name: "Create", exact: true }),

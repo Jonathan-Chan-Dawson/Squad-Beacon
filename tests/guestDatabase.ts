@@ -8,7 +8,7 @@ export const guestIds = {
   guest: "c3333333-3333-4333-8333-333333333333",
   other: "d4444444-4444-4444-8444-444444444444",
 };
-export async function guestDatabase() {
+export async function guestDatabase(throughMigration?: string) {
   const db = new PGlite();
   await db.exec(`
     create role anon; create role authenticated; create role service_role bypassrls;
@@ -29,6 +29,7 @@ export async function guestDatabase() {
   `);
   const migrations = join(process.cwd(),"supabase","migrations");
   for (const file of readdirSync(migrations).filter(f => f.endsWith(".sql")).sort()) {
+    if (throughMigration && file > throughMigration) break;
     try { await db.exec(readFileSync(join(migrations,file),"utf8").replace("create extension if not exists pgcrypto;","")); }
     catch(error) { throw new Error(`${file}: ${(error as Error).message}`); }
   }

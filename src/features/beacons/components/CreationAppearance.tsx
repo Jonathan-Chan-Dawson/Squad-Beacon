@@ -5,7 +5,6 @@ import type { BeaconControlValues } from "../controls";
 import { DECORATION_ACCENTS, DECORATION_EMOJIS } from "../controls";
 import type { Category } from "@/src/shared/types";
 import { BeaconIcon } from "./BeaconIcon";
-import { BeaconSkinPreview } from "./BeaconSkinPreview";
 import {
   BeaconCardArtwork,
   beaconArtworkStyles,
@@ -24,7 +23,8 @@ export function CardAppearancePreview({
   onBackgroundChange?: (background: BeaconArtworkStyle) => void;
 }) {
   const { styles } = useTheme();
-  const [localBackground, setLocalBackground] = useState<BeaconArtworkStyle>("Constellation");
+  const [localBackground, setLocalBackground] =
+    useState<BeaconArtworkStyle>("Constellation");
   const variant = background ?? localBackground;
   return (
     <View style={{ gap: 8 }}>
@@ -62,12 +62,14 @@ export function CreationAppearance({
   onChange,
   background,
   onBackgroundChange,
+  onOpenShop,
 }: {
   category: Category;
   value: BeaconControlValues;
   onChange: (value: BeaconControlValues) => void;
   background?: BeaconArtworkStyle;
   onBackgroundChange?: (background: BeaconArtworkStyle) => void;
+  onOpenShop: () => void;
 }) {
   const { styles } = useTheme();
   return (
@@ -107,7 +109,12 @@ export function CreationAppearance({
         background={background}
         onBackgroundChange={onBackgroundChange}
       />
-      <BeaconSkinPreview category={category} />
+      <Button
+        compact
+        secondary
+        title="Shop Beacon looks"
+        onPress={onOpenShop}
+      />
     </View>
   );
 }

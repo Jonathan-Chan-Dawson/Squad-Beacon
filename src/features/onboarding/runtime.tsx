@@ -19,6 +19,7 @@ import {
   type SuccessKey,
 } from "./progress";
 import type { CopyTone } from "./copy";
+import { consumeVisitorWelcomeForNewAccount } from "./visitorEntry";
 
 type ProgressValue = {
   keys: ReadonlySet<OnboardingKey>;
@@ -146,7 +147,14 @@ function AccountProgress({
             return;
           }
           next.add("welcome.seen.v1");
-          if (claim.data === true) setFirstEntrySession(true);
+          if (claim.data === true) {
+            if (consumeVisitorWelcomeForNewAccount()) {
+              next.add("welcome.dismissed.v1");
+              pending.current.add("welcome.dismissed.v1");
+            } else {
+              setFirstEntrySession(true);
+            }
+          }
         }
         keysRef.current = next;
         setKeys(next);
