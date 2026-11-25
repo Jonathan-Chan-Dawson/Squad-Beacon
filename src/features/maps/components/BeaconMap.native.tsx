@@ -1,8 +1,8 @@
 import {
   EMPTY_MARKER_STATE,
-  visibleBeaconLabels,
+  visibleMapLabels,
   mapAvailabilityColors,
-  visibleFriendLabels,
+  mapIdentityColors,
   ownsMapBeacon,
   prepareMapIdentity,
   mapBeaconMarkerStates,
@@ -13,6 +13,8 @@ import { beaconMapLook } from "@/src/features/beacons/rewardLooks";
 import { mapBeaconTitle } from "@/src/features/discovery/discoveryCardPresentation";
 import { isBeaconLive } from "@/src/features/beacons/beaconLive";
 import { ClusterArtworkCache } from "../clusterArtwork";
+import { nextAvailabilityExpiry } from "@/src/features/beacons/availability";
+import { useAvailabilityNow } from "@/src/features/beacons/availabilityClock";
 
 import {
   nativeMapMode,
@@ -30,7 +32,9 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { useIsFocused } from "expo-router";
 import {
+  AppState,
   Platform,
   View,
   Text,
@@ -44,7 +48,7 @@ import MapView, {
   Polyline,
   PROVIDER_GOOGLE,
 } from "react-native-maps";
-import { friendAvailabilityState, locationIsFresh } from "@/src/shared/domain";
+import { locationIsFresh } from "@/src/shared/domain";
 import { isValidCoordinate } from "@/src/shared/exploration";
 import { useBeacon } from "@/src/shared/store";
 import { useTheme } from "@/src/shared/ui";
@@ -166,6 +170,8 @@ export default function BeaconMap({
   controlCommand,
   mapStyle,
   selectedActivityId = null,
+  selectedPersonId = null,
+  focusBackground,
   onLongPress,
   onPlace,
   onGestureChange,
@@ -181,6 +187,13 @@ export default function BeaconMap({
 
   const map = useRef<MapView>(null);
   const gestureActive = useRef(false);
+  const moving = useRef(false);
+  const focusedRoute = useIsFocused();
+  const [appActive, setAppActive] = useState(AppState.currentState == null || AppState.currentState === "active");
+  useEffect(() => {
+    const subscription = AppState.addEventListener("change", (state) => setAppActive(state === "active"));
+    return () => subscription.remove();
+  }, []);
   const cameraSettledCallback = useRef(onCameraCommandSettled);
   useEffect(() => {
     cameraSettledCallback.current = onCameraCommandSettled;
@@ -241,7 +254,21 @@ export default function BeaconMap({
   const appliedControlRevision = useRef<number | null>(null);
   const { height } = useWindowDimensions();
   const { showAvatars } = usePreferences();
-  const now = useNow();
+  const mapNow = useNow();
+  const availabilityNow = useAvailabilityNow(nextAvailabilityExpiry(identityData.viewer_id === identityViewer ? identityData.presence : undefined, mapNow), focusedRoute);
+  const now = Math.max(mapNow, availabilityNow);
+  const activitiesById = useMemo(
+    () => new Map(activities.map((activity) => [activity.id, activity])),
+    [activities],
+  );
+  const profilesById = useMemo(
+    () => new Map(profiles.map((profile) => [profile.id, profile])),
+    [profiles],
+  );
+  const authorizedPlaces = useMemo(
+    () => places.filter((place) => activitiesById.has(place.activity_id)),
+    [activitiesById, places],
+  );
   const identityLookup = useMemo(
     () => prepareMapIdentity(identityData, identityViewer),
     [identityData, identityViewer],
@@ -296,14 +323,7 @@ export default function BeaconMap({
             summary,
             x: point.x,
             y: point.y,
-            satellite: pulseHasBeacon(
-              summary,
-              places.filter((place) =>
-                activities.some(
-                  (activity) => activity.id === place.activity_id,
-                ),
-              ),
-            ),
+            satellite: pulseHasBeacon(summary, authorizedPlaces),
           };
         }),
       );
@@ -325,7 +345,7 @@ export default function BeaconMap({
     return () => {
       active = false;
     };
-  }, [ready, region, mapSize, pulseSummaries, places, activities]);
+  }, [ready, region, mapSize, pulseSummaries, authorizedPlaces]);
   const latestSelectionActions = useRef({ onActivity, onPerson });
   useEffect(() => {
     latestSelectionActions.current = { onActivity, onPerson };
@@ -358,12 +378,12 @@ export default function BeaconMap({
                 latitude: p.latitude,
                 longitude: p.longitude,
               }) &&
-              activities.some((a) => a.id === p.activity_id),
+              activitiesById.has(p.activity_id),
           )
           .map((place) => [place.activity_id, place]),
       ).values(),
     ],
-    [places, activities],
+    [places, activitiesById],
   );
   const freshLocations = useMemo(
     () =>
@@ -381,9 +401,7 @@ export default function BeaconMap({
                       latitude: location.latitude,
                       longitude: location.longitude,
                     }) &&
-                    profiles.some(
-                      (profile) => profile.id === location.owner_id,
-                    ),
+                    profilesById.has(location.owner_id),
                 )
                 .sort(
                   (a, b) =>
@@ -395,7 +413,7 @@ export default function BeaconMap({
             ).values(),
           ]
         : [],
-    [showAvatars, locations, now, profiles],
+    [showAvatars, locations, now, profilesById],
   );
   const points = [
     ...pins.map((p) => ({
@@ -642,9 +660,7 @@ export default function BeaconMap({
         kind: "beacon" as const,
         latitude: place.latitude!,
         longitude: place.longitude!,
-        category: activities.find(
-          (activity) => activity.id === place.activity_id,
-        )?.category,
+        category: activitiesById.get(place.activity_id)?.category,
       })),
       ...freshLocations.map((location) => ({
         id: `person:${location.owner_id}`,
@@ -653,7 +669,7 @@ export default function BeaconMap({
         longitude: location.longitude!,
       })),
     ],
-    [contextPoints, pins, activities, freshLocations],
+    [contextPoints, pins, activitiesById, freshLocations],
   );
   const zoom = nativeMapZoom(region.longitudeDelta, mapSize.width);
   const [presentationMode, setPresentationMode] =
@@ -715,6 +731,7 @@ export default function BeaconMap({
         identityViewer,
         now,
         identityLookup,
+        availabilityNow,
       ),
     [
       artworkCache,
@@ -726,6 +743,7 @@ export default function BeaconMap({
       identityData,
       identityViewer,
       identityLookup,
+      availabilityNow,
       now,
     ],
   );
@@ -750,14 +768,15 @@ export default function BeaconMap({
       .map((item) => item.group.members[0].id),
   );
   const lightingTier = { stack: "close", swarm: "medium", atmosphere: "far", micro: "micro" } as const;
-  const beaconLabels = visibleBeaconLabels(
+  const markerLabels = visibleMapLabels(
     mapPoints,
     new Set(presentations.flatMap(({ group }) =>
-      group.members.length === 1 && markerStates.has(group.members[0].id.slice(7))
+      group.members.length === 1
         ? [group.members[0].id] : [])),
     zoom,
+    (id) => id === `beacon:${selectedActivityId}` || id === `person:${selectedPersonId}` ? 0 : markerStates.get(id.slice(7))?.owned ? 1 : id.startsWith("person:") || markerStates.get(id.slice(7))?.friendHosted ? 2 : 3,
   );
-  for (const id of beaconLabels) renderedSingletonIds.add(id);
+  for (const id of markerLabels) renderedSingletonIds.add(id);
   const [cameraMoving, setCameraMoving] = useState(false);
   function selectStackMember(member: ClusterPoint) {
     if (onPick) return;
@@ -815,7 +834,7 @@ export default function BeaconMap({
       Number(right === selectedActivityId) - Number(left === selectedActivityId) ||
       Number(markerStates.get(right)?.participatingLive) - Number(markerStates.get(left)?.participatingLive) ||
       left.localeCompare(right))
-    .slice(0, availableHaloSlots);
+    .slice(0, Math.min(3, availableHaloSlots));
   const haloRevision = JSON.stringify([
     identityViewer,
     zoom,
@@ -887,16 +906,6 @@ export default function BeaconMap({
     (point: ClusterPoint) => clusterActions.current.selectStackMember(point),
     [],
   );
-  const friendLabelIds = visibleFriendLabels(
-    freshLocations
-      .filter((l) => renderedSingletonIds.has(`person:${l.owner_id}`))
-      .map((l) => ({
-        id: l.owner_id,
-        latitude: l.latitude!,
-        longitude: l.longitude!,
-      })),
-    nativeMapZoom(region.longitudeDelta, mapSize.width),
-  );
   return (
     <View
       onLayout={(event) =>
@@ -923,7 +932,10 @@ export default function BeaconMap({
         onMapReady={() => setReady(true)}
         onRegionChangeComplete={(nextRegion, details) => {
           if (!isValidMapRegion(nextRegion)) return;
-          setCameraMoving(false);
+          if (moving.current) {
+            moving.current = false;
+            setCameraMoving(false);
+          }
           setRegion(nextRegion);
           setPresentationMode((previous) =>
             nativeMapMode(
@@ -960,21 +972,25 @@ export default function BeaconMap({
           );
           void settleCameraCommand(settledZoom.current);
           onGestureChange?.(false);
-          void updateAnchor();
+          if (anchorLat != null && anchorLng != null) void updateAnchor();
         }}
         onPanDrag={() => {
+          if (gestureActive.current) return;
           pendingCameraCommand.current = null;
           gestureActive.current = true;
           onGestureChange?.(true);
         }}
-        onRegionChange={(next, details) => {
-          setCameraMoving(true);
-          if (details?.isGesture) {
+        onRegionChange={(_, details) => {
+          if (!moving.current) {
+            moving.current = true;
+            setCameraMoving(true);
+          }
+          if (details?.isGesture && !gestureActive.current) {
             pendingCameraCommand.current = null;
             gestureActive.current = true;
             onGestureChange?.(true);
           }
-          void updateAnchor();
+          if (anchorLat != null && anchorLng != null) void updateAnchor();
         }}
         userInterfaceStyle={resolvedAppearance}
         customMapStyle={
@@ -1110,8 +1126,7 @@ export default function BeaconMap({
                   stopNumber={point.stopNumber}
                   showProjection={presentationMode === "stack"}
                   lightingTier={lightingTier[presentationMode]}
-                  compactProjection={presentationMode === "swarm" ||
-                    (presentationMode === "atmosphere" && selectedActivityId === point.activityId)}
+                  compactProjection={presentationMode === "swarm"}
                   selected={selectedActivityId === point.activityId}
                   dimmed={false}
                   appearanceKey={appearanceKey}
@@ -1165,7 +1180,7 @@ export default function BeaconMap({
                         point.publicBeaconId
                           ? "solid"
                           : "dashed",
-                      borderColor: point.publicBeaconId ? categoryColors[point.category ?? "Other"] : colors.green,
+                      borderColor: point.publicBeaconId ? mapIdentityColors.other : colors.green,
                       backgroundColor: colors.surface,
                     }}
                   >
@@ -1194,7 +1209,7 @@ export default function BeaconMap({
                 coordinate={center}
                 zoom={zoom}
                 selected={selectedPin}
-                paused={cameraMoving || !!onPick}
+                paused={cameraMoving || !!onPick || !focusedRoute || !appActive}
                 {...beaconPulseStyle(markerStates.get(id), selectedPin, categoryColors[category])}
               />
             );
@@ -1210,6 +1225,7 @@ export default function BeaconMap({
               members={modelsFor(presentation)}
               categoryColors={categoryColors}
               availabilityColors={availabilityColors}
+              beaconStates={markerStates}
               appearanceKey={clusterAppearanceKey}
               equippedLooks={identityData.equipped_looks}
               onPress={handlePresentation}
@@ -1257,10 +1273,9 @@ export default function BeaconMap({
                 }
                 showProjection={presentationMode === "stack"}
                 lightingTier={lightingTier[presentationMode]}
-                compactProjection={presentationMode === "swarm" ||
-                  (presentationMode === "atmosphere" && selectedPin)}
+                compactProjection={presentationMode === "swarm"}
                 streetTime={streetTime}
-                beaconName={!onPick && !context && beaconLabels.has(`beacon:${activity.id}`)
+                beaconName={!onPick && (!context || selectedPin) && markerLabels.has(`beacon:${activity.id}`)
                   ? mapBeaconTitle(activity.title, !!activity.plan_id, activity.plan_step_index).title.trim()
                   : undefined}
                 appearanceKey={appearanceKey}
@@ -1269,6 +1284,11 @@ export default function BeaconMap({
               />
             );
           })}
+        {!onPick && presentationMode !== "micro" && presentations.length < 70 && focusBackground?.slice(0, Math.max(0, MAX_RENDERED_MAP_FEATURES - nativeFeatureCount - reservedFeatures - liveHaloPins.length)).map((point) => (
+          <Marker key={point.id} coordinate={point} anchor={{ x: 0.5, y: 0.5 }} tracksViewChanges={false} zIndex={-1}>
+            <View pointerEvents="none" accessibilityElementsHidden style={{ width: point.kind === "person" ? 8 : 10, height: point.kind === "person" ? 8 : 10, borderRadius: 5, backgroundColor: "#A4A0B4", opacity: 0.28 }} />
+          </Marker>
+        ))}
         {freshLocations
           .filter((location) =>
             renderedSingletonIds.has(`person:${location.owner_id}`),
@@ -1278,11 +1298,8 @@ export default function BeaconMap({
               (item) => item.id === location.owner_id,
             );
             if (!profile) return null;
-            const ownerAvailability =
-              (availabilityActivities ?? activities)
-                .filter((activity) => activity.owner_id === location.owner_id)
-                .map((activity) => friendAvailabilityState(activity, now))
-                .find((state) => state !== "unknown") ?? "unknown";
+            const model = memberModels.get(`person:${profile.id}`);
+            const ownerAvailability = model?.availability ?? "unknown";
             const ageLabel =
               formatLocationAge(location.updated_at, now) ?? "now";
             return (
@@ -1290,9 +1307,13 @@ export default function BeaconMap({
                 key={`person:${location.owner_id}`}
                 location={location}
                 profile={profile}
-                availabilityColor={availabilityColors[ownerAvailability]}
+                availabilityColor={model?.relationshipColor ?? "#94A3B8"}
                 availabilityLabel={ownerAvailability.replace("-", " ")}
-                showLabel={friendLabelIds.has(profile.id)}
+                availabilityDetail={model?.availabilityDetail}
+                personBadges={model?.personBadges}
+                selected={selectedPersonId === profile.id}
+                street={presentationMode === "stack"}
+                showLabel={markerLabels.has(`person:${profile.id}`)}
                 ageLabel={ageLabel}
                 appearanceKey={appearanceKey}
                 onPress={selectPerson}

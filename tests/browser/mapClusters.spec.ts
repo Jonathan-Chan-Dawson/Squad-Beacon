@@ -151,7 +151,7 @@ test("constellation opens searchable Beacons and nearby Friends and selects an e
 });
 
 for (const width of [320, 390]) {
-  test(`Beacon tools stay on Map and save Sketchboard notes at ${width}px`, async ({
+  test(`Beacon tools open from Map and save Scratchboard notes at ${width}px`, async ({
     page,
   }) => {
     await startDemo(page);
@@ -171,39 +171,34 @@ for (const width of [320, 390]) {
     await expect(
       preview.getByRole("button", { name: "See overview", exact: true }),
     ).toBeVisible();
-    await preview
-      .getByRole("button", { name: "Beacon Sketchboard", exact: true })
-      .click();
-    const panel = page.getByTestId("map-panel");
-    await expect(panel).toBeVisible();
-    await expect(page).not.toHaveURL(/\/activity\//);
-    await expect(
-      panel.getByRole("tab", { name: "Beacon Sketchboard", exact: true }),
-    ).toHaveAttribute("aria-selected", "true");
-    await panel
+    await preview.getByRole("button", { name: "See overview", exact: true }).click();
+    await expect(page).toHaveURL(/\/activity\//);
+    await page.getByRole("tab", { name: "Tools", exact: true }).click();
+    await page.getByRole("tab", { name: "Scratchboard", exact: true }).click();
+    await page
       .getByRole("textbox", { name: "Your note", exact: true })
       .fill("Map Sketchboard draft saved from its tab");
-    await panel.getByRole("button", { name: "Save note", exact: true }).click();
-    await panel.getByRole("tab", { name: "Checklist", exact: true }).click();
+    await page.getByRole("button", { name: "Save note", exact: true }).click();
+    await page.getByRole("button", { name: "All tools", exact: true }).click();
+    await page.getByRole("tab", { name: "Checklist", exact: true }).click();
     await expect(
-      panel.getByRole("checkbox", {
+      page.getByRole("checkbox", {
         name: "Check Bring a water bottle",
         exact: true,
       }),
     ).toBeVisible();
-    await panel
-      .getByRole("tab", { name: "Beacon Sketchboard", exact: true })
+    await page.getByRole("button", { name: "All tools", exact: true }).click();
+    await page
+      .getByRole("tab", { name: "Scratchboard", exact: true })
       .click();
     await expect(
-      panel.getByRole("textbox", { name: "Your note", exact: true }),
+      page.getByRole("textbox", { name: "Your note", exact: true }),
     ).toHaveValue("Map Sketchboard draft saved from its tab");
     await page.screenshot({
       path: test.info().outputPath("map-sketchboard-panel.png"),
     });
-    await page
-      .getByTestId("beacon-sheet-dismiss-area")
-      .click({ position: { x: 5, y: 5 } });
-    await expect(panel).toHaveCount(0);
+    await page.goBack();
+    await expect(page.getByTestId("full-map-screen")).toBeVisible();
   });
 }
 
@@ -225,14 +220,10 @@ test("Draw-created Beacon links back to its decision", async ({ page }) => {
   await expect(page.getByTestId("map-tooltip")).toBeVisible();
   await page
     .getByTestId("map-tooltip")
-    .getByRole("button", {
-      name: "Open A surprise crew meetup Beacon details",
-      exact: true,
-    })
+    .getByRole("button", { name: "See overview", exact: true })
     .first()
     .click();
-  await expect(page.getByTestId("map-panel")).toBeVisible();
-  await expect(page).not.toHaveURL(/\/activity\//);
+  await expect(page).toHaveURL(/\/activity\//);
   await expect(
     page.getByRole("button", { name: "View Draw decision", exact: true }),
   ).toBeVisible();
@@ -240,9 +231,9 @@ test("Draw-created Beacon links back to its decision", async ({ page }) => {
     .getByRole("button", { name: "View Draw decision", exact: true })
     .click();
 
-  await expect(page).toHaveURL(/\/council\/demo-draw-result$/);
+  await expect(page).toHaveURL(/\/responses\?threadId=demo-draw-result$/);
   await expect(page.getByText(/Crew.?s surprise meetup/)).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Open beacon", exact: true }),
+    page.getByRole("button", { name: "View Beacon", exact: true }),
   ).toBeVisible();
 });

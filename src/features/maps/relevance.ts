@@ -14,19 +14,24 @@ export function deriveMapPointPriorities(
 ): Record<string, MapPointPriority> {
   const priorities: Record<string, MapPointPriority> = {};
   const following = followedBeaconIds(data, viewerId, true);
+  const activitiesById = new Map(
+    data.activities.map((activity) => [activity.id, activity]),
+  );
+  const going = new Map<string, number>();
+  for (const rsvp of data.rsvps)
+    if (rsvp.status === "going")
+      going.set(rsvp.activity_id, (going.get(rsvp.activity_id) ?? 0) + 1);
   for (const activityId of activityIds) {
-    const activity = data.activities.find((item) => item.id === activityId);
+    const activity = activitiesById.get(activityId);
     if (!activity) continue;
     const attendance =
-      activity.accepted_seat_count ??
-      data.rsvps.filter(
-        (rsvp) => rsvp.activity_id === activity.id && rsvp.status === "going",
-      ).length + 1;
+      activity.accepted_seat_count ?? (going.get(activity.id) ?? 0) + 1;
     priorities[`beacon:${activity.id}`] = {
       tier: beaconDiscoveryTier(data, activity, viewerId, now, personalized),
       affinity:
         Number(personalized && beaconInterestMatch(data, activity, viewerId)) +
-        (activity.owner_id === viewerId ? 100 : 0) + Number(following.has(activity.id)) * 0.5,
+        (activity.owner_id === viewerId ? 100 : 0) +
+        Number(following.has(activity.id)) * 0.5,
       attendance,
     };
   }
@@ -43,29 +48,34 @@ export function deriveMapPointPriorities(
       .filter((member) => closeListIds.includes(member.list_id))
       .map((member) => member.user_id),
   );
+  const starredFriends = new Set(
+    data.favorites
+      .filter(
+        (favorite) =>
+          favorite.owner_id === viewerId && favorite.kind === "friend",
+      )
+      .map((favorite) => favorite.target_id),
+  );
+  const availablePeople = new Set(
+    data.activities
+      .filter(
+        (activity) =>
+          activity.mode === "solo" &&
+          activity.available === true &&
+          activity.status === "scheduled" &&
+          Date.parse(activity.starts_at) <= now &&
+          Date.parse(activity.ends_at) > now,
+      )
+      .map((activity) => activity.owner_id),
+  );
   for (const personId of personIds) {
-    const starred = data.favorites.some(
-      (favorite) =>
-        favorite.owner_id === viewerId &&
-        favorite.kind === "friend" &&
-        favorite.target_id === personId,
-    );
-    const available = data.activities.some(
-      (activity) =>
-        activity.owner_id === personId &&
-        activity.mode === "solo" &&
-        activity.available === true &&
-        activity.status === "scheduled" &&
-        Date.parse(activity.starts_at) <= now &&
-        Date.parse(activity.ends_at) > now,
-    );
     priorities[`person:${personId}`] = {
       tier:
         personId === viewerId
           ? -2
-          : starred
+          : starredFriends.has(personId)
             ? 1
-            : available
+            : availablePeople.has(personId)
               ? 5
               : closeFriendIds.has(personId)
                 ? 6

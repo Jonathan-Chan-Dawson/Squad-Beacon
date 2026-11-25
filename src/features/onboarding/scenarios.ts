@@ -35,6 +35,7 @@ export function makeScenario(name: DemoScenario): {
     viewer_id: DEMO_ID,
     profiles: [profile],
     capabilities: reference.capabilities,
+    demo_rewards: name === "fresh" ? { balance: 0, owned: [], stage: 0, taps: 0 } : undefined,
   };
   const other = structuredClone(
     reference.profiles.find((p) => p.id !== DEMO_ID)!,

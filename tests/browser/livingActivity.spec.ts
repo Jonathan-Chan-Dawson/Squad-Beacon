@@ -124,7 +124,7 @@ test("compact empty state, direct editing, independent Status and availability, 
     .click();
   await page
     .getByRole("dialog", { name: "Availability & sharing", exact: true })
-    .getByRole("button", { name: "Not sharing availability", exact: true })
+    .getByRole("button", { name: "Clear availability", exact: true })
     .click();
   await expect(
     page.getByRole("dialog", { name: "Availability & sharing", exact: true }),

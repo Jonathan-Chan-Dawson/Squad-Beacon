@@ -1,4 +1,6 @@
-import { AvatarStatusBadge } from "./AvatarStatusBadge";
+import { AvailabilityArc, AvatarStatusBadge } from "./AvatarStatusBadge";
+import { activeAvailability } from "@/src/features/beacons/availability";
+import { useAvailabilityNow } from "@/src/features/beacons/availabilityClock";
 import type { FriendAvailabilityState } from "@/src/shared/domain";
 import React, { useEffect, useState } from "react";
 import { Image, View } from "react-native";
@@ -21,6 +23,10 @@ export function ProfileAvatar({
 }) {
   const { showAvatars } = usePreferences();
   const { data, userId } = useBeacon();
+  const presence = data.viewer_id === userId ? data.presence?.find((row) => row.owner_id === profile?.id) : undefined;
+  const now = useAvailabilityNow(Date.parse(presence?.availability_until ?? ""), !!status && !!presence);
+  const availability = status ? activeAvailability(presence, now) : null;
+  const badgeStatus = presence && status ? availability?.status === "busy" ? "unavailable" : availability ? "available" : "unknown" : status;
   const [image, setImage] = useState<{ key: string; uri: string } | null>(null);
   const canReadPhoto = !!profile && canViewProfile(data, profile, userId);
   const key =
@@ -80,13 +86,14 @@ export function ProfileAvatar({
       />
     );
   const ring = profile && canReadPhoto ? getRewardLook(data.equipped_looks?.[profile.id]?.ring) : undefined;
-  return ring || (status && status !== "unknown") ? (
+  return ring || (badgeStatus && badgeStatus !== "unknown") ? (
     <View style={{ width: size, height: size }}>
       {avatar}
       {ring && <View testID="equipped-avatar-ring" pointerEvents="none" style={{
         position: "absolute", inset: -2, borderWidth: 2, borderRadius: size, borderColor: ring.color,
       }} />}
-      {status && status !== "unknown" && <AvatarStatusBadge state={status} size={size >= 64 ? 16 : 12} />}
+      {size >= 32 && <AvailabilityArc detail={availability} size={size} />}
+      {badgeStatus && badgeStatus !== "unknown" && <AvatarStatusBadge state={badgeStatus} size={size >= 64 ? 16 : 12} />}
     </View>
   ) : (
     avatar

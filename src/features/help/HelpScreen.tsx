@@ -5,6 +5,7 @@ import { ChevronDown, ChevronRight } from "lucide-react-native";
 import { Button, Field, Screen, Txt, useTheme } from "@/src/shared/ui";
 import { matchesSearch } from "@/src/shared/search";
 import { tipCopy, SemanticEmpty } from "@/src/features/onboarding/OnboardingUI";
+import { TutorialDialog, tutorials, type Tutorial } from "@/src/features/onboarding/SectionTutorial";
 
 const topics: { title: string; answer: string; link: string; path: Href }[] = [
   {
@@ -85,6 +86,7 @@ export default function HelpScreen() {
   const { styles, colors } = useTheme();
   const { tour } = useLocalSearchParams<{ tour?: string }>();
   const [tourOpen, setTourOpen] = useState(tour === "yes");
+  const [tutorial, setTutorial] = useState<Tutorial | null>(null);
   const [query, setQuery] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
   const visible = topics.filter((topic) =>
@@ -93,6 +95,7 @@ export default function HelpScreen() {
   return (
     <Screen title="A friendly field guide" eyebrow="HELP & TIPS" create={false}>
       <Txt muted>A few useful answers. Follow your curiosity.</Txt>
+      {tutorial && <TutorialDialog item={tutorial} close={() => setTutorial(null)} />}
       {!query.trim() && (
         <View style={{ gap: 8 }}>
           <Pressable
@@ -104,6 +107,9 @@ export default function HelpScreen() {
             <Text style={[styles.h2, { flex: 1 }]}>Quick Tour</Text>
             {tourOpen ? <ChevronDown size={18} color={colors.muted} /> : <ChevronRight size={18} color={colors.muted} />}
           </Pressable>
+          {tourOpen && (Object.keys(tutorials) as Tutorial[]).map((item) => (
+            <Button key={item} compact secondary title={`Replay ${tutorials[item].label} tutorial`} onPress={() => setTutorial(item)} />
+          ))}
           {tourOpen && ([
             ["Discover", "Browse activities nearby or look around the Map.", "/browse-beacons"],
             ["Create", "Make a Beacon or send a Ping to see who’s interested.", "/create"],

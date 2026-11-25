@@ -25,10 +25,13 @@ import {
 } from "lucide-react-native";
 import { HomeAction } from "../HomeAction";
 import { useDesignTheme } from "@/src/shared/design-system";
+import { NavigationFilterChip } from "@/src/shared/NavigationTabs";
 import { Button, Txt } from "@/src/shared/ui";
 import { useBeacon } from "@/src/shared/store";
 import { usePreferences } from "@/src/shared/preferences";
 import { useNow } from "@/src/shared/useNow";
+import { nextAvailabilityExpiry } from "../../availability";
+import { useAvailabilityNow } from "../../availabilityClock";
 import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
 import { StatusViewer } from "./StatusViewer";
 import { SharedStatusControl } from "./SharedStatusControl";
@@ -58,7 +61,8 @@ import {
 export function useSocialFriendsController() {
   const { colors, tokens } = useDesignTheme();
   const { data, userId, loading, getCurrentData } = useBeacon();
-  const now = useNow();
+  const homeNow = useNow();
+  const now = Math.max(homeNow, useAvailabilityNow(nextAvailabilityExpiry(data.viewer_id === userId ? data.presence : undefined, homeNow)));
   const friends = useMemo(
     () => socialFriends(data, userId, now),
     [data, userId, now],
@@ -475,7 +479,7 @@ export function SocialFriendRow({
         <Text
           testID={"availability-badge-" + friend.id}
           accessibilityLabel={"Availability: " + status.label}
-          style={{ color: status.color, ...tokens.type.caption }}
+          style={{ color: colors.textSecondary, ...tokens.type.caption }}
         >
           {availabilityLabel(friend, now)}
         </Text>
@@ -547,7 +551,7 @@ function FriendCard({
   return (
     <View testID="your-people-card" style={{
       width,
-      minHeight: 212,
+      minHeight: 168,
       flexGrow: 1,
       borderRadius: 12,
       borderWidth: 1,
@@ -641,11 +645,11 @@ function FriendCard({
 }
 
 export function SocialFriendsSection() {
-  const { colors, tokens } = useDesignTheme();
+  const { colors } = useDesignTheme();
   const { data, getCurrentData } = useBeacon();
   const now = useNow();
   const { width } = useWindowDimensions();
-  const cardWidth = width <= 360 ? 136 : width <= 600 ? 152 : 160;
+  const cardWidth = width <= 360 ? 136 : 152;
   const controller = useSocialFriendsController();
   const { friends, scoped, loading, userId } = controller;
   const [browse, updateBrowse] = useFriendsBrowseState(userId);
@@ -722,24 +726,18 @@ export function SocialFriendsSection() {
         {filters.map(({ label, count, scope, filter }) => {
           const selected = browse.scope === scope && browse.filter === filter;
           return (
-            <Pressable key={label} accessibilityRole="button" accessibilityLabel={`${label} · ${count}`}
-              accessibilityState={{ selected }} aria-pressed={selected} onPress={() => updateBrowse({ scope, filter })}
-              style={{ minHeight: 44, justifyContent: "center", paddingHorizontal: 8, borderRadius: 8, backgroundColor: selected ? colors.surfaceSelected : "transparent" }}>
-              <Text style={{ color: selected ? colors.textPrimary : colors.textSecondary, ...tokens.type.caption }}>{label} · {count}</Text>
-            </Pressable>
+            <NavigationFilterChip key={label} label={`${label} · ${count}`} selected={selected}
+              onPress={() => updateBrowse({ scope, filter })} />
           );
         })}
       </View>
-      <Text testID="your-people-summary" style={{ color: colors.textSecondary, ...tokens.type.caption }}>
-        {`${ordered.length} ${ordered.length === 1 ? "friend" : "friends"}`}
-      </Text>
       <FlatList
         key={userId + ":" + browse.scope + ":" + browse.filter}
         testID="your-people-carousel"
         horizontal
         data={ordered}
         ListHeaderComponent={userId && data.viewer_id === userId ? (
-          <View testID="your-people-self" style={{ width: cardWidth, minHeight: 212, flex: 1, borderRadius: 12, backgroundColor: colors.surfaceSelected }}>
+          <View testID="your-people-self" style={{ width: cardWidth, minHeight: 168, flex: 1, borderRadius: 12, backgroundColor: colors.surfaceSelected }}>
             <SharedStatusControl card />
           </View>
         ) : null}

@@ -712,7 +712,8 @@ svg.leaflet-image-layer.leaflet-interactive path {
   }
 }
 
-.beacon-map-moving .map-now-halo {
+.beacon-map-moving .map-now-halo,
+.beacon-map-paused .map-now-halo {
   animation: none;
   opacity: 0;
 }

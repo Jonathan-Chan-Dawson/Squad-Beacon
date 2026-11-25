@@ -1,6 +1,9 @@
 import { appendBeaconUpperBeam, appendMapProjector } from "./projector";
 import {
   beaconPinEmphasis,
+  beaconMarkerColor,
+  constellationRelationships,
+  mapIdentityColors,
   distantBeaconPinEmphasis,
   type BeaconMarkerState,
 } from "./markerIdentity";
@@ -31,7 +34,6 @@ type Options = {
   surface: string;
   line: string;
   categoryColor: (category: NonNullable<ClusterPoint["category"]>) => string;
-  beaconProjectionColor?: (point: ClusterPoint) => string | undefined;
   beaconState?: (point: ClusterPoint) => BeaconMarkerState | undefined;
 };
 /** The foreground, density marks, and count positions use the same geometry as native. */
@@ -72,11 +74,9 @@ export function webConstellation(
   const projector = geometry.projector;
   if (projector) {
     const primary = geometry.primary[0];
-    const categoryTone = options.categoryColor(primary.category ?? "Other");
-    const light = explorer ? null : beaconPinEmphasis(options.beaconState?.(primary), false, categoryTone);
     appendMapProjector(
       node,
-      (!explorer ? options.beaconProjectionColor?.(primary) : undefined) ?? light?.color ?? categoryTone,
+      explorer ? mapIdentityColors.cluster : beaconMarkerColor(options.beaconState?.(primary)),
       center + projector.top,
       projector.height,
       projector.width,
@@ -85,13 +85,22 @@ export function webConstellation(
       center + projector.x,
     );
   }
-  geometry.dots.forEach(({ category, offset, size }) => {
+  if (geometry.signal) {
+    const { x, y, width } = geometry.signal;
+    const signal = document.createElement("span");
+    signal.dataset.testid = "cluster-signal";
+    signal.setAttribute("aria-hidden", "true");
+    signal.style.cssText = `position:absolute;box-sizing:border-box;left:${center + x - width / 2}px;top:${center + y - width / 2}px;width:${width}px;height:${width}px;border-radius:50%;border:1px solid ${options.line};background:${options.surface};opacity:.85;pointer-events:none;`;
+    node.append(signal);
+  }
+  const relationships = constellationRelationships(presentation.beacons, (point) => options.beaconState?.(point), geometry.dots.length);
+  geometry.dots.slice(0, relationships.length).forEach(({ offset, size }, index) => {
     const dot = document.createElement("span");
     dot.dataset.testid = "cluster-constellation-dot";
-    dot.dataset.category = category ?? "friends";
+    dot.dataset.relationship = relationships[index];
     dot.setAttribute("aria-hidden", "true");
-    const color = category ? options.categoryColor(category) : options.ink;
-    dot.style.cssText = `position:absolute;left:${center + offset.x - size / 2}px;top:${center + offset.y - size / 2}px;width:${size}px;height:${size}px;border-radius:50%;background:${color};opacity:${category ? 1 : 0.55};pointer-events:none;`;
+    const color = mapIdentityColors[relationships[index]];
+    dot.style.cssText = `position:absolute;left:${center + offset.x - size / 2}px;top:${center + offset.y - size / 2}px;width:${size}px;height:${size}px;border-radius:50%;background:${color};pointer-events:none;`;
     node.append(dot);
   });
   const appendFriendAvatar = (marker: HTMLElement, point: ClusterPoint) => {
@@ -153,7 +162,7 @@ export function webConstellation(
         const person = point.kind === "person";
         const color = person
           ? (options.friendColor?.(point) ?? options.ink)
-          : options.categoryColor(point.category ?? "Other");
+          : beaconMarkerColor(options.beaconState?.(point));
         dot.style.cssText = `width:${markerSize}px;height:${markerSize}px;border-radius:50%;background:${color};opacity:${person ? 0.65 : 1};`;
         if (accent?.beamHeight) {
           const opacity = Math.round(accent.glowOpacity * 255).toString(16).padStart(2, "0");
@@ -166,12 +175,9 @@ export function webConstellation(
       }
     }
     // Identity decorations never enlarge or obscure the established cluster footprint.
-    if (markerSize < 24)
-      item
-        .querySelectorAll('[data-testid="beacon-ownership-star"]')
-        .forEach((decoration) => decoration.remove());
-    if (!petalBookmarkVisible(geometry, index))
-      item.querySelector('[data-testid="beacon-saved-bookmark"]')?.remove();
+    const badges = item.querySelector('[data-testid="beacon-marker-badges"]');
+    if (markerSize < 24 || (badges?.querySelector('[data-testid="beacon-saved-bookmark"]') && !petalBookmarkVisible(geometry, index)))
+      badges?.remove();
     items.push(item);
     node.append(item);
   });

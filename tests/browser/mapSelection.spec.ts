@@ -378,7 +378,7 @@ test("saving a Map Beacon refreshes its Bookmark without moving the camera", asy
     ),
   );
   const initial = await marker.evaluate((node) => (node.getAttribute("aria-label") ?? node.querySelector("button[aria-label]")?.getAttribute("aria-label"))!);
-  const base = initial.replace(/, Saved/g, "");
+  const base = initial.replace(/, (?:Saved|Matches your interests|Friend-hosted|Your Squad|Live|Going)(?=,|$)/g, "");
   const stableMarker = page
     .locator('.leaflet-container button[aria-label^="Map:"]')
     .filter({ has: page.locator("[data-cluster-face]") })
@@ -386,9 +386,7 @@ test("saving a Map Beacon refreshes its Bookmark without moving the camera", asy
       page.getByRole("button", {
         name: new RegExp(
           "^" +
-            base
-              .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
-              .replace(/, Friend-hosted|, Live/g, "") +
+            base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") +
             "(?:,|$)",
         ),
       }),

@@ -10,7 +10,8 @@ type Wallet = {
   level: number;
   welcome: string[];
   equipped: Record<string, string>;
-  clicker: { week: string; stage: number; remaining: number; charge: number };
+  shop_unlocked: boolean;
+  clicker: { week: string; stage: number; starter_taps: number; remaining: number; charge: number };
   catalog: { id: string; price: number; owned: boolean }[];
 };
 
@@ -101,12 +102,16 @@ test("a fresh viewer can earn 120 Coins, unlock and equip a starter ring once", 
     assert.deepEqual(snapshot.equipped_looks[host], { ring: "starter-ring" });
 
     const current = await query();
+    assert.equal(current.clicker.stage, 0);
+    assert.equal(current.shop_unlocked, false);
     const tap = {
       request_id: crypto.randomUUID(),
       week: current.clicker.week,
       taps: 7,
     };
-    assert.equal((await query("tap", tap)).clicker.charge, (7 * scale) / 10);
+    const firstBatch = await query("tap", tap);
+    assert.equal(firstBatch.clicker.charge, (7 * scale) / 10);
+    assert.equal(firstBatch.clicker.starter_taps, 7);
     assert.equal(
       (await query("tap", tap)).balance,
       45 * scale + (7 * scale) / 10,
@@ -132,6 +137,7 @@ test("a fresh viewer can earn 120 Coins, unlock and equip a starter ring once", 
       taps: 12,
     });
     assert.equal(capped.clicker.remaining, 0);
+    assert.equal(capped.clicker.starter_taps, 8);
     assert.equal(capped.balance, 45 * scale + (8 * scale) / 10);
     await role("root");
     await db.query(
@@ -139,7 +145,16 @@ test("a fresh viewer can earn 120 Coins, unlock and equip a starter ring once", 
       [host],
     );
     await role("authenticated", host);
-    assert.equal((await query()).clicker.remaining, 500);
+    const refreshed = await query();
+    assert.equal(refreshed.clicker.remaining, 500);
+    assert.equal(refreshed.clicker.starter_taps, 8);
+    const finish = { request_id: crypto.randomUUID(), week: refreshed.clicker.week, taps: 2 };
+    const unlocked = await query("tap", finish);
+    assert.equal(unlocked.shop_unlocked, true);
+    assert.equal(unlocked.clicker.stage, 1);
+    assert.equal(unlocked.clicker.starter_taps, 10);
+    assert.equal(unlocked.balance, 46 * scale);
+    assert.equal((await query("tap", finish)).balance, unlocked.balance);
   } finally {
     await db.close();
   }
@@ -190,6 +205,7 @@ test("wallet unit migration preserves money and older ownership, and uses histor
         "utf8",
       ),
     );
+    await db.exec(await readFile("supabase/migrations/20261124192325_mini_beacon_starter_stage.sql", "utf8"));
     await db.exec(
       "update private.beacon_coin_policy set rewards_started_at=now()-interval '4 days'",
     );
@@ -215,6 +231,8 @@ test("wallet unit migration preserves money and older ownership, and uses histor
       [host],
     );
     assert.equal(rows[0].wallet.balance, (12.5 + 22.5 + 30) * scale);
+    assert.equal(rows[0].wallet.clicker.stage, 1);
+    assert.equal(rows[0].wallet.shop_unlocked, true);
     assert.equal(
       rows[0].wallet.catalog.find((item) => item.id === "ember-beam")?.owned,
       true,

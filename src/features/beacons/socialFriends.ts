@@ -16,6 +16,7 @@ import {
 } from "@/src/features/people/privateLists";
 
 export type SocialFriend = SafeFriendNowRow & {
+  availabilityDetail?: ReturnType<typeof selectPersonPreview>["availabilityDetail"];
   currentActivityTitle?: string;
   attachment?: ReturnType<typeof visibleStatusAttachment>;
   currentBeacon?: ReturnType<typeof visibleCurrentBeacon>;
@@ -104,6 +105,7 @@ export function socialFriends(
           name: preview.profile?.name ?? "Friend",
           profile: preview.profile,
           availability: preview.availability,
+          availabilityDetail: preview.availabilityDetail,
           statusText: statusNoteText(note),
           currentActivityTitle:
             sharedCurrent?.type === "activity_note"
@@ -168,6 +170,7 @@ export function socialFriends(
 }
 
 export function availabilityLabel(friend: SocialFriend, now = Date.now()) {
+  if (friend.availabilityDetail) return friend.availabilityDetail.label;
   const time = friend.until
     ? new Date(friend.until).toLocaleTimeString([], {
         hour: "numeric",
@@ -190,6 +193,7 @@ export function availabilityLabel(friend: SocialFriend, now = Date.now()) {
 }
 
 export function homeFriendAvailability(friend: SocialFriend, now: number) {
+  if (friend.availabilityDetail) return friend.availabilityDetail.label;
   const time = (date: Date) =>
     date.toLocaleTimeString([], {
       hour: "numeric",

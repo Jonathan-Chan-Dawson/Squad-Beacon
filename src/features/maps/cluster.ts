@@ -55,6 +55,7 @@ export const CLUSTER_PREVIEW_GAP = 2;
 const CLUSTER_MIN_ZOOM = 0;
 export const MAP_MAX_ZOOM = 22;
 const CLUSTER_MAX_ZOOM = MAP_MAX_ZOOM;
+const VIEWPORT_MARKER_BUFFER = 44;
 const MAX_MERCATOR_LATITUDE = 85.05112878;
 const CATEGORIES: Category[] = [
   "Fitness",
@@ -124,11 +125,31 @@ function wrappedLongitude(longitude: number) {
 }
 
 function wrappedLongitudeDelta(longitude: number, center: number) {
-  return ((longitude - center + 540) % 360) - 180;
+  return wrappedLongitude(longitude - center);
+}
+
+/** Collect friend candidates without rebuilding a radius-one cluster hierarchy. */
+export function pointsInMapViewport(points: ClusterPoint[], viewport: ClusterViewport) {
+  const buffered = {
+    ...viewport,
+    width: viewport.width + VIEWPORT_MARKER_BUFFER * 2,
+    height: viewport.height + VIEWPORT_MARKER_BUFFER * 2,
+  };
+  if (!Number.isFinite(viewport.zoom) || viewport.zoom < 0 ||
+      !Number.isFinite(viewport.width) || viewport.width <= 0 ||
+      !Number.isFinite(viewport.height) || viewport.height <= 0) return [];
+  const [[west, south, east, north]] = viewportBoxes(buffered, viewport.centerLongitude);
+  return points.filter((point) => {
+    if (!validPoint(point) || point.latitude < south || point.latitude > north)
+      return false;
+    const longitude = wrappedLongitudeDelta(point.longitude, viewport.centerLongitude);
+    return longitude >= west && longitude <= east;
+  });
 }
 
 function viewportBoxes(
   viewport: ClusterViewport,
+  indexLongitude: number,
 ): [number, number, number, number][] {
   const { centerLatitude, zoom, width, height } = viewport;
   const worldSize = 256 * 2 ** Math.min(zoom, CLUSTER_MAX_ZOOM + 1);
@@ -137,7 +158,8 @@ function viewportBoxes(
   const latitudeRadius = height / 2 / worldSize;
   const north = latitudeFromMercatorY(centerY - latitudeRadius);
   const south = latitudeFromMercatorY(centerY + latitudeRadius);
-  return [[-longitudeRadius, south, longitudeRadius, north]];
+  const center = wrappedLongitudeDelta(viewport.centerLongitude, indexLongitude);
+  return [[center - longitudeRadius, south, center + longitudeRadius, north]];
 }
 
 function featuresInBounds(
@@ -233,6 +255,26 @@ function buildIndex(
   );
 }
 
+/** Reuse the indexed coordinates across committed camera moves and display changes. */
+export class ClusterIndexCache {
+  private readonly byPoints = new WeakMap<ClusterPoint[], Map<string, Supercluster<ClusterPoint>>>();
+
+  get(points: ClusterPoint[], radius: number, longitude: number) {
+    let indexes = this.byPoints.get(points);
+    if (!indexes) {
+      indexes = new Map();
+      this.byPoints.set(points, indexes);
+    }
+    const key = `${radius}:${longitude}`;
+    const index = indexes.get(key) ?? buildIndex(points.filter(validPoint), radius, longitude);
+    indexes.delete(key);
+    indexes.set(key, index);
+    const oldest = indexes.keys().next();
+    if (indexes.size > 8 && !oldest.done) indexes.delete(oldest.value);
+    return index;
+  }
+}
+
 /**
  * Clusters valid readable points using Supercluster. If an unusually dense view
  * still has over 150 rendered features, progressively lower the cluster zoom
@@ -242,6 +284,7 @@ export function clusterMapPoints(
   points: ClusterPoint[],
   viewport: ClusterViewport,
   radius = 24,
+  cache?: ClusterIndexCache,
 ): MapPointGroup[] {
   const { centerLatitude, centerLongitude, zoom, width, height } = viewport;
   if (
@@ -258,24 +301,32 @@ export function clusterMapPoints(
   )
     return [];
 
-  const readablePoints = points.filter(validPoint);
-  if (!readablePoints.length) return [];
-  const boxes = viewportBoxes(viewport);
+  if (!points.length) return [];
+  // Keep the projection seam away from the camera. Reuse one longitude frame
+  // during local movement, and center wide views exactly to avoid splitting them.
+  const frameLongitude = cache ? Math.round(centerLongitude / 90) * 90 : centerLongitude;
+  const frameBoxes = viewportBoxes(viewport, frameLongitude);
+  const useFrame = frameBoxes.every(([west, , east]) => west > -135 && east < 135);
+  const indexLongitude = useFrame ? frameLongitude : centerLongitude;
+  const boxes = useFrame ? frameBoxes : viewportBoxes(viewport, indexLongitude);
+  const indexAt = (indexRadius: number) =>
+    cache?.get(points, indexRadius, indexLongitude) ??
+    buildIndex(points.filter(validPoint), indexRadius, indexLongitude);
   const requestedZoom = Math.floor(Math.min(zoom, CLUSTER_MAX_ZOOM + 1));
   let clusterRadius = Math.max(1, radius);
-  let index = buildIndex(readablePoints, clusterRadius, centerLongitude);
+  let index = indexAt(clusterRadius);
 
   for (let level = requestedZoom; level >= CLUSTER_MIN_ZOOM; level--) {
     const features = featuresInBounds(index, boxes, level);
     if (features.length <= MAX_RENDERED_MAP_FEATURES)
-      return materializeGroups(index, features, centerLongitude);
+      return materializeGroups(index, features, indexLongitude);
   }
 
   for (clusterRadius *= 2; clusterRadius <= 4096; clusterRadius *= 2) {
-    index = buildIndex(readablePoints, clusterRadius, centerLongitude);
+    index = indexAt(clusterRadius);
     const features = featuresInBounds(index, boxes, CLUSTER_MIN_ZOOM);
     if (features.length <= MAX_RENDERED_MAP_FEATURES)
-      return materializeGroups(index, features, centerLongitude);
+      return materializeGroups(index, features, indexLongitude);
   }
 
   // A very large, globally dispersed data set can exceed the cap even at the
@@ -283,11 +334,11 @@ export function clusterMapPoints(
   // silently dropping markers or exposing only an arbitrary first page.
   const allVisible = featuresInBounds(index, boxes, CLUSTER_MIN_ZOOM);
   if (allVisible.length <= MAX_RENDERED_MAP_FEATURES)
-    return materializeGroups(index, allVisible, centerLongitude);
+    return materializeGroups(index, allVisible, indexLongitude);
   const flattened = materializeGroups(
     index,
     allVisible,
-    centerLongitude,
+    indexLongitude,
   ).flatMap((group) => group.members);
   return flattened.length
     ? [

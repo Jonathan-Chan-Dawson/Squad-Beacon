@@ -15,6 +15,7 @@ import {
 import type { ClusterPoint } from "../src/features/maps/cluster";
 import {
   bloomGeometry,
+  constellationDiameter,
   petalBookmarkVisible,
 } from "../src/features/maps/clusterBloom";
 import { nativePresentation } from "../src/features/maps/nativeMapPresentation";
@@ -233,7 +234,7 @@ test("shared clock changes update location accessibility without restarting bitm
   assert.equal(after.visualRevision, before.visualRevision);
 });
 
-test("city and regional constellations use distinct ranked categories at stable positions", () => {
+test("city and regional constellations reserve stable orbital positions", () => {
   const anchor = { latitude: 41.885, longitude: -87.642 };
   const categories = ["Social", "Social", "Creative", "Fitness", "Study"] as const;
   const members: ClusterPoint[] = categories.map((category, index) => ({
@@ -241,11 +242,15 @@ test("city and regional constellations use distinct ranked categories at stable 
   }));
   const render = (mode: "micro" | "atmosphere", input: ClusterPoint[]) =>
     bloomGeometry(nativePresentation({ ...anchor, id: "constellation", members: input }, mode, {}, new Set())).dots;
-  assert.deepEqual(render("atmosphere", members).map((dot) => dot.category), ["Social", "Creative", "Fitness"]);
-  assert.deepEqual(render("micro", members).map((dot) => dot.category), ["Social", "Creative"]);
+  assert.equal(render("atmosphere", members).length, 3);
+  assert.equal(render("micro", members).length, 2);
   assert.deepEqual(render("atmosphere", members.map((point, index) => ({
     ...point, longitude: point.longitude + index * 0.01,
   })).reverse()), render("atmosphere", members));
+});
+
+test("signal sizes step through the five exact Beacon count bands", () => {
+  assert.deepEqual([2, 9, 10, 49, 50, 199, 200, 499, 500, 10000].map(constellationDiameter), [12, 12, 18, 18, 24, 24, 30, 30, 38, 38]);
 });
 
 test("nearby artwork reduces satellites without shifting petals or mutating authorized locations", () => {

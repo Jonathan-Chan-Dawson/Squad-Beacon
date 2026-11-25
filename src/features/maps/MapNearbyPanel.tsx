@@ -6,6 +6,8 @@ import { Info, Maximize2, Search } from "lucide-react-native";
 import { cardPresentation as card } from "@/src/theme/cardPresentation";
 import { useBeacon } from "@/src/shared/store";
 import { useNow } from "@/src/shared/useNow";
+import { activeAvailability, nextAvailabilityExpiry } from "@/src/features/beacons/availability";
+import { useAvailabilityNow } from "@/src/features/beacons/availabilityClock";
 import { Button, useTheme } from "@/src/shared/ui";
 import { clusterPeople } from "./mapDiscovery";
 import { canReadBeaconActivity } from "@/src/features/beacons/beaconModules";
@@ -51,7 +53,9 @@ export function MapNearbyPanel({
 }) {
   const { data, userId } = useBeacon();
   const { styles, colors, tokens } = useTheme();
-  const now = useNow();
+  const mapNow = useNow();
+  const authorizedAvailability = userId && data.viewer_id === userId ? data.presence : undefined;
+  const now = Math.max(mapNow, useAvailabilityNow(nextAvailabilityExpiry(authorizedAvailability, mapNow)));
   const [infoOpen, setInfoOpen] = useState(false);
   const infoAnchor = useRef<View>(null);
   const [expanded, setExpanded] = useState(false);
@@ -76,6 +80,8 @@ export function MapNearbyPanel({
         )
     : [];
   const people = clusterPeople(data, [], personIds, userId);
+  const nearbyIds = new Set(people.map((person) => person.id));
+  const freeCount = authorizedAvailability?.filter((row) => nearbyIds.has(row.owner_id) && activeAvailability(row, now)?.status === "available").length ?? 0;
   const readableIds = new Set(beacons.map((row) => row.id));
   const publicBeacons = [
     ...new Map(
@@ -123,6 +129,7 @@ export function MapNearbyPanel({
             <Text accessibilityRole="header" style={[styles.h2, tokens.type.titleSmall]}>
               Nearby · {beaconCount + people.length}
             </Text>
+            {freeCount > 0 && <Text style={styles.muted}>{freeCount} {freeCount === 1 ? "friend is" : "friends are"} free</Text>}
           </View>
         </MapTooltipHeader>
         {!compact && (

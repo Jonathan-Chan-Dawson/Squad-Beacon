@@ -277,5 +277,36 @@ test("living activity isolation, replay, authorization, pause and takeover", asy
   ).rows[0].data;
   assert.ok(!foreignHistory.rows.some((r: any) => r.id === solo.id));
   await assert.rejects(db.query("select * from private.presence_config"));
+  const readAvailability = async () => (await db.query<{ value: Record<string, unknown> | null }>(
+    "select private.living_presence_projection($1) value", [ids.owner],
+  )).rows[0].value;
+  await actor("owner");
+  await action("update_presence", { availability: "available", availability_mode: "indefinite", availability_note: "  Up for coffee  ", availability_audience: "friends" });
+  const indefinite = await readAvailability();
+  assert.equal(indefinite?.availability_mode, "indefinite");
+  assert.equal(indefinite?.availability_until, null);
+  assert.equal(indefinite?.availability_note, "Up for coffee");
+  await actor("member");
+  assert.equal((await readAvailability())?.availability_note, "Up for coffee");
+  await actor("stranger");
+  assert.equal((await readAvailability())?.availability_note ?? null, null);
+  await actor("owner");
+  await action("update_presence", { availability: "busy" });
+  const original = await readAvailability();
+  const legacyEnd = Date.parse(String(original?.availability_until));
+  assert.equal(legacyEnd - Date.parse(String(original?.availability_started_at)), 3600000);
+  const extension = crypto.randomUUID();
+  await action("update_presence", { availability_extend_minutes: 30 }, extension);
+  await action("update_presence", { availability_extend_minutes: 30 }, extension);
+  const extended = await readAvailability();
+  assert.equal(Date.parse(String(extended?.availability_until)) - legacyEnd, 1800000);
+  assert.equal(extended?.availability_started_at, original?.availability_started_at);
+  await root();
+  await db.query("update private.presence_config set availability_until=now()-interval '1 minute' where owner_id=$1", [ids.owner]);
+  await actor("owner");
+  assert.equal((await readAvailability())?.availability, null);
+  await assert.rejects(action("update_presence", { availability_extend_minutes: 60 }), /active timed availability/i);
+  await action("update_presence", { availability: null });
+  assert.equal((await readAvailability())?.availability_started_at, null);
   await db.close();
 });

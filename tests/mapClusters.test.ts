@@ -11,6 +11,7 @@ import {
   clusterPreviewOverflow,
   formatLocationAge,
   clusterMapPoints,
+  ClusterIndexCache,
   clusterCategoryMix,
   clusterBounds,
   markerVisualSize,
@@ -182,6 +183,20 @@ test("map clustering returns only points inside the visible bounds", () => {
     groups.flatMap((group) => group.members.map((member) => member.id)),
     ["beacon:visible"],
   );
+});
+
+test("cached camera queries keep both sides of the antimeridian and handle world copies", () => {
+  const cache = new ClusterIndexCache();
+  const points = [
+    { id: "beacon:east", kind: "beacon" as const, latitude: 0, longitude: 179.95 },
+    { id: "beacon:west", kind: "beacon" as const, latitude: 0, longitude: -179.95 },
+    { id: "beacon:outside", kind: "beacon" as const, latitude: 0, longitude: 0 },
+  ];
+  for (const centerLongitude of [179.99, -179.99, 540.01]) {
+    const groups = clusterMapPoints(points, { ...viewport, centerLatitude: 0, centerLongitude, zoom: 11 }, 24, cache);
+    assert.deepEqual(groups.flatMap((group) => group.members.map((member) => member.id)).sort(),
+      ["beacon:east", "beacon:west"]);
+  }
 });
 
 test("marker visuals keep the fixed activity and friend sizes", () => {

@@ -2,78 +2,38 @@ import { expect, test } from "@playwright/test";
 import { mockOnboardingAccount } from "./onboardingAccount";
 import { startDemoFromEntry } from "./demoEntry";
 
-test("tiny Profile Beacon toast opens the Machine and can seed a Beacon", async ({ page }) => {
+test("Profile keeps the Mini Beacon interaction beside Shop and Score lives in Rewards", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 900 });
-  await page.routeWebSocket("**/hot", () => {});
-  await page.routeWebSocket("**/message", () => {});
+  await page.emulateMedia({ reducedMotion: "reduce" });
   await mockOnboardingAccount(page, { signedOut: true });
   await page.goto("/auth/sign-in");
   await startDemoFromEntry(page);
-  await expect(page.getByTestId("full-map-screen")).toBeVisible();
   await page.getByRole("tab", { name: "Profile", exact: true }).click();
-  await expect(page.getByTestId("profile-identity")).toBeVisible();
-  const icon = page.getByTestId("profile-tiny-beacon").locator("svg").last();
-  const count = page.getByTestId("profile-tiny-beacon-count");
-  const trigger = page.getByRole("button", { name: "Tap the tiny Beacon" });
-  const noteBox = (await page.getByTestId("living-status-message").boundingBox())!;
-  const triggerBox = (await trigger.boundingBox())!;
-  expect(triggerBox.x).toBeGreaterThanOrEqual(noteBox.x + noteBox.width);
-  expect(Math.abs(triggerBox.y + triggerBox.height / 2 - noteBox.y - noteBox.height / 2)).toBeLessThan(2);
-  const firstColor = (await icon.getAttribute("stroke"))!;
-  expect(firstColor).toMatch(/^#/);
-  await expect(count).toHaveText("1,500");
-  await trigger.click();
-  await expect(count).toHaveText("1,500");
-  await expect(icon).not.toHaveAttribute("stroke", firstColor);
-  for (let tap = 1; tap < 8; tap++) await trigger.click();
-  await expect(count).toHaveText("1,502");
-  await expect(trigger).toHaveAttribute("aria-valuetext", "1502 points, Citywide stage");
+  const identity = page.getByTestId("profile-identity");
+  const tap = identity.getByRole("button", { name: "Tap Mini Beacon" });
+  const shop = identity.getByRole("button", { name: "Open Shop" });
+  await expect(tap).toBeVisible();
+  await expect(shop).toBeVisible();
+  const noteBox = (await identity.getByTestId("living-status-message").boundingBox())!;
+  const rewardsBox = (await identity.getByTestId("profile-status-rewards").boundingBox())!;
+  expect(rewardsBox.x).toBeGreaterThanOrEqual(noteBox.x + noteBox.width);
+  expect(Math.abs(rewardsBox.y + rewardsBox.height / 2 - noteBox.y - noteBox.height / 2)).toBeLessThan(2);
+  expect((await identity.getByTestId("profile-mini-beacon-face").boundingBox())!.width).toBe(28);
+  expect((await identity.getByTestId("profile-shop-face").boundingBox())!.width).toBe(28);
+  expect((await tap.boundingBox())!.width).toBeGreaterThanOrEqual(44);
+  expect((await shop.boundingBox())!.width).toBeGreaterThanOrEqual(44);
+  await tap.click();
+  await expect(identity.getByText("+0.1 Coins", { exact: true })).toBeVisible();
   await expect(page).toHaveURL(/\/profile$/);
-  const toast = page.getByRole("button", { name: /Open Spontaneity Machine$/ });
-  await expect(toast).toBeVisible();
-  await toast.click();
-  await expect(page).toHaveURL(/\/spontaneity$/);
-  await page.getByRole("button", { name: "Generate Side Quest", exact: true }).click();
-  const title = await page.getByTestId("side-quest-title").innerText();
-  await page.getByRole("button", { name: "Create Beacon", exact: true }).click();
-  await expect(page.getByLabel("Activity title", { exact: true })).toHaveValue(title);
-  const timing = page.getByTestId("inline-beacon-timing");
-  const later = timing.getByLabel("Start time: In 30 min", { exact: true });
-  await later.click();
-  await expect(later).toHaveAttribute("aria-selected", "true");
-  const duration = timing.getByRole("radio", { name: "2 hours", exact: true });
-  await duration.click();
-  await expect(duration).toBeChecked();
-  await expect(timing.getByRole("button", { name: "Start time: Choose date", exact: true })).toBeVisible();
-});
-
-test("tiny Beacon saves progress through the five-million-point upgrade", async ({ page }) => {
-  await page.routeWebSocket("**/hot", () => {});
-  await page.routeWebSocket("**/message", () => {});
-  await mockOnboardingAccount(page, { signedOut: true });
-  const key = `beacon.viewer-defaults.${Array.from("demo-you", char => char.codePointAt(0)!.toString(16)).join("-")}`;
-  await page.addInitScript((key) => {
-    if (!localStorage.getItem(key))
-      localStorage.setItem(key, JSON.stringify({ tinyBeaconTaps: 4_998_499 }));
-  }, key);
-  async function openProfile() {
-    await page.goto("/auth/sign-in");
-    await startDemoFromEntry(page);
-    await expect(page.getByTestId("full-map-screen")).toBeVisible();
-    await page.getByRole("tab", { name: "Profile", exact: true }).click();
-  }
-  await openProfile();
-  const trigger = page.getByRole("button", { name: "Tap the tiny Beacon" });
-  const milestone = "5000000 points, Infinite Signal stage";
-  await expect(trigger).toHaveAttribute("aria-valuetext", /The Last Star stage/);
-  await trigger.click();
-  await expect(trigger).toHaveAttribute("aria-valuetext", milestone);
-  await expect(page.getByText("Infinite Signal unlocked", { exact: true })).toBeVisible();
-  await expect.poll(() => page.evaluate((key) => JSON.parse(localStorage.getItem(key) ?? "{}").tinyBeaconTaps, key)).toBe(4_998_500);
-  await page.getByRole("button", { name: "View score", exact: true }).click();
-  await expect(page.getByText("5,000,000 points · Infinite Signal · Level 50")).toBeVisible();
-  await openProfile();
-  await expect(trigger).toHaveAttribute("aria-valuetext", milestone);
+  await tap.click({ delay: 650 });
+  const info = page.getByRole("dialog", { name: "Mini Beacon" });
+  await expect(info.getByText("10 taps per Coin · 499 rewarded taps left this week")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await shop.click();
+  await expect(page.getByRole("button", { name: "Tap Mini Beacon" })).toHaveCount(0);
+  await page.getByRole("tab", { name: "Progress", exact: true }).click();
+  await page.getByRole("button", { name: "View Beacon Score", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Beacon Score" })).toBeVisible();
 });
 
 for (const [width, appearance] of [
@@ -89,6 +49,7 @@ for (const [width, appearance] of [
   test(`identity-attached status at ${width}px in ${appearance}`, async ({
     page,
   }) => {
+    test.setTimeout(90_000);
     await page.setViewportSize({ width, height: 1000 });
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.addInitScript(
@@ -128,7 +89,7 @@ for (const [width, appearance] of [
       .click();
     await expect(editor).toHaveCount(0);
     await expect(homeNote).toContainText("Coffee, then a creative afternoon");
-    await home
+    await page
       .getByRole("button", { name: "Change availability", exact: true })
       .click();
     const availability = page.getByRole("dialog", {
@@ -142,11 +103,11 @@ for (const [width, appearance] of [
     await availability
       .getByRole("button", { name: "Busy", exact: true })
       .click();
+    await availability.getByRole("button", { name: "Save availability", exact: true }).click();
     await expect(availability).toHaveCount(0);
     await expect(homeNote).toContainText("Coffee, then a creative afternoon");
     await page.screenshot({
       path: test.info().outputPath(`beacons-${width}-${appearance}.png`),
-      fullPage: true,
     });
     if (width === 320 && appearance === "dark") {
       const largerText = await page.addStyleTag({

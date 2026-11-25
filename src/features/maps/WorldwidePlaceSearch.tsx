@@ -7,6 +7,7 @@ import { usePreferences } from "@/src/shared/preferences";
 import { searchWorldwidePlaces } from "./searchWorldwidePlaces";
 import { demoWorldwidePlaces, type WorldwidePlace } from "./placeSearch";
 import { useBeacon } from "@/src/shared/store";
+import { openGuestEntry } from "@/src/features/auth/guestEntry";
 
 export function WorldwidePlaceSearch({
   query,
@@ -15,7 +16,7 @@ export function WorldwidePlaceSearch({
   query: string;
   onChoose?: (place: WorldwidePlace) => void;
 }) {
-  const { demo } = useBeacon();
+  const { demo, userId } = useBeacon();
   const provider = Platform.OS === "android" ? "google" : "osm";
   const { colors, styles } = useTheme();
   const { resolvedAppearance } = usePreferences();
@@ -32,7 +33,10 @@ export function WorldwidePlaceSearch({
     return () => {
       state.value++;
     };
-  }, [query]);
+  }, [query, userId, demo]);
+  if (!userId) {
+    return <Button compact secondary title="Sign in to search worldwide places" onPress={() => openGuestEntry("/", "places", undefined, { search: "yes" })} />;
+  }
   return (
     <View style={{ gap: 8 }}>
       <Button

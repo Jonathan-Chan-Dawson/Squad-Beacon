@@ -1,8 +1,8 @@
 import { router, useFocusEffect, type Href } from "expo-router";
-import { ChevronRight, RadioTower } from "lucide-react-native";
+import { ChevronRight, Dices } from "lucide-react-native";
 import { useCallback, useRef } from "react";
 import { Pressable, Text, View } from "react-native";
-import { IconButton, useTheme } from "@/src/shared/ui";
+import { Button, useTheme } from "@/src/shared/ui";
 
 const spontaneityLabel = "I'm Bored, open Spontaneity Machine";
 
@@ -23,9 +23,8 @@ export function SpontaneityEntry({ compact = false }: { compact?: boolean }) {
   const { semanticColors: colors, styles, tokens } = useTheme();
   if (compact) {
     return (
-      <IconButton label={spontaneityLabel} onPress={open}>
-        <RadioTower size={20} color={colors.accent} />
-      </IconButton>
+      <Button title="I’m bored" accessibilityLabel={spontaneityLabel} compact secondary onPress={open}
+        icon={<Dices size={15} color={colors.accent} />} />
     );
   }
   return (
@@ -49,7 +48,7 @@ export function SpontaneityEntry({ compact = false }: { compact?: boolean }) {
         borderRadius: tokens.radius.md,
         backgroundColor: colors.surfaceSelected,
       }}>
-        <RadioTower size={20} color={colors.accent} />
+        <Dices size={20} color={colors.accent} />
       </View>
       <View style={{ flex: 1, gap: 2 }}>
         <Text style={styles.h2}>I’m Bored</Text>

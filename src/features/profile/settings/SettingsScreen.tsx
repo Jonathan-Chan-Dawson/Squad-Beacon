@@ -561,7 +561,7 @@ function SettingsForm({ profile }: { profile: Profile }) {
       title: "Help & policies",
       items: rows([
         {
-          title: "Help & support",
+          title: "Help & Tips",
           keywords: "guide",
           icon: HelpCircle,
           onPress: () => router.push("/help" as Href),
@@ -671,6 +671,9 @@ function SettingsForm({ profile }: { profile: Profile }) {
         onClose={() => setDemoControls(false)}
       >
         <DemoTierSelector />
+        {__DEV__ && demo && (
+          <Action title="Add demo Coins" run={async () => { await act("demo_rewards_grant"); }} feedback="success" />
+        )}
       </Sheet>
       <Sheet
         title={panel ? panelTitle[panel] : "Settings"}

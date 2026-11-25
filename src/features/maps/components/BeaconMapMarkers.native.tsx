@@ -5,6 +5,11 @@ import {
   EMPTY_MARKER_STATE,
   markerStateLabel,
   beaconPinEmphasis,
+  beaconMarkerBadges,
+  beaconBadgeArtwork,
+  beaconMarkerColor,
+  BEACON_BADGE_SIZE,
+  BEACON_BADGE_GAP,
   distantBeaconPinEmphasis,
   BEACON_LIVE_BEAM_HEIGHT,
   BEACON_SELECTED_BEAM_HEIGHT,
@@ -16,20 +21,23 @@ import {
   type BeaconMarkerState,
   ownsMapBeacon,
   mapIdentityColors,
+  personMarkerBadges,
+  type PersonMarkerBadge,
   friendLocationLabel,
 } from "../markerIdentity";
 import {
+  AvailabilityArc,
   AvatarStatusBadge,
   avatarAvailability,
 } from "@/src/features/profile/AvatarStatusBadge";
 import { useNow } from "@/src/shared/useNow";
+import type { activeAvailability } from "@/src/features/beacons/availability";
 import { CLUSTER_PREVIEW_LIMIT } from "../mapClusterPolicy";
 import React, { useEffect, useRef, useState } from "react";
 import { BeaconPinGlyph } from "./BeaconPinGlyph";
-import { Bookmark } from "lucide-react-native";
 import { Image, Text, View } from "react-native";
 import { Circle as MapCircle, Marker } from "react-native-maps";
-import Svg, { Circle, Defs, LinearGradient, RadialGradient, Rect, Stop } from "react-native-svg";
+import Svg, { Circle, Defs, LinearGradient, Path, RadialGradient, Rect, Stop } from "react-native-svg";
 import Animated, {
   cancelAnimation,
   interpolate,
@@ -278,6 +286,8 @@ export function BeaconPinTip({
       style={{
         position: "absolute",
         top: faceBottom - size.overlap,
+        left: "50%",
+        marginLeft: -size.halfWidth,
         width: 0,
         height: 0,
         borderLeftWidth: size.halfWidth,
@@ -306,7 +316,7 @@ export function BeaconPinLight({
   const spread = compact ? faceSize / 2 + 7 : level === 1 ? 46 : level === 2 ? 33 : level === 3 ? 29 : 27;
   return (
     <>
-      <Svg pointerEvents="none" width={spread * 2} height={spread * 2} style={{ position: "absolute", top: inset + faceSize / 2 - spread }}>
+      <Svg pointerEvents="none" width={spread * 2} height={spread * 2} style={{ position: "absolute", top: inset + faceSize / 2 - spread, left: "50%", marginLeft: -spread }}>
         <Defs>
           <RadialGradient id="beaconGlow">
             <Stop offset="62%" stopColor={color} stopOpacity={glowOpacity} />
@@ -317,7 +327,7 @@ export function BeaconPinLight({
         <Circle cx={spread} cy={spread} r={spread} fill="url(#beaconGlow)" />
       </Svg>
       {beamHeight > 0 && (
-        <Svg testID="beacon-marker-beam" pointerEvents="none" width={beamWidth} height={beamHeight} style={{ position: "absolute", top: inset - beamHeight + 2 }}>
+        <Svg testID="beacon-marker-beam" pointerEvents="none" width={beamWidth} height={beamHeight} style={{ position: "absolute", top: inset - beamHeight + 2, left: "50%", marginLeft: -beamWidth / 2 }}>
           <Defs>
             <LinearGradient id="beaconBeam" x1="0%" y1="0%" x2="0%" y2="100%">
               <Stop offset="0%" stopColor={color} stopOpacity={0} />
@@ -356,7 +366,6 @@ export function BeaconMarkerArtwork({
   lightingTier = "close",
   raisedPin = false,
   stopNumber,
-  cosmetic,
 }: {
   id: string;
   lightEnabled?: boolean;
@@ -377,9 +386,10 @@ export function BeaconMarkerArtwork({
   icon?: string | null;
 }) {
   const { colors } = useTheme();
-  const owned = markerState.owned;
+  const markerColor = beaconMarkerColor(markerState);
+  const artworkWidth = raisedPin && selected ? 116 : beaconName ? BEACON_NAME_MAX_WIDTH : 58;
   const streetSize = markerVisualSize("beacon");
-  const visualSize = lightingTier === "medium" && !selected && !stopNumber ? 30 : streetSize;
+  const visualSize = lightingTier !== "close" && !stopNumber ? 30 : streetSize;
   const pinInset = raisedPin ? (selected ? NATIVE_SELECTED_LIGHT_INSET : NATIVE_BEACON_LIGHT_INSET) : 0;
   const tipY = pinInset + streetSize / 2 + BEACON_FACE_TO_TIP;
   const lighting = lightEnabled && !dimmed
@@ -394,7 +404,7 @@ export function BeaconMarkerArtwork({
     <MarkerContent selected={selected} dimmed={dimmed} tipY={tipY}>
       <View
         style={{
-          width: raisedPin && selected ? 116 : beaconName ? BEACON_NAME_MAX_WIDTH : raisedPin && lighting?.level === 2 ? 66 : 58,
+          width: artworkWidth,
           height: (streetTime || beaconName ? 70 : 56) + pinInset + (projectionRoom ? NATIVE_PROJECTION_ROOM : 0),
           paddingTop: pinInset,
           alignItems: "center",
@@ -402,55 +412,37 @@ export function BeaconMarkerArtwork({
       >
         {upperLight && <BeaconPinLight lighting={upperLight} inset={pinInset} compact={lightingTier !== "close"} faceSize={visualSize} />}
         {projection ? (
-          <MapProjector kind="beacon" center={raisedPin && selected ? 58 : beaconName ? BEACON_NAME_MAX_WIDTH / 2 : raisedPin && lighting?.level === 2 ? 33 : 29}
-            color={cosmetic?.beam ?? lighting?.color ?? categoryColor} top={pinInset + visualSize - 5}
+          <MapProjector kind="beacon" center={artworkWidth / 2}
+            color={markerColor} top={pinInset + visualSize - 5}
             {...projection} />
-        ) : showProjection ? <BeaconPinTip color={categoryColor} faceBottom={pinInset + visualSize} /> : null}
+        ) : showProjection ? <BeaconPinTip color={markerColor} faceBottom={pinInset + visualSize} /> : null}
+        {selected && !dimmed && <View pointerEvents="none" testID="map-marker-selection-ring" style={{ position: "absolute", top: tipY - 15, left: "50%", marginLeft: -15, width: 30, height: 30, borderRadius: 15, borderWidth: 2, borderStyle: "dotted", borderColor: mapIdentityColors.selection }} />}
         <View
           style={{
             width: visualSize,
             height: visualSize,
             borderRadius: visualSize / 2,
             borderWidth: 2,
-            borderColor: cosmetic?.frame ?? categoryColor,
+            borderColor: markerColor,
             backgroundColor: colors.surface,
             alignItems: "center",
             justifyContent: "center",
             elevation: 5,
-            shadowColor: lighting?.color ?? categoryColor,
-            shadowOpacity: selected ? 0.4 : markerState.participatingLive ? 0.32 : 0.22,
-            shadowRadius: selected ? 9 : markerState.participatingLive ? 7 : 5,
+            shadowColor: markerColor,
+            shadowOpacity: dimmed ? 0 : 0.26,
+            shadowRadius: 5,
             shadowOffset: { width: 0, height: 3 },
           }}
         >
-          {markerState.friendHosted && (
-            <View
-              pointerEvents="none"
-              accessible={false}
-              style={{
-                position: "absolute",
-                inset: 0,
-                borderWidth: 2.5,
-                borderColor: colors.success,
-                opacity: 0.95,
-                borderRadius: visualSize / 2 - 2,
-              }}
-            />
-          )}
           <BeaconPinGlyph category={category} icon={icon} size={22} color={colors.ink} />
           {stopNumber ? (
             <View pointerEvents="none" accessible={false} testID="map-plan-stop-badge" style={{ position: "absolute", left: -5, top: -5, minWidth: 16, height: 16, paddingHorizontal: 3, borderRadius: 8, borderWidth: 1, borderColor: categoryColor, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" }}>
               <Text style={{ color: colors.ink, fontSize: 9, fontWeight: "700" }}>{stopNumber}</Text>
             </View>
           ) : null}
-          {lighting?.level === 1 && (
-            <>
-              <View pointerEvents="none" style={{ position: "absolute", inset: -4, borderRadius: visualSize / 2 + 4, borderWidth: 2, borderColor: colors.ink }} />
-              <View pointerEvents="none" style={{ position: "absolute", inset: -6, borderRadius: visualSize / 2 + 6, borderWidth: 2, borderColor: lighting.core }} />
-            </>
+          {!dimmed && (lightingTier === "close" || lightingTier === "medium") && (
+            <BeaconMarkerBadgeRow state={markerState} limit={lightingTier === "close" ? 3 : 1} showRelevance={showSaved} />
           )}
-          {showSaved && markerState.saved && !owned && <SavedBookmark />}
-          {owned && <OwnershipStar />}
         </View>
         {streetTime || beaconName ? (
           <View
@@ -557,11 +549,9 @@ function BeaconMapPinComponent({
               width: 10,
               height: 10,
               borderRadius: 5,
-              backgroundColor: categoryColor,
+              backgroundColor: beaconMarkerColor(markerState),
               borderWidth: 1,
-              borderColor: markerState.friendHosted
-                ? colors.success
-                : "#FFFFFF",
+              borderColor: colors.surface,
             }}
           />
         </View>
@@ -635,6 +625,10 @@ function FriendMapPinComponent({
   profile,
   availabilityColor,
   availabilityLabel,
+  availabilityDetail,
+  personBadges,
+  street = true,
+  selected = false,
   ageLabel,
   showLabel = true,
   appearanceKey,
@@ -644,6 +638,10 @@ function FriendMapPinComponent({
   profile: Profile;
   availabilityColor: string;
   availabilityLabel: string;
+  availabilityDetail?: ReturnType<typeof activeAvailability>;
+  personBadges?: readonly PersonMarkerBadge[];
+  street?: boolean;
+  selected?: boolean;
   ageLabel: string;
   showLabel?: boolean;
   appearanceKey: string;
@@ -653,9 +651,9 @@ function FriendMapPinComponent({
   const loadedAvatarKey = useRef<string | null>(null);
   const avatarKey = `${profile.id}:${profile.avatar_updated_at ?? ""}`;
   const tracking = useMarkerTracking(
-    `${location.id}:${avatarKey}:${profile.name}:${profile.avatar_seed ?? ""}:${profile.avatar_style ?? ""}:${availabilityColor}:${ageLabel}:${showLabel}:${appearanceKey}:${avatarRevision}`,
+    `${location.id}:${avatarKey}:${profile.name}:${profile.avatar_seed ?? ""}:${profile.avatar_style ?? ""}:${availabilityColor}:${availabilityLabel}:${availabilityDetail?.progress}:${availabilityDetail?.arcColor}:${personBadges?.join(",")}:${ageLabel}:${showLabel}:${street}:${selected}:${appearanceKey}:${avatarRevision}`,
   );
-  const avatarSize = markerVisualSize("person");
+  const avatarSize = street ? 32 : 24;
   const markerHeight = 54;
   return (
     <Marker
@@ -663,27 +661,30 @@ function FriendMapPinComponent({
         latitude: location.latitude!,
         longitude: location.longitude!,
       }}
-      anchor={{ x: 0.5, y: 0.48 }}
+      anchor={{ x: 0.5, y: (avatarSize / 2 + 5) / markerHeight }}
       tracksViewChanges={tracking}
-      accessibilityLabel={`Map friend: ${profile.name}, ${availabilityLabel}, location ${ageLabel}`}
+      accessibilityLabel={`Map friend: ${profile.name}, ${availabilityDetail?.label ?? availabilityLabel}, location ${ageLabel}`}
+      accessibilityState={{ selected }}
+      zIndex={selected ? 1000 : undefined}
       onPress={(event) => {
         event.stopPropagation();
         onPress(location.owner_id);
       }}
     >
-      <View style={{ width: 94, height: markerHeight, alignItems: "center" }}>
+      <View style={{ width: 114, height: markerHeight, paddingTop: 5, alignItems: "center" }}>
+        {selected && <View pointerEvents="none" testID="map-friend-selection-ring" style={{ position: "absolute", top: 1, left: (114 - avatarSize - 8) / 2, width: avatarSize + 8, height: avatarSize + 8, borderWidth: 2, borderStyle: "dotted", borderRadius: (avatarSize + 8) / 2, borderColor: mapIdentityColors.selection }} />}
         <View
           style={{
             width: avatarSize,
             height: avatarSize,
             borderRadius: avatarSize / 2,
             borderColor: availabilityColor,
-            borderWidth: 3,
+            borderWidth: 1.5,
             backgroundColor: "#FFFFFF",
             alignItems: "center",
             justifyContent: "center",
-            overflow: "hidden",
             elevation: 4,
+            transform: [{ scale: selected ? BEACON_SELECTED_SCALE : 1 }],
           }}
         >
           <FriendMapAvatar
@@ -695,24 +696,13 @@ function FriendMapPinComponent({
               setAvatarRevision((revision) => revision + 1);
             }}
           />
+          {street && <AvailabilityArc detail={availabilityDetail} size={avatarSize - 3} />}
+          {street && personBadges?.map((name, index) => {
+            const badge = personMarkerBadges[name];
+            return <View key={name} pointerEvents="none" accessibilityElementsHidden style={{ position: "absolute", top: -3, left: index === 0 ? -3 : undefined, right: index === 1 ? -3 : undefined, backgroundColor: badge.color, borderRadius: 7, width: 12, height: 12, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#FFFFFF" }}><Text style={{ color: "#26243A", fontSize: 8, fontWeight: "700" }}>{badge.glyph}</Text></View>;
+          })}
+          <AvatarStatusBadge state={availabilityLabel === "unavailable" ? "unavailable" : availabilityLabel === "unknown" ? "unknown" : "available"} size={street ? 12 : 10} />
         </View>
-        {availabilityLabel !== "unknown" && (
-          <View
-            style={{
-              position: "absolute",
-              top: 0,
-              right: (94 - avatarSize) / 2,
-              width: 12,
-              height: 12,
-              borderRadius: 6,
-              borderWidth: 2,
-              borderColor: "#FFFFFF",
-              backgroundColor: availabilityColor,
-              zIndex: 5,
-              elevation: 5,
-            }}
-          />
-        )}
         {showLabel && (
           <View
             style={{
@@ -729,7 +719,7 @@ function FriendMapPinComponent({
               numberOfLines={1}
               style={{ color: "#34434A", fontSize: 9, fontWeight: "700" }}
             >
-              {friendLocationLabel(profile.name, ageLabel)}
+              {selected ? `${profile.name}${availabilityDetail ? ` · ${availabilityDetail.label}` : ""}` : friendLocationLabel(profile.name, ageLabel)}
             </Text>
           </View>
         )}
@@ -752,6 +742,10 @@ export const FriendMapPin = React.memo(
     left.profile.avatar_updated_at === right.profile.avatar_updated_at &&
     left.availabilityColor === right.availabilityColor &&
     left.availabilityLabel === right.availabilityLabel &&
+    left.availabilityDetail === right.availabilityDetail &&
+    left.personBadges === right.personBadges &&
+    left.street === right.street &&
+    left.selected === right.selected &&
     left.ageLabel === right.ageLabel &&
     left.showLabel === right.showLabel &&
     left.appearanceKey === right.appearanceKey &&
@@ -968,6 +962,28 @@ export const ClusterMapPin = React.memo(
     left.onPress === right.onPress,
 );
 
+export function BeaconMarkerBadgeRow({ state, limit, showRelevance }: { state: BeaconMarkerState; limit: 1 | 3; showRelevance?: boolean }) {
+  const { colors } = useTheme();
+  const badges = beaconMarkerBadges(state, limit, showRelevance);
+  if (!badges.length) return null;
+  return (
+    <View testID="beacon-marker-badges" pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={{ position: "absolute", bottom: -4, left: 0, right: 0, zIndex: 6, flexDirection: "row", justifyContent: "center", gap: BEACON_BADGE_GAP }}>
+      {badges.map((kind) => {
+        const { color, testId, path, filled } = beaconBadgeArtwork[kind];
+        const ownedBadge = kind === "ownership";
+        const ink = ownedBadge ? color : "#252031";
+        return (
+          <View key={kind} testID={testId} style={{ width: BEACON_BADGE_SIZE, height: BEACON_BADGE_SIZE, borderRadius: BEACON_BADGE_SIZE / 2, borderWidth: 1, borderColor: ownedBadge ? color : colors.surface, backgroundColor: ownedBadge ? "#30251E" : color, alignItems: "center", justifyContent: "center", shadowColor: color, shadowRadius: ownedBadge ? 2 : 0, shadowOpacity: ownedBadge ? 0.8 : 0 }}>
+            <Svg width={8} height={8} viewBox="0 0 24 24">
+              <Path d={path} fill={filled ? ink : "none"} stroke={filled ? "none" : ink} strokeWidth={2.5} strokeLinecap="round" />
+            </Svg>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
 export function OwnershipStar({ small = false }: { small?: boolean }) {
   return (
     <View
@@ -986,43 +1002,14 @@ export function OwnershipStar({ small = false }: { small?: boolean }) {
         borderWidth: 1,
         borderColor: "#FFFFFF",
         backgroundColor: mapIdentityColors.ownership,
+        shadowColor: mapIdentityColors.ownership,
+        shadowOpacity: 0.5,
+        shadowRadius: 3,
         alignItems: "center",
         justifyContent: "center",
       }}
     >
-      <Text style={{ color: "#FFFFFF", fontSize: small ? 8 : 10 }}>★</Text>
-    </View>
-  );
-}
-
-export function SavedBookmark({ small = false }: { small?: boolean }) {
-  const { colors } = useTheme();
-  return (
-    <View
-      testID="beacon-saved-bookmark"
-      pointerEvents="none"
-      accessible={false}
-      accessibilityElementsHidden
-      importantForAccessibility="no-hide-descendants"
-      style={{
-        position: "absolute",
-        right: small ? -2 : -5,
-        top: small ? -1 : -2,
-        width: small ? 12 : 16,
-        height: small ? 12 : 16,
-        borderRadius: 4,
-        backgroundColor: colors.surface,
-        borderWidth: 1,
-        borderColor: colors.outline,
-        alignItems: "center",
-        justifyContent: "center",
-      }}
-    >
-      <Bookmark
-        size={small ? 8 : 11}
-        color={colors.textPrimary}
-        fill={colors.textPrimary}
-      />
+      <Text style={{ color: "#33230C", fontSize: small ? 8 : 10 }}>★</Text>
     </View>
   );
 }

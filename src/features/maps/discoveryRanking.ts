@@ -135,22 +135,27 @@ export function discoverBeacons(
         place?.label,
       );
     })
+    .map((activity) => ({
+      activity,
+      tier: beaconDiscoveryTier(data, activity, viewerId, now, personalized),
+      distanceBucket: Math.floor(
+        (beaconDiscoveryDistance(data, activity, viewerId, origin) ??
+          Infinity) / 5,
+      ),
+      interest: Number(
+        personalized && beaconInterestMatch(data, activity, viewerId),
+      ),
+      startsAt: Date.parse(activity.starts_at),
+    }))
     .sort(
       (a, b) =>
-        beaconDiscoveryTier(data, a, viewerId, now, personalized) -
-          beaconDiscoveryTier(data, b, viewerId, now, personalized) ||
-        Math.floor(
-          (beaconDiscoveryDistance(data, a, viewerId, origin) ?? Infinity) / 5,
-        ) -
-          Math.floor(
-            (beaconDiscoveryDistance(data, b, viewerId, origin) ?? Infinity) /
-              5,
-          ) ||
-        Number(personalized && beaconInterestMatch(data, b, viewerId)) -
-          Number(personalized && beaconInterestMatch(data, a, viewerId)) ||
-        Date.parse(a.starts_at) - Date.parse(b.starts_at) ||
-        a.id.localeCompare(b.id),
-    );
+        a.tier - b.tier ||
+        a.distanceBucket - b.distanceBucket ||
+        b.interest - a.interest ||
+        a.startsAt - b.startsAt ||
+        a.activity.id.localeCompare(b.activity.id),
+    )
+    .map(({ activity }) => activity);
 }
 
 export function personDiscoveryReason(

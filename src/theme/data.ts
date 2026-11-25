@@ -206,14 +206,14 @@ const availabilityColors: Record<
 > = {
   light: {
     available: "#176B4A",
-    endingSoon: "#765000",
-    unavailable: "#9D3F48",
+    endingSoon: "#79451D",
+    unavailable: "#754616",
     unknown: "#505965",
   },
   dark: {
-    available: "#8EE0B3",
-    endingSoon: "#F2D16E",
-    unavailable: "#FF9B9C",
+    available: "#79DDB0",
+    endingSoon: "#E99B66",
+    unavailable: "#F0B574",
     unknown: "#AAB2BD",
   },
 };

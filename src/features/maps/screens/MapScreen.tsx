@@ -81,6 +81,8 @@ import BeaconMap, {
 } from "@/src/features/maps/components/BeaconMap";
 import { useBeacon } from "@/src/shared/store";
 import { useNow } from "@/src/shared/useNow";
+import { activeAvailability, nextAvailabilityExpiry } from "@/src/features/beacons/availability";
+import { useAvailabilityNow } from "@/src/features/beacons/availabilityClock";
 import { matchesSearch } from "@/src/shared/search";
 import {
   canReadBeaconActivity,
@@ -305,6 +307,7 @@ export default function MapScreen() {
   const exploration = useExploration();
   const [feedbackAction, setFeedbackAction] = useState(0);
   const [dismissedFeedback, setDismissedFeedback] = useState(0);
+  const [dismissedGuestEmpty, setDismissedGuestEmpty] = useState(false);
   const [feedbackResult, setFeedbackResult] = useState(0);
   const resolvedFeedback = useRef(0);
   const [dismissedMapError, setDismissedMapError] = useState<string | null>(
@@ -359,7 +362,12 @@ export default function MapScreen() {
   const insets = useSafeAreaInsets();
   const { height, width } = useWindowDimensions();
   const [mapSize, setMapSize] = useState({ width, height });
-  const now = useNow();
+  const mapNow = useNow();
+  const now = Math.max(mapNow, useAvailabilityNow(nextAvailabilityExpiry(data.viewer_id === userId ? data.presence : undefined, mapNow)));
+  const [interestFocusViewer, setInterestFocusViewer] = useState<string | null>(null);
+  const [freeFocusViewer, setFreeFocusViewer] = useState<string | null>(null);
+  const focusInterests = !!userId && interestFocusViewer === userId;
+  const focusFree = !!userId && freeFocusViewer === userId;
   const [advancedFiltersOpen, setAdvancedFiltersOpen] = useState(false);
   const [quickMenu, setQuickMenu] = useState<DiscoveryMenu>(null);
   const [lastFriendScope, setLastFriendScope] =
@@ -662,10 +670,9 @@ export default function MapScreen() {
     userId,
     exploration.filters.friendScope,
   );
-  const profileInterests =
-    data.viewer_id === userId
+  const profileInterests = useMemo(() => data.viewer_id === userId
       ? (data.profiles.find((p) => p.id === userId)?.interests ?? [])
-      : [];
+      : [], [data.profiles, data.viewer_id, userId]);
   const personalizedRanking =
     exploration.filters.personalizedRanking !== false &&
     profileInterests.length > 0;
@@ -987,25 +994,26 @@ export default function MapScreen() {
     [data, snapshotReady, userId],
   );
 
-  const safePlaces = useMemo(
-    () =>
-      data.places.filter((place) => {
-        const activity = data.activities.find(
-          (candidate) => candidate.id === place.activity_id,
-        );
-        return (
-          !!userId &&
-          !!activity &&
-          canReadBeaconActivity(data, activity, userId) &&
-          canReadBeaconMeetingDetails(data, activity, userId)
-        );
-      }),
-    [data, userId],
+  const safePlaces = useMemo(() => {
+    if (!userId) return [];
+    const byId = new Map(data.activities.map((activity) => [activity.id, activity]));
+    return data.places.filter((place) => {
+      const activity = byId.get(place.activity_id);
+      return (
+        !!activity &&
+        canReadBeaconActivity(data, activity, userId) &&
+        canReadBeaconMeetingDetails(data, activity, userId)
+      );
+    });
+  }, [data, userId]);
+  const physicalPlaceActivityIds = useMemo(
+    () => new Set(safePlaces.filter(validPhysicalPlace).map((place) => place.activity_id)),
+    [safePlaces],
   );
 
   const followingIds = useMemo(() => followedBeaconIds(data, userId), [data, userId]);
   const onlyFollowing = !!exploration.filters.onlyFollowing;
-  const normalActivities = useMemo(
+  const strictActivities = useMemo(
     () =>
       safeActivities.filter(
         (activity) =>
@@ -1037,6 +1045,7 @@ export default function MapScreen() {
       now,
     ],
   );
+  const normalActivities = useMemo(() => focusInterests ? strictActivities.filter((activity) => profileInterests.some((interest) => matchesSearch(interest, activity.title, activity.category, activity.description))) : strictActivities, [focusInterests, strictActivities, profileInterests]);
   const activities = useMemo(
     () => [
       ...new Map(
@@ -1177,7 +1186,7 @@ export default function MapScreen() {
     [data, userId],
   );
 
-  const mapLocations = useMemo(
+  const strictLocations = useMemo(
     () =>
       data.locations.filter((location) => {
         if (
@@ -1252,8 +1261,12 @@ export default function MapScreen() {
       userId,
     ],
   );
+  const freePeople = useMemo(() => new Set(data.viewer_id === userId && userId ? data.presence?.filter((row) => activeAvailability(row, now)?.status === "available").map((row) => row.owner_id) : []), [data.presence, data.viewer_id, now, userId]);
+  const mapLocations = useMemo(() => focusFree ? strictLocations.filter((location) => freePeople.has(location.owner_id)) : strictLocations, [focusFree, freePeople, strictLocations]);
 
   const query = exploration.query.trim();
+  const searchOverlayOpen = placeSearchOpen || params.search === "yes";
+  const searchOrigin = exploration.area?.coordinate ?? viewport?.center;
   const publicDiscovery = usePublicBeacons(
     query,
     surprise?.contextKey === surpriseContextKey
@@ -1266,28 +1279,42 @@ export default function MapScreen() {
     ...publicDiscovery.rows.map((row) => row.activity_id),
     ...(selected ? [selected] : []),
   ]);
-  const rankedPublic = rankPublicBeaconSummaries(
-    publicDiscovery.rows,
-    personalizedRanking ? profileInterests : [],
-    exploration.area?.label ?? null,
-    now,
-    beaconCommunities.rows,
-  );
+  const areaLabel = exploration.area?.label ?? null;
+  const rankedPublic = useMemo(() => rankPublicBeaconSummaries(
+    publicDiscovery.rows, personalizedRanking ? profileInterests : [],
+    areaLabel, now, beaconCommunities.rows,
+  ), [areaLabel, beaconCommunities.rows, now, personalizedRanking, profileInterests, publicDiscovery.rows]);
   const selectedPublic = publicDiscovery.rows.find(
     (row) => row.activity_id === publicSelection,
   );
-  const publicMapRows = publicMapBeacons(
+  const hasContexts = contextViews.length > 0;
+  const strictPublicMapRows = useMemo(() => publicMapBeacons(
     rankedPublic,
     exploration.filters,
     selectedCategories,
-    onlyFollowing ? activities
-      .filter(row => safePlaces.some(place => place.activity_id === row.id && validPhysicalPlace(place)))
-      .map(row => row.id) : activities.map((row) => row.id),
-    !!contextViews.length,
+    onlyFollowing ? strictActivities
+      .filter(row => physicalPlaceActivityIds.has(row.id))
+      .map(row => row.id) : [...strictActivities, ...activities].map((row) => row.id),
+    hasContexts,
     viewport,
     now,
     { data, viewerId: userId, now, friends: discoveryFriends, followingIds },
-  );
+  ), [activities, strictActivities, data, discoveryFriends, exploration.filters, followingIds, hasContexts,
+    now, onlyFollowing, physicalPlaceActivityIds, rankedPublic, selectedCategories, userId, viewport]);
+  const publicMapRows = useMemo(() => focusInterests ? strictPublicMapRows.filter((row) => profileInterests.some((interest) => matchesSearch(interest, row.title, row.category, ...row.interest_tags))) : strictPublicMapRows, [focusInterests, profileInterests, strictPublicMapRows]);
+  const focusBackground = useMemo(() => {
+    if ((!focusInterests && !focusFree) || !viewport || hasContexts) return undefined;
+    const area: ExplorationArea = { kind: "viewport", label: "Visible map area", coordinate: viewport.center, zoom: viewport.zoom, bounds: viewport.bounds };
+    const matches = new Set(activities.map((row) => row.id));
+    const eligible = new Set(strictActivities.map((row) => row.id));
+    const matchingPublic = new Set(publicMapRows.map((row) => row.activity_id));
+    const points = [
+      ...(focusInterests ? safePlaces.flatMap((place) => validPhysicalPlace(place) && eligible.has(place.activity_id) && !matches.has(place.activity_id) && selected !== place.activity_id ? [{ id: `focus:${place.activity_id}`, kind: "beacon" as const, latitude: place.latitude, longitude: place.longitude }] : []) : []),
+      ...(focusInterests ? strictPublicMapRows.flatMap((row) => !matchingPublic.has(row.activity_id) && publicSelection !== row.activity_id && row.coarse_lat != null && row.coarse_lng != null ? [{ id: `focus:public:${row.activity_id}`, kind: "beacon" as const, latitude: row.coarse_lat, longitude: row.coarse_lng }] : []) : []),
+      ...(focusFree ? strictLocations.flatMap((row) => row.latitude != null && row.longitude != null && !freePeople.has(row.owner_id) && person !== row.owner_id ? [{ id: `focus:person:${row.owner_id}`, kind: "person" as const, latitude: row.latitude, longitude: row.longitude }] : []) : []),
+    ];
+    return [...new Map(points.filter((point) => matchesExplorationArea(area, point)).map((point) => [point.id, point])).values()].slice(0, 16);
+  }, [focusInterests, focusFree, viewport, hasContexts, activities, strictActivities, publicMapRows, safePlaces, selected, strictPublicMapRows, publicSelection, strictLocations, freePeople, person]);
   const surpriseArea =
     surprise?.contextKey === surpriseContextKey ? surprise.area : viewport;
   const surprisePublic = publicMapBeacons(
@@ -1295,16 +1322,14 @@ export default function MapScreen() {
     exploration.filters,
     selectedCategories,
     normalActivities
-      .filter((a) =>
-        safePlaces.some((p) => p.activity_id === a.id && validPhysicalPlace(p)),
-      )
+      .filter((activity) => physicalPlaceActivityIds.has(activity.id))
       .map((a) => a.id),
     !!contextViews.length,
     surpriseArea,
     now,
     { data, viewerId: userId, now, friends: discoveryFriends, followingIds },
   );
-  const surprisePool = surpriseCandidates(
+  const surprisePool = surprise ? surpriseCandidates(
     data,
     userId,
     normalActivities,
@@ -1312,7 +1337,7 @@ export default function MapScreen() {
     exploration.filters,
     surpriseArea,
     now,
-  );
+  ) : [];
   const surprisePoolKey = JSON.stringify(surprisePool);
   useEffect(() => {
     if (!surprise) return;
@@ -1506,7 +1531,7 @@ export default function MapScreen() {
   )
     setDismissedFeedback(feedbackResult);
 
-  const publicPoints = [
+  const publicPoints = useMemo(() => [
     ...publicMapRows,
     ...(selectedPublic &&
     !publicMapRows.some((r) => r.activity_id === selectedPublic.activity_id) &&
@@ -1522,17 +1547,17 @@ export default function MapScreen() {
     latitude: row.coarse_lat!,
     longitude: row.coarse_lng!,
     suggestion: false,
-  }));
+  })), [now, publicMapRows, selectedPublic]);
+  const visibleContextPoints = useMemo(() => planFocus
+    ? contextPoints : [...contextPoints, ...publicPoints],
+  [contextPoints, planFocus, publicPoints]);
   useEffect(() => {
     if (!clusterActivityIds || !clusterPersonIds) return;
-    const beacons = clusterActivityIds.filter(
-      (id) =>
-        activities.some((row) => row.id === id) ||
-        publicDiscovery.rows.some((row) => row.activity_id === id),
-    );
-    const people = clusterPersonIds.filter((id) =>
-      mapLocations.some((row) => row.owner_id === id),
-    );
+    const beaconIds = new Set(activities.map((row) => row.id));
+    for (const row of publicDiscovery.rows) beaconIds.add(row.activity_id);
+    const locationIds = new Set(mapLocations.map((row) => row.owner_id));
+    const beacons = clusterActivityIds.filter((id) => beaconIds.has(id));
+    const people = clusterPersonIds.filter((id) => locationIds.has(id));
     if (
       beacons.length === clusterActivityIds.length &&
       people.length === clusterPersonIds.length
@@ -1569,21 +1594,17 @@ export default function MapScreen() {
     setPlaceSearchOpen(false);
   }
 
-  const searchActivityResults = userId
-    ? discoverBeacons(
-        data,
-        userId,
-        query,
-        now,
-        exploration.area?.coordinate ?? viewport?.center,
-        personalizedRanking,
-      )
-        .filter((a) => safeActivities.some((row) => row.id === a.id))
-        .slice(0, 5)
-    : [];
-  const searchPeopleResults: Profile[] =
-    snapshotReady && userId
-      ? data.profiles
+  const searchActivityResults = useMemo(() => {
+    if (!searchOverlayOpen || !userId) return [];
+    const readableIds = new Set(safeActivities.map((activity) => activity.id));
+    return discoverBeacons(data, userId, query, now, searchOrigin, personalizedRanking)
+      .filter((activity) => readableIds.has(activity.id))
+      .slice(0, 5);
+  }, [data, now, personalizedRanking, query, safeActivities, searchOrigin, searchOverlayOpen, userId]);
+  const searchPeopleResults: Profile[] = useMemo(() => {
+    if (!searchOverlayOpen || !snapshotReady || !userId) return [];
+    const friendSet = new Set(friends);
+    return data.profiles
           .filter(
             (profile) =>
               profile.id !== userId &&
@@ -1598,11 +1619,11 @@ export default function MapScreen() {
           )
           .sort(
             (a, b) =>
-              Number(friends.includes(b.id)) - Number(friends.includes(a.id)) ||
+              Number(friendSet.has(b.id)) - Number(friendSet.has(a.id)) ||
               a.name.localeCompare(b.name),
           )
-          .slice(0, query ? 5 : 3)
-      : [];
+          .slice(0, query ? 5 : 3);
+  }, [data, friends, query, searchOverlayOpen, snapshotReady, userId]);
   const [directoryResult, setDirectoryResult] = useState<{
     snapshot: typeof data;
     rows: SocialDirectorySummary[];
@@ -1648,53 +1669,56 @@ export default function MapScreen() {
     space: "Organizations",
     organization: "Networks",
   } as const;
-  const searchPlaceResults = safePlaces
-    .filter(
+  const searchPlaceResults = useMemo(() => {
+    if (!searchOverlayOpen) return [];
+    const readableIds = new Set(safeActivities.map((activity) => activity.id));
+    return safePlaces.filter(
       (place) =>
         validPhysicalPlace(place) &&
-        safeActivities.some((activity) => activity.id === place.activity_id) &&
+        readableIds.has(place.activity_id) &&
         (!query || matchesSearch(query, place.label)),
     )
     .slice(0, 8);
+  }, [query, safeActivities, safePlaces, searchOverlayOpen]);
 
-  const visibleActivityIds = activities.map((activity) => activity.id);
-  const clusterPriorities = userId
+  const ordinaryPriorities = useMemo(() => userId
     ? deriveMapPointPriorities(
         data,
         userId,
-        visibleActivityIds,
+        activities.map((activity) => activity.id),
         showAvatars ? mapLocations.map((location) => location.owner_id) : [],
         now,
         personalizedRanking,
       )
-    : {};
-  for (const row of publicMapRows)
-    clusterPriorities[`beacon:${row.activity_id}`] = {
-      tier:
-        Date.parse(row.starts_at) <= now && Date.parse(row.ends_at) > now
-          ? 2
-          : 6,
-    };
-  for (const point of contextPoints)
-    if (point.activityId)
-      clusterPriorities[`beacon:${point.activityId}`] = {
-        ...clusterPriorities[`beacon:${point.activityId}`],
-        tier: Math.min(
-          clusterPriorities[`beacon:${point.activityId}`]?.tier ?? 7,
-          (viewport?.zoom ?? 13) >= 16 ? -1 : 1,
-        ),
-        affinity: 10,
+    : {}, [activities, data, mapLocations, now, personalizedRanking, showAvatars, userId]);
+  const streetContext = (viewport?.zoom ?? 13) >= 16;
+  const clusterPriorities = useMemo(() => {
+    const priorities = { ...ordinaryPriorities };
+    for (const row of publicMapRows)
+      priorities[`beacon:${row.activity_id}`] = {
+        tier: Date.parse(row.starts_at) <= now && Date.parse(row.ends_at) > now ? 2 : 6,
       };
-  if (selected)
-    clusterPriorities[`beacon:${selected}`] = {
-      ...clusterPriorities[`beacon:${selected}`],
-      tier: -3,
-    };
-  if (person)
-    clusterPriorities[`person:${person}`] = {
-      ...clusterPriorities[`person:${person}`],
-      tier: -3,
-    };
+    for (const point of contextPoints)
+      if (point.activityId) {
+        const key = `beacon:${point.activityId}`;
+        priorities[key] = {
+          ...priorities[key],
+          tier: Math.min(priorities[key]?.tier ?? 7, streetContext ? -1 : 1),
+          affinity: 10,
+        };
+      }
+    if (selected)
+      priorities[`beacon:${selected}`] = {
+        ...priorities[`beacon:${selected}`],
+        tier: -3,
+      };
+    if (person)
+      priorities[`person:${person}`] = {
+        ...priorities[`person:${person}`],
+        tier: -3,
+      };
+    return priorities;
+  }, [contextPoints, now, ordinaryPriorities, person, publicMapRows, selected, streetContext]);
   const focusedBeacon =
     selected && userId
       ? data.activities.find(
@@ -1754,6 +1778,8 @@ export default function MapScreen() {
 
   const activeChips = useMemo<ActiveMapFilterChip[]>(() => {
     const chips: ActiveMapFilterChip[] = [];
+    if (focusInterests) chips.push({ key: "focus-interests", label: "My interests" });
+    if (focusFree) chips.push({ key: "focus-free", label: "Free friends" });
     if (exploration.filters.onlyFollowing) chips.push({ key: "following", label: "Only Following" });
     const audienceLabel =
       exploration.filters.audience === "Everyone"
@@ -1798,6 +1824,8 @@ export default function MapScreen() {
     return chips;
   }, [
     activeCategories,
+    focusFree,
+    focusInterests,
     discoveryActive,
     exploration.filters,
     mapAudiences,
@@ -2432,6 +2460,8 @@ export default function MapScreen() {
   }
 
   function removeActiveChip(key: string) {
+    if (key === "focus-free") return setFreeFocusViewer(null);
+    if (key === "focus-interests") return setInterestFocusViewer(null);
     if (key === "discovery") {
       clearDiscovery();
       return;
@@ -2468,6 +2498,8 @@ export default function MapScreen() {
   function chooseQuickFilter(filter: MapQuickFilter) {
     closePopovers();
     if (filter === "All") {
+      setFreeFocusViewer(null);
+      setInterestFocusViewer(null);
       if (exploration.filters.friendScope)
         setLastFriendScope(exploration.filters.friendScope);
       if (discoveryRestore.current && selectedCategories.length)
@@ -2726,7 +2758,7 @@ export default function MapScreen() {
     (!!selectedPublic && !person && !selected) ||
     (!!selected && !person && !detailTab);
   const activeAreaTarget = explorationTarget;
-  const activeSearchVisible = placeSearchOpen || params.search === "yes";
+  const activeSearchVisible = searchOverlayOpen;
   const shareIndicator = (
     <View
       pointerEvents="box-none"
@@ -2874,9 +2906,7 @@ export default function MapScreen() {
               exploration.filters.audience === "Friends"
             }
             fullScreen
-            contextPoints={
-              planFocus ? contextPoints : [...contextPoints, ...publicPoints]
-            }
+            contextPoints={visibleContextPoints}
             contextPaths={contextPaths}
             onContextPoint={(point) => {
               if (pickMode) return;
@@ -2971,7 +3001,7 @@ export default function MapScreen() {
               discoveryActive || planFocus ? [] : availabilityActivities
             }
             places={safePlaces}
-            locations={planFocus ? [] : mapLocations}
+            locations={planFocus ? [] : selectedPersonLocation && !mapLocations.some((location) => location.id === selectedPersonLocation.id) && strictLocations.some((location) => location.id === selectedPersonLocation.id) ? [...mapLocations, selectedPersonLocation] : mapLocations}
             profiles={data.profiles}
             clusterPriorities={clusterPriorities}
             areaName={
@@ -2980,6 +3010,8 @@ export default function MapScreen() {
                 : undefined
             }
             selectedActivityId={selected}
+            selectedPersonId={person}
+            focusBackground={pickMode || planFocus ? undefined : focusBackground}
             onPick={
               pickMode &&
               (pickingDraft ||
@@ -3034,28 +3066,23 @@ export default function MapScreen() {
               setContextPoint(null);
               setSelected(null);
               setPerson(null);
+              const readableBeacons = new Set(activities.map((activity) => activity.id));
+              if (focusedBeacon) readableBeacons.add(focusedBeacon.id);
+              for (const row of publicMapRows) readableBeacons.add(row.activity_id);
+              const readableLocations = new Set(mapLocations.map((location) => location.owner_id));
+              const peopleById = new Map(data.profiles.map((profile) => [profile.id, profile]));
               const memberIds = nextCluster.members
                 .filter((member) => member.kind === "beacon")
                 .map((member) => member.id.slice("beacon:".length))
-                .filter(
-                  (id) =>
-                    activities.some((activity) => activity.id === id) ||
-                    focusedBeacon?.id === id ||
-                    publicMapRows.some((row) => row.activity_id === id),
-                );
+                .filter((id) => readableBeacons.has(id));
               const peopleIds = nextCluster.members
                 .filter((member) => member.kind === "person")
                 .map((member) => member.id.slice("person:".length))
-                .filter(
-                  (id) =>
-                    mapLocations.some((location) => location.owner_id === id) &&
-                    !!data.profiles.find(
-                      (profile) =>
-                        profile.id === id &&
-                        userId &&
-                        canViewProfile(data, profile, userId),
-                    ),
-                );
+                .filter((id) => {
+                  const profile = peopleById.get(id);
+                  return !!userId && readableLocations.has(id) &&
+                    !!profile && canViewProfile(data, profile, userId);
+                });
               if (memberIds.length || peopleIds.length) {
                 setClusterSection(
                   section ?? (memberIds.length ? "Beacons" : "Friends"),
@@ -3197,6 +3224,10 @@ export default function MapScreen() {
               friendLabel={friendLabel}
               friendChoices={friendChoices}
               hasProfileInterests={profileInterests.length > 0}
+              focusInterests={focusInterests}
+              onToggleInterestFocus={userId ? () => { setInterestFocusViewer(focusInterests ? null : userId); setQuickMenu(null); } : undefined}
+              focusFree={focusFree}
+              onToggleFreeFocus={userId && mapPreferences.showFriends ? () => setFreeFocusViewer(focusFree ? null : userId) : undefined}
               menu={quickMenu}
               onMenuChange={(next) => {
                 if (!userId && next === "friends") { requestSignIn(); return; }
@@ -3431,7 +3462,8 @@ export default function MapScreen() {
         !calm &&
         ((publicDiscovery.error &&
           publicDiscovery.error !== dismissedMapError) ||
-          (feedbackResult > dismissedFeedback &&
+          ((feedbackResult > dismissedFeedback ||
+            (!userId && !dismissedGuestEmpty && !publicDiscovery.error)) &&
             !hasVisibleBeacons &&
             !publicMapRows.length &&
             publicDiscovery.ready)) ? (
@@ -3456,9 +3488,10 @@ export default function MapScreen() {
             <Text numberOfLines={2} style={[styles.muted, { flex: 1 }]}>
               {publicDiscovery.error
                 ? "Couldn't refresh results."
+                : !userId ? "No public Beacons here yet. Pan the Map or try another search."
                 : onlyFollowing ? "No followed Beacons match here." : "No Beacons match these filters."}
             </Text>
-            {!publicDiscovery.error && (
+            {!publicDiscovery.error && (userId || feedbackResult > dismissedFeedback) && (
               <Button
                 compact
                 secondary
@@ -3481,6 +3514,7 @@ export default function MapScreen() {
             <IconButton
               label="Dismiss map message"
               onPress={() => {
+                if (!userId) setDismissedGuestEmpty(true);
                 setDismissedFeedback(feedbackAction);
                 setDismissedMapError(publicDiscovery.error ?? null);
               }}

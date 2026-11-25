@@ -1,8 +1,12 @@
 import { ActivityCategoryChoices } from "../ActivityCategoryChoices";
+import { activeAvailability, availabilityColors } from "../../availability";
+import { useAvailabilityNow } from "../../availabilityClock";
+import { TimedAvailabilitySheet } from "./TimedAvailabilitySheet";
 import { GuestShareButton } from "@/src/features/sharing/GuestShareSheet";
 import { DurationControl } from "@/src/shared/DurationControl";
 import {canReadPlanningThread} from "@/src/features/planning/domain";
 import { ProfileSonarCard } from "@/src/features/profile/components/ProfileSonarCard";
+import { SpontaneityEntry } from "../../spontaneity/SpontaneityEntry";
 import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
 import { eligibleDefaultTargets } from "@/src/features/profile/settings/beaconDefaults";
 import { QuickChoiceDialog } from "@/src/shared/Dialogs";
@@ -25,6 +29,7 @@ import {
   ChevronRight,
   EyeOff,
   MoreHorizontal,
+  Minus,
   Pencil,
   Plus,
   Radio,
@@ -310,6 +315,9 @@ export function LivingStatusHeader({
 }) {
   const { data, userId, act } = useBeacon();
   const now = useNow(1000);
+  const initialPresence = userId && data.viewer_id === userId ? presenceFor(data, userId) : undefined;
+  const availabilityNow = useAvailabilityNow(Date.parse(initialPresence?.availability_until ?? ""));
+  const timed = data.is_demo || data.capabilities?.timed_availability === true;
   const availabilityAnchor = useRef<View>(null);
   const viewport = useWindowDimensions();
   const [anchor, setAnchor] = useState({ x: 0, y: 0, width: 0, height: 0 });
@@ -317,7 +325,6 @@ export function LivingStatusHeader({
   const [open, setOpen] = useState(false),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
-  const initialPresence = userId ? presenceFor(data, userId) : undefined;
   const [audience, setAudience] = useState<Audience>(
     initialPresence?.availability_audience ?? "friends",
   );
@@ -325,35 +332,37 @@ export function LivingStatusHeader({
     initialPresence?.availability_audience_id ?? null,
   );
   const [minutes, setMinutes] = useState("60");
+  const [editorKey, setEditorKey] = useState(0);
+  const saving = useRef(false);
   const [settings, setSettings] = useState(false);
   if (!userId) return null;
-  const presence = presenceFor(data, userId);
+  const presence = initialPresence;
   const status = data.activities
     .filter((a) => a.owner_id === userId && isStatusNote(a) && activeAt(a, now))
     .sort((a, b) => b.starts_at.localeCompare(a.starts_at))[0];
   const text = statusNoteText(status);
+  const availabilityDetail = activeAvailability(presence, availabilityNow);
   const availability = presence
-    ? !presence.availability_until ||
-      Date.parse(presence.availability_until) > now
-      ? presence.availability
-      : null
+    ? availabilityDetail?.status ?? null
     : status?.available === true
       ? "available"
       : status?.available === false
         ? "busy"
         : null;
   const setPresence = async (payload: Payload) => {
+    if (saving.current) return;
+    saving.current = true;
     setBusy(true);
     setError("");
     try {
       if (
-        Object.hasOwn(payload, "availability") &&
+        !timed && payload.availability &&
         (!Number.isInteger(Number(minutes)) ||
           Number(minutes) < 5 ||
           Number(minutes) > 1440)
       )
         throw new Error("Choose a duration from 5 to 1440 minutes.");
-      if (Object.hasOwn(payload, "availability"))
+      if (!timed && payload.availability)
         payload.availability_until = new Date(
           now + Number(minutes) * 60000,
         ).toISOString();
@@ -362,6 +371,7 @@ export function LivingStatusHeader({
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not update sharing.");
     } finally {
+      saving.current = false;
       setBusy(false);
     }
   };
@@ -390,10 +400,18 @@ export function LivingStatusHeader({
         accessibilityLabel="Change availability"
         accessibilityState={{ expanded: open, disabled: busy }}
         disabled={busy}
-        onPress={onLegacyAvailability ?? (() => availabilityAnchor.current?.measureInWindow((x, y, width, height) => {
-          setAnchor({ x, y, width, height });
-          setOpen(true);
-        }))}
+        onPress={onLegacyAvailability ?? (() => {
+          setError("");
+          if (timed) {
+            setEditorKey((value) => value + 1);
+            setOpen(true);
+            return;
+          }
+          availabilityAnchor.current?.measureInWindow((x, y, width, height) => {
+            setAnchor({ x, y, width, height });
+            setOpen(true);
+          });
+        })}
         style={{
           minHeight: 44,
           flexShrink: 1,
@@ -418,14 +436,14 @@ export function LivingStatusHeader({
             borderRadius: 999,
           }}
         >
-          <View
+          {timed && availability === "available" ? <Check size={13} color={availabilityTone.color} strokeWidth={2.5} /> : timed && availability === "busy" ? <Minus size={13} color={availabilityTone.color} strokeWidth={2.5} /> : <View
             style={{
               width: 8,
               height: 8,
               borderRadius: 4,
-              backgroundColor: availabilityTone.color,
+              backgroundColor: availability ? availabilityColors[availability] : availabilityTone.color,
             }}
-          />
+          />}
           <Text
             style={{
               fontSize: 12,
@@ -435,7 +453,7 @@ export function LivingStatusHeader({
             }}
           >
             {availability === "available"
-              ? variant === "compact"
+              ? timed || variant === "compact"
                 ? "Free"
                 : "Available"
               : availability === "busy"
@@ -507,7 +525,7 @@ export function LivingStatusHeader({
             <Text numberOfLines={2} style={[styles.muted, { flex: 1 }]}>{text || "Add a status note"}</Text>
             <Pencil size={15} color={colors.accent} />
           </Pressable>
-          <ProfileSonarCard compact iconOnly />
+          <ProfileSonarCard compact pill />
         </View>
       ) : variant === "compact" ? (
         <View
@@ -558,7 +576,7 @@ export function LivingStatusHeader({
               <View
                 style={{
                   flexDirection: "row",
-                  justifyContent: "flex-end",
+                  flexWrap: "wrap",
                   alignItems: "center",
                   gap: 6,
                 }}
@@ -578,6 +596,7 @@ export function LivingStatusHeader({
         </View>
       )}
       {status && variant !== "card" && <GuestShareButton label="Share selected Status Note" kind="status" target={status.id} title="A note from Squad Beacon" statusText={status.title} expiresAt={status.ends_at} readOnly />}
+      {timed ? (editorKey > 0 && <TimedAvailabilitySheet key={`${userId}:${editorKey}`} current={availabilityDetail} presence={presence} busy={busy} error={error} now={now} visible={open} onClose={() => setOpen(false)} onApply={setPresence} />) : (
       <Modal transparent visible={open} animationType="none" onRequestClose={() => setOpen(false)}>
         <Pressable accessibilityLabel="Dismiss availability menu" onPress={() => setOpen(false)} style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0 }} />
         <View role="dialog" accessibilityViewIsModal accessibilityLabel="Availability & sharing" style={{
@@ -744,6 +763,7 @@ export function LivingStatusHeader({
         </ScrollView>
         </View>
       </Modal>
+      )}
     </View>
   );
 }
@@ -755,6 +775,7 @@ export function LivingActivitySection({
   compact = false,
   divider = false,
   dashboard = false,
+  suggestIdeas = false,
 }: {
   personId: string;
   showLower?: boolean;
@@ -762,6 +783,7 @@ export function LivingActivitySection({
   compact?: boolean;
   divider?: boolean;
   dashboard?: boolean;
+  suggestIdeas?: boolean;
 }) {
   const { data, userId, act, getViewerEpoch, getCurrentData } = useBeacon();
   const now = useNow(1000);
@@ -916,12 +938,13 @@ export function LivingActivitySection({
         >
           {(dashboard || !compact || current) && (
             <View
-              style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
+              style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 6 }}
             >
               {compact && <Zap size={14} color={colors.green} />}
-              <Text style={[styles.label, { color: colors.ink }]}>
+              <Text style={[styles.label, { color: colors.ink, marginRight: "auto" }]}>
                 Current Activity
               </Text>
+              {suggestIdeas && own && <SpontaneityEntry compact />}
               {dashboard && own && (current || featured) && (
                 <Button compact secondary title="Edit activity" onPress={() => setManage("home")} />
               )}
@@ -929,6 +952,7 @@ export function LivingActivitySection({
           )}
           {featured ? (
             <>
+              <Txt muted>Featured activity</Txt>
               <StatusAttachmentPreview compact activity={featured} onPress={() => router.push({
                 pathname: featured.type === "beacon" ? "/activity/[id]" : "/council/[id]",
                 params: { id: featured.id },
@@ -1313,7 +1337,7 @@ export function UpNextCard({ personId }: { personId: string }) {
         </Pressable>
       ) : (
         <View style={{ gap: 6, padding: 10, borderRadius: 12, backgroundColor: colors.surfaceRaised }}>
-          <Txt muted>Nothing coming up yet</Txt>
+          <Txt muted>Nothing coming up yet.</Txt>
           <Button compact secondary title="Create Beacon" onPress={() => router.push({ pathname: "/create", params: { editor: "yes" } })} />
         </View>
       )}

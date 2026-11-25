@@ -1,5 +1,4 @@
 import { PremiumHeaderButton } from "@/src/features/profile/components/PremiumEntry";
-import { SpontaneityEntry } from "../spontaneity/SpontaneityEntry";
 import { UpNextCard, LivingActivitySection } from "../components/feed/LivingActivitySection";
 import { homePresentation } from "@/src/features/onboarding/presentation";
 import { useOnboarding } from "@/src/features/onboarding/runtime";
@@ -495,7 +494,6 @@ export default function ActivitiesScreen() {
             </Text>
             {userId ? (
               <>
-                <SpontaneityEntry compact />
                 <PremiumHeaderButton />
                 <Pressable
                   accessibilityRole="button"
@@ -512,8 +510,6 @@ export default function ActivitiesScreen() {
                 </Pressable>
                 <InboxButton />
               </>
-            ) : !loading ? (
-              <HomeAction title="Sign in" plain onPress={() => router.push("/auth/sign-in")} />
             ) : null}
           </View>
         </GlassBar>
@@ -588,7 +584,7 @@ export default function ActivitiesScreen() {
           <View testID="home-personal-timeline" style={{ gap: 8, borderTopWidth: 1, borderTopColor: designColors.border, paddingTop: 12 }}>
             {hubHeading("Your Activity", "My Activity →", () => router.push("/your-activity" as Href))}
             {data.is_demo || data.capabilities?.living_activity ? (
-              <LivingActivitySection key={userId} personId={userId} compact dashboard />
+              <LivingActivitySection key={userId} personId={userId} compact dashboard suggestIdeas />
             ) : (
               <UpNextCard personId={userId} />
             )}
@@ -780,8 +776,6 @@ export default function ActivitiesScreen() {
               ))}
             </View>
           </View>
-        ) : !loading ? (
-          <HomeAction title="Help & Tips" onPress={() => router.push("/help")} />
         ) : null}
       </ScrollView>
       <Sheet

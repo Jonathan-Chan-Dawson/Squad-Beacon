@@ -1,7 +1,7 @@
 import type { beaconPinEmphasis } from "./markerIdentity";
 
 export function beaconProjectionDimensions(tier: "close" | "medium" | "far") {
-  if (tier === "close") return { height: 23, width: 36, opacity: 0.9 };
+  if (tier === "close") return { height: 21, width: 36, opacity: 0.9 };
   if (tier === "medium") return { height: 20, width: 31, opacity: 0.85 };
   return { height: 16, width: 26, opacity: 0.78 };
 }

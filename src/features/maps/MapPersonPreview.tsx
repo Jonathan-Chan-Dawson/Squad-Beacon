@@ -16,6 +16,7 @@ import {
 } from "@/src/features/people/previews/personPreview";
 import { useBeacon } from "@/src/shared/store";
 import { useNow } from "@/src/shared/useNow";
+import { useAvailabilityNow } from "@/src/features/beacons/availabilityClock";
 import { Action, useTheme } from "@/src/shared/ui";
 import { ActivityBadge } from "@/src/features/beacons/ActivityBadge";
 import { beaconPreviewWhen } from "./discoveryRanking";
@@ -40,7 +41,9 @@ export function MapPersonPreview({
 }) {
   const { data, userId, act } = useBeacon();
   const { styles, colors, tokens } = useTheme();
-  const now = useNow();
+  const mapNow = useNow();
+  const presence = data.viewer_id === userId ? data.presence?.find((row) => row.owner_id === personId) : undefined;
+  const now = Math.max(mapNow, useAvailabilityNow(Date.parse(presence?.availability_until ?? ""), !!presence));
   const selection = selectPersonPreview(data, personId, userId, now);
   // Solo statuses use the existing activity storage, but are not linked Beacon cards.
   const current = currentActivity(data, personId, userId, now);
@@ -121,30 +124,10 @@ export function MapPersonPreview({
               padding: 2,
               borderRadius: 24,
               borderWidth: 1,
-              borderColor:
-                selection.availability === "unknown"
-                  ? colors.line
-                  : availabilityToken.color,
+              borderColor: selection.canMessage ? "#77B9FA" : colors.line,
             }}
           >
-            <ProfileAvatar profile={profile} size={mapTooltip.avatarSize} />
-            <View
-              testID={
-                selection.availability !== "unknown"
-                  ? `avatar-status-${selection.availability}`
-                  : undefined
-              }
-              pointerEvents="none"
-              style={{
-                position: "absolute",
-                right: -2,
-                bottom: -2,
-                borderRadius: 8,
-                backgroundColor: colors.white,
-              }}
-            >
-              <StatusIcon size={13} color={availabilityToken.color} />
-            </View>
+            <ProfileAvatar profile={profile} size={mapTooltip.avatarSize} status={selection.availability} />
           </View>
           <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
             <Text
@@ -204,15 +187,16 @@ export function MapPersonPreview({
           numberOfLines={1}
           style={[
             styles.label,
-            { flexShrink: 1, fontSize: 12, color: availabilityToken.color },
+            { flexShrink: 1, fontSize: 12, color: colors.ink },
           ]}
         >
-          {status}
-          {minutes
+          {selection.availabilityDetail?.label ?? status}
+          {!presence && minutes
             ? ` \u00b7 ends in ${minutes < 60 ? `${minutes} min` : `${Math.ceil(minutes / 60)} hrs`}`
             : ""}
         </Text>
       </View>
+      {selection.availabilityDetail?.note ? <Text style={styles.muted}>{selection.availabilityDetail.note}</Text> : null}
       {selection.sharedContexts[0] && (
         <Text
           numberOfLines={1}

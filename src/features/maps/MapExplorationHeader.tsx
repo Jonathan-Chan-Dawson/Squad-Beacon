@@ -63,6 +63,10 @@ export function MapExplorationHeader({
   onCategoriesChange,
   onPersonalizedChange,
   hasProfileInterests,
+  focusInterests = false,
+  onToggleInterestFocus,
+  focusFree = false,
+  onToggleFreeFocus,
   menu,
   onMenuChange,
   onSurprise,
@@ -94,6 +98,10 @@ export function MapExplorationHeader({
   onCategoriesChange(categories: Category[]): void;
   onPersonalizedChange(value: boolean): void;
   hasProfileInterests: boolean;
+  focusInterests?: boolean;
+  onToggleInterestFocus?: () => void;
+  focusFree?: boolean;
+  onToggleFreeFocus?: () => void;
   menu: DiscoveryMenu;
   onMenuChange(value: DiscoveryMenu): void;
   onSurprise(eventTime: number): void;
@@ -272,11 +280,11 @@ export function MapExplorationHeader({
             accessibilityLabel="All"
             accessibilityHint="Clear Friends and category restrictions; retain time and advanced filters"
             accessibilityState={{
-              selected: !filters.friendScope && !categories.length,
+              selected: !filters.friendScope && !categories.length && !focusInterests && !focusFree,
             }}
-            aria-pressed={!filters.friendScope && !categories.length}
+            aria-pressed={!filters.friendScope && !categories.length && !focusInterests && !focusFree}
             onPress={() => onQuickFilter("All")}
-            style={chipStyle(!filters.friendScope && !categories.length)}
+            style={chipStyle(!filters.friendScope && !categories.length && !focusInterests && !focusFree)}
           >
             <Text
               style={{
@@ -346,12 +354,12 @@ export function MapExplorationHeader({
             accessibilityLabel={`Interests${categories.length ? `, ${categories.length} categories` : ""}, For Me ranking ${forMe ? "on" : "off"}`}
             accessibilityState={{
               expanded: menu === "interests",
-              selected: !!categories.length,
+              selected: !!categories.length || focusInterests,
             }}
             aria-expanded={menu === "interests"}
             onPress={() => openMenu("interests")}
             style={{
-              ...chipStyle(!!categories.length),
+              ...chipStyle(!!categories.length || focusInterests),
               paddingHorizontal: 6,
               flexDirection: "row",
               alignItems: "center",
@@ -383,6 +391,9 @@ export function MapExplorationHeader({
               color={categories.length ? colors.primary : colors.ink}
             />
           </Pressable>
+          {onToggleFreeFocus && <Pressable accessibilityRole="button" accessibilityLabel="Free friends" accessibilityState={{ selected: focusFree }} aria-pressed={focusFree} onPress={onToggleFreeFocus} style={chipStyle(focusFree)}>
+            <Text style={{ color: focusFree ? colors.primary : colors.ink, fontWeight: "700", fontSize: 13 }}>Free</Text>
+          </Pressable>}
         </ScrollView>
         <View
           style={{
@@ -640,6 +651,9 @@ export function MapExplorationHeader({
                       </Text>
                       {forMe && <Check size={17} color={colors.primary} />}
                     </Pressable>
+                    {onToggleInterestFocus && <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: focusInterests, disabled: !hasProfileInterests }} aria-checked={focusInterests} disabled={!hasProfileInterests} onPress={onToggleInterestFocus} style={{ minHeight: 44, justifyContent: "center", paddingHorizontal: 8 }}>
+                      <Text style={{ color: !hasProfileInterests ? colors.muted : focusInterests ? colors.primary : colors.ink, fontSize: 13 }}>{focusInterests ? "✓ Focus on my interests" : "Focus on my interests"}</Text>
+                    </Pressable>}
                     <Text
                       style={{
                         color: colors.muted,

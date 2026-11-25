@@ -9,10 +9,12 @@ export function BeaconScoreSheet({
   score,
   visible,
   onClose,
+  insideRewards = false,
 }: {
   score: ReturnType<typeof useBeaconScore>;
   visible: boolean;
   onClose: () => void;
+  insideRewards?: boolean;
 }) {
   const { index, stage, nextStage } = beaconScoreTier(score.points);
   return (
@@ -41,7 +43,7 @@ export function BeaconScoreSheet({
           secondary
           compact
         />
-        <Button
+        {!insideRewards && <Button
           compact
           secondary
           title="Open Rewards"
@@ -49,7 +51,7 @@ export function BeaconScoreSheet({
             onClose();
             router.push("/beacon-shop" as Href);
           }}
-        />
+        />}
         <Txt>How you earn XP</Txt>
         <Txt muted>
           A qualifying hosted Beacon earns both hosting and attendance points.

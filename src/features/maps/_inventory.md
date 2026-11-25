@@ -20,6 +20,7 @@ Maps feature
 - Overview retains the external BeaconMusicLink and canonical Repeat creation route. Web chat expands through the same sheet resize action; native chat opens the dedicated activity chat screen. Author previews retain existing permissions.
 - components/BeaconMap.tsx, BeaconMap.native.tsx, BeaconMap.web.tsx: platform variants; keep these siblings together. MapScreen owns overlay controls via `hideControls`; `viewportInsets` reserves overlay-safe camera space on native and web. Native `mapPadding` is attached only after `onMapReady`, then tracks current inset values.
 - cluster.ts: pure Web Mercator/screen-pixel grouping shared by native and web markers.
+- MapPresentationCache reuses Supercluster indexes within a stable longitude frame. The shared presentation budgets previews separately from authorized members. Run `node_modules/.bin/tsx scripts/measure-map-presentation.ts` for the deterministic presentation benchmark.
 - relevance.ts: shared entity ranking for cluster previews.
 - directions.ts: physical-location directions links; never includes the viewer's location.
 - placeSearch.ts: validates bounded worldwide results without persistent caching.

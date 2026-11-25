@@ -9,6 +9,7 @@ export const demoRewardActions = {
   grant: "demo_rewards_grant",
   unlock: "demo_rewards_unlock",
   equip: "demo_rewards_equip",
+  tap: "demo_rewards_tap",
 } as const;
 
 export function applyDemoRewards(
@@ -21,6 +22,19 @@ export function applyDemoRewards(
   if (!data.is_demo || data.viewer_id !== viewer)
     throw new Error("Open the demo to use demo Coins.");
   const wallet = data.demo_rewards ?? { balance: 0, owned: [] };
+  if (action === demoRewardActions.tap) {
+    const taps = wallet.taps ?? 0;
+    if (taps >= 500) return data;
+    return {
+      ...data,
+      demo_rewards: {
+        ...wallet,
+        balance: wallet.balance + demoCoinScale / 10,
+        stage: wallet.stage === 0 && taps < 9 ? 0 : 1,
+        taps: taps + 1,
+      },
+    };
+  }
   if (action === demoRewardActions.grant) {
     const balance = wallet.balance + demoCoinGrant * demoCoinScale;
     return { ...data, demo_rewards: { ...wallet, balance } };
@@ -47,6 +61,7 @@ export function applyDemoRewards(
     return {
       ...data,
       demo_rewards: {
+        ...wallet,
         balance: wallet.balance - price,
         owned: [...wallet.owned, item],
       },

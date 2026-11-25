@@ -8,11 +8,18 @@ export async function startDemoFromEntry(page: Page) {
     .getByRole("button", { name: "Sign in", exact: true })
     .first();
   const profile = page.getByRole("tab", { name: "Profile", exact: true });
+  const dismissIntro = page.getByRole("button", { name: "Skip introduction", exact: true });
   await expect(demo.or(signIn).or(profile).first()).toBeVisible();
   const throughSignIn = !(await demo.isVisible());
   if (throughSignIn) {
+    if (await dismissIntro.isVisible()) await dismissIntro.click();
     if (await signIn.isVisible()) await signIn.click();
-    else await profile.click();
+    else {
+      await profile.click();
+      const dismissProfile = page.getByRole("dialog", { name: "Make it yours." }).getByRole("button", { name: "Got it" });
+      if (await dismissProfile.isVisible()) await dismissProfile.click();
+      await signIn.click();
+    }
   }
   await demo.click();
   await expect(demo).toHaveCount(0);

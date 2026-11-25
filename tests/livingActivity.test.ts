@@ -8,6 +8,20 @@ import {
 } from "../src/features/beacons/livingActivity";
 import { liveOwnedStatuses } from "../src/features/beacons/components/feed/statusActions";
 import { normalizeData } from "../src/shared/types";
+import { activeAvailability, availabilityEnd } from "../src/features/beacons/availability";
+
+test("availability arcs use authoritative duration and warm only near expiry", () => {
+  const start = Date.parse("2026-11-24T16:00:00Z");
+  const end = availabilityEnd("1 hour", start)!;
+  const timed = { availability: "available", availability_until: end, availability_started_at: new Date(start).toISOString() } as const;
+  assert.equal(activeAvailability(timed, start + 1800000)?.progress, 0.5);
+  assert.equal(activeAvailability(timed, start + 1800000)?.arcColor, "#79DDB0");
+  assert.notEqual(activeAvailability(timed, start + 3540000)?.arcColor, "#79DDB0");
+  assert.equal(activeAvailability({ ...timed, availability: "busy" }, Date.parse(end)), null);
+  assert.equal(activeAvailability({ ...timed, availability_started_at: null }, start)?.progress, null);
+  assert.equal(activeAvailability({ availability: "available", availability_mode: "indefinite" }, start)?.progress, 1);
+  assert.throws(() => availabilityEnd("Custom", start, "2026-11-26T16:00:00Z"), /next 24 hours/);
+});
 import {
   publishPlanningSession,
   type PlanningCreationSession,

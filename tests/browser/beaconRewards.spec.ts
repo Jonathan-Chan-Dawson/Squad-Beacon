@@ -60,11 +60,19 @@ for (const appearance of ["light", "dark"] as const) {
           });
         }
       });
+      await page.goto("/profile");
+      const tap = page.getByRole("button", { name: "Tap Mini Beacon" });
+      const shop = page.getByRole("button", { name: "Open Shop", exact: true });
+      await expect(tap).not.toHaveAttribute("aria-busy", "true");
+      await expect(shop).toHaveCount(0);
+      for (let press = 0; press < 10; press++) await tap.click();
+      await expect(shop).toBeVisible();
+      await expect(page.getByText(/Shop unlocked!/)).toBeVisible();
       await page.goto("/beacon-shop?tab=Quests");
       await expect(
         page.getByText("4 / 4 complete · 1,200 XP and 120 base Coins"),
       ).toBeVisible();
-      await expect(page.getByText("120 Coins", { exact: true })).toBeVisible();
+      await expect(page.getByText("121 Coins", { exact: true })).toBeVisible();
       await expect(page.getByRole("button", { name: "Add demo Coins" })).toHaveCount(0);
       await page.getByRole("button", { name: "Explore Shop" }).click();
       await expect(
@@ -84,7 +92,7 @@ for (const appearance of ["light", "dark"] as const) {
       ).toBeVisible();
       await page.getByRole("button", { name: "Buy", exact: true }).click();
       await page.getByRole("button", { name: "Confirm", exact: true }).click();
-      await expect(page.getByText("45 Coins", { exact: true })).toBeVisible();
+      await expect(page.getByText("46 Coins", { exact: true })).toBeVisible();
       await page.getByRole("button", { name: "Equip · Avatar ring" }).click();
       await expect(
         page.getByRole("button", { name: "Equipped · Avatar ring" }),
@@ -110,7 +118,7 @@ for (const appearance of ["light", "dark"] as const) {
       await expect(
         page.getByRole("button", { name: "Equipped · Avatar ring" }),
       ).toBeVisible();
-      await expect(page.getByText("45 Coins", { exact: true })).toBeVisible();
+      await expect(page.getByText("46 Coins", { exact: true })).toBeVisible();
       await page.goto("/profile");
       await expect(
         page.getByTestId("equipped-avatar-ring").first(),

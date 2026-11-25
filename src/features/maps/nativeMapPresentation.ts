@@ -2,6 +2,8 @@ import { mapPointOffset as nativePointOffset } from "./mapPointOffset";
 import { bloomGeometry } from "./clusterBloom";
 import {
   clusterMapPoints,
+  ClusterIndexCache,
+  pointsInMapViewport,
   MAX_RENDERED_MAP_FEATURES,
   rankClusterMembers,
   type ClusterPoint,
@@ -99,6 +101,10 @@ export function nativePetalOffset(index: number, expanded = false, count = 10) {
 
 /** Spatial queries ignore names, labels and availability. Ranking changes reuse the groups. */
 export class MapPresentationCache {
+  private readonly indexes = new ClusterIndexCache();
+  private partitionKey = "";
+  private renderedPartitionKey = "";
+  private partition: ReturnType<typeof partitionMapPoints> = { selected: [], beacons: [], people: [] };
   private spatialKey = "";
   private rankKey = "";
   private value: NativeMapPresentation[] = [];
@@ -114,23 +120,33 @@ export class MapPresentationCache {
       friendsProminent,
     ] = args;
     const ordered = [...points].sort((a, b) => a.id.localeCompare(b.id));
-    const spatialKey = JSON.stringify([
+    const partitionKey = JSON.stringify([
       ordered,
+      ordered
+        .filter((point) => priorities[point.id]?.tier === -3)
+        .map((point) => point.id),
+    ]);
+    if (partitionKey !== this.partitionKey) {
+      this.partition = partitionMapPoints(ordered, priorities);
+      this.partitionKey = partitionKey;
+    }
+    const spatialKey = JSON.stringify([
       viewport,
       mode,
       [...owned].sort(),
       budget,
       friendsProminent,
-      ordered
-        .filter((point) => priorities[point.id]?.tier === -3)
-        .map((point) => point.id),
     ]);
     const rankKey = JSON.stringify(
       ordered.map((point) => [point.id, priorities[point.id]]),
     );
-    if (spatialKey !== this.spatialKey) {
-      this.value = nativeMapPresentations(...args);
+    const build = () => buildMapPresentations(
+      this.partition, viewport, mode, priorities, owned, budget, friendsProminent, this.indexes,
+    );
+    if (spatialKey !== this.spatialKey || partitionKey !== this.renderedPartitionKey) {
+      this.value = build();
       this.spatialKey = spatialKey;
+      this.renderedPartitionKey = partitionKey;
       this.stats.spatialBuilds++;
     } else if (rankKey !== this.rankKey) {
       this.value = this.value.map((item) =>
@@ -147,7 +163,7 @@ export class MapPresentationCache {
         this.value.reduce((sum, item) => sum + item.featureCost, 0) >
         (budget ?? MAX_RENDERED_MAP_FEATURES)
       ) {
-        this.value = nativeMapPresentations(...args);
+        this.value = build();
         this.stats.spatialBuilds++;
       }
     } else this.stats.hits++;
@@ -229,7 +245,8 @@ function applyGeometry(item: NativeMapPresentation) {
 }
 
 export function presentationOpensExplorer(item: NativeMapPresentation) {
-  return new Set(item.group.members.map((member) => member.id)).size > 1;
+  const first = item.group.members[0];
+  return !!first && item.group.members.some((member) => member.id !== first.id);
 }
 
 /** Build artwork for foreground markers and the bounded friend-avatar previews. */
@@ -329,6 +346,20 @@ function avoidNeighborArtwork(
   return items;
 }
 
+function partitionMapPoints(points: ClusterPoint[], priorities: Record<string, MapPointPriority>) {
+  const unique = [...new Map(points.map((point) => [point.id, point])).values()]
+    .sort((a, b) => a.id.localeCompare(b.id));
+  const selected: ClusterPoint[] = [];
+  const beacons: ClusterPoint[] = [];
+  const people: ClusterPoint[] = [];
+  for (const point of unique) {
+    if (priorities[point.id]?.tier === -3) selected.push(point);
+    else if (point.kind === "beacon") beacons.push(point);
+    else people.push(point);
+  }
+  return { selected, beacons, people };
+}
+
 /** Authorized coordinates only. Beacon clustering is independent of friend positions. */
 export function nativeMapPresentations(
   points: ClusterPoint[],
@@ -339,17 +370,26 @@ export function nativeMapPresentations(
   budget = MAX_RENDERED_MAP_FEATURES,
   friendsProminent = false,
 ) {
-  const unique = [
-    ...new Map(points.map((point) => [point.id, point])).values(),
-  ].sort((a, b) => a.id.localeCompare(b.id));
+  return buildMapPresentations(partitionMapPoints(points, priorities), viewport, mode, priorities, ownedIds, budget, friendsProminent);
+}
+
+function buildMapPresentations(
+  { selected: selectedPoints, beacons, people }: ReturnType<typeof partitionMapPoints>,
+  viewport: ClusterViewport,
+  mode: NativeMapMode,
+  priorities: Record<string, MapPointPriority>,
+  ownedIds: ReadonlySet<string>,
+  budget = MAX_RENDERED_MAP_FEATURES,
+  friendsProminent = false,
+  indexes?: ClusterIndexCache,
+) {
   const selected = clusterMapPoints(
-    unique.filter((point) => priorities[point.id]?.tier === -3),
+    selectedPoints,
     viewport,
     1,
+    indexes,
   ).flatMap((group) => group.members);
-  const ordinary = unique.filter((point) => priorities[point.id]?.tier !== -3);
-  const beacons = ordinary.filter((point) => point.kind === "beacon");
-  const people = ordinary.filter((point) => point.kind === "person");
+  const eligiblePeople = pointsInMapViewport(people, viewport);
   let pressured = false;
   // Supercluster evaluates integer zooms. Compensate for fractional zoom so
   // markers do not merge at nearly twice the intended visual distance.
@@ -359,6 +399,7 @@ export function nativeMapPresentations(
       beacons,
       viewport,
       radius / zoomScale,
+      indexes,
     ).flatMap((group) => {
       if (group.members.length < 2 || group.members.length > 3) return [group];
       const separated = group.members.every((point, index) =>
@@ -378,8 +419,8 @@ export function nativeMapPresentations(
     });
     const remaining: ClusterPoint[] = [];
     // Grid lookup bounds the collision search, even with thousands of authorized friends.
-    const cell = 96,
-      buckets = new Map<string, MapPointGroup[]>();
+    const cell = 96;
+    const buckets = new Map<string, { group: MapPointGroup; x: number; y: number }[]>();
     const screen = (point: { latitude: number; longitude: number }) =>
       nativePointOffset(
         point,
@@ -390,37 +431,36 @@ export function nativeMapPresentations(
         viewport.zoom,
       );
     for (const group of groups) {
-      const p = screen(group),
-        key = `${Math.floor(p.x / cell)}:${Math.floor(p.y / cell)}`;
-      buckets.set(key, [...(buckets.get(key) ?? []), group]);
+      const p = screen(group);
+      const key = `${Math.floor(p.x / cell)}:${Math.floor(p.y / cell)}`;
+      const entry = { group, ...p };
+      const bucket = buckets.get(key);
+      if (bucket) bucket.push(entry);
+      else buckets.set(key, [entry]);
     }
-    // Materialize the friend viewport once so distant/offscreen people cannot attach to an on-screen bloom.
-    const eligiblePeople = clusterMapPoints(people, viewport, 1).flatMap(
-      (group) => group.members,
-    );
     for (const person of eligiblePeople) {
       const p = screen(person);
       let nearest: MapPointGroup | undefined,
         distance = friendsProminent ? MIXED_RADIUS - 4 : MIXED_RADIUS;
       for (let x = -1; x <= 1; x++)
         for (let y = -1; y <= 1; y++)
-          for (const group of buckets.get(
+          for (const anchor of buckets.get(
             `${Math.floor(p.x / cell) + x}:${Math.floor(p.y / cell) + y}`,
           ) ?? []) {
-            const anchor = screen(group),
-              d = Math.hypot(p.x - anchor.x, p.y - anchor.y);
+            const d = Math.hypot(p.x - anchor.x, p.y - anchor.y);
             if (
               d < distance ||
-              (d === distance && nearest && group.id < nearest.id)
+              (d === distance && nearest && anchor.group.id < nearest.id)
             ) {
-              nearest = group;
+              nearest = anchor.group;
               distance = d;
             }
           }
       if (nearest) nearest.members.push(person);
       else remaining.push(person);
     }
-    groups.push(...clusterMapPoints(remaining, viewport, radius / zoomScale));
+    const friendPoints = remaining.length === people.length ? people : remaining;
+    groups.push(...clusterMapPoints(friendPoints, viewport, radius / zoomScale, indexes));
     const requested = pressured && mode === "stack" ? "swarm" : mode;
     const result = groups.map((group) =>
       nativePresentation(

@@ -58,6 +58,15 @@ export function applyDemoLivingActivity(
     data.presence.push(presence);
   }
   if (action === "update_presence") {
+    if (Object.hasOwn(payload, "availability_extend_minutes")) {
+      const minutes = payload.availability_extend_minutes;
+      const until = Date.parse(presence.availability_until ?? "");
+      if ((minutes !== 30 && minutes !== 60) || !presence.availability || !(until > now))
+        throw new Error("Choose an active timed availability to extend.");
+      const extended = until + minutes * 60000;
+      if (extended > now + 86400000) throw new Error("Choose a time within the next 24 hours.");
+      presence.availability_until = new Date(extended).toISOString();
+    }
     if (Object.hasOwn(payload, "availability")) {
       if (
         payload.availability !== null &&
@@ -65,10 +74,20 @@ export function applyDemoLivingActivity(
         payload.availability !== "busy"
       )
         throw new Error("Choose valid availability.");
+      const indefinite = payload.availability_mode === "indefinite";
+      const until = Date.parse(String(payload.availability_until ?? new Date(now + 3600000).toISOString()));
+      if (payload.availability && !indefinite && (!(until > now) || until > now + 86400000))
+        throw new Error("Choose a time within the next 24 hours.");
+      const note = typeof payload.availability_note === "string" ? payload.availability_note.trim() : "";
+      if (note.length > 120) throw new Error("Availability notes can be up to 120 characters.");
+      const end = payload.availability && !indefinite ? new Date(until).toISOString() : null;
+      const mode = payload.availability ? indefinite ? "indefinite" : "timed" : null;
+      const sameDuration = payload.availability === presence.availability && end === presence.availability_until && mode === presence.availability_mode;
       presence.availability = payload.availability;
-      presence.availability_until = String(
-        payload.availability_until ?? new Date(now + 3600000).toISOString(),
-      );
+      presence.availability_until = end;
+      presence.availability_started_at = payload.availability ? (sameDuration ? presence.availability_started_at : null) ?? new Date(now).toISOString() : null;
+      presence.availability_mode = mode;
+      presence.availability_note = payload.availability ? note || null : null;
     }
     if (payload.availability_audience) {
       const audience = payload.availability_audience as Activity["audience"];

@@ -16,33 +16,22 @@ const intersects = (a: Box, b: Box) =>
   Math.abs(a.x - b.x) < (a.width + b.width) / 2 + 2 &&
   Math.abs(a.y - b.y) < (a.height + b.height) / 2 + 2;
 
-/** Category marks are composition cues with fixed slots relative to the count. */
+export function constellationDiameter(count: number) {
+  return count >= 500 ? 38 : count >= 200 ? 30 : count >= 50 ? 24 : count >= 10 ? 18 : 12;
+}
+
 function constellationDots(
   item: NativeMapPresentation,
-  count: Box,
+  signal: Box,
   clear: (box: Box) => boolean,
 ) {
   const regional = item.scale === "micro";
-  const categories = [
-    ...new Set(item.beacons.map((point) => point.category ?? "Other")),
-  ];
-  const candidates = (categories.length ? categories : [null]).slice(
-    0,
-    regional ? 2 : 3,
-  );
-  for (let length = candidates.length; length > 0; length--) {
-    const dots = candidates.slice(0, length).map((category, index) => ({
-      category,
-      size: regional ? 4 : index === 0 ? 7 : 5,
-      offset: {
-        x: count.x + (index - (length - 1) / 2) * (regional ? 9 : 12),
-        y:
-          count.y -
-          count.height / 2 -
-          7 -
-          (length === 3 && index === 1 ? 3 : 0),
-      },
-    }));
+  for (let length = Math.min(item.beacons.length, regional ? 2 : 3); length > 0; length--) {
+    const dots = Array.from({ length }, (_, index) => {
+      const angle = length === 1 ? -Math.PI / 2 : -Math.PI * (0.16 + 0.68 * index / (length - 1));
+      const radius = signal.width / 2;
+      return { size: regional ? 4 : 5, offset: { x: signal.x + Math.cos(angle) * radius, y: signal.y + Math.sin(angle) * radius } };
+    });
     if (
       dots.every(({ offset, size }) =>
         clear({ ...offset, width: size, height: size }),
@@ -184,8 +173,8 @@ function calculateBloomGeometry(item: NativeMapPresentation) {
     if (!grouped) return { x, top: bottom - 5, ...dimensions };
     // Try the larger projection first and fall back when its base would crowd the count.
     for (const [width, height, belowFace] of [
-      [dimensions.width + 4, dimensions.height + 2, 7],
-      [street ? 33 : 28, street ? 17 : 14, 3],
+      [dimensions.width + 4, Math.round((dimensions.height + (street ? 4 : 2)) * 1.12), 7],
+      [street ? 33 : 28, street ? 19 : 16, 3],
     ]) {
       const top = bottom + belowFace - height;
       const box = { x, y: top + (height + 5) / 2, width, height: height + 5 };
@@ -218,8 +207,10 @@ function calculateBloomGeometry(item: NativeMapPresentation) {
         fontSize,
       }
     : undefined;
-  const dots =
-    grouped && distant ? constellationDots(item, countBox, clear) : [];
+  const signalDiameter = friendsOnly ? 10 : constellationDiameter(beaconTotal);
+  const signalBox = { x: countBox.x, y: countBox.y - (countBox.height + signalDiameter) / 2 + 2, width: signalDiameter, height: signalDiameter };
+  const signal = grouped && distant && clear(signalBox) ? signalBox : undefined;
+  const dots = signal ? constellationDots(item, signal, clear) : [];
   const satellites: ClusterPoint[] = [];
   const satelliteOffsets: Offset[] = [];
   const satelliteSize = street ? 17 : 14;
@@ -293,6 +284,7 @@ function calculateBloomGeometry(item: NativeMapPresentation) {
                 Math.abs(projector.top + projector.height + 5),
               )
             : 0,
+          signal ? Math.abs(signal.y) + signal.height / 2 : 0,
           ...dots.map(
             ({ offset, size }) =>
               Math.max(Math.abs(offset.x), Math.abs(offset.y)) + size / 2,
@@ -332,6 +324,7 @@ function calculateBloomGeometry(item: NativeMapPresentation) {
     satelliteSize,
     countBadge,
     dots,
+    signal,
     distant,
     projector,
   };

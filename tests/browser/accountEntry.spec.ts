@@ -50,7 +50,7 @@ test("new signed-out account signs in, completes only required setup and enters 
     noProfile: true,
   });
   await page.goto("/activities");
-  await expect(page.getByTestId("visitor-welcome")).toBeVisible();
+  await page.getByRole("dialog", { name: "Welcome to Squad Beacon!" }).getByRole("button", { name: "Skip introduction" }).click();
   await signIn(page);
   await expect(
     page.getByText("Just the basics, then you’re in."),

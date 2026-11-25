@@ -220,16 +220,17 @@ export function PersonProfilePreview({
                 ]}
               >
                 <Text
-                  style={[styles.chipText, { color: availabilityToken.color }]}
+                  style={[styles.chipText, { color: colors.ink }]}
                 >
-                  {selection.availability === "available"
+                  {selection.availabilityDetail?.label ?? (selection.availability === "available"
                     ? "Available now"
                     : selection.availability === "ending-soon"
                       ? "Wrapping up soon"
-                      : "Not available right now"}
+                      : "Not available right now")}
                 </Text>
               </View>
             ) : null}
+            {selection.availabilityDetail?.note ? <Text style={styles.muted}>{selection.availabilityDetail.note}</Text> : null}
 
             {profile && selection.sharedContexts.length ? (
               <View style={{ gap: 8 }}>

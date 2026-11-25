@@ -31,14 +31,22 @@ import { ResendAuthEmail } from "./ResendAuthEmail";
 
 const entryModes = ["Sign in", "Create account"] as const;
 
-export function Auth({ onExplore }: { onExplore?: () => void } = {}) {
+export function Auth({
+  onExplore,
+  initialMode = "Sign in",
+  reason,
+}: {
+  onExplore?: () => void;
+  initialMode?: "Sign in" | "Create account";
+  reason?: string;
+} = {}) {
   const { colors, semanticColors, styles } = useTheme();
   const { width, fontScale } = useWindowDimensions();
   const wide = width >= 840 && fontScale <= 1.3;
   const { startDemo } = useBeacon();
   const [mode, setMode] = useState<
     "Sign in" | "Create account" | "Reset password"
-  >("Sign in");
+  >(initialMode);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [visible, setVisible] = useState(false);
@@ -227,7 +235,7 @@ export function Auth({ onExplore }: { onExplore?: () => void } = {}) {
                     <Text accessibilityRole="header" style={styles.h2}>
                       {heading}
                     </Text>
-                    <Txt muted>{description}</Txt>
+                    <Txt muted>{!resetting && reason ? reason : description}</Txt>
                   </View>
                   <View style={entryStyles.fields}>
                     <Field

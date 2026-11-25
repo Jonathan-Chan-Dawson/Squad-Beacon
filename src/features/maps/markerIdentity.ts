@@ -7,6 +7,7 @@ import { isApprovedGoing } from "@/src/features/beacons/permissions";
 import { communityTypeLabel } from "@/src/features/social/communityPresentation";
 import type { MapContextPoint } from "./contextFilters";
 import { mapPointOffset } from "./mapPointOffset";
+import { matchesSearch } from "@/src/shared/search";
 
 export type BeaconMarkerState = {
   owned: boolean;
@@ -15,6 +16,7 @@ export type BeaconMarkerState = {
   squadHosted: boolean;
   live: boolean;
   participatingLive: boolean;
+  interest?: boolean;
 };
 export const EMPTY_MARKER_STATE: BeaconMarkerState = {
   owned: false,
@@ -31,40 +33,86 @@ export const COMPACT_BEACON_PIN_RADIUS = 9;
 export const BEACON_PIN_TIP = { halfWidth: 9, height: 12, overlap: 2 };
 export const COMPACT_BEACON_PIN_TIP = { halfWidth: 6, height: 7, overlap: 2 };
 export const BEACON_PIN_LIGHT_INSET = 38;
-export const BEACON_SELECTED_SCALE = 1.25;
-export const BEACON_SELECTED_BEAM_HEIGHT = 38;
-export const BEACON_LIVE_BEAM_HEIGHT = 26;
-const LIVE_BEACON_COLOR = "#F18432";
+export const BEACON_SELECTED_SCALE = 1.08;
+export const BEACON_SELECTED_BEAM_HEIGHT = 24;
+export const BEACON_LIVE_BEAM_HEIGHT = 24;
+export const mapIdentityColors = {
+  ownership: "#F5B952",
+  friend: "#77B9FA",
+  squad: "#68D6A2",
+  other: "#AFA2DE",
+  personOther: "#94A3B8",
+  selection: "#CBBBF8",
+  cluster: "#E3AF79",
+  live: "#F4CD64",
+  interest: "#E6A6DA",
+};
+
+export function beaconRelationship(state?: BeaconMarkerState | null) {
+  return state?.owned ? "ownership" : state?.friendHosted ? "friend" : state?.squadHosted ? "squad" : "other";
+}
+
+export function beaconMarkerColor(state?: BeaconMarkerState | null) {
+  return mapIdentityColors[beaconRelationship(state)];
+}
+
+export function constellationRelationships<T>(points: readonly T[], stateFor: (point: T) => BeaconMarkerState | undefined, limit: number) {
+  const relationships = new Set<ReturnType<typeof beaconRelationship>>();
+  for (const point of points) {
+    if (relationships.size >= limit) break;
+    relationships.add(beaconRelationship(stateFor(point)));
+  }
+  return [...relationships];
+}
+
+export const beaconBadgeArtwork = {
+  ownership: { color: mapIdentityColors.ownership, testId: "beacon-ownership-star", path: "m12 2 3.1 6.3 7 .9-5 5 1.2 7L12 18l-6.3 3.2 1.2-7-5-5 7-.9Z", filled: true },
+  friend: { color: mapIdentityColors.friend, testId: "beacon-friend-badge", path: "M16 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0ZM4 21v-2a5 5 0 0 1 5-5h6a5 5 0 0 1 5 5v2", filled: false },
+  squad: { color: mapIdentityColors.squad, testId: "beacon-squad-badge", path: "M15 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0ZM3 21v-2a5 5 0 0 1 5-5h6a5 5 0 0 1 5 5v2m-1-17a4 4 0 0 1 0 7m2 4a4 4 0 0 1 2 4v2", filled: false },
+  live: { color: mapIdentityColors.live, testId: "beacon-live-badge", path: "m13 2-9 12h7l-1 8 10-12h-7Z", filled: true },
+  saved: { color: mapIdentityColors.selection, testId: "beacon-saved-bookmark", path: "M6 3h12v18l-6-4-6 4Z", filled: true },
+  interest: { color: mapIdentityColors.interest, testId: "beacon-interest-badge", path: "M12 21 3.6 12.6A5.5 5.5 0 0 1 12 5.5a5.5 5.5 0 0 1 8.4 7.1Z", filled: true },
+} as const;
+
+export const BEACON_BADGE_SIZE = 11;
+export const BEACON_BADGE_GAP = 2;
+
+export function beaconMarkerBadges(state: BeaconMarkerState, limit: 1 | 3, showRelevance = true) {
+  const relationship = beaconRelationship(state);
+  const badges: (keyof typeof beaconBadgeArtwork)[] = [];
+  if (relationship !== "other") badges.push(relationship);
+  if (state.live) badges.push("live");
+  if (showRelevance && state.saved) badges.push("saved");
+  if (showRelevance && state.interest) badges.push("interest");
+  return badges.slice(0, limit);
+}
 
 export function beaconPinEmphasis(
   state: BeaconMarkerState | null | undefined,
-  selected: boolean,
-  categoryColor: string,
+  _selected: boolean,
+  _categoryColor: string,
   compact = false,
 ) {
-  if (selected)
-    return { level: 1, color: "#E6AE45", core: "#FFFEF4", beamHeight: BEACON_SELECTED_BEAM_HEIGHT, beamWidth: 30, coreWidth: 6, beamOpacity: 1, glowOpacity: 0.98 };
-  if (state?.participatingLive)
-    return { level: 2, color: LIVE_BEACON_COLOR, core: "#FFDD9C", beamHeight: compact ? 27 : BEACON_LIVE_BEAM_HEIGHT, beamWidth: compact ? 19 : 22, coreWidth: 5, beamOpacity: compact ? 0.9 : 0.96, glowOpacity: compact ? 0.67 : 0.81 };
-  if (state?.owned)
-    return { level: 3, color: "#F3B932", core: "#FFF1AD", beamHeight: compact ? 21 : 19, beamWidth: 17, coreWidth: 4, beamOpacity: 0.88, glowOpacity: compact ? 0.48 : 0.6 };
-  if (state?.friendHosted)
-    return { level: 4, color: "#6DAFE5", core: "#CBEAFF", beamHeight: compact ? 17 : 15, beamWidth: 11, coreWidth: compact ? 3 : 2, beamOpacity: 0.65, glowOpacity: compact ? 0.27 : 0.29 };
-  if (state?.squadHosted)
-    return { level: 5, color: "#67C49B", core: "#C9F5E0", beamHeight: compact ? 20 : 18, beamWidth: compact ? 12 : 10, coreWidth: compact ? 3 : 2, beamOpacity: 0.63, glowOpacity: compact ? 0.26 : 0.28 };
-  if (!compact && state?.saved)
-    return { level: 0, color: categoryColor, core: categoryColor, beamHeight: 0, beamWidth: 0, coreWidth: 0, beamOpacity: 0, glowOpacity: 0.18 };
-  return null;
+  const relationship = beaconRelationship(state);
+  const color = mapIdentityColors[relationship];
+  const level = { ownership: 3, friend: 4, squad: 5, other: 6 }[relationship];
+  return {
+    level, color, core: color,
+    beamHeight: compact ? 17 : BEACON_SELECTED_BEAM_HEIGHT,
+    beamWidth: compact ? 13 : 18,
+    coreWidth: compact ? 2 : 3,
+    beamOpacity: compact ? 0.46 : 0.66,
+    glowOpacity: compact ? 0.24 : 0.38,
+  };
 }
 
 /** Scale the established priority effect as the map zooms out. */
 export function distantBeaconPinEmphasis(
-  lighting: ReturnType<typeof beaconPinEmphasis>,
+  lighting: ReturnType<typeof beaconPinEmphasis> | null,
   tier: "medium" | "far" | "micro",
 ) {
   if (!lighting) return null;
-  const priority = lighting.level >= 1 && lighting.level <= 3;
-  const beam = tier !== "micro" && priority ? (tier === "far" ? 0.32 : 0.66) : 0;
+  const beam = tier === "medium" ? 0.66 : 0;
   return {
     ...lighting,
     beamHeight: Math.round(lighting.beamHeight * beam),
@@ -77,12 +125,10 @@ export function distantBeaconPinEmphasis(
 
 export function beaconPulseStyle(
   state: BeaconMarkerState | null | undefined,
-  selected: boolean,
-  categoryColor: string,
+  _selected: boolean,
+  _categoryColor: string,
 ) {
-  if (selected) return { color: "#FFF0B8", opacity: 0.16, duration: BEACON_PULSE_DURATION };
-  if (state?.participatingLive) return { color: LIVE_BEACON_COLOR, opacity: 0.42, duration: 2600 };
-  return { color: categoryColor, opacity: 0.24, duration: BEACON_PULSE_DURATION };
+  return { color: beaconMarkerColor(state), opacity: 0.24, duration: BEACON_PULSE_DURATION };
 }
 
 /** Prepare once per authorized snapshot, never from another account's relationships. */
@@ -108,6 +154,10 @@ export function prepareMapIdentity(data: Data, viewerId: string | null) {
       ? data.rsvps.filter((row) => row.user_id === viewerId).reverse().map((row) => [row.activity_id, row] as const)
       : []),
     squads,
+    squadPeople: new Set(authorized ? [
+      ...data.squad_members.filter((row) => squads.has(row.squad_id)).map((row) => row.user_id),
+      ...data.squads.filter((row) => squads.has(row.id)).map((row) => row.owner_id),
+    ] : []),
     squadBeacons,
     blockedHosts: new Set(
       authorized
@@ -128,6 +178,7 @@ export function prepareMapIdentity(data: Data, viewerId: string | null) {
         : [],
     ),
     friends: new Set(authorized ? friendIds(data, viewerId) : []),
+    interests: authorized ? (data.profiles.find((row) => row.id === viewerId)?.interests ?? []) : [],
     saved: new Set(
       authorized
         ? data.beacon_favorites
@@ -137,6 +188,19 @@ export function prepareMapIdentity(data: Data, viewerId: string | null) {
     ),
   };
 }
+
+export function personMarkerColor(id: string, lookup: ReturnType<typeof prepareMapIdentity>) {
+  return mapIdentityColors[id === lookup.viewerId ? "ownership" : lookup.friends.has(id) ? "friend" : lookup.squadPeople.has(id) ? "squad" : "personOther"];
+}
+
+export const personMarkerBadges = {
+  favorite: { glyph: "★", color: mapIdentityColors.ownership },
+  interest: { glyph: "♥", color: mapIdentityColors.interest },
+  squad: { glyph: "♟", color: mapIdentityColors.squad },
+  live: { glyph: "◉", color: mapIdentityColors.live },
+};
+
+export type PersonMarkerBadge = keyof typeof personMarkerBadges;
 
 export function beaconMarkerState(
   data: Data,
@@ -164,6 +228,7 @@ export function beaconMarkerState(
       (activity.audience === "squad" && !!activity.audience_id && lookup.squads.has(activity.audience_id)),
     live,
     participatingLive: live && (owned || isApprovedGoing(activity, lookup.rsvps.get(activity.id))),
+    interest: lookup.interests.some((interest) => matchesSearch(interest, activity.title, activity.category, activity.description)),
   };
 }
 
@@ -171,6 +236,7 @@ export function markerStateLabel(state: BeaconMarkerState) {
   return [
     state.owned && "Your Beacon",
     state.saved && "Saved",
+    state.interest && "Matches your interests",
     state.friendHosted && "Friend-hosted",
     state.squadHosted && !state.owned && "Your Squad",
     state.live && "Live",
@@ -197,10 +263,6 @@ export function mapBeaconMarkerStates(
   }
   return states;
 }
-export const mapIdentityColors = {
-  ownership: "#168578",
-};
-
 export function ownsMapBeacon(
   data: Data,
   activity: Activity,
@@ -221,6 +283,25 @@ export function friendLocationLabel(name: string, age: string) {
 
 /** Greedy screen-space labels; never remove the underlying authorized avatar. */
 export const BEACON_NAME_MAX_WIDTH = 112;
+
+export function visibleMapLabels(
+  points: readonly { id: string; kind: "beacon" | "person"; latitude: number; longitude: number }[],
+  singletons: ReadonlySet<string>,
+  zoom: number,
+  priority: (id: string) => number,
+) {
+  const candidates = points.filter((point) => singletons.has(point.id) && (zoom >= 12 || priority(point.id) === 0));
+  candidates.sort((left, right) => priority(left.id) - priority(right.id) || left.id.localeCompare(right.id));
+  const accepted: typeof candidates = [];
+  for (const point of candidates) {
+    if (accepted.some((other) => {
+      const { x, y } = mapPointOffset(point, other, zoom);
+      return Math.abs(x) < (point.kind === "beacon" || other.kind === "beacon" ? 112 : 94) && Math.abs(y) < 25;
+    })) continue;
+    accepted.push(point);
+  }
+  return new Set(accepted.map((point) => point.id));
+}
 
 export function visibleBeaconLabels(
   points: readonly { id: string; latitude: number; longitude: number }[],

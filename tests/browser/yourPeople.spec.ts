@@ -108,7 +108,8 @@ test("directory search never narrows homepage counts", async ({
 }) => {
   await home(page);
   const rail = page.getByTestId("friends-right-now");
-  const count = await rail.getByTestId("your-people-summary").innerText();
+  const countLabel = rail.getByRole("button", { name: /^All · \d+$/ });
+  const count = await countLabel.innerText();
   await rail.getByRole("button", { name: /^See all \d+ friends$/ }).click();
   const directory = page.getByTestId("friends-screen");
   await directory
@@ -117,7 +118,7 @@ test("directory search never narrows homepage counts", async ({
   await directory
     .getByRole("button", { name: "Back to Beacons", exact: true })
     .click();
-  await expect(rail.getByTestId("your-people-summary")).toHaveText(count);
+  await expect(countLabel).toHaveText(count);
 });
 
 test("enlarged text retains the homepage filters and directory action at 320px", async ({

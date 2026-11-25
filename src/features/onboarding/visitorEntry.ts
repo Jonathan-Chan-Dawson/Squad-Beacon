@@ -8,6 +8,7 @@ const handoffWindowMs = 24 * 60 * 60 * 1000;
 let handledThisSession = false;
 let seenThisSession = false;
 let transferredWelcome = false;
+const handledTutorials = new Set<string>();
 
 function read(key: string) {
   return Platform.OS === "web"
@@ -18,6 +19,24 @@ function read(key: string) {
 function write(key: string, value = "yes") {
   if (Platform.OS === "web") localStorage.setItem(key, value);
   else SecureStore.setItem(key, value);
+}
+
+export function tutorialHandled(section: string) {
+  if (handledTutorials.has(section)) return true;
+  try {
+    return read(`sb.tutorial-${section}.v1`) === "yes";
+  } catch {
+    return false;
+  }
+}
+
+export function finishTutorial(section: string) {
+  handledTutorials.add(section);
+  try {
+    write(`sb.tutorial-${section}.v1`);
+  } catch {
+    // Keep the dismissal for the current session when storage is unavailable.
+  }
 }
 
 export function reserveFirstVisitorEntry() {

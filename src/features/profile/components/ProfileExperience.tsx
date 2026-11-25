@@ -23,10 +23,13 @@ import type { Profile } from "@/src/shared/types";
 import { useBeacon } from "@/src/shared/store";
 import { rewardTint } from "@/src/features/beacons/rewardLooks";
 import { useNow } from "@/src/shared/useNow";
+import { activeAvailability, availabilityColors } from "@/src/features/beacons/availability";
+import { useAvailabilityNow } from "@/src/features/beacons/availabilityClock";
 import { activityWhen, friendAvailabilityState } from "@/src/shared/domain";
 import { Button, Field, Sheet, Txt, useTheme } from "@/src/shared/ui";
 import { Skeleton, useReducedMotion } from "@/src/shared/design-system";
 import { MotionPressable } from "@/src/shared/MotionPressable";
+import { PrimaryTab } from "@/src/shared/NavigationTabs";
 import { ProfileAvatar } from "../ProfileAvatar";
 import { selectProfileBeacon, type ProfileContentRow } from "../profileContent";
 import { useProfileContent } from "../useProfileContent";
@@ -207,7 +210,7 @@ export function ProfileExperience({
   actions,
   overviewAccessory,
   accessory,
-  noteAccessory,
+  progression,
   tab,
   onTabChange,
   onAspirationPosition,
@@ -216,7 +219,7 @@ export function ProfileExperience({
   actions: React.ReactNode;
   overviewAccessory?: React.ReactNode;
   accessory?: React.ReactNode;
-  noteAccessory?: React.ReactNode;
+  progression?: React.ReactNode;
   tab: ProfileTab;
   onTabChange: (tab: ProfileTab) => void;
   onAspirationPosition?: (y: number) => void;
@@ -246,18 +249,11 @@ export function ProfileExperience({
   });
   const [statusViewerOpen, setStatusViewerOpen] = useState(false);
   const status = visibleSoloActivity(data, profile.id, userId, now);
-  const presence = data.presence?.find((p) => p.owner_id === profile.id);
-  const availability = presence
-    ? !presence.availability ||
-      (presence.availability_until &&
-        Date.parse(presence.availability_until) <= now)
-      ? "unknown"
-      : presence.availability === "busy"
-        ? "unavailable"
-        : presence.availability_until &&
-            Date.parse(presence.availability_until) - now <= 1800000
-          ? "ending-soon"
-          : "available"
+  const presence = data.viewer_id === userId ? data.presence?.find((p) => p.owner_id === profile.id) : undefined;
+  const availabilityNow = useAvailabilityNow(Date.parse(presence?.availability_until ?? ""), !!presence);
+  const availabilityDetail = activeAvailability(presence, availabilityNow);
+  const availability = presence || data.capabilities?.timed_availability
+    ? availabilityDetail?.status === "busy" ? "unavailable" : availabilityDetail ? "available" : "unknown"
     : friendAvailabilityState(status, now);
   const available = availability === "available";
   const availabilityColor =
@@ -344,8 +340,7 @@ export function ProfileExperience({
             padding: 3,
             borderRadius: 50,
             borderWidth: 1.5,
-            borderColor:
-              availability !== "unknown" ? availabilityColor : colors.border,
+            borderColor: own ? "#F5B952" : colors.border,
           }}
         >
           <ProfileAvatar
@@ -396,7 +391,7 @@ export function ProfileExperience({
                   width: 7,
                   height: 7,
                   borderRadius: 4,
-                  backgroundColor: availabilityColor,
+                  backgroundColor: availabilityDetail?.color ?? (available ? availabilityColors.available : availability === "unavailable" ? availabilityColors.busy : availabilityColor),
                 }}
               />
               <Text
@@ -404,19 +399,20 @@ export function ProfileExperience({
                   styles.muted,
                   {
                     flex: 1,
-                    color: availabilityColor,
+                    color: colors.textPrimary,
                   },
                 ]}
               >
-                {available
+                {availabilityDetail?.label ?? (available
                   ? "Available now"
                   : availability === "ending-soon"
                     ? "Wrapping up soon"
-                    : "Not available right now"}
+                    : "Not available right now")}
               </Text>
             </View>
           )
         )}
+        {!own && availabilityDetail?.note ? <Txt muted>{availabilityDetail.note}</Txt> : null}
       </View>
       {accessory}
       {availabilityControl}
@@ -448,14 +444,12 @@ export function ProfileExperience({
             livingLayout
             identityOnly
             renderIdentity={renderIdentity}
-            noteAccessory={noteAccessory}
+            noteAccessory={progression}
           />
         ) : (
           <>
             {renderIdentity()}
-            {own && noteAccessory && (
-              <View style={{ alignSelf: "flex-end" }}>{noteAccessory}</View>
-            )}
+            {own && progression && <View style={{ alignSelf: "flex-end" }}>{progression}</View>}
           </>
         )}
         {!own && <BeaconTierBadge personId={profile.id} />}
@@ -563,38 +557,18 @@ export function ProfileExperience({
         accessibilityRole="tablist"
         style={{
           flexDirection: "row",
-          padding: 4,
-          borderRadius: 16,
-          backgroundColor: colors.surfaceRaised,
+          flexWrap: "wrap",
+          gap: 8,
         }}
       >
         {(["Overview", "Beacons", "About"] as const).map((value) => (
-          <MotionPressable
+          <PrimaryTab
             key={value}
-            accessibilityRole="tab"
-            accessibilityState={{ selected: tab === value }}
+            role="tab"
+            label={value}
+            selected={tab === value}
             onPress={() => onTabChange(value)}
-            style={{
-              flex: 1,
-              minHeight: 42,
-              alignItems: "center",
-              justifyContent: "center",
-              borderRadius: 12,
-              backgroundColor: tab === value ? colors.accent : "transparent",
-            }}
-          >
-            <Text
-              style={[
-                styles.body,
-                {
-                  color: tab === value ? colors.onAccent : colors.textSecondary,
-                  fontWeight: tab === value ? "700" : "400",
-                },
-              ]}
-            >
-              {value}
-            </Text>
-          </MotionPressable>
+          />
         ))}
       </View>
       <Animated.View style={[{ gap: 22 }, tabStyle]}>

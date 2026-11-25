@@ -17,6 +17,10 @@ export function subscribeToSheetStack(callback: () => void) {
   };
 }
 
+export function hasActiveOverlay() {
+  return activeSheetStack.length > 0;
+}
+
 function notifySheetStackChanged() {
   sheetStackSubscribers.forEach((callback) => callback());
 }

@@ -32,7 +32,7 @@ export function rememberEntryIntent(
   params: Record<string, string | string[] | undefined>,
 ) {
   if (path === "/") {
-    pending = "/";
+    pending = params.search === "yes" ? "/?search=yes" : "/";
     persist(null);
     return;
   }

@@ -26,8 +26,15 @@ export async function mockOnboardingAccount(
     holdProgress?: boolean;
     failVerify?: boolean;
     failResend?: number;
+    sectionTutorials?: boolean;
   } = {},
 ) {
+  if (!options.sectionTutorials) {
+    await page.addInitScript(() => {
+      for (const section of ["map", "squads", "profile", "create"])
+        localStorage.setItem(`sb.tutorial-${section}.v1`, "yes");
+    });
+  }
   const url =
     process.env.EXPO_PUBLIC_SUPABASE_URL ??
     readFileSync(".env", "utf8")

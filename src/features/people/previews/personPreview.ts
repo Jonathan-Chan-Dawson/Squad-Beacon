@@ -1,4 +1,5 @@
 import { canReadBeaconActivity } from "@/src/features/beacons/beaconModules";
+import { activeAvailability as resolveAvailability } from "@/src/features/beacons/availability";
 import { isApprovedGoing } from "@/src/features/beacons/permissions";
 import { visibleSoloActivity } from "@/src/features/maps/soloActivity";
 import { activeOrganizationRole } from "@/src/features/organizations/domain";
@@ -33,6 +34,7 @@ export type PersonPreviewSelection = {
   profile?: Profile;
   starred: boolean;
   availability: FriendAvailabilityState;
+  availabilityDetail?: ReturnType<typeof resolveAvailability>;
   beacon?: Activity;
   sharedContexts: SharedContext[];
   canViewMap: boolean;
@@ -215,6 +217,8 @@ export function selectPersonPreview(
 
   const beacon = selectProfileBeacon(data, candidate, viewerId, now);
   const activeAvailability = visibleSoloActivity(data, personId, viewerId, now);
+  const presence = data.presence?.find((row) => row.owner_id === personId);
+  const availabilityDetail = resolveAvailability(presence, now);
   const location = selectFreshVisiblePersonLocation(
     data,
     personId,
@@ -234,13 +238,8 @@ export function selectPersonPreview(
           favorite.kind === "friend" &&
           favorite.target_id === personId,
       ),
-    availability: (() => {
-      const presence=data.presence?.find(p=>p.owner_id===personId);
-      if(!presence)return friendAvailabilityState(activeAvailability,now);
-      if(!presence.availability||presence.availability_until&&Date.parse(presence.availability_until)<=now)return "unknown";
-      if(presence.availability==="busy")return "unavailable";
-      return presence.availability_until&&Date.parse(presence.availability_until)-now<=1800000?"ending-soon":"available";
-    })(),
+    availability: presence || data.capabilities?.timed_availability ? availabilityDetail?.status === "busy" ? "unavailable" : availabilityDetail ? "available" : "unknown" : friendAvailabilityState(activeAvailability, now),
+    availabilityDetail,
     beacon,
     sharedContexts: sharedContexts(data, viewerId, personId),
     canViewMap: !!location,

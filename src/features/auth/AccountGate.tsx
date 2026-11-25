@@ -5,6 +5,14 @@ import { accountReadiness } from "@/src/shared/accountReadiness";
 import { Action, Loading, Screen, Txt } from "@/src/shared/ui";
 import { Auth, Onboard } from "./Auth";
 import { clearEntryIntent } from "./entryIntent";
+import { SectionTutorial, type Tutorial } from "@/src/features/onboarding/SectionTutorial";
+
+const tutorialByRoute: Partial<Record<string, Tutorial>> = {
+  index: "map",
+  squads: "squads",
+  profile: "profile",
+  create: "create",
+};
 
 /** Mount the navigator first; gate its screens before personal code can mount. */
 export function AccountGate({
@@ -25,11 +33,18 @@ export function AccountGate({
     name === "invite";
   const signedOutBrowsing =
     readiness.state === "signed-out" &&
-    ["index", "activities", "two", "browse-beacons", "discover/[id]"].includes(
+    ["index", "activities", "two", "squads", "profile", "browse-beacons", "discover/[id]"].includes(
       name,
     );
-  if (publicRoute || readiness.state === "ready" || signedOutBrowsing)
-    return <>{children}</>;
+  if (publicRoute || readiness.state === "ready" || signedOutBrowsing) {
+    const tutorial = tutorialByRoute[name];
+    return (
+      <>
+        {children}
+        {tutorial && !account.demo && <SectionTutorial item={tutorial} />}
+      </>
+    );
+  }
   if (!focused) return null;
   if (readiness.state === "loading") return <Loading />;
   if (readiness.state === "signed-out") {

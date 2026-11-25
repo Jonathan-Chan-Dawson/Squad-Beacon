@@ -533,7 +533,7 @@ export interface Data {
   premium?: import("./entitlements").EntitlementSnapshot;
   demo_session_id?: string;
   demo_premium_tier?: import("./entitlements").PremiumTier;
-  demo_rewards?: { balance: number; owned: string[] };
+  demo_rewards?: { balance: number; owned: string[]; stage?: number; taps?: number };
   is_demo?: boolean;
   viewer_id?: ID | null;
   location_recipients?: string[];
@@ -555,7 +555,7 @@ export interface Data {
   rsvps: RSVP[];
   resolved_beacon_responses?: RSVP[];
   presence?: Presence[];
-  capabilities?: { beacon_topics?: boolean; beacon_map_icons?: boolean; beacon_expansion?: boolean; beacon_hosting?:boolean; beacon_stories?:boolean; beacon_specialized?:boolean; advanced_beacon_tools?:boolean; premium_tools?: boolean; squad_boosts?: boolean; premium?: boolean; plan_editor?: boolean; recurrence_v2?: boolean; guest_sharing?: boolean; guest_planning?: boolean; living_plans?: boolean; collaborative_plans?: boolean; repeatable_plans?: boolean; connected_planning?: boolean; living_activity?: boolean; rsvp_decline?: boolean; beacon_supplies?: boolean; status_privacy?: boolean; status_attachments?: boolean; status_current_beacon?: boolean };
+  capabilities?: { beacon_topics?: boolean; beacon_map_icons?: boolean; beacon_expansion?: boolean; beacon_hosting?:boolean; beacon_stories?:boolean; beacon_specialized?:boolean; advanced_beacon_tools?:boolean; premium_tools?: boolean; squad_boosts?: boolean; premium?: boolean; plan_editor?: boolean; recurrence_v2?: boolean; guest_sharing?: boolean; guest_planning?: boolean; living_plans?: boolean; collaborative_plans?: boolean; repeatable_plans?: boolean; connected_planning?: boolean; living_activity?: boolean; timed_availability?: boolean; rsvp_decline?: boolean; beacon_supplies?: boolean; status_privacy?: boolean; status_attachments?: boolean; status_current_beacon?: boolean };
   comments: Comment[];
   reactions: Reaction[];
   locations: LocationSession[];
@@ -568,6 +568,9 @@ export interface Presence {
   sharing: boolean;
   availability: "available" | "busy" | null;
   availability_until?: string | null;
+  availability_started_at?: string | null;
+  availability_mode?: "timed" | "indefinite" | null;
+  availability_note?: string | null;
   availability_audience?: Audience;
   availability_audience_id?: string | null;
   show_current_beacon?: boolean;
@@ -671,6 +674,7 @@ export function normalizeData(value: Partial<Data> | null | undefined): Data {
   data.capabilities.beacon_hosting = data.is_demo === true || value?.capabilities?.beacon_hosting === true;
   data.capabilities.beacon_stories = data.is_demo === true || value?.capabilities?.beacon_stories === true;
   data.capabilities.beacon_specialized = data.is_demo === true || value?.capabilities?.beacon_specialized === true;
+  data.capabilities.timed_availability = data.is_demo === true || value?.capabilities?.timed_availability === true;
   data.capabilities.beacon_expansion = data.is_demo === true || value?.capabilities?.beacon_expansion === true;
   data.capabilities.plan_editor = data.is_demo === true || value?.capabilities?.plan_editor === true;
   data.capabilities.recurrence_v2 = data.is_demo === true || value?.capabilities?.recurrence_v2 === true;

@@ -45,11 +45,24 @@ export type ShopProduct = {
 
 const categories = [
   "All looks",
+  "Skins",
   "Beacons",
   "Profile",
   "Communities",
   "Owned",
 ] as const;
+type ShopCategory = (typeof categories)[number];
+
+function showsProduct(category: ShopCategory, product: ShopProduct) {
+  switch (category) {
+    case "Skins": return product.slot === "skin";
+    case "Owned": return product.owned;
+    case "Beacons": return lookSlots.activity.includes(product.slot);
+    case "Profile": return lookSlots.profile.includes(product.slot) || product.slot === "profile_set";
+    case "Communities": return product.slot === "community";
+    default: return true;
+  }
+}
 const showcase: Record<RewardTarget, LookId> = {
   activity: "aurora",
   profile: "starter-ring",
@@ -278,8 +291,7 @@ export function BeaconShopCatalog({
 }) {
   const { styles, semanticColors: colors } = useTheme();
   const { width, fontScale } = useWindowDimensions();
-  const [category, setCategory] =
-    useState<(typeof categories)[number]>("All looks");
+  const [selectedCategory, setCategory] = useState<ShopCategory>("All looks");
   const [gridWidth, setGridWidth] = useState(0);
   const columns = width < 350 || fontScale > 1.4 ? 1 : gridWidth >= 530 ? 3 : 2;
   const tileWidth = gridWidth
@@ -288,19 +300,13 @@ export function BeaconShopCatalog({
   const featured = products.find(
     (item) => item.id === showcase[scope ?? "profile"],
   );
+  const availableCategories = categories.filter((category) =>
+    (category === "All looks" || !scope || category === "Owned") &&
+    (category === "All looks" || products.some((product) => showsProduct(category, product))),
+  );
+  const category = availableCategories.includes(selectedCategory) ? selectedCategory : "All looks";
   const visible = products
-    .filter((product) => {
-      if (category === "Owned") return product.owned;
-      if (category === "Beacons")
-        return lookSlots.activity.includes(product.slot);
-      if (category === "Profile")
-        return (
-          lookSlots.profile.includes(product.slot) ||
-          product.slot === "profile_set"
-        );
-      if (category === "Communities") return product.slot === "community";
-      return true;
-    })
+    .filter((product) => showsProduct(category, product))
     .sort(
       (first, second) =>
         Number(isLockedMilestone(first)) - Number(isLockedMilestone(second)) ||
@@ -347,7 +353,7 @@ export function BeaconShopCatalog({
           Browse looks
         </Text>
         <Chips
-          options={scope ? (["All looks", "Owned"] as const) : categories}
+          options={availableCategories}
           value={category}
           onChange={setCategory}
           accessibilityPrefix="Filter looks"

@@ -2,12 +2,11 @@ import {
   PremiumHeaderButton,
   PersonalMembershipSummary,
 } from "../components/PremiumEntry";
-import React, { useCallback, useEffect, useId, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Modal, Pressable, Share, Text, View } from "react-native";
-import Svg, { Circle, Defs, LinearGradient, Stop } from "react-native-svg";
-import { router, useLocalSearchParams, type Href } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Pencil, RadioTower, Settings, Sparkles, X } from "lucide-react-native";
+import { Pencil, Settings, Sparkles, X } from "lucide-react-native";
 import { useBeacon } from "@/src/shared/store";
 import {
   Button,
@@ -23,7 +22,7 @@ import { useSpontaneityEntry } from "@/src/features/beacons/spontaneity/Spontane
 import { ChatKeyboardFrame } from "@/src/features/messages/ChatKeyboard";
 import { ProfileSurveyContent } from "../ProfileSurvey";
 import { InviteQR } from "@/src/features/people/InviteQR";
-import { BeaconScoreSheet } from "../components/BeaconScoreSheet";
+import { MiniBeaconControls } from "../components/MiniBeaconControls";
 import { beaconScoreTier } from "../beaconScore";
 import { useBeaconScore } from "../useBeaconScore";
 import {
@@ -49,14 +48,7 @@ function ProfileScreenBody() {
   const [saved, setSaved] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const score = useBeaconScore(userId, demo);
-  const [scoreOpen, setScoreOpen] = useState(false);
-  const ringId = `tiny-beacon-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
-  const { index: stageIndex, stage, nextStage } = beaconScoreTier(score.points);
-  const progress = nextStage
-    ? (score.points - stage.at) /
-      (nextStage.at - stage.at)
-    : 1;
-  const dotColor = stage.tint;
+  const { index: stageIndex } = beaconScoreTier(score.points);
   const [dotToast, setDotToast] = useState<{ message: string; recipe?: BeaconTemplate } | null>(null);
   const dismissDotToast = useCallback(() => setDotToast(null), []);
   const openSpontaneity = useSpontaneityEntry();
@@ -76,9 +68,6 @@ function ProfileScreenBody() {
     });
     return () => cancelAnimationFrame(frame);
   }, [score.synced, stageIndex]);
-  function tapDot() {
-    router.push("/beacon-shop?mini=true" as Href);
-  }
   function openToastQuest() {
     dismissDotToast();
     openSpontaneity();
@@ -152,123 +141,7 @@ function ProfileScreenBody() {
           tab={displayedTab}
           onTabChange={setTab}
           onAspirationPosition={focusAspirations}
-          noteAccessory={
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Open Mini Beacon"
-              disabled={!score.ready}
-              aria-valuetext={
-                score.points
-                  ? `${score.points} XP, level ${stageIndex + 1}`
-                  : undefined
-              }
-              onPress={tapDot}
-              style={({ pressed }) => ({
-                width: 44,
-                height: 44,
-                alignItems: "center",
-                justifyContent: "center",
-                opacity: pressed ? 0.65 : 1,
-              })}
-            >
-              <View
-                testID="profile-tiny-beacon"
-                accessibilityElementsHidden
-                importantForAccessibility="no-hide-descendants"
-                style={{
-                  width: 44,
-                  height: 44,
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                {(score.points > 0) && (
-                  <Svg
-                    width={38}
-                    height={38}
-                    viewBox="0 0 40 40"
-                    style={{ position: "absolute" }}
-                  >
-                    <Defs>
-                      <LinearGradient
-                        id={ringId}
-                        x1="0%"
-                        y1="0%"
-                        x2="100%"
-                        y2="100%"
-                      >
-                        <Stop offset="0%" stopColor={dotColor} />
-                        <Stop offset="100%" stopColor={stage.tint} />
-                      </LinearGradient>
-                    </Defs>
-                    {stageIndex >= 2 && (
-                      <Circle
-                        cx={20}
-                        cy={20}
-                        r={19}
-                        stroke={stage.tint}
-                        strokeOpacity={0.45}
-                        fill="none"
-                      />
-                    )}
-                    <Circle
-                      cx={20}
-                      cy={20}
-                      r={15}
-                      stroke={stage.tint}
-                      strokeOpacity={0.35}
-                      strokeWidth={2}
-                      fill="none"
-                    />
-                    <Circle
-                      cx={20}
-                      cy={20}
-                      r={15}
-                      stroke={`url(#${ringId})`}
-                      strokeWidth={Math.min(stageIndex + 2, 5)}
-                      strokeLinecap="round"
-                      strokeDasharray={[94.25, 94.25]}
-                      strokeDashoffset={
-                        94.25 * (1 - Math.max(0.09, progress))
-                      }
-                      rotation={-90}
-                      origin="20, 20"
-                      fill="none"
-                    />
-                  </Svg>
-                )}
-                <RadioTower size={15} color={dotColor} strokeWidth={2} />
-                {(score.points > 0) && (
-                  <View
-                    style={{
-                      position: "absolute",
-                      bottom: 0,
-                      right: 0,
-                      minWidth: 17,
-                      alignItems: "center",
-                      paddingHorizontal: 3,
-                      backgroundColor: colors.surface,
-                      borderColor: stage.tint,
-                      borderWidth: 1,
-                      borderRadius: 9,
-                    }}
-                  >
-                    <Text
-                      testID="profile-tiny-beacon-count"
-                      style={{
-                        color: colors.textPrimary,
-                        fontSize: 9,
-                        fontWeight: "700",
-                        fontVariant: ["tabular-nums"],
-                      }}
-                    >
-                      {score.points < 10_000 ? score.points.toLocaleString() : Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 }).format(score.points)}
-                    </Text>
-                  </View>
-                )}
-              </View>
-            </Pressable>
-          }
+          progression={<MiniBeaconControls />}
           overviewAccessory={<View testID="profile-membership-section"><PersonalMembershipSummary /></View>}
           actions={
             <>
@@ -278,13 +151,6 @@ function ProfileScreenBody() {
                 icon={<Pencil size={16} color={colors.onAccent} />}
                 onPress={() => router.push("/profile/edit")}
               />
-              <Button
-                title="View score"
-                compact
-                secondary
-                onPress={() => { setScoreOpen(true); void score.refresh(); }}
-              />
-              <Button compact secondary title="Rewards and looks" onPress={() => router.push("/beacon-shop" as Href)} />
               <Button
                 title="Share profile"
                 compact
@@ -396,7 +262,6 @@ function ProfileScreenBody() {
         )}
       </Sheet>
     </Screen>
-      <BeaconScoreSheet score={score} visible={scoreOpen} onClose={() => setScoreOpen(false)} />
       {dotToast ? (
         <View pointerEvents="box-none" style={{ position: "absolute", bottom: insets.bottom + tokens.layout.tabBarHeight + 16, left: 16, right: 16, alignItems: "center", zIndex: 10 }}>
           <Pressable

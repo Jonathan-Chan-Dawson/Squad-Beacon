@@ -1,14 +1,16 @@
 import React, { useEffect } from "react";
-import { router, useIsFocused, type Href } from "expo-router";
+import { router, useIsFocused, useLocalSearchParams, type Href } from "expo-router";
 import { Auth, Onboard } from "./Auth";
 import { consumeEntryIntent } from "./entryIntent";
 import { accountReadiness } from "@/src/shared/accountReadiness";
 import { useBeacon } from "@/src/shared/store";
 import { Action, Loading, Screen, Txt } from "@/src/shared/ui";
+import { guestEntryReason } from "./guestEntry";
 
 export default function SignInScreen() {
   const account = useBeacon();
   const focused = useIsFocused();
+  const { mode, reason } = useLocalSearchParams<{ mode?: string; reason?: string }>();
   const { state } = accountReadiness(account);
   useEffect(() => {
     if (state === "ready" && focused)
@@ -27,8 +29,14 @@ export default function SignInScreen() {
     );
   return (
     <Auth
+      initialMode={mode === "create" ? "Create account" : "Sign in"}
+      reason={guestEntryReason(reason)}
       onExplore={() => {
         const destination = consumeEntryIntent();
+        if (router.canGoBack()) {
+          router.back();
+          return;
+        }
         router.replace(
           (destination.startsWith("/discover/") ? destination : "/") as Href,
         );

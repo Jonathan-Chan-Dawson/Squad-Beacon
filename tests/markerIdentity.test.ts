@@ -6,6 +6,8 @@ import {
   prepareMapIdentity,
   beaconMarkerState,
   beaconPinEmphasis,
+  beaconMarkerBadges,
+  visibleMapLabels,
   markerStateLabel,
   EMPTY_MARKER_STATE,
 } from "../src/features/maps/markerIdentity";
@@ -100,8 +102,9 @@ test("marker states coexist independently of community hosting and expose access
     squadHosted: false,
     live: true,
     participatingLive: true,
+    interest: true,
   });
-  assert.equal(markerStateLabel(state), "Saved, Friend-hosted, Live, Going");
+  assert.equal(markerStateLabel(state), "Saved, Matches your interests, Friend-hosted, Live, Going");
   activity.owner_id = DEMO_ID;
   const owned = beaconMarkerState(
     data,
@@ -114,21 +117,20 @@ test("marker states coexist independently of community hosting and expose access
   assert.match(markerStateLabel(owned), /Your Beacon, Saved/);
 });
 
-test("selection, live participation, ownership, friendship and Squads have distinct lighting levels", () => {
+test("selection and live status preserve the relationship's projector hue and size", () => {
   const { data, activity, now } = fixture();
   const state = () => beaconMarkerState(data, activity, prepareMapIdentity(data, DEMO_ID), now);
   const live = beaconPinEmphasis(state(), false, "#FF9999")!;
   const selected = beaconPinEmphasis(state(), true, "#FF9999")!;
-  assert.equal(selected.level, 1);
-  assert.equal(live.level, 2);
-  assert.equal(live.color, "#F18432");
+  assert.deepEqual(selected, live);
+  assert.equal(live.color, "#77B9FA");
 
   activity.approval_required = true;
   data.rsvps.find((row) => row.activity_id === activity.id)!.approved = false;
   assert.equal(state().participatingLive, false);
   const friend = beaconPinEmphasis(state(), false, "#FF9999")!;
   assert.equal(friend.level, 4);
-  assert.equal(friend.color, "#6DAFE5");
+  assert.equal(friend.color, "#77B9FA");
 
   data.is_demo = false;
   activity.viewer_can_access = true;
@@ -145,7 +147,7 @@ test("selection, live participation, ownership, friendship and Squads have disti
   assert.equal(state().squadHosted, true);
   const squad = beaconPinEmphasis(state(), false, "#FF9999")!;
   assert.equal(squad.level, 5);
-  assert.equal(squad.color, "#67C49B");
+  assert.equal(squad.color, "#68D6A2");
 
   activity.owner_id = DEMO_ID;
   assert.equal(state().participatingLive, true);
@@ -153,10 +155,23 @@ test("selection, live participation, ownership, friendship and Squads have disti
   assert.equal(state().participatingLive, false);
   const owned = beaconPinEmphasis(state(), false, "#FF9999")!;
   assert.equal(owned.level, 3);
-  assert.equal(owned.color, "#F3B932");
+  assert.equal(owned.color, "#F5B952");
   const levels = [selected, live, owned, friend, squad];
-  assert.deepEqual(levels.map(({ beamHeight }) => beamHeight), [38, 26, 19, 15, 18]);
-  assert.ok(levels.slice(1).every(({ glowOpacity }, i) => glowOpacity < levels[i].glowOpacity));
+  assert.deepEqual(levels.map(({ beamHeight }) => beamHeight), [24, 24, 24, 24, 24]);
+});
+
+test("badges and nearby labels make room for the highest-priority identity", () => {
+  const state = { ...EMPTY_MARKER_STATE, owned: true, friendHosted: true, saved: true, interest: true, live: true };
+  assert.deepEqual(beaconMarkerBadges(state, 3), ["ownership", "live", "saved"]);
+  assert.deepEqual(beaconMarkerBadges(state, 1), ["ownership"]);
+  assert.deepEqual(beaconMarkerBadges({ ...state, owned: false, friendHosted: false }, 3), ["live", "saved", "interest"]);
+  assert.deepEqual(beaconMarkerBadges(state, 3, false), ["ownership", "live"]);
+  const points = [
+    { id: "beacon:owned", kind: "beacon" as const, latitude: 41.88, longitude: -87.64 },
+    { id: "person:chosen", kind: "person" as const, latitude: 41.88, longitude: -87.64 },
+  ];
+  const ids = new Set(points.map((point) => point.id));
+  assert.deepEqual([...visibleMapLabels(points, ids, 13, (id) => id === "person:chosen" ? 0 : 1)], ["person:chosen"]);
 });
 
 test("marker lookups fail closed across accounts, unreadable Beacons and blocked hosts", () => {
