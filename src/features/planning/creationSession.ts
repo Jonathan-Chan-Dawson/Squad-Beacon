@@ -14,6 +14,7 @@ export async function publishPlanningSession(
     action: string,
     payload: Payload,
     requestId?: string,
+    deferRefresh?: boolean,
   ) => Promise<Record<string, unknown>>,
   id: () => string = () => crypto.randomUUID(),
 ) {
@@ -24,22 +25,24 @@ export async function publishPlanningSession(
       payload: structuredClone(option),
     }));
   }
+  const pendingOptions = (session.options ?? []).filter((option) => !option.id);
   if (!session.threadId) {
     const result = await act(
       "create_planning_thread",
       session.attempt.payload,
       session.attempt.requestId,
+      pendingOptions.length > 0,
     );
     if (typeof result.id !== "string" || !result.id)
       throw new Error("Could not verify publication. Retry this saved setup.");
     session.threadId = result.id;
   }
-  for (const option of session.options ?? []) {
-    if (option.id) continue;
+  for (const [index, option] of pendingOptions.entries()) {
     const result = await act(
       "add_council_proposal",
       { thread_id: session.threadId, payload: option.payload },
       option.requestId,
+      index < pendingOptions.length - 1,
     );
     if (typeof result.id !== "string" || !result.id)
       throw new Error(

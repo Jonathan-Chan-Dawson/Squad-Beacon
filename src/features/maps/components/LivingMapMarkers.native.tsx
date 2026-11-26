@@ -12,7 +12,7 @@ import {
   bloomGeometry,
   bloomAccessibilityLabel,
   petalBookmarkVisible,
-  STELLAR_OUTLINE, STELLAR_CORE, STELLAR_FACETS, STELLAR_PEOPLE, STELLAR_OPACITY, STELLAR_PERSON,
+  STELLAR_OUTLINE, STELLAR_CORE, STELLAR_FACETS, STELLAR_PEOPLE, STELLAR_OPACITY, STELLAR_PERSON, ROUND_SIGNAL, ROUND_SIGNAL_CORE, ROUND_SIGNAL_FACETS,
 } from "../clusterBloom";
 import { Marker, Polygon } from "react-native-maps";
 import { MapProjector } from "./MapProjector";
@@ -227,6 +227,8 @@ function LivingMapPinComponent({
     : undefined;
   const states = new Map(members.flatMap((member) => member.kind === "beacon" ? [[member.id, member.markerState] as const] : []));
   const relationships = stellarRelationships(presentation.beacons, (point) => beaconStates?.get(point.id.slice(7)) ?? states.get(point.id), geometry.signal?.facets ?? 0);
+  const stellar = presentation.scale === "micro";
+  const beaconShape = stellar ? STELLAR_OUTLINE : ROUND_SIGNAL;
   const shadowGradientId = React.useId().replace(/:/g, "");
   const shadowOpacity = geometry.friendsOnly ? CLUSTER_FRIEND_SHADOW_OPACITY : CLUSTER_SHADOW_OPACITY;
   const [avatarRevision, setAvatarRevision] = React.useState(0);
@@ -353,12 +355,12 @@ function LivingMapPinComponent({
               <Path d={STELLAR_PEOPLE} fill="#B5CCEC" stroke="#293750" strokeWidth={8} strokeLinejoin="round" />
             ) : (
               <>
-                {geometry.signal.glow && <Path d={STELLAR_OUTLINE} fill="none" stroke="#CFB9FF" strokeWidth={geometry.signal.width >= 36 ? 8 : 5} opacity={0.36} strokeLinejoin="round" />}
-                <Path d={STELLAR_OUTLINE} fill="#E8DFFD" stroke="#594A78" strokeWidth={3} strokeLinejoin="round" />
+                {geometry.signal.glow && <Path d={beaconShape} fill="none" stroke="#CFB9FF" strokeWidth={geometry.signal.width >= 36 ? 8 : 5} opacity={0.36} strokeLinejoin="round" />}
+                <Path d={beaconShape} fill="#E8DFFD" stroke="#594A78" strokeWidth={3} strokeLinejoin="round" />
                 {relationships.map((relationship, index) => (
-                  <Path key={relationship} d={STELLAR_FACETS[index]} fill={mapIdentityColors[relationship]} />
+                  <Path key={relationship} d={(stellar ? STELLAR_FACETS : ROUND_SIGNAL_FACETS)[index]} fill={mapIdentityColors[relationship]} />
                 ))}
-                <Path d={STELLAR_CORE} fill="#FFF4DE" opacity={0.93} />
+                <Path d={stellar ? STELLAR_CORE : ROUND_SIGNAL_CORE} fill="#FFF4DE" opacity={0.93} />
               </>
             )}
           </Svg>
@@ -401,13 +403,13 @@ function LivingMapPinComponent({
               >
                 {geometry.distant ? (
                   <Svg
-                    testID={model.kind === "person" ? "map-single-person-signal" : "map-single-stellar-beacon"}
+                    testID={model.kind === "person" ? "map-single-person-signal" : stellar ? "map-single-stellar-beacon" : "map-single-round-beacon"}
                     width={32}
                     height={32}
                     viewBox="0 0 100 100"
                     style={{ opacity: STELLAR_OPACITY }}
                   >
-                    <Path d={model.kind === "person" ? STELLAR_PERSON : STELLAR_OUTLINE} fill={color} />
+                    <Path d={model.kind === "person" ? STELLAR_PERSON : beaconShape} fill={color} />
                   </Svg>
                 ) : (
                   <MemberArtwork

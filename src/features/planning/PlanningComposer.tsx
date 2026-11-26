@@ -420,12 +420,12 @@ export function PlanningComposer({ sessionId }: { sessionId: string }) {
         publication,
         payload,
         options,
-        async (action, value, requestId) => {
+        async (action, value, requestId, deferRefresh) => {
           if (epoch !== getViewerEpoch())
             throw new Error(
               "Your account changed. Return to the original account.",
             );
-          return act(action, value, requestId);
+          return act(action, value, requestId, deferRefresh);
         },
         randomUUID,
       );
@@ -451,6 +451,8 @@ export function PlanningComposer({ sessionId }: { sessionId: string }) {
       });
     } catch (failure) {
       if (epoch === getViewerEpoch()) {
+        if (publication.options?.some((option) => !option.id))
+          void refresh();
         if (
           (failure as { definitive?: boolean })?.definitive &&
           !publication.threadId
@@ -513,7 +515,7 @@ export function PlanningComposer({ sessionId }: { sessionId: string }) {
         importantForAccessibility={
           frozen || busy ? "no-hide-descendants" : "auto"
         }
-        style={{ gap: 12, opacity: frozen ? 0.65 : 1 }}
+        style={{ gap: 8, opacity: frozen ? 0.65 : 1 }}
       >
         <Field
           inputRef={titleInput}

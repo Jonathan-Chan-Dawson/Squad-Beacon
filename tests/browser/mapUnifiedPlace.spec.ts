@@ -203,14 +203,25 @@ for (const [kind, label] of [["time", "Find a Time"], ["vote", "Vote"], ["draw",
     const menu = page.getByTestId("map-place-actions");
     await menu.getByRole("button", { name: "Ask Group", exact: true }).click();
     const picker = page.getByRole("dialog", { name: "Ask Group", exact: true });
+    await expect.poll(async () => {
+      const title = await picker.getByText("Ask Group", { exact: true }).boundingBox();
+      const lastRow = await picker.getByRole("button", { name: "Random Draw", exact: true }).boundingBox();
+      const viewport = page.viewportSize()!;
+      if (!title || !lastRow) return false;
+      return lastRow.y + lastRow.height - title.y <= 352 &&
+        Math.abs(lastRow.x + lastRow.width / 2 - viewport.width / 2) < 24 &&
+        Math.abs((title.y + lastRow.y + lastRow.height) / 2 - viewport.height / 2) < 40;
+    }).toBe(true);
     if (kind === "time")
-      await picker.screenshot({ path: info.outputPath("ask-group.png") });
+      await page.screenshot({ path: info.outputPath("ask-group.png") });
     await picker.getByRole("button", { name: label, exact: true }).click();
     await expect.poll(() => new URL(page.url()).searchParams.get("kind")).toBe(kind);
     const url = new URL(page.url());
     expect(url.pathname).toBe("/planning/create");
     expect(url.searchParams.get("latitude")).toBeTruthy();
     expect(url.searchParams.get("longitude")).toBeTruthy();
+    await expect(page.getByRole("heading", { name: label, exact: true })).toBeVisible();
+    await page.screenshot({ path: info.outputPath(`${kind}-composer.png`) });
     await page.goBack();
     await expect(page.getByRole("button", { name: "Choose a place", exact: true })).toBeVisible();
   });

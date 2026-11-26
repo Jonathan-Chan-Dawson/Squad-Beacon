@@ -545,6 +545,8 @@ export function Sheet({
   footer,
   centered = false,
   scrollable = true,
+  maxWidth,
+  hideHandle = false,
 }: {
   title: string;
   visible: boolean;
@@ -557,6 +559,8 @@ export function Sheet({
   footer?: React.ReactNode;
   centered?: boolean;
   scrollable?: boolean;
+  maxWidth?: number;
+  hideHandle?: boolean;
 }) {
   const { semanticColors: colors, resolvedAppearance, tokens } = useTheme();
   const insets = useSafeAreaInsets();
@@ -624,7 +628,7 @@ export function Sheet({
   // the library also overrides left/right, so inset it with equal margins.
   const sheetWidth = Math.min(
     width - (centered ? insets.left + insets.right + 24 : 0),
-    tokens.layout.contentMaxWidth,
+    maxWidth ?? tokens.layout.contentMaxWidth,
   );
   const modalStyle = {
     marginHorizontal: (width - sheetWidth) / 2,
@@ -851,6 +855,7 @@ export function Sheet({
       }
       animationConfigs={animationConfigs}
       backdropComponent={renderBackdrop}
+      handleComponent={hideHandle ? null : undefined}
       footerComponent={footer ? renderFooter : undefined}
       style={modalStyle}
       backgroundStyle={
@@ -940,7 +945,14 @@ export function Sheet({
               },
             })}
       >
-        <View style={{ backgroundColor: colors.bg }}>
+        <View style={{
+          backgroundColor: colors.bg,
+          ...(hideHandle && centered ? {
+            borderTopLeftRadius: tokens.radius.sheet,
+            borderTopRightRadius: tokens.radius.sheet,
+            overflow: "hidden",
+          } : {}),
+        }}>
           <View
             style={{
               minHeight: tokens.layout.minTapTarget + tokens.space.md,

@@ -3,7 +3,7 @@ import { mapBeaconTitle } from "@/src/features/discovery/discoveryCardPresentati
 import { planPathArrowheads } from "../contextFilters";
 import type { Category } from "@/src/shared/types";
 import { isBeaconLive } from "@/src/features/beacons/beaconLive";
-import { bloomGeometry, STELLAR_OPACITY, STELLAR_OUTLINE } from "../clusterBloom";
+import { bloomGeometry, ROUND_SIGNAL, STELLAR_OPACITY, STELLAR_OUTLINE } from "../clusterBloom";
 import { KeyedMapLayers } from "../keyedMapLayers";
 import { ClusterArtworkCache, type ClusterMemberArtwork } from "../clusterArtwork";
 import { nextAvailabilityExpiry } from "@/src/features/beacons/availability";
@@ -993,11 +993,12 @@ export default function BeaconMap(props: MapProps) {
         if (publicMarker && !dot) badge.dataset.publicBeaconFace = "true";
         badge.style.cssText = `position:relative;box-sizing:border-box;flex-shrink:0;width:${visualSize}px;height:${visualSize}px;border:${dot ? 1 : compact ? 2 : 3}px solid ${dot ? colors.white : identity?.lifecycle === "cancelled" ? "#D4969D" : tone};border-radius:${publicMarker && !dot ? (compact ? 8 : 11) : visualSize / 2}px;background:${dot ? tone : colors.surface};display:flex;align-items:center;justify-content:center;box-shadow:${dot ? "none" : `0 0 10px ${tone}85,0 3px 10px #172c2940`};font-size:${compact ? 20 : 22}px;`;
         if (dot) {
-          badge.dataset.testid = "map-single-stellar-beacon";
+          const stellar = presentationMode.current === "micro";
+          badge.dataset.testid = stellar ? "map-single-stellar-beacon" : "map-single-round-beacon";
           badge.style.border = "0";
           badge.style.background = "transparent";
           badge.style.opacity = String(STELLAR_OPACITY);
-          badge.innerHTML = `<svg aria-hidden="true" width="${visualSize}" height="${visualSize}" viewBox="0 0 100 100"><path d="${STELLAR_OUTLINE}" fill="${tone}"/></svg>`;
+          badge.innerHTML = `<svg aria-hidden="true" width="${visualSize}" height="${visualSize}" viewBox="0 0 100 100"><path d="${stellar ? STELLAR_OUTLINE : ROUND_SIGNAL}" fill="${tone}"/></svg>`;
         }
         if (!dot && identity?.lifecycle === "upcoming") badge.style.borderStyle = "dashed";
         if (upperLight) {

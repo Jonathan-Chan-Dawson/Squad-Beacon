@@ -3646,8 +3646,8 @@ export default function MapScreen() {
           />
         )}
         {askGroupViewerKey === viewerKey && mapIsFocused && pickMode && selectedPlace && selectedPlaceReadable && (
-          <Sheet title="Ask Group" visible onClose={() => setAskGroupViewerKey(null)} maxHeightPercent={75}>
-            <Text style={styles.muted}>{selectedPlace.label}</Text>
+          <Sheet title="Ask Group" visible centered hideHandle snapHeight={334} maxWidth={388} onClose={() => setAskGroupViewerKey(null)} maxHeightPercent={85}>
+            <Text numberOfLines={1} style={[styles.muted, { marginBottom: 6 }]}>{selectedPlace.label}</Text>
             <PlanningModeMenu layout="list" onSelect={createAtPickedLocation} />
           </Sheet>
         )}

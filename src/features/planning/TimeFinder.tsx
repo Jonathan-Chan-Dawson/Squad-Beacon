@@ -591,7 +591,7 @@ export function TimeFinderComposer({ sessionId }: { sessionId: string }) {
       footer={<Action title={frozen ? "Verify creation" : "Send Time Poll"} disabled={submitting} run={publish} />}
     >
       <PlanningKindSelector kind="time" sessionId={sessionId} disabled={locked} />
-      <View pointerEvents={locked ? "none" : "auto"} accessibilityElementsHidden={locked} importantForAccessibility={locked ? "no-hide-descendants" : "auto"} style={{ gap: 12, opacity: frozen ? 0.65 : 1 }}>
+      <View pointerEvents={locked ? "none" : "auto"} accessibilityElementsHidden={locked} importantForAccessibility={locked ? "no-hide-descendants" : "auto"} style={{ gap: 8, opacity: frozen ? 0.65 : 1 }}>
         <Field
           inputRef={titleInput}
           label="What are you planning?"

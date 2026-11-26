@@ -190,6 +190,7 @@ test("ambiguous publication retries frozen payloads and IDs and never repeats co
   const session: PlanningCreationSession = {};
   const calls: { action: string; id?: string; title: unknown }[] = [];
   let fail = true;
+  const refreshDeferrals: (boolean | undefined)[] = [];
   let counter = 0;
   const options = [
     { ...initial().options[0].payload, title: "First" },
@@ -199,7 +200,9 @@ test("ambiguous publication retries frozen payloads and IDs and never repeats co
     action: string,
     payload: Record<string, unknown>,
     id?: string,
+    deferRefresh?: boolean,
   ) => {
+    refreshDeferrals.push(deferRefresh);
     calls.push({
       action,
       id,
@@ -237,6 +240,7 @@ test("ambiguous publication retries frozen payloads and IDs and never repeats co
   assert.equal(calls.filter((row) => row.title === "First").length, 1);
   assert.equal(calls[2].id, calls[3].id);
   assert.equal(calls[3].title, "Second");
+  assert.deepEqual(refreshDeferrals, [true, true, false, false]);
 });
 
 test("an unverified thread result never starts option publication", async () => {

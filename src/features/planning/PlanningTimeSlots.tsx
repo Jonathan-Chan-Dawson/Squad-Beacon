@@ -111,11 +111,7 @@ export function PlanningTimeSlots({
   return (
     <View style={{ gap: 6 }}>
       <Txt>Proposed times</Txt>
-      <Txt muted>
-        {slots.length
-          ? "People answer Yes, Maybe or No for each time."
-          : "Add at least two times for people to compare."}
-      </Txt>
+      {slots.length < 2 && <Txt muted>Add at least two times to compare.</Txt>}
       {slots.map((option) => (
         <PlanningCreationRow
           key={option.id}

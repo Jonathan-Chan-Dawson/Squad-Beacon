@@ -18,7 +18,7 @@ import {
   bloomGeometry,
   bloomAccessibilityLabel,
   petalBookmarkVisible,
-  STELLAR_OUTLINE, STELLAR_CORE, STELLAR_FACETS, STELLAR_PEOPLE, STELLAR_OPACITY, STELLAR_PERSON,
+  STELLAR_OUTLINE, STELLAR_CORE, STELLAR_FACETS, STELLAR_PEOPLE, STELLAR_OPACITY, STELLAR_PERSON, ROUND_SIGNAL, ROUND_SIGNAL_CORE, ROUND_SIGNAL_FACETS,
 } from "./clusterBloom";
 import type { ClusterPoint } from "./cluster";
 import {
@@ -86,11 +86,13 @@ export function webConstellation(
       center + projector.x,
     );
   }
+  const stellar = presentation.scale === "micro";
+  const beaconShape = stellar ? STELLAR_OUTLINE : ROUND_SIGNAL;
   if (geometry.signal) {
     const { x, y, width, facets, glow } = geometry.signal;
     const signal = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     signal.setAttribute("data-testid", "cluster-signal");
-    signal.setAttribute("data-signal-kind", geometry.friendsOnly ? "people" : "stellar");
+    signal.setAttribute("data-signal-kind", geometry.friendsOnly ? "people" : stellar ? "stellar" : "round");
     signal.setAttribute("aria-hidden", "true");
     signal.setAttribute("viewBox", "0 0 100 100");
     signal.style.cssText = `position:absolute;left:${center + x - width / 2}px;top:${center + y - width / 2}px;width:${width}px;height:${width}px;opacity:${geometry.friendsOnly ? 1 : STELLAR_OPACITY};pointer-events:none;`;
@@ -109,13 +111,13 @@ export function webConstellation(
     if (geometry.friendsOnly) {
       path(STELLAR_PEOPLE, "#B5CCEC", "#293750", 8);
     } else {
-      if (glow) path(STELLAR_OUTLINE, "none", "#CFB9FF", width >= 36 ? 8 : 5).setAttribute("opacity", "0.36");
-      path(STELLAR_OUTLINE, "#E8DFFD", "#594A78", 3);
+      if (glow) path(beaconShape, "none", "#CFB9FF", width >= 36 ? 8 : 5).setAttribute("opacity", "0.36");
+      path(beaconShape, "#E8DFFD", "#594A78", 3);
       stellarRelationships(presentation.beacons, point => options.beaconState?.(point), facets)
         .forEach((relationship, index) => {
-          path(STELLAR_FACETS[index], mapIdentityColors[relationship]).setAttribute("data-relationship", relationship);
+          path((stellar ? STELLAR_FACETS : ROUND_SIGNAL_FACETS)[index], mapIdentityColors[relationship]).setAttribute("data-relationship", relationship);
         });
-      path(STELLAR_CORE, "#FFF4DE").setAttribute("opacity", "0.93");
+      path(stellar ? STELLAR_CORE : ROUND_SIGNAL_CORE, "#FFF4DE").setAttribute("opacity", "0.93");
     }
     node.append(signal);
   }
@@ -178,12 +180,12 @@ export function webConstellation(
           ? (options.friendColor?.(point) ?? options.ink)
           : beaconMarkerColor(options.beaconState?.(point));
         const glyph = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-        glyph.setAttribute("data-testid", person ? "map-single-person-signal" : "map-single-stellar-beacon");
+        glyph.setAttribute("data-testid", person ? "map-single-person-signal" : stellar ? "map-single-stellar-beacon" : "map-single-round-beacon");
         glyph.setAttribute("aria-hidden", "true");
         glyph.setAttribute("viewBox", "0 0 100 100");
         glyph.style.cssText = `width:${markerSize}px;height:${markerSize}px;opacity:${STELLAR_OPACITY};pointer-events:none;`;
         const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
-        path.setAttribute("d", person ? STELLAR_PERSON : STELLAR_OUTLINE);
+        path.setAttribute("d", person ? STELLAR_PERSON : beaconShape);
         path.setAttribute("fill", color);
         glyph.append(path);
         item.replaceChildren(glyph);

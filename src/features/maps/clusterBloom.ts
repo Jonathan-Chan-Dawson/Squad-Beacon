@@ -22,6 +22,13 @@ export function stellarDiameter(count: number) {
 
 // All paths share a 100 × 100 view box. The colored facets meet the core.
 export const STELLAR_OUTLINE = "M50 4Q57 39 96 50Q57 61 50 96Q43 61 4 50Q43 39 50 4Z";
+export const ROUND_SIGNAL = "M50 7a43 43 0 1 0 0 86a43 43 0 1 0 0-86Z";
+export const ROUND_SIGNAL_CORE = "M50 36a14 14 0 1 0 0 28a14 14 0 1 0 0-28Z";
+export const ROUND_SIGNAL_FACETS = [
+  "M50 13a7 7 0 1 0 0 14a7 7 0 1 0 0-14Z",
+  "M80 60a7 7 0 1 0 0 14a7 7 0 1 0 0-14Z",
+  "M20 60a7 7 0 1 0 0 14a7 7 0 1 0 0-14Z",
+];
 export const STELLAR_CORE = "M50 21Q56 43 79 50Q56 57 50 79Q44 57 21 50Q44 43 50 21Z";
 export const STELLAR_OPACITY = 0.9;
 export const STELLAR_PERSON = "M50 43a13 13 0 1 0 0-26 13 13 0 0 0 0 26M23 84V73a27 27 0 0 1 54 0v11Z";

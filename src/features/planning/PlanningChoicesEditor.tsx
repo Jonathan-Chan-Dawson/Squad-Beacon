@@ -87,7 +87,7 @@ function ChoiceRow({
     action();
   }
   return (
-    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+    <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
       <TextInput
         accessibilityLabel="Activity option"
         placeholder={
@@ -98,7 +98,7 @@ function ChoiceRow({
         maxLength={120}
         editable={!disabled}
         onChangeText={onTitle}
-        style={[styles.input, { flex: 1, minWidth: 0 }]}
+        style={[styles.input, { flex: 1, minWidth: 0, minHeight: 44, paddingVertical: 7 }]}
       />
       <View ref={anchor} collapsable={false}>
         <IconButton

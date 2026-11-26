@@ -1,6 +1,6 @@
 import React from "react";
 import { Pressable, Text, View } from "react-native";
-import { CalendarClock, Dices, Radio, Vote } from "lucide-react-native";
+import { CalendarClock, ChevronRight, Dices, Radio, Vote } from "lucide-react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { randomUUID } from "expo-crypto";
 import { useBeacon } from "@/src/shared/store";
@@ -49,11 +49,11 @@ export function PlanningModeMenu({
 }) {
   const { data } = useBeacon();
   const { colors, styles } = useTheme();
+  const list = layout === "list";
+  const modes = planningCreationModes.filter(({ kind }) => kind !== "time" || connectedPlanningEnabled(data));
   return (
-    <View style={{ flexDirection: layout === "list" ? "column" : "row", flexWrap: layout === "list" ? "nowrap" : "wrap", gap: 8 }}>
-      {planningCreationModes
-        .filter(({ kind }) => kind !== "time" || connectedPlanningEnabled(data))
-        .map(({ kind, label, description, Icon }) => (
+    <View style={list ? { borderTopWidth: 1, borderColor: colors.line } : { flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+      {modes.map(({ kind, label, description, Icon }, index) => (
           <Pressable
             key={kind}
             accessibilityRole="button"
@@ -61,24 +61,23 @@ export function PlanningModeMenu({
             accessibilityHint={description}
             onPress={() => onSelect(kind)}
             style={({ pressed }) => [
-              styles.card,
-              {
-                flexBasis: layout === "list" ? undefined : "45%",
-                flexGrow: layout === "list" ? 0 : 1,
-                minHeight: layout === "list" ? 58 : 92,
-                flexDirection: layout === "list" ? "row" : "column",
-                alignItems: layout === "list" ? "center" : undefined,
-                gap: 4,
-                padding: 12,
-                opacity: pressed ? 0.7 : 1,
-              },
+              list ? {
+                minHeight: 52, flexDirection: "row", alignItems: "center", gap: 10,
+                paddingVertical: 6, paddingHorizontal: 2,
+                borderBottomWidth: index < modes.length - 1 ? 1 : 0,
+                borderColor: colors.line,
+              } : [styles.card, { flexBasis: "45%", flexGrow: 1, minHeight: 92, gap: 4, padding: 12 }],
+              pressed && { opacity: 0.7 },
             ]}
           >
-            <Icon size={19} color={colors.green} aria-hidden />
-            <View style={{ gap: 3 }}>
-              <Text style={styles.body}>{label}</Text>
+            <View style={list ? { width: 32, height: 32, borderRadius: 9, backgroundColor: colors.primaryContainer, alignItems: "center", justifyContent: "center" } : undefined}>
+              <Icon size={list ? 17 : 19} color={colors.primary} aria-hidden />
+            </View>
+            <View style={list ? { flex: 1, minWidth: 0 } : { gap: 3 }}>
+              <Text style={[styles.body, list && { fontWeight: "600" }]}>{label}</Text>
               <Text style={styles.muted}>{description}</Text>
             </View>
+            {list && <ChevronRight size={15} color={colors.muted} aria-hidden />}
           </Pressable>
         ))}
     </View>
@@ -154,10 +153,10 @@ export function PlanningKindSelector({
             style={({ pressed }) => ({
               flex: 1,
               minWidth: 0,
-              minHeight: 52,
-              paddingVertical: 8,
+              minHeight: 44,
+              paddingVertical: 5,
               paddingHorizontal: 2,
-              gap: 4,
+              gap: 2,
               alignItems: "center",
               justifyContent: "center",
               borderBottomWidth: 2,

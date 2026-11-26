@@ -64,9 +64,11 @@ test("distant Beacon constellations use a pearl signal and retain the exact coun
   const constellation = page.getByTestId("map-constellation");
   await expect(constellation).toHaveAttribute("data-beacon-count", "25");
   const signal = constellation.getByTestId("cluster-signal");
-  await expect(signal).toHaveAttribute("data-signal-kind", "stellar");
+  await expect(signal).toHaveAttribute("data-signal-kind", "round");
   await expect(signal).toHaveCSS("opacity", "0.9");
   await expect(signal.locator("[data-relationship]")).toHaveCount(1);
+  await page.evaluate(() => (window as any).renderConstellation(25, "micro"));
+  await expect(signal).toHaveAttribute("data-signal-kind", "stellar");
   await page.evaluate(() => (window as any).renderConstellation(1, "micro"));
   await expect(page.getByTestId("map-single-stellar-beacon")).toHaveCSS("width", "11px");
   await page.evaluate(() => (window as any).renderConstellation(1, "micro", false, "person"));

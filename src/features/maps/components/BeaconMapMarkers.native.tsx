@@ -39,7 +39,7 @@ import type { activeAvailability } from "@/src/features/beacons/availability";
 import { CLUSTER_PREVIEW_LIMIT } from "../mapClusterPolicy";
 import React, { useEffect, useRef, useState } from "react";
 import { BeaconPinGlyph } from "./BeaconPinGlyph";
-import { STELLAR_OPACITY, STELLAR_OUTLINE } from "../clusterBloom";
+import { ROUND_SIGNAL, STELLAR_OPACITY, STELLAR_OUTLINE } from "../clusterBloom";
 import { Image, Text, View } from "react-native";
 import { Circle as MapCircle, Marker } from "react-native-maps";
 import Svg, { Circle, Defs, LinearGradient, Path, RadialGradient, Rect, Stop } from "react-native-svg";
@@ -571,8 +571,8 @@ function BeaconMapPinComponent({
             justifyContent: "center",
           }}
         >
-          <Svg testID="map-single-stellar-beacon" width={10} height={10} viewBox="0 0 100 100" style={{ opacity: STELLAR_OPACITY }}>
-            <Path d={STELLAR_OUTLINE} fill={beaconMarkerColor(markerState)} />
+          <Svg testID={lightingTier === "micro" ? "map-single-stellar-beacon" : "map-single-round-beacon"} width={10} height={10} viewBox="0 0 100 100" style={{ opacity: STELLAR_OPACITY }}>
+            <Path d={lightingTier === "micro" ? STELLAR_OUTLINE : ROUND_SIGNAL} fill={beaconMarkerColor(markerState)} />
           </Svg>
         </View>
       </Marker>

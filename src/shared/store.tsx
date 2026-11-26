@@ -68,7 +68,7 @@ type Store = {
   viewerEpoch: number;
   actionNotice: { kind: ActionNoticeKind; id: number } | null;
   dismissActionNotice: () => void;
-  act: (action: string, payload?: Payload, requestId?: string) => Promise<Record<string, unknown>>;
+  act: (action: string, payload?: Payload, requestId?: string, deferPlanningRefresh?: boolean) => Promise<Record<string, unknown>>;
   loadRoutineCalendar: (range: RoutineCalendarRange) => Promise<RoutineCalendarResult>;
   searchDirectory: (
     input: SocialDirectoryQuery,
@@ -409,7 +409,7 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
     };
   }, [session, demo, refresh, setData]);
   const act = useCallback(
-    async (action: string, payload: Payload = {}, requestId?: string) => {
+    async (action: string, payload: Payload = {}, requestId?: string, deferPlanningRefresh = false) => {
       if (!demo && action.startsWith("demo_rewards_"))
         throw new Error("Open the demo to use demo Coins.");
       if (demo) {
@@ -659,6 +659,9 @@ export function BeaconProvider({ children }: { children: React.ReactNode }) {
         throw new Error("Reconnect to save changes. Nothing was queued.");
       const result = await rpc(action, payload, requestId, actorScoped || profileAction ? viewer : undefined, profileAction ? assertAtomicViewer : undefined);
       assertAtomicViewer();
+      // The last write in a planning publication refreshes the account snapshot.
+      if (deferPlanningRefresh && (action === "create_planning_thread" || action === "add_council_proposal"))
+        return result;
       if (generation === epoch.current) await refresh();
       assertAtomicViewer();
       if (profileAction && (dataRef.current.viewer_id !== viewer ||

@@ -44,11 +44,11 @@ export function PlanningCreationRow({
     </>
   );
   const style = {
-    minHeight: 52,
+    minHeight: 46,
     flexDirection: "row" as const,
     alignItems: "center" as const,
-    gap: 10,
-    paddingVertical: 8,
+    gap: 8,
+    paddingVertical: 5,
     borderBottomWidth: 1,
     borderBottomColor: colors.line,
   };

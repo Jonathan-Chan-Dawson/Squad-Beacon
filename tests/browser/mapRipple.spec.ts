@@ -4,7 +4,8 @@ import { BEACON_NAME_MAX_WIDTH, EMPTY_MARKER_STATE, mapPersonOpacity } from "../
 import { beaconPinSymbols } from "../../src/features/maps/beaconPinArtwork";
 import { appendBeaconUpperBeam, appendMapProjector, beaconProjectionDimensions, clusterPrism } from "../../src/features/maps/projector";
 import { miniAvatarSvg } from "../../src/features/profile/avatarArt";
-import { STELLAR_OPACITY, STELLAR_OUTLINE } from "../../src/features/maps/clusterBloom";
+import { ROUND_SIGNAL, STELLAR_OPACITY, STELLAR_OUTLINE } from "../../src/features/maps/clusterBloom";
+import { planningKindLabels } from "../../src/features/planning/planningLabels";
 import { test, expect } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import ts from "typescript";
@@ -45,6 +46,8 @@ const script = ts.transpileModule(
   const BEACON_NAME_MAX_WIDTH = ${BEACON_NAME_MAX_WIDTH};
   const STELLAR_OPACITY = ${STELLAR_OPACITY};
   const STELLAR_OUTLINE = ${JSON.stringify(STELLAR_OUTLINE)};
+  const ROUND_SIGNAL = ${JSON.stringify(ROUND_SIGNAL)};
+  const planningKindLabels = ${JSON.stringify(planningKindLabels)};
   let colors = { green: "#218466", ink: "#182c30", white: "#fff", success: "#176B4A", outline: "#718078", surface: "#fff", textPrimary: "#182c30" };
   const reducedMotion = false, group = {}, coordinates = [];
   const onPick = undefined, identityViewer = "viewer";
@@ -281,7 +284,7 @@ test("web Beacon ripple stays at the badge center across dot/full sizes, chips, 
           await expect(page.locator(".map-now-halo")).toHaveCount(0);
           await expect(page.getByTestId("map-beacon-projector")).toHaveCount(0);
           if (zoom < 12 && !selected) {
-            await expect(page.getByTestId("map-single-stellar-beacon")).toHaveCSS("opacity", "0.9");
+            await expect(page.getByTestId(zoom < 9 ? "map-single-stellar-beacon" : "map-single-round-beacon")).toHaveCSS("opacity", "0.9");
           }
           await page.getByRole("button", { name: "Test Beacon" }).click();
           continue;
