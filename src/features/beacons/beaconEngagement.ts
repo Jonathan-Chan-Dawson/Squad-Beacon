@@ -7,11 +7,12 @@ import {
 } from "./activityToolEntry";
 export const cardToolLabels: Partial<Record<BeaconToolId, string>> = {
   checklist: "Checklist",
+  agenda: "Activity Schedule",
   journal: "Sketchboard",
   focus: "Focus timer",
   experiences: "Memories",
-  scoreboard: "Scoreboard",
-  music: "Music link",
+  scoreboard: "Teams & Scores",
+  music: "Music",
 };
 /** Independent module authorization, never inferred from being able to read a discovery card. */
 export function beaconEngagement(
@@ -40,6 +41,13 @@ export function beaconEngagement(
   const tools = (Object.keys(cardToolLabels) as BeaconToolId[]).filter(
     (tool) =>
       (tool !== "music" || !!activity.music_url) &&
+      (tool !== "agenda" ||
+        !!data.premium_tool_configs?.some(
+          (config) =>
+            config.activity_id === id &&
+            config.kind === "agenda" &&
+            config.settings.agenda?.enabled === true,
+        )) &&
       (tool === "experiences"
         ? resolveActivityToolEntry(data, activity, viewer, "tools", tool)
             .tab === "Memories"

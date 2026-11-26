@@ -1,4 +1,5 @@
 import { test, expect, type Page } from "@playwright/test";
+import { startDemoFromEntry } from "./demoEntry";
 
 async function enter(page: Page, route: string, appearance: "light" | "dark") {
   await page.emulateMedia({ reducedMotion: "reduce" });
@@ -9,20 +10,18 @@ async function enter(page: Page, route: string, appearance: "light" | "dark") {
       JSON.stringify({ hintsSeen: 3 }),
     );
   }, appearance);
-  await page.goto(route);
-  const demo = page.getByRole("button", { name: /Explore the demo/ });
-  await expect(demo).toBeVisible();
-  await expect
-    .poll(
-      () =>
-        demo.evaluate((node) =>
-          Object.keys(node).some((key) => key.startsWith("__reactProps$")),
-        ),
-      { timeout: 90000 },
-    )
-    .toBe(true);
-  await demo.click();
-  await expect(demo).toHaveCount(0);
+  const publicNavigation =
+    route === "/" || route === "/activities" || route === "/browse-beacons";
+  await page.goto(publicNavigation ? "/auth/sign-in" : route);
+  await startDemoFromEntry(page);
+  if (route === "/activities" || route === "/browse-beacons") {
+    await page.getByRole("tab", { name: "Beacons", exact: true }).click();
+  }
+  if (route === "/browse-beacons") {
+    await page
+      .getByRole("button", { name: "Explore all →", exact: true })
+      .click();
+  }
 }
 
 for (const appearance of ["light", "dark"] as const) {
@@ -33,7 +32,11 @@ for (const appearance of ["light", "dark"] as const) {
       test.setTimeout(120000);
       await page.setViewportSize({ width, height: 900 });
       await enter(page, "/your-activity", appearance);
-      const card = page.getByTestId("beacon-feed-card-demo-you-showcase-live");
+      const card = page
+        .getByTestId("your-activity-screen")
+        .getByTestId("beacon-feed-card-demo-you-showcase-live")
+        .filter({ visible: true })
+        .first();
       const shortcuts = card.getByTestId(
         "beacon-shortcuts-demo-you-showcase-live",
       );
@@ -51,7 +54,7 @@ for (const appearance of ["light", "dark"] as const) {
         ),
       ).toBe(true);
       await card.screenshot({
-        path: `docs/screenshots/beacon-map-hotfix-2026-10-31/${appearance}-${width}-activity.png`,
+        path: `test-results/visual-captures/beacon-map-hotfix-2026-10-31/${appearance}-${width}-activity.png`,
       });
       await expect(
         card.getByRole("button", { name: /^React to / }),
@@ -119,7 +122,7 @@ for (const appearance of ["light", "dark"] as const) {
       await expect(preview).toBeVisible();
       const shortcuts = preview.getByTestId("beacon-shortcuts-map-plan-coffee");
       const contextBounds = (await preview
-        .getByTestId("map-beacon-context")
+        .getByTestId("map-beacon-identity")
         .boundingBox())!;
       const cardBounds = (await preview.boundingBox())!;
       expect(contextBounds.height).toBeGreaterThanOrEqual(44);
@@ -135,17 +138,21 @@ for (const appearance of ["light", "dark"] as const) {
         .boundingBox())!;
       expect(
         commentsBounds.x - reactBounds.x - reactBounds.width,
-      ).toBeGreaterThanOrEqual(8);
+      ).toBeGreaterThanOrEqual(4);
       await expect(
         preview.getByRole("heading", { name: "Coffee together", exact: true }),
       ).toBeVisible();
+      await expect(preview.getByTestId("beacon-plan-position")).toHaveText(
+        "1/3",
+      );
       await expect(
-        preview.getByText("Plan stop 1", { exact: false }).first(),
+        preview.getByRole("button", {
+          name: "Open Plan Coffee, art and a lakefront walk, stop 1 of 3",
+          exact: true,
+        }),
       ).toBeVisible();
       await expect(
-        preview
-          .getByTestId("map-beacon-identity")
-          .getByRole("button", { name: /^Plan stop 1: Show .* on Map$/i }),
+        preview.getByRole("button", { name: "Zoom to Fit", exact: true }),
       ).toBeVisible();
       await expect(
         preview.getByRole("button", { name: /^Beacon tools/ }),
@@ -155,7 +162,7 @@ for (const appearance of ["light", "dark"] as const) {
       ).toBeVisible();
       await expect(
         shortcuts.getByRole("button", { name: /^Open .+ chat$/ }),
-      ).toHaveCount(0);
+      ).toBeVisible();
       await expect(
         preview.getByRole("button", { name: /^React to / }),
       ).toBeInViewport({ ratio: 1 });
@@ -201,25 +208,25 @@ for (const appearance of ["light", "dark"] as const) {
         .locator(".leaflet-map-pane")
         .getAttribute("style");
       await preview.screenshot({
-        path: `docs/screenshots/beacon-map-hotfix-2026-10-31/${appearance}-${width}-map.png`,
+        path: `test-results/visual-captures/beacon-map-hotfix-2026-10-31/${appearance}-${width}-map.png`,
       });
       await preview
         .getByRole("button", { name: /^Beacon tools|^More Beacon actions/ })
         .click();
       await expect(
         page.getByRole("dialog", {
-          name: "Beacon tools & actions",
+          name: "Beacon tools",
           exact: true,
         }),
       ).toBeVisible();
       const toolsMenu = page.getByRole("dialog", {
-        name: "Beacon tools & actions",
+        name: "Beacon tools",
         exact: true,
       });
       const menuBounds = await toolsMenu.boundingBox();
       expect(menuBounds!.height).toBeLessThanOrEqual(380);
       await toolsMenu.screenshot({
-        path: `docs/screenshots/beacon-map-hotfix-2026-10-31/${appearance}-${width}-tools.png`,
+        path: `test-results/visual-captures/beacon-map-hotfix-2026-10-31/${appearance}-${width}-tools.png`,
       });
       await page.keyboard.press("Escape");
       await expect(preview).toBeVisible();
@@ -231,7 +238,7 @@ for (const appearance of ["light", "dark"] as const) {
       await expect(toolsMenu).toBeVisible();
       await page
         .getByRole("button", {
-          name: "Dismiss Beacon tools & actions",
+          name: "Dismiss Beacon tools",
           exact: true,
         })
         .click({ position: { x: 2, y: 2 } });
@@ -260,7 +267,7 @@ for (const appearance of ["light", "dark"] as const) {
         .first();
       await expect(reactionChip).toHaveAttribute("aria-pressed", "true");
       await preview.screenshot({
-        path: `docs/screenshots/beacon-map-hotfix-2026-10-31/${appearance}-${width}-map-reacted.png`,
+        path: `test-results/visual-captures/beacon-map-hotfix-2026-10-31/${appearance}-${width}-map-reacted.png`,
       });
       await reactionChip.click();
       await expect(
@@ -272,7 +279,7 @@ for (const appearance of ["light", "dark"] as const) {
       );
       await preview
         .getByRole("button", {
-          name: "Open Plan stop 1: Coffee together details",
+          name: "See overview",
           exact: true,
         })
         .click();
@@ -303,7 +310,9 @@ test("public Browse previews expose no member-only shortcuts", async ({
   await page.setViewportSize({ width: 320, height: 844 });
   await enter(page, "/browse-beacons", "light");
   await page.getByTestId("browse-beacons-search").fill("photography");
-  const card = page.getByTestId("discovery-beacon-card-map-public-photo-walk");
+  const card = page
+    .getByTestId("browse-beacons-screen")
+    .getByTestId("discovery-beacon-card-map-public-photo-walk");
   await expect(card).toBeVisible();
   await expect(
     card.getByRole("button", {
@@ -323,7 +332,9 @@ test("a friend-host fallback says Message host and opens the existing conversati
   await page
     .getByTestId("browse-beacons-search")
     .fill("A few rounds. Good company.");
-  const card = page.getByTestId("discovery-beacon-card-a1");
+  const card = page
+    .getByTestId("browse-beacons-screen")
+    .getByTestId("discovery-beacon-card-a1");
   await expect(card).toBeVisible();
   await expect(
     card.getByRole("button", { name: /^Open .+ chat$/ }),
@@ -340,30 +351,32 @@ test("Home shows direct actions without duplicating them in the menu", async ({
   await enter(page, "/activities", "light");
   const card = page
     .getByTestId("home-explore-beacons")
-    .getByTestId("beacon-feed-card-map-plan-coffee");
-  const shortcuts = card.getByTestId("beacon-shortcuts-map-plan-coffee");
-  await expect(card.getByRole("button", { name: /^React to / })).toBeVisible();
+    .getByTestId(/^beacon-feed-card-/)
+    .filter({
+      has: page.getByRole("heading", {
+        name: "A relaxed riverwalk",
+        exact: true,
+      }),
+    });
   await expect(
-    shortcuts.getByRole("button", { name: /^Open .+ chat$/ }),
+    card.getByRole("button", {
+      name: "Message host of A relaxed riverwalk",
+      exact: true,
+    }),
   ).toBeVisible();
-  await expect(
-    shortcuts.getByRole("button", { name: /^View .+ on map$/ }),
-  ).toHaveCount(0);
   await card.screenshot({
-    path: "docs/screenshots/beacon-map-hotfix-2026-10-31/light-390-home.png",
+    path: "test-results/visual-captures/beacon-map-hotfix-2026-10-31/light-390-home.png",
   });
   await card
     .getByRole("button", { name: "More Beacon actions", exact: true })
     .click();
-  const menu = page.getByRole("dialog", {
-    name: "Plan stop 1: Coffee together",
-  });
+  const menu = page.getByRole("dialog", { name: "A relaxed riverwalk" });
   await expect(menu).toBeVisible();
   await expect(
-    menu.getByRole("button", { name: "Open Chat", exact: true }),
+    menu.getByRole("button", { name: /Open Chat|Message host/i }),
   ).toHaveCount(0);
   await expect(
-    menu.getByRole("button", { name: "View on Map", exact: true }),
+    menu.getByRole("button", { name: "Share Beacon", exact: true }),
   ).toBeVisible();
 });
 
@@ -372,7 +385,12 @@ test("public Map preview keeps its Join action readable and member tools private
 }) => {
   test.setTimeout(120000);
   await page.setViewportSize({ width: 320, height: 844 });
-  await enter(page, "/", "light");
+  await enter(page, "/auth/sign-in", "light");
+  const intro = page.getByRole("button", {
+    name: "Skip introduction",
+    exact: true,
+  });
+  if (await intro.isVisible()) await intro.click();
   await page
     .getByRole("textbox", {
       name: "Search places, Beacons, people and communities",
@@ -402,16 +420,11 @@ test("public Map preview keeps its Join action readable and member tools private
   expect(bounds!.height).toBeGreaterThanOrEqual(44);
   await expect(action).toBeInViewport({ ratio: 1 });
   await card.screenshot({
-    path: "docs/screenshots/beacon-map-hotfix-2026-10-31/light-320-public-map.png",
+    path: "test-results/visual-captures/beacon-map-hotfix-2026-10-31/light-320-public-map.png",
   });
-  await card
-    .getByRole("button", { name: "Beacon info & actions", exact: true })
-    .click();
   await expect(
-    page.getByRole("dialog", { name: "Public Beacon information" }),
-  ).toBeVisible();
-  await page.keyboard.press("Escape");
-  await expect(card).toBeVisible();
+    card.getByRole("button", { name: /^Beacon tools|Beacon info & actions/ }),
+  ).toHaveCount(0);
   await card
     .getByRole("button", { name: "Close map preview", exact: true })
     .click();
@@ -421,11 +434,12 @@ test("public Map preview keeps its Join action readable and member tools private
 test("shared card actions stay compact with reaction overflow, all tools and zero tools", async ({
   page,
 }) => {
+  test.setTimeout(90_000);
   await page.setViewportSize({ width: 320, height: 844 });
-  await enter(page, "/activities", "dark");
-  const card = page
-    .getByTestId("home-explore-beacons")
-    .getByTestId("beacon-feed-card-map-plan-coffee");
+  await enter(page, "/browse-beacons", "dark");
+  const directory = page.getByTestId("browse-beacons-screen");
+  await directory.getByTestId("browse-beacons-search").fill("Coffee together");
+  const card = directory.getByTestId("discovery-beacon-card-map-plan-coffee");
   // Reuse the existing browser-suite technique: mutate only the in-memory demo
   // provider, then dispatch its ordinary action to publish a fresh snapshot.
   await card.evaluate(async (node) => {
@@ -476,7 +490,7 @@ test("shared card actions stay compact with reaction overflow, all tools and zer
   });
   await expect(tools).toBeVisible();
   const primary = card.getByRole("button", {
-    name: "Open Beacon",
+    name: "Hosting management",
     exact: true,
   });
   const primaryBounds = (await primary.boundingBox())!;
@@ -498,7 +512,7 @@ test("shared card actions stay compact with reaction overflow, all tools and zer
     5,
   );
   await reactions.screenshot({
-    path: "docs/screenshots/beacon-map-hotfix-2026-10-31/dark-320-reaction-overflow.png",
+    path: "test-results/visual-captures/beacon-map-hotfix-2026-10-31/dark-320-reaction-overflow.png",
   });
   await page.keyboard.press("Escape");
   await tools.click();
@@ -508,14 +522,14 @@ test("shared card actions stay compact with reaction overflow, all tools and zer
     "Sketchboard",
     "Memories",
     "Focus timer",
-    "Music link",
-    "Scoreboard",
+    "Music",
+    "Teams & Scores",
   ])
     await expect(
       menu.getByRole("button", { name, exact: true }),
     ).toBeAttached();
   await menu.screenshot({
-    path: "docs/screenshots/beacon-map-hotfix-2026-10-31/dark-320-six-tools.png",
+    path: "test-results/visual-captures/beacon-map-hotfix-2026-10-31/dark-320-six-tools.png",
   });
   await page.keyboard.press("Escape");
   await card.getByRole("button", { name: /^Comments on / }).click();

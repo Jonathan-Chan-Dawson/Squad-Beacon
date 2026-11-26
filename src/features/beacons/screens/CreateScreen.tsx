@@ -60,6 +60,8 @@ import {
 
 import { CreationInvitees } from "../components/feed/CreationInvitees";
 import { CreateHome } from "@/src/features/beacons/CreateHome";
+import { LoginToUse } from "@/src/features/auth/LoginToUse";
+import { openGuestEntry } from "@/src/features/auth/guestEntry";
 import { canReadPlanningThread } from "@/src/features/planning/domain";
 import type { BeaconDraft } from "@/src/features/planning/types";
 import { ActivityBadge } from "@/src/features/beacons/ActivityBadge";
@@ -110,7 +112,7 @@ import {
   resolveActivityEndAt,
   resolveCreationStartAt,
 } from "@/src/features/beacons/createTiming";
-import { type BeaconTemplate } from "@/src/shared/templates";
+import { beaconTemplateCatalog, templates, type BeaconTemplate } from "@/src/shared/templates";
 import {
   Action,
   Button,
@@ -136,9 +138,52 @@ function moduleDefaultsFromControls(
     enable_music: controls.enable_music,
   };
 }
+const publicRecipes = [...templates, ...beaconTemplateCatalog];
+
+function recipeModules(recipe: BeaconTemplate) {
+  const modules = new Set(recipe.suggestedTools ?? []);
+  return {
+    enable_chat: modules.size === 0 || modules.has("chat"),
+    enable_checklist: modules.has("checklist"),
+    enable_journal: modules.has("notes"),
+    enable_focus: modules.has("focus"),
+    enable_experiences: modules.has("memories"),
+    enable_scoreboard: modules.has("scoreboard"),
+    enable_music: modules.has("music"),
+  };
+}
+
 export default function CreateActivity({ templateBrowser = false }: { templateBrowser?: boolean } = {}) {
   const params = useLocalSearchParams();
   const { userId } = useBeacon();
+  if (!userId) {
+    const route = templateBrowser ? "/beacon-templates" : "/create";
+    const routeParams = Object.fromEntries(
+      Object.entries(params).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
+    );
+    if (usesSharedStatusEditor(params) || [
+      "editor", "resumeDraft", "repeat", "template", "editTemplate", "saveTemplate", "recipe",
+      "savedChecklist", "planId", "threadId", "squadId", "spaceId", "organizationId",
+    ].some((key) => routeParams[key]) || (routeParams.kind && routeParams.kind !== "beacon")) {
+      return (
+        <Screen title="Create" eyebrow="" compactHeader create={false}>
+          <LoginToUse destination={route} params={routeParams} detail="Log in to continue creating." resumeCurrentPage />
+        </Screen>
+      );
+    }
+    const context = creationHandoffParams(params);
+    const start = (extra: Record<string, string> = {}) =>
+      openGuestEntry("/create", "create", undefined, { ...context, editor: "yes", ...extra });
+    return (
+      <CreateHome
+        browserScreen={templateBrowser}
+        context={context}
+        onBlank={() => start()}
+        onTemplate={(recipe) => start({ recipe: String(publicRecipes.indexOf(recipe)) })}
+        onReuse={(id) => start({ repeat: id })}
+      />
+    );
+  }
   if (typeof params.resumeDraft === "string")
     return (
       <RestoreDraft
@@ -227,6 +272,7 @@ function CreateEditor({ templateBrowser = false }: { templateBrowser?: boolean }
     placeLabel?: string;
     repeat?: string;
     template?: string;
+    recipe?: string;
     editTemplate?: string;
     saveTemplate?: string;
     savedChecklist?: string;
@@ -239,6 +285,9 @@ function CreateEditor({ templateBrowser = false }: { templateBrowser?: boolean }
     fromMap?: string;
     timezone?: string;
   }>();
+  const routeRecipe = typeof params.recipe === "string" && /^\d+$/.test(params.recipe)
+    ? publicRecipes[Number(params.recipe)]
+    : undefined;
   const planningSource = data.planning_threads.find(t=>t.id===params.sourcePlanningId);
   const allowedPlanningInvitees = planningSource ? data.planning_backup_invitees?.find(row=>row.thread_id===planningSource.id)?.user_ids ?? data.profiles.filter(p=>canReadPlanningThread(data,planningSource,p.id)).map(p=>p.id) : undefined;
   const [draftToken] = useState(
@@ -520,13 +569,13 @@ function CreateEditor({ templateBrowser = false }: { templateBrowser?: boolean }
       userId,
       draftToken,
       "selectedRecipe",
-      null,
+      routeRecipe ?? null,
     );
   const [prepAnswers, setPrepAnswers] = usePlanningDraftState<string[]>(
     userId,
     draftToken,
     "prepAnswers",
-    [],
+    routeRecipe?.prepPrompts?.map(() => "") ?? [],
   );
   const [kind] = usePlanningDraftState(
     userId,
@@ -542,7 +591,7 @@ function CreateEditor({ templateBrowser = false }: { templateBrowser?: boolean }
     userId,
     draftToken,
     "title",
-    statusSeed?.title ?? saved?.title ?? previous?.title ?? "",
+    statusSeed?.title ?? saved?.title ?? previous?.title ?? routeRecipe?.title ?? "",
   );
   const [description, setDescription] = usePlanningDraftState(
     userId,
@@ -551,6 +600,7 @@ function CreateEditor({ templateBrowser = false }: { templateBrowser?: boolean }
     statusSeed?.description ??
       saved?.description ??
       previous?.description ??
+      routeRecipe?.description ??
       "",
   );
   const [templateName, setTemplateName] = usePlanningDraftState(
@@ -569,7 +619,7 @@ function CreateEditor({ templateBrowser = false }: { templateBrowser?: boolean }
     userId,
     draftToken,
     "category",
-    statusSeed?.category ?? saved?.category ?? previous?.category ?? "Social",
+    statusSeed?.category ?? saved?.category ?? previous?.category ?? routeRecipe?.category ?? "Social",
   );
   const sourceHydrated = useRef(!!statusSeed);
   const textEdited = useRef({
@@ -718,7 +768,7 @@ function CreateEditor({ templateBrowser = false }: { templateBrowser?: boolean }
       userId,
       draftToken,
       "duration",
-      formatDurationLabel(saved?.minutes ?? 60),
+      formatDurationLabel(saved?.minutes ?? routeRecipe?.minutes ?? 60),
     );
   const [starts, setStarts] = usePlanningDraftState(
     userId,
@@ -730,7 +780,7 @@ function CreateEditor({ templateBrowser = false }: { templateBrowser?: boolean }
     userId,
     draftToken,
     "ends",
-    () => new Date(routeStart + (saved?.minutes ?? 60) * 60000).toISOString(),
+    () => new Date(routeStart + (saved?.minutes ?? routeRecipe?.minutes ?? 60) * 60000).toISOString(),
   );
   const [label, setLabel] = usePlanningDraftState(
     userId,
@@ -927,7 +977,7 @@ function CreateEditor({ templateBrowser = false }: { templateBrowser?: boolean }
             manual_closed: false,
             checklist_edit_policy: "participants" as const,
           }
-        : defaultBeaconControlValues(),
+        : { ...defaultBeaconControlValues(), ...(routeRecipe && recipeModules(routeRecipe)) },
   }));
   const [mapIcon, setMapIcon] = usePlanningDraftState<string | null>(userId, draftToken, "mapIcon", null);
   const [mapIconPublic, setMapIconPublic] = usePlanningDraftState(userId, draftToken, "mapIconPublic", false);
@@ -960,20 +1010,10 @@ function CreateEditor({ templateBrowser = false }: { templateBrowser?: boolean }
     setPrepAnswers(t.prepPrompts?.map(() => "") ?? []);
     setDuration(formatDurationLabel(t.minutes));
     setEnds(new Date(Date.parse(starts) + t.minutes * 60000).toISOString());
-    const modules = new Set(t.suggestedTools ?? []);
-    const moduleDefaults = {
-      enable_chat: modules.size === 0 || modules.has("chat"),
-      enable_checklist: modules.has("checklist"),
-      enable_journal: modules.has("notes"),
-      enable_focus: modules.has("focus"),
-      enable_experiences: modules.has("memories"),
-      enable_scoreboard: modules.has("scoreboard"),
-      enable_music: modules.has("music"),
-    };
     setBeaconControls({
       ...beaconControls,
-      ...moduleDefaults,
-    } as BeaconControlValues);
+      ...recipeModules(t),
+    });
   }
   function descriptionWithPrep() {
     const answers = (selectedRecipe?.prepPrompts ?? []).flatMap(

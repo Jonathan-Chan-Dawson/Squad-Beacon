@@ -101,20 +101,21 @@ test("bloom counts, direct exploration, reduced motion and phone layouts", async
           assert.equal(await dense.getByTestId("map-cluster-projector").count(), Number(near));
           assert.equal(await dense.getByTestId("map-beacon-projector").count(), 0);
           const petals = dense.locator(".map-petal-item");
-          const dots = dense.getByTestId("cluster-constellation-dot");
+          const star = dense.locator('[data-signal-kind="stellar"]');
           const peeks = dense.getByTestId("cluster-friend-satellite");
           if (mode === "stack" || mode === "swarm") {
             assert.equal(await petals.count(), 3);
-            assert.equal(await dots.count(), 0);
+            assert.equal(await star.count(), 0);
             assert.ok(await peeks.count() <= 2);
             assert.equal(await peeks.locator("img").count(), await peeks.count());
           } else {
             assert.equal(await petals.count(), 0);
             assert.equal(await peeks.count(), 0);
             assert.equal(await dense.getByTestId("cluster-circle-shadow").count(), 0);
-            const categories = await dots.evaluateAll((items) => items.map((item) => item.getAttribute("data-category")));
-            assert.equal(categories.length, mode === "micro" ? 2 : 3);
-            assert.equal(new Set(categories).size, categories.length);
+            assert.equal(await star.count(), 1);
+            const facets = await star.locator("[data-relationship]").evaluateAll(items => items.map(item => item.getAttribute("data-relationship")));
+            assert.ok(facets.length >= 1 && facets.length <= (mode === "micro" ? 2 : 3));
+            assert.equal(new Set(facets).size, facets.length);
           }
           const before = await page.evaluate(() => (window as any).opened ?? 0);
           await pill.dispatchEvent("click");

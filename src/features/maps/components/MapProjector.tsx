@@ -1,4 +1,5 @@
 import { useId } from "react";
+import { clusterPrism } from "../projector";
 import Svg, {
   Defs,
   Ellipse,
@@ -26,6 +27,16 @@ export function MapProjector({
   kind: "beacon" | "person" | "cluster";
 }) {
   const id = useId().replace(/[^a-zA-Z0-9]/g, "");
+  const prism = kind === "cluster";
+  const beamStops = prism
+    ? [
+        ["0%", clusterPrism.ice, 0],
+        ["28%", clusterPrism.ice, 1],
+        ["55%", clusterPrism.pearl, 1],
+        ["78%", clusterPrism.lilac, 1],
+        ["100%", clusterPrism.blush, 1],
+      ] as const
+    : [["0%", color, 0], ["52%", color, 1], ["100%", color, 1]] as const;
   return (
     <Svg
       testID={`map-${kind}-projector`}
@@ -37,9 +48,9 @@ export function MapProjector({
     >
       <Defs>
         <LinearGradient id={`${id}beam`} x1="0%" x2="0%" y1="0%" y2="100%">
-          <Stop offset="0%" stopColor={color} stopOpacity={0} />
-          <Stop offset="52%" stopColor={color} />
-          <Stop offset="100%" stopColor={color} />
+          {beamStops.map(([offset, stopColor, stopOpacity]) => (
+            <Stop key={offset} offset={offset} stopColor={stopColor} stopOpacity={stopOpacity} />
+          ))}
         </LinearGradient>
         <LinearGradient id={`${id}core`} x1="0%" x2="0%" y1="0%" y2="100%">
           <Stop offset="12%" stopColor="#fff" stopOpacity={0} />
@@ -48,9 +59,9 @@ export function MapProjector({
         </LinearGradient>
         <RadialGradient id={`${id}base`}>
           <Stop offset="8%" stopColor="#fff" stopOpacity={0.7} />
-          <Stop offset="22%" stopColor={color} />
+          <Stop offset="22%" stopColor={prism ? clusterPrism.ice : color} />
           <Stop offset="48%" stopColor={color} stopOpacity={0} />
-          <Stop offset="61%" stopColor={color} />
+          <Stop offset="61%" stopColor={prism ? clusterPrism.lilac : color} />
           <Stop offset="72%" stopColor={color} stopOpacity={0} />
         </RadialGradient>
       </Defs>

@@ -59,6 +59,8 @@ export interface MapProps {
   availabilityActivities?: Activity[];
   /** Screen-owned selection state used to emphasize one readable Beacon pin. */
   selectedActivityId?: string | null;
+  selectedPublicBeaconId?: string | null;
+  selectedPlanningPointId?: string;
   selectedPersonId?: string | null;
   focusBackground?: readonly { id: string; latitude: number; longitude: number; kind: "beacon" | "person" }[];
   places: ActivityPlace[];

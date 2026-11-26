@@ -129,7 +129,11 @@ export function CouncilChoices({
   onExpand,
   onBeforeRespond,
   onOpenBeaconEditor,
+  onDirtyChange,
+  mapPreview = false,
 }: {
+  onDirtyChange?: (dirty: boolean) => void;
+  mapPreview?: boolean;
   threadId: string;
   compact?: boolean;
   expanded: boolean;
@@ -150,6 +154,12 @@ export function CouncilChoices({
   const [adding, setAdding] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const hasEdits = none !== (ballot?.none_work ?? false) ||
+    choices.length !== (ballot?.proposal_ids.length ?? 0) ||
+    choices.some((choice) => !ballot?.proposal_ids.includes(choice));
+  React.useEffect(() => {
+    onDirtyChange?.(!!state?.eligible && hasEdits);
+  }, [state?.eligible, hasEdits, onDirtyChange]);
   if (!state) return null;
   const { thread, eligible, options, votes } = state;
   const approval = thread.vote_method === "approval";
@@ -285,7 +295,7 @@ export function CouncilChoices({
         );
       })}
       {!expanded && options.length > 3 && (
-        <Button compact secondary title="Show All Options" onPress={onExpand} />
+        <Button compact secondary title={mapPreview ? `See all ${options.length} options` : "Show All Options"} onPress={onExpand} />
       )}
       {approval && eligible && (
         <>
@@ -327,7 +337,7 @@ export function CouncilChoices({
         </Text>
       )}
       {!eligible && <Txt muted>Responses are closed.</Txt>}
-      {expanded && eligible && (
+      {expanded && eligible && !mapPreview && (
         <PlanningLink
           title="Suggest an option"
           onPress={() => setAdding(!adding)}

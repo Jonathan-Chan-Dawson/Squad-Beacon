@@ -22,6 +22,8 @@ import { router } from "expo-router";
 import { Action, Txt, useTheme } from "@/src/shared/ui";
 import { useBeacon } from "@/src/shared/store";
 import { PlanningResponseControls } from "./PlanningResponseControls";
+import { ShowPlanningOnMap } from "./ShowPlanningOnMap";
+import { planningKindLabels } from "./planningLabels";
 import { planningDestination, type planningInbox } from "./inbox";
 import { canOpenSquadPing } from "@/src/features/people/communication";
 
@@ -51,14 +53,7 @@ export function DecisionRow({
   const { data, userId, act, getViewerEpoch } = useBeacon();
   const now = useNow();
   const { thread, response, vote, manages, eligible } = item;
-  const kindLabel =
-    thread.kind === "time"
-      ? "Find a Time"
-      : thread.kind === "vote"
-        ? "Vote"
-        : thread.kind === "draw"
-          ? "Draw"
-          : "Ping";
+  const kindLabel = planningKindLabels[thread.kind];
   const interested = new Set(
     item.responses
       .filter((r) => r.response === "interested")
@@ -187,6 +182,7 @@ export function DecisionRow({
                         : `Respond by ${deadline}`
                       : "Responses closed · Awaiting organizer"}
       </Text>
+      {expanded && <ShowPlanningOnMap threadId={thread.id} />}
       {!thread.materialized_activity_id &&
       thread.status === "open" &&
       !(thread.kind === "ping" && thread.owner_id === userId) ? (

@@ -111,7 +111,7 @@ for (const appearance of ["light", "dark"] as const)
         .getByRole("button", { name: "Clear search", exact: true })
         .click();
       await page.screenshot({
-        path: `docs/screenshots/card-context-social-2026-10-31/${appearance}-${width}-chats.png`,
+        path: `test-results/visual-captures/card-context-social-2026-10-31/${appearance}-${width}-chats.png`,
       });
       expect(
         await page.evaluate(

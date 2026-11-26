@@ -1,14 +1,12 @@
 import React, { useEffect, useRef } from "react";
-import { View } from "react-native";
-import { router } from "expo-router";
-import { Images, MessagesSquare } from "lucide-react-native";
+import { View, useWindowDimensions } from "react-native";
+import { MessagesSquare } from "lucide-react-native";
 import { useBeacon } from "@/src/shared/store";
 import { useDesignTheme } from "@/src/shared/design-system";
 import { beaconCardShortcuts } from "../beaconCardShortcuts";
 import {
   BeaconCardEngagement,
   BeaconToolsButton,
-  type BeaconToolsMenuOwner,
 } from "./BeaconCardEngagement";
 import { HomeAction } from "./HomeAction";
 
@@ -16,28 +14,23 @@ export function BeaconCardShortcuts({
   activityId,
   onChat,
   section = "all",
-  menuOwner,
   labeledSocial = true,
-  mapPreview = false,
 }: {
   activityId: string;
   onChat?: () => void;
   section?: "all" | "social" | "actions";
-  menuOwner?: BeaconToolsMenuOwner;
   labeledSocial?: boolean;
-  mapPreview?: boolean;
 }) {
   const { data, userId } = useBeacon();
   const { colors } = useDesignTheme();
+  const { width, fontScale } = useWindowDimensions();
   const latest = useRef({ data, userId });
   useEffect(() => {
     latest.current = { data, userId };
   }, [data, userId]);
   const current = beaconCardShortcuts(data, userId, activityId);
   if (!current) return null;
-  const chat = !mapPreview && onChat ? current.chat : null;
-  const memories =
-    !mapPreview && !chat && current.engagement?.tools.includes("experiences");
+  const chat = onChat ? current.chat : null;
   if (
     section === "social" &&
     !current.engagement?.canReact &&
@@ -45,21 +38,13 @@ export function BeaconCardShortcuts({
     !current.engagement?.allReactionGroups.length
   )
     return null;
-  if (
-    section === "actions" &&
-    !chat &&
-    !memories &&
-    !current.engagement?.tools.length &&
-    !menuOwner
-  )
+  if (section === "actions" && !chat && !current.engagement?.tools.length)
     return null;
   if (
     !chat &&
-    !memories &&
     !current.engagement?.canReact &&
     !current.engagement?.canReadComments &&
-    !current.engagement?.tools.length &&
-    !menuOwner
+    !current.engagement?.tools.length
   )
     return null;
   return (
@@ -74,11 +59,7 @@ export function BeaconCardShortcuts({
       }}
     >
       {section !== "actions" ? (
-        <BeaconCardEngagement
-          activityId={activityId}
-          separateChat
-          labeled={labeledSocial}
-        />
+        <BeaconCardEngagement activityId={activityId} labeled={labeledSocial} />
       ) : null}
       {section !== "social" ? (
         <View
@@ -94,6 +75,11 @@ export function BeaconCardShortcuts({
             <HomeAction
               outlined
               prominent
+              title={
+                chat === "beacon" && width >= 360 && fontScale <= 1.25
+                  ? "Chat"
+                  : undefined
+              }
               label={
                 chat === "beacon"
                   ? `Open ${current.activity.title} chat`
@@ -115,29 +101,7 @@ export function BeaconCardShortcuts({
               }}
             />
           ) : null}
-          {memories ? (
-            <HomeAction
-              outlined
-              prominent
-              label={`Open ${current.activity.title} memories`}
-              icon={<Images size={18} color={colors.accent} />}
-              onPress={() => {
-                if (
-                  latest.current.userId === userId &&
-                  beaconCardShortcuts(
-                    latest.current.data,
-                    latest.current.userId,
-                    activityId,
-                  )?.engagement?.tools.includes("experiences")
-                )
-                  router.push({
-                    pathname: "/activity/[id]",
-                    params: { id: activityId, tab: "memories" },
-                  });
-              }}
-            />
-          ) : null}
-          <BeaconToolsButton activityId={activityId} menuOwner={menuOwner} />
+          <BeaconToolsButton activityId={activityId} />
         </View>
       ) : null}
     </View>

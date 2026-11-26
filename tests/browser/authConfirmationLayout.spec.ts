@@ -32,7 +32,7 @@ for (const appearance of ["light", "dark"] as const) {
         account.authCalls.filter((path) => path === "/auth/v1/verify"),
       ).toHaveLength(0);
       await page.screenshot({
-        path: `docs/screenshots/auth-email/confirm-${appearance}-${width}.png`,
+        path: `test-results/visual-captures/auth-email/confirm-${appearance}-${width}.png`,
         animations: "disabled",
       });
     });

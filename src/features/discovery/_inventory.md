@@ -7,7 +7,7 @@ Public discovery feature
 - domain.ts: opt-in validation, safe-summary filtering, and interest/coarse-area ranking. These are client presentation helpers; server authorization remains authoritative.
 - publicDirectory.ts / usePublicBeacons.ts: viewer-bound summary parsing and Map discovery loading.
 - PublicBeaconPreview.tsx: public-summary-only adapter for the shared discovery card, with coarse-area location, guarded join/request actions, and optional details/close controls.
-- DiscoveryBeaconCard.tsx / discoveryCardPresentation.ts: shared compact editorial shell and pure accepted-count/capacity/social metadata formatting for authorized Activity and sanitized public-summary inputs.
+- DiscoveryBeaconCard.tsx / discoveryCardPresentation.ts: shared Standard, Compact, and Mini renderer and pure accepted-count/capacity/social metadata formatting for authorized Activity and sanitized public-summary inputs.
 - BeaconDiscoverySettings.tsx: explicit host publishing from existing Beacon settings.
 - MapScreen integrates public summaries, unified search, and the existing community previews.
 - 202610110001_map_discovery.sql supplies authenticated discovery, publishing, joining, and capacity enforcement.

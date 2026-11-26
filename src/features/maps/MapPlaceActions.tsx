@@ -22,7 +22,7 @@ export function MapPlaceActions({
   title,
   onClose,
   onCreate,
-  onPing,
+  onAskGroup,
   onUpdate,
   onDirections,
   onSearch,
@@ -32,7 +32,7 @@ export function MapPlaceActions({
   title: string;
   onClose(): void;
   onCreate(): void;
-  onPing(): void;
+  onAskGroup(): void;
   onUpdate(): void;
   onDirections(): void;
   onSearch(): void;
@@ -65,7 +65,7 @@ export function MapPlaceActions({
   useOverlayKeyboardFocus(root, true, onClose, () => focusOverlay(root));
   const actions = [
     { label: "Create Beacon", Icon: RadioTower, run: onCreate, primary: true },
-    { label: "Start Ping", Icon: MessageCircle, run: onPing, mint: true },
+    { label: "Ask Group", Icon: MessageCircle, run: onAskGroup, mint: true },
     { label: "Add live update", Icon: Activity, run: onUpdate },
   ];
   return (

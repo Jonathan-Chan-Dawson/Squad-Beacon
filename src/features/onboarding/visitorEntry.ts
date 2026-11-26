@@ -1,7 +1,6 @@
 import { Platform } from "react-native";
 import * as SecureStore from "expo-secure-store";
 
-const entryKey = "sb.visitor-entry.v1";
 const welcomeKey = "sb.visitor-welcome.v1";
 const welcomeHandoffKey = "sb.visitor-welcome-handoff.v1";
 const handoffWindowMs = 24 * 60 * 60 * 1000;
@@ -36,16 +35,6 @@ export function finishTutorial(section: string) {
     write(`sb.tutorial-${section}.v1`);
   } catch {
     // Keep the dismissal for the current session when storage is unavailable.
-  }
-}
-
-export function reserveFirstVisitorEntry() {
-  try {
-    if (read(entryKey)) return false;
-    write(entryKey);
-    return true;
-  } catch {
-    return false;
   }
 }
 

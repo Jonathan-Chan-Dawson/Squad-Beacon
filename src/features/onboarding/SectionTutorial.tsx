@@ -19,7 +19,10 @@ export const tutorials = {
     title: "Welcome to Squad Beacon!",
     art: "welcome",
     copy: "Find your people, discover activities, and turn everyday ideas into something worth doing.",
-    tips: [],
+    tips: [
+      ["Explore Beacons", "Browse public activities or see them on the Map."],
+      ["Your Activity", "Find your current and upcoming plans here when you’re signed in."],
+    ],
   },
   map: {
     label: "Map",

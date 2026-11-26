@@ -31,6 +31,7 @@ export function ActionRow({
   danger = false,
   detail,
   count,
+  trailing,
   testID,
 }: {
   label: string;
@@ -41,6 +42,7 @@ export function ActionRow({
   danger?: boolean;
   detail?: string;
   count?: number;
+  trailing?: React.ReactNode;
   testID?: string;
 }) {
   const { colors } = useDesignTheme();
@@ -97,6 +99,7 @@ export function ActionRow({
           {count}
         </Text>
       ) : null}
+      {trailing}
     </Pressable>
   );
 }

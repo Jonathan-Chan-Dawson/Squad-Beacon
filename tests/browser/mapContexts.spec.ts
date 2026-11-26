@@ -8,8 +8,8 @@ for (const example of [
   },
   {
     route: "/council/demo-draw-result?mode=manage",
-    action: "Show Suggested Beacons",
-    chip: "Draw: Crew’s surprise meetup",
+    action: "Show on Map",
+    chip: "Random Draw: Crew’s surprise meetup",
   },
 ])
   test(`${example.action} focuses ${example.chip} on the current map`, async ({
@@ -26,7 +26,7 @@ for (const example of [
     });
     await expect(chip).toBeVisible();
     await expect(page.getByTestId("map-exploration-header")).toBeVisible();
-    if (example.chip.startsWith("Draw:")) {
+    if (example.chip.startsWith("Random Draw:")) {
       const pin = page.locator(
         'button[aria-label^="Map: A surprise crew meetup"]',
       );
@@ -60,13 +60,13 @@ for (const example of [
 test("suggested Beacon context is removable independently of normal filters", async ({
   page,
 }) => {
-  await page.goto("/council/demo-vote-weekend?mode=manage");
+  await page.goto("/council/demo-draw-result?mode=manage");
   await page.getByRole("button", { name: /Explore the demo/ }).click();
   await page
-    .getByRole("button", { name: "Show Suggested Beacons", exact: true })
+    .getByRole("button", { name: "Show on Map", exact: true })
     .click();
   const context = page.getByRole("button", {
-    name: "Remove Vote: Which weekend plan sounds best? filter",
+    name: "Remove Random Draw: Crew’s surprise meetup filter",
     exact: true,
   });
   await expect(context).toBeVisible();

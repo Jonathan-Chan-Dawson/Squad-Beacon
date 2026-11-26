@@ -11,7 +11,7 @@ Beacons feature
 - screens/CreateScreen.tsx: creation launcher/editor, parameter-driven resets, drafts, validation, persistence and placement.
 - screens/ActivityDetailScreen.tsx: Beacon detail workspace, navigation, RSVP actions and permission-gated tools.
 - components/activity-detail/: shared Hero, Info (with native variant), Progress, People and Tools sections, also reused by Map sheets.
-- ActivityCard.tsx, ActivityBadge.tsx, BeaconResponse.tsx: feed rows, status, and RSVP controls.
+- ActivityBadge.tsx and BeaconResponse.tsx: category identity and RSVP controls. Published cards share the discovery card renderer.
 - components/BeaconFeedCard.tsx: readable Activity adapter for the shared compact discovery shell, retaining canonical participation and Home presentation behavior.
 - cardSocialPreview.ts: current-viewer profile-safe attendee faces and canonical count; friend previews retain read access while general attendee faces require detail-roster permission.
 - BeaconTools.tsx, beaconModules.ts: checklist, Beacon Sketchboard, Timer, and access helpers.
@@ -32,7 +32,7 @@ Beacons feature
 
 - creationDraftStorage.ts, draftSnapshot.ts: versioned account-owned local draft snapshots, size-safe native storage chunks, serialized commits, validation, and frozen canonical publication recovery. Publication is blocked when its initial checkpoint fails.
 - components/CreationControls.tsx, creationModules.ts: compact disclosure rows, real module switches/configuration, and explicit recommendations; People & Access separates visibility, eligible invitations, delivery effects, approval, capacity, and post-publication role management.
-- components/BeaconIdentity.tsx: read-only shared identity for published ActivityCard and creation review; draft review never fabricates published/RSVP state.
+- components/BeaconIdentity.tsx: read-only shared identity for creation review; draft review never fabricates published/RSVP state.
 
 - creationValidation.ts: supported HTTPS meeting-link validation for publication; unfinished templates remain exempt.
 
@@ -46,7 +46,7 @@ Beacons feature
 
 - components/ActivityCategoryChoices.tsx, components/CreationTimingFields.tsx, BeaconTimingEditor.tsx and creationPublicListing.ts: category choices, inline creation timing, staged published-Beacon timing, and recoverable opt-in public discovery.
 
-- beaconCardShortcuts.ts and components/BeaconCardShortcuts.tsx: viewer-checked reactions/comments, one Chat/host-message or Memories shortcut, counted Tools and authorized Map actions in More across readable cards; public projections remain separate.
+- beaconCardShortcuts.ts and components/BeaconCardShortcuts.tsx: viewer-checked reactions/comments, one Chat or host-message shortcut, counted Tools and authorized Map actions in More across readable cards; public projections remain separate.
 
 - Plan-draft handoffs reuse CreateScreen and existing creation storage: Add to Plan returns private configuration without publication. Only the Plan scheduling transaction creates selected Beacons.
 

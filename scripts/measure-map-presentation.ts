@@ -2,6 +2,7 @@ import { performance } from "node:perf_hooks";
 import type { ClusterPoint } from "../src/features/maps/cluster";
 import {
   MapPresentationCache,
+  crowdedBeaconMarkers,
   nativeMapMode,
 } from "../src/features/maps/nativeMapPresentation";
 
@@ -45,6 +46,7 @@ for (const count of [100, 500, 2_000, 10_000]) {
         priorities,
         owned,
       );
+      crowdedBeaconMarkers(result, zoom, () => 40);
       const elapsed = performance.now() - start;
       if (step >= 4) samples.push(elapsed);
       peakFeatures = Math.max(

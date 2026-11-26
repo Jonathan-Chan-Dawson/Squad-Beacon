@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { memo, useId, useMemo, useState } from "react";
 import {
   Pressable,
   StyleSheet,
@@ -19,6 +19,7 @@ import Svg, {
   Circle,
   Defs,
   Ellipse,
+  Polygon,
   RadialGradient,
   Rect,
   Stop,
@@ -29,6 +30,7 @@ import {
   beaconMapLook,
   lookSlotLabels,
   lookSlots,
+  priceText,
   rewardLooks,
   type LookId,
   type RewardTarget,
@@ -55,12 +57,21 @@ type ShopCategory = (typeof categories)[number];
 
 function showsProduct(category: ShopCategory, product: ShopProduct) {
   switch (category) {
-    case "Skins": return product.slot === "skin";
-    case "Owned": return product.owned;
-    case "Beacons": return lookSlots.activity.includes(product.slot);
-    case "Profile": return lookSlots.profile.includes(product.slot) || product.slot === "profile_set";
-    case "Communities": return product.slot === "community";
-    default: return true;
+    case "Skins":
+      return product.slot === "skin";
+    case "Owned":
+      return product.owned;
+    case "Beacons":
+      return lookSlots.activity.includes(product.slot);
+    case "Profile":
+      return (
+        lookSlots.profile.includes(product.slot) ||
+        product.slot === "profile_set"
+      );
+    case "Communities":
+      return product.slot === "community";
+    default:
+      return true;
   }
 }
 const showcase: Record<RewardTarget, LookId> = {
@@ -72,9 +83,6 @@ const showcase: Record<RewardTarget, LookId> = {
 };
 const isLockedMilestone = (item: ShopProduct) =>
   !!item.milestone_level && !item.owned;
-
-export const priceText = (value: number, scale = 12600) =>
-  (value / scale).toLocaleString(undefined, { maximumFractionDigits: 4 });
 
 export function ShopPrice({
   product,
@@ -117,7 +125,7 @@ export function ShopPrice({
   );
 }
 
-export function ShopArtwork({
+function ShopArtworkView({
   product,
   size = "tile",
 }: {
@@ -159,68 +167,102 @@ export function ShopArtwork({
         { height: large ? 212 : size === "spotlight" ? 126 : 120 },
       ]}
     >
-      <Svg
-        width="100%"
-        height="100%"
-        viewBox="0 0 200 130"
-        preserveAspectRatio="xMidYMid slice"
-        style={StyleSheet.absoluteFill}
-      >
-        <Defs>
-          <RadialGradient id={glow} cx="50%" cy="48%" rx="52%" ry="62%">
-            <Stop offset="0%" stopColor={color} stopOpacity={0.31} />
-            <Stop offset="100%" stopColor={color} stopOpacity={0} />
-          </RadialGradient>
-        </Defs>
-        <Rect width="200" height="130" fill={`url(#${glow})`} />
-        <Ellipse
-          cx="100"
-          cy="65"
-          rx="61"
-          ry="44"
-          stroke={color}
-          strokeOpacity={0.23}
-          strokeWidth={0.7}
-          rotation="-21"
-          origin="100, 65"
-          fill="none"
+      {large ? (
+        <Svg
+          width="100%"
+          height="100%"
+          viewBox="0 0 200 130"
+          preserveAspectRatio="xMidYMid slice"
+          style={StyleSheet.absoluteFill}
+        >
+          <Defs>
+            <RadialGradient id={glow} cx="50%" cy="48%" rx="52%" ry="62%">
+              <Stop offset="0%" stopColor={color} stopOpacity={0.31} />
+              <Stop offset="100%" stopColor={color} stopOpacity={0} />
+            </RadialGradient>
+          </Defs>
+          <Rect width="200" height="130" fill={`url(#${glow})`} />
+          <Ellipse
+            cx="100"
+            cy="65"
+            rx="61"
+            ry="44"
+            stroke={color}
+            strokeOpacity={0.23}
+            strokeWidth={0.7}
+            rotation="-21"
+            origin="100, 65"
+            fill="none"
+          />
+          <Ellipse
+            cx="100"
+            cy="65"
+            rx="82"
+            ry="58"
+            stroke={color}
+            strokeOpacity={0.13}
+            strokeWidth={0.7}
+            rotation="-21"
+            origin="100, 65"
+            fill="none"
+          />
+          <Circle cx="42" cy="40" r="1.4" fill={color} fillOpacity={0.8} />
+          <Circle
+            cx="156"
+            cy="83"
+            r="1.4"
+            fill={mapLook.beam ?? color}
+            fillOpacity={0.85}
+          />
+          <Circle cx="148" cy="29" r="0.9" fill="#FFFFFF" fillOpacity={0.55} />
+          <Circle cx="67" cy="107" r="0.9" fill="#FFFFFF" fillOpacity={0.45} />
+        </Svg>
+      ) : (
+        <View
+          pointerEvents="none"
+          style={[
+            layout.tileOrbit,
+            { backgroundColor: color + "15", borderColor: color + "44" },
+          ]}
         />
-        <Ellipse
-          cx="100"
-          cy="65"
-          rx="82"
-          ry="58"
-          stroke={color}
-          strokeOpacity={0.13}
-          strokeWidth={0.7}
-          rotation="-21"
-          origin="100, 65"
-          fill="none"
-        />
-        <Circle cx="42" cy="40" r="1.4" fill={color} fillOpacity={0.8} />
-        <Circle
-          cx="156"
-          cy="83"
-          r="1.4"
-          fill={mapLook.beam ?? color}
-          fillOpacity={0.85}
-        />
-        <Circle cx="148" cy="29" r="0.9" fill="#FFFFFF" fillOpacity={0.55} />
-        <Circle cx="67" cy="107" r="0.9" fill="#FFFFFF" fillOpacity={0.45} />
-      </Svg>
+      )}
       {projector ? (
         <View
           style={[layout.projector, { width: 110, height: large ? 165 : 91 }]}
         >
-          <MapProjector
-            kind="beacon"
-            color={beam}
-            top={projectorSize + (large ? 3 : 0)}
-            center={55}
-            width={large ? 103 : 68}
-            height={large ? 55 : 33}
-            opacity={1}
-          />
+          {large ? (
+            <MapProjector
+              kind="beacon"
+              color={beam}
+              top={projectorSize + (large ? 3 : 0)}
+              center={55}
+              width={large ? 103 : 68}
+              height={large ? 55 : 33}
+              opacity={1}
+            />
+          ) : (
+            <Svg
+              width={66}
+              height={32}
+              style={{ position: "absolute", top: projectorSize, left: 22 }}
+              pointerEvents="none"
+            >
+              <Polygon
+                points="14,0 52,0 36,26 30,26"
+                fill={beam}
+                fillOpacity={0.48}
+              />
+              <Ellipse
+                cx={33}
+                cy={27}
+                rx={20}
+                ry={3}
+                fill={beam}
+                fillOpacity={0.25}
+              />
+              <Ellipse cx={33} cy={26} rx={6} ry={2} fill={beam} />
+            </Svg>
+          )}
           <View
             style={[
               layout.lens,
@@ -276,6 +318,14 @@ export function ShopArtwork({
   );
 }
 
+export const ShopArtwork = memo(
+  ShopArtworkView,
+  (previous, next) =>
+    previous.size === next.size &&
+    previous.product.id === next.product.id &&
+    previous.product.slot === next.product.slot,
+);
+
 export function BeaconShopCatalog({
   products,
   equipped,
@@ -300,18 +350,26 @@ export function BeaconShopCatalog({
   const featured = products.find(
     (item) => item.id === showcase[scope ?? "profile"],
   );
-  const availableCategories = categories.filter((category) =>
-    (category === "All looks" || !scope || category === "Owned") &&
-    (category === "All looks" || products.some((product) => showsProduct(category, product))),
+  const availableCategories = categories.filter(
+    (category) =>
+      (category === "All looks" || !scope || category === "Owned") &&
+      (category === "All looks" ||
+        products.some((product) => showsProduct(category, product))),
   );
-  const category = availableCategories.includes(selectedCategory) ? selectedCategory : "All looks";
-  const visible = products
-    .filter((product) => showsProduct(category, product))
-    .sort(
-      (first, second) =>
-        Number(isLockedMilestone(first)) - Number(isLockedMilestone(second)) ||
-        first.price - second.price,
-    );
+  const category = availableCategories.includes(selectedCategory)
+    ? selectedCategory
+    : "All looks";
+  const visible = useMemo(
+    () =>
+      products
+        .filter((product) => showsProduct(category, product))
+        .sort(
+          (first, second) =>
+            Number(isLockedMilestone(first)) -
+              Number(isLockedMilestone(second)) || first.price - second.price,
+        ),
+    [category, products],
+  );
 
   return (
     <View style={{ gap: 16 }}>
@@ -428,6 +486,14 @@ const layout = StyleSheet.create({
     borderRadius: 20,
   },
   spotlightArt: { flex: 1, alignSelf: "center" },
+  tileOrbit: {
+    position: "absolute",
+    width: 108,
+    height: 78,
+    borderWidth: 1,
+    borderRadius: 54,
+    transform: [{ rotate: "-21deg" }],
+  },
   spotlightCopy: { flex: 1.25, gap: 9, paddingVertical: 7, paddingLeft: 9 },
   projector: { alignItems: "center", paddingTop: 4 },
   lens: {

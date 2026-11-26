@@ -6,7 +6,10 @@ import {
   prepareMapIdentity,
   beaconMarkerState,
   beaconPinEmphasis,
-  beaconMarkerBadges,
+  beaconMarkerSlots,
+  beaconMarkerColor,
+  beaconFaceSize,
+  beaconGlyphSize,
   visibleMapLabels,
   markerStateLabel,
   EMPTY_MARKER_STATE,
@@ -95,7 +98,7 @@ test("marker states coexist independently of community hosting and expose access
     prepareMapIdentity(data, DEMO_ID),
     now,
   );
-  assert.deepEqual(state, {
+  assert.deepEqual({owned: state.owned, saved: state.saved, friendHosted: state.friendHosted, squadHosted: state.squadHosted, live: state.live, participatingLive: state.participatingLive, interest: state.interest}, {
     owned: false,
     saved: true,
     friendHosted: true,
@@ -104,7 +107,7 @@ test("marker states coexist independently of community hosting and expose access
     participatingLive: true,
     interest: true,
   });
-  assert.equal(markerStateLabel(state), "Saved, Matches your interests, Friend-hosted, Live, Going");
+  assert.equal(markerStateLabel(state), "Saved, Matches your interests, Friend-hosted, Live, Going, 2 confirmed participants");
   activity.owner_id = DEMO_ID;
   const owned = beaconMarkerState(
     data,
@@ -123,14 +126,13 @@ test("selection and live status preserve the relationship's projector hue and si
   const live = beaconPinEmphasis(state(), false, "#FF9999")!;
   const selected = beaconPinEmphasis(state(), true, "#FF9999")!;
   assert.deepEqual(selected, live);
-  assert.equal(live.color, "#77B9FA");
+  assert.equal(live.color, "#E8A54D");
 
   activity.approval_required = true;
   data.rsvps.find((row) => row.activity_id === activity.id)!.approved = false;
   assert.equal(state().participatingLive, false);
-  const friend = beaconPinEmphasis(state(), false, "#FF9999")!;
-  assert.equal(friend.level, 4);
-  assert.equal(friend.color, "#77B9FA");
+  assert.equal(beaconPinEmphasis(state(), false, "#FF9999"), null);
+  assert.equal(beaconMarkerColor(state()), "#77B9FA");
 
   data.is_demo = false;
   activity.viewer_can_access = true;
@@ -145,27 +147,34 @@ test("selection and live status preserve the relationship's projector hue and si
   assert.equal(state().squadHosted, false);
   data.squad_members.push({ squad_id: "lighting-squad", user_id: DEMO_ID, role: "member" });
   assert.equal(state().squadHosted, true);
-  const squad = beaconPinEmphasis(state(), false, "#FF9999")!;
-  assert.equal(squad.level, 5);
-  assert.equal(squad.color, "#68D6A2");
+  assert.equal(beaconMarkerColor({ ...state(), friendHosted: true }), "#68D6A2");
+  assert.equal(beaconPinEmphasis(state(), false, "#FF9999"), null);
 
   activity.owner_id = DEMO_ID;
   assert.equal(state().participatingLive, true);
   activity.starts_at = new Date(now + 60_000).toISOString();
   assert.equal(state().participatingLive, false);
   const owned = beaconPinEmphasis(state(), false, "#FF9999")!;
-  assert.equal(owned.level, 3);
-  assert.equal(owned.color, "#F5B952");
-  const levels = [selected, live, owned, friend, squad];
-  assert.deepEqual(levels.map(({ beamHeight }) => beamHeight), [24, 24, 24, 24, 24]);
+  assert.equal(owned.level, 1);
+  assert.equal(owned.color, "#FFD66B");
+  assert.deepEqual([selected, live, owned].map(({ beamHeight }) => beamHeight), [24, 24, 24]);
+  assert.equal(beaconPinEmphasis({ ...state(), lifecycle: "ended" }, true, "#FF9999"), null);
 });
 
 test("badges and nearby labels make room for the highest-priority identity", () => {
   const state = { ...EMPTY_MARKER_STATE, owned: true, friendHosted: true, saved: true, interest: true, live: true };
-  assert.deepEqual(beaconMarkerBadges(state, 3), ["ownership", "live", "saved"]);
-  assert.deepEqual(beaconMarkerBadges(state, 1), ["ownership"]);
-  assert.deepEqual(beaconMarkerBadges({ ...state, owned: false, friendHosted: false }, 3), ["live", "saved", "interest"]);
-  assert.deepEqual(beaconMarkerBadges(state, 3, false), ["ownership", "live"]);
+  const slots = (props: Parameters<typeof beaconMarkerSlots>[1]) =>
+    Object.fromEntries(beaconMarkerSlots(state, props).map(({ slot, kind }) => [slot, kind]));
+  assert.deepEqual(slots({ size: 40, street: true }), { identity: "ownership", lifecycle: "live" });
+  assert.deepEqual(slots({ size: 40, street: true, selected: true }), { identity: "ownership", saved: "saved", context: "interest", lifecycle: "live" });
+  assert.deepEqual(slots({ size: 40, street: true, selected: true, count: true }), { identity: "ownership", saved: "saved", lifecycle: "live" });
+  assert.deepEqual(slots({ size: 40, street: true, selected: true, crowded: true }), { identity: "ownership", lifecycle: "live" });
+  assert.deepEqual(slots({ size: 32, petal: true }), { identity: "ownership" });
+  const saved = beaconMarkerSlots({ ...EMPTY_MARKER_STATE, saved: true }, { size: 40, street: true });
+  assert.deepEqual(saved.map(({ slot, kind, left, diameter, glyphSize }) => [slot, kind, left, diameter, glyphSize]), [["saved", "saved", 28, 12, 9]]);
+  assert.equal(beaconMarkerSlots(state, { size: 60, street: true })[0]?.diameter, 14);
+  assert.deepEqual([30, 40, 44, 66].map(beaconGlyphSize), [16, 21, 23, 30]);
+  assert.equal(beaconFaceSize({ ...state, count: 1000 }, 40, true), 66);
   const points = [
     { id: "beacon:owned", kind: "beacon" as const, latitude: 41.88, longitude: -87.64 },
     { id: "person:chosen", kind: "person" as const, latitude: 41.88, longitude: -87.64 },

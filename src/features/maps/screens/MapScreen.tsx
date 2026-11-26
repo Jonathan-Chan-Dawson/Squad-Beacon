@@ -184,6 +184,8 @@ import { MapControlPopover, MapNavigationRow } from "../MapControlPopover";
 import { useMapWeather, weatherCondition } from "../mapWeather";
 import { MapOptions, MapStyleControls } from "@/src/features/maps/MapOptions";
 import { MapPlaceActions } from "@/src/features/maps/MapPlaceActions";
+import { MapPlanningPreview } from "../MapPlanningPreview";
+import { PlanningModeMenu, type planningCreationModes } from "@/src/features/planning/PlanningKindSelector";
 import {
   readMapDevicePreferences,
   writeMapDevicePreferences,
@@ -271,6 +273,8 @@ function validPhysicalPlace(
 
 export default function MapScreen() {
   const mapIsFocused = usePathname() === "/";
+  const [askGroupViewerKey, setAskGroupViewerKey] = useState<string | null>(null);
+  const [planningPinSelection, setPlanningPinSelection] = useState<{ viewer: string | null; id: string } | null>(null);
   const { colors, styles } = useTheme();
   const { showAvatars } = usePreferences();
   const reducedMotion = useReducedMotion();
@@ -410,12 +414,13 @@ export default function MapScreen() {
         : [],
     [contextState, data, userId, viewerKey, discoveryActive],
   );
-  const planFocus = [...contextViews]
-    .reverse()
-    .find((view) => view.key.startsWith("context:plan:"));
+  const mostRecentContext = contextViews.at(-1);
+  const threadFocus = mostRecentContext?.key.startsWith("context:thread:") ? mostRecentContext : undefined;
+  const planFocus = threadFocus ? undefined : [...contextViews].reverse().find((view) => view.key.startsWith("context:plan:"));
+  const activeContext = planFocus ?? threadFocus;
   const displayedContexts = useMemo(
-    () => (planFocus ? [planFocus] : contextViews),
-    [planFocus, contextViews],
+    () => (activeContext ? [activeContext] : contextViews),
+    [activeContext, contextViews],
   );
   const contextPoints = useMemo(
     () => [
@@ -1313,7 +1318,7 @@ export default function MapScreen() {
       ...(focusInterests ? strictPublicMapRows.flatMap((row) => !matchingPublic.has(row.activity_id) && publicSelection !== row.activity_id && row.coarse_lat != null && row.coarse_lng != null ? [{ id: `focus:public:${row.activity_id}`, kind: "beacon" as const, latitude: row.coarse_lat, longitude: row.coarse_lng }] : []) : []),
       ...(focusFree ? strictLocations.flatMap((row) => row.latitude != null && row.longitude != null && !freePeople.has(row.owner_id) && person !== row.owner_id ? [{ id: `focus:person:${row.owner_id}`, kind: "person" as const, latitude: row.latitude, longitude: row.longitude }] : []) : []),
     ];
-    return [...new Map(points.filter((point) => matchesExplorationArea(area, point)).map((point) => [point.id, point])).values()].slice(0, 16);
+    return [...new Map(points.filter((point) => matchesExplorationArea(area, point)).map((point) => [point.id, point])).values()].slice(0, 6);
   }, [focusInterests, focusFree, viewport, hasContexts, activities, strictActivities, publicMapRows, safePlaces, selected, strictPublicMapRows, publicSelection, strictLocations, freePeople, person]);
   const surpriseArea =
     surprise?.contextKey === surpriseContextKey ? surprise.area : viewport;
@@ -1541,6 +1546,12 @@ export default function MapScreen() {
   ].map((row) => ({
     id: `public:${row.activity_id}`,
     publicBeaconId: row.activity_id,
+    publicSummary: {
+      accepted_seat_count: row.accepted_seat_count,
+      viewer_response: row.viewer_response,
+      starts_at: row.starts_at,
+      ends_at: row.ends_at,
+    },
     mapIcon: row.map_icon,
     category: row.category,
     title: row.title,
@@ -1548,9 +1559,19 @@ export default function MapScreen() {
     longitude: row.coarse_lng!,
     suggestion: false,
   })), [now, publicMapRows, selectedPublic]);
-  const visibleContextPoints = useMemo(() => planFocus
+  const visibleContextPoints = useMemo(() => activeContext
     ? contextPoints : [...contextPoints, ...publicPoints],
-  [contextPoints, planFocus, publicPoints]);
+  [contextPoints, activeContext, publicPoints]);
+  const planningPin = planningPinSelection?.viewer === userId
+    ? contextPoints.find((point) => point.id === planningPinSelection?.id && point.threadId)
+    : undefined;
+  useEffect(() => {
+    if (!planningPinSelection || planningPin) return;
+    const frame = requestAnimationFrame(() => {
+      setPlanningPinSelection((current) => current === planningPinSelection ? null : current);
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [planningPinSelection, planningPin]);
   useEffect(() => {
     if (!clusterActivityIds || !clusterPersonIds) return;
     const beaconIds = new Set(activities.map((row) => row.id));
@@ -1915,6 +1936,7 @@ export default function MapScreen() {
   }
 
   function chooseBeacon(id: string, fromSurprise = false) {
+    setPlanningPinSelection(null);
     if (!fromSurprise) cancelSurprise();
     if (discoveryRestore.current) {
       discoveryRestore.current.selectionChanged = true;
@@ -1994,6 +2016,7 @@ export default function MapScreen() {
 
   function finishPicking() {
     Keyboard.dismiss();
+    setAskGroupViewerKey(null);
     const previous = pickRestore.current;
     pickRestore.current = null;
     creationLocationContext.current = {};
@@ -2667,7 +2690,7 @@ export default function MapScreen() {
     }
   }
 
-  function createAtPickedLocation(kind: "beacon" | "ping") {
+  function createAtPickedLocation(kind: "beacon" | (typeof planningCreationModes)[number]["kind"]) {
     if (
       !selectedPlace ||
       !selectedPlaceReadable ||
@@ -2682,10 +2705,10 @@ export default function MapScreen() {
       placeLabel: selectedPlace.label,
     };
     finishPicking();
-    if (kind === "ping")
+    if (kind !== "beacon")
       router.push({
         pathname: "/planning/create",
-        params: { ...location, kind: "ping", sessionId: randomUUID() },
+        params: { ...location, kind, sessionId: randomUUID() },
       });
     else router.push({ pathname: "/create", params: location });
   }
@@ -2907,6 +2930,7 @@ export default function MapScreen() {
             }
             fullScreen
             contextPoints={visibleContextPoints}
+            selectedPlanningPointId={planningPin?.id}
             contextPaths={contextPaths}
             onContextPoint={(point) => {
               if (pickMode) return;
@@ -2915,11 +2939,16 @@ export default function MapScreen() {
                 return;
               }
               if (point.activityId) chooseBeacon(point.activityId);
-              else if (point.threadId)
-                router.push({
-                  pathname: "/council/[id]",
-                  params: { id: point.threadId },
-                });
+              else if (point.threadId) {
+                closePopovers();
+                setSelected(null);
+                setPerson(null);
+                setPublicSelection(null);
+                setDetailTab(null);
+                setClusterActivityIds(null);
+                setClusterPersonIds(null);
+                setPlanningPinSelection({ viewer: userId, id: point.id });
+              }
             }}
             calm={calm}
             pulseSummaries={
@@ -2979,29 +3008,31 @@ export default function MapScreen() {
                 ? selectedPlaceReadable
                   ? selectedPlace
                   : null
-                : selectedPublic
+                : planningPin ?? (selectedPublic
                   ? {
                       latitude: selectedPublic.coarse_lat!,
                       longitude: selectedPublic.coarse_lng!,
                     }
                   : clusterActivityIds
                     ? clusterCenter
-                    : focusedCoordinate
+                    : focusedCoordinate)
             }
             onAnchor={setMapAnchor}
             activities={
               planFocus
                 ? []
+                : threadFocus
+                  ? threadFocus.activities
                 : focusedBeacon &&
                     !activities.some((activity) => activity.id === selected)
                   ? [...activities, focusedBeacon]
                   : activities
             }
             availabilityActivities={
-              discoveryActive || planFocus ? [] : availabilityActivities
+              discoveryActive || activeContext ? [] : availabilityActivities
             }
             places={safePlaces}
-            locations={planFocus ? [] : selectedPersonLocation && !mapLocations.some((location) => location.id === selectedPersonLocation.id) && strictLocations.some((location) => location.id === selectedPersonLocation.id) ? [...mapLocations, selectedPersonLocation] : mapLocations}
+            locations={activeContext ? [] : selectedPersonLocation && !mapLocations.some((location) => location.id === selectedPersonLocation.id) && strictLocations.some((location) => location.id === selectedPersonLocation.id) ? [...mapLocations, selectedPersonLocation] : mapLocations}
             profiles={data.profiles}
             clusterPriorities={clusterPriorities}
             areaName={
@@ -3010,6 +3041,7 @@ export default function MapScreen() {
                 : undefined
             }
             selectedActivityId={selected}
+            selectedPublicBeaconId={publicSelection}
             selectedPersonId={person}
             focusBackground={pickMode || planFocus ? undefined : focusBackground}
             onPick={
@@ -3600,6 +3632,25 @@ export default function MapScreen() {
           </View>
         ) : null}
 
+        {mapIsFocused && planningPin && !pickMode && mapAnchor && (
+          <MapPlanningPreview
+            key={`${userId}:${planningPin.id}`}
+            point={planningPin}
+            anchor={mapAnchor}
+            bounds={{ ...mapSize, top: headerTop + headerHeight + 12, bottom: mapBottomClearance + 8 }}
+            onClose={() => setPlanningPinSelection(null)}
+            onOpen={(id) => {
+              setPlanningPinSelection(null);
+              router.push({ pathname: "/council/[id]", params: { id } });
+            }}
+          />
+        )}
+        {askGroupViewerKey === viewerKey && mapIsFocused && pickMode && selectedPlace && selectedPlaceReadable && (
+          <Sheet title="Ask Group" visible onClose={() => setAskGroupViewerKey(null)} maxHeightPercent={75}>
+            <Text style={styles.muted}>{selectedPlace.label}</Text>
+            <PlanningModeMenu layout="list" onSelect={createAtPickedLocation} />
+          </Sheet>
+        )}
         <MyBeaconsSheet
           visible={myBeaconsOpen}
           onClose={() => setMyBeaconsOpen(false)}
@@ -3632,6 +3683,7 @@ export default function MapScreen() {
         !activeSearchVisible &&
         controlsVisible &&
         !clusterActivityIds &&
+        !planningPin &&
         !beaconPreviewOpen ? (
           <View
             testID="map-control-rail"
@@ -4262,7 +4314,7 @@ export default function MapScreen() {
               title={selectedPlace.label}
               onClose={cancelPicking}
               onCreate={() => createAtPickedLocation("beacon")}
-              onPing={() => createAtPickedLocation("ping")}
+              onAskGroup={() => setAskGroupViewerKey(viewerKey)}
               onUpdate={() => openAddUpdate()}
               onDirections={() => {
                 const url = physicalDirectionsUrl(

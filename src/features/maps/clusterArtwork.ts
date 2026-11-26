@@ -27,6 +27,7 @@ import { formatLocationAge, type ClusterPoint } from "./cluster";
 export type ClusterMemberArtwork = {
   id: string;
   kind: ClusterPoint["kind"];
+  publicMarker: boolean;
   category: Category;
   label: string;
   owned: boolean;
@@ -74,6 +75,7 @@ export class ClusterArtworkCache {
         profile = point.kind === "person" ? profilesById.get(id) : undefined;
       const activity =
         point.kind === "beacon" ? activitiesById.get(id) : undefined;
+      const publicMarker = point.kind === "beacon" && !activity;
       const markerState = activity
         ? beaconMarkerState(data, activity, lookup, now)
         : EMPTY_MARKER_STATE;
@@ -101,6 +103,7 @@ export class ClusterArtworkCache {
       const visualRevision = JSON.stringify([
         point.id,
         category,
+        publicMarker,
         owned,
         markerState,
         availability,
@@ -123,6 +126,7 @@ export class ClusterArtworkCache {
           : {
               id: point.id,
               kind: point.kind,
+              publicMarker,
               category,
               label,
               owned,

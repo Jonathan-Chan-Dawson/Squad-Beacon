@@ -1,5 +1,7 @@
 import type { beaconPinEmphasis } from "./markerIdentity";
 
+export const clusterPrism = { ice: "#A5E8FF", pearl: "#F4F8FF", lilac: "#CFB9FF", blush: "#F7CEF5" };
+
 export function beaconProjectionDimensions(tier: "close" | "medium" | "far") {
   if (tier === "close") return { height: 21, width: 36, opacity: 0.9 };
   if (tier === "medium") return { height: 20, width: 31, opacity: 0.85 };
@@ -37,6 +39,9 @@ export function appendMapProjector(
   const beam = document.createElement("span");
   beam.style.cssText =
     "position:absolute;inset:0;background:linear-gradient(transparent, currentColor 52%, currentColor);clip-path:polygon(15% 0,85% 0,56% 100%,44% 100%);";
+  if (kind === "cluster") {
+    beam.style.background = `linear-gradient(170deg, ${clusterPrism.ice}35, ${clusterPrism.ice} 28%, ${clusterPrism.pearl} 55%, ${clusterPrism.lilac} 78%, ${clusterPrism.blush})`;
+  }
   const core = document.createElement("span");
   core.style.cssText =
     "position:absolute;inset:0;background:linear-gradient(transparent 12%, #ffffff50 72%, #ffffffb3);clip-path:polygon(37% 0,63% 0,52% 100%,48% 100%);";
@@ -44,6 +49,9 @@ export function appendMapProjector(
   base.dataset.projectorPart = "base";
   base.style.cssText =
     "position:absolute;inset:auto 0 -5px;height:10px;border-radius:50%;background:radial-gradient(ellipse,#ffffffb3 8%,currentColor 22%,transparent 48%,currentColor 61%,transparent 72%);";
+  if (kind === "cluster") {
+    base.style.background = `radial-gradient(ellipse, ${clusterPrism.pearl} 10%, ${clusterPrism.ice}a0 29%, transparent 49%, ${clusterPrism.lilac}c0 60%, transparent 76%)`;
+  }
   projector.append(beam, core, base);
   parent.append(projector);
 }

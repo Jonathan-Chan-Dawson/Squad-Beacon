@@ -17,6 +17,7 @@ export function AppNavigation({
   return (
     <Stack screenOptions={{ headerShown: false }} screenLayout={screenLayout}>
       <Stack.Screen name="(tabs)" />
+      <Stack.Screen name="beacon-shop" dangerouslySingular />
       <Stack.Screen name="create" options={{ presentation: "modal" }} />
       <Stack.Screen
         name="profile/edit"

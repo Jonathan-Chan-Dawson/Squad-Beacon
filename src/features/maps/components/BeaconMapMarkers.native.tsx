@@ -5,11 +5,15 @@ import {
   EMPTY_MARKER_STATE,
   markerStateLabel,
   beaconPinEmphasis,
-  beaconMarkerBadges,
+  beaconMarkerSlots,
+  beaconFaceSize,
+  quietBeacon,
+  mapPersonOpacity,
   beaconBadgeArtwork,
   beaconMarkerColor,
-  BEACON_BADGE_SIZE,
-  BEACON_BADGE_GAP,
+  MAP_BADGE_INK,
+  beaconGlyphSize,
+  PUBLIC_BEACON_FACE_SIZE,
   distantBeaconPinEmphasis,
   BEACON_LIVE_BEAM_HEIGHT,
   BEACON_SELECTED_BEAM_HEIGHT,
@@ -35,6 +39,7 @@ import type { activeAvailability } from "@/src/features/beacons/availability";
 import { CLUSTER_PREVIEW_LIMIT } from "../mapClusterPolicy";
 import React, { useEffect, useRef, useState } from "react";
 import { BeaconPinGlyph } from "./BeaconPinGlyph";
+import { STELLAR_OPACITY, STELLAR_OUTLINE } from "../clusterBloom";
 import { Image, Text, View } from "react-native";
 import { Circle as MapCircle, Marker } from "react-native-maps";
 import Svg, { Circle, Defs, LinearGradient, Path, RadialGradient, Rect, Stop } from "react-native-svg";
@@ -353,6 +358,7 @@ export function BeaconPinLight({
 export function BeaconMarkerArtwork({
   category,
   categoryColor,
+  cosmetic,
   selected = false,
   dimmed = false,
   streetTime,
@@ -366,6 +372,8 @@ export function BeaconMarkerArtwork({
   lightingTier = "close",
   raisedPin = false,
   stopNumber,
+  publicMarker = false,
+  badgeCrowded = false,
 }: {
   id: string;
   lightEnabled?: boolean;
@@ -374,6 +382,8 @@ export function BeaconMarkerArtwork({
   lightingTier?: "close" | "medium" | "far" | "micro";
   raisedPin?: boolean;
   stopNumber?: number;
+  publicMarker?: boolean;
+  badgeCrowded?: boolean;
   cosmetic?: ReturnType<typeof beaconMapLook>;
   category: Category;
   categoryColor: string;
@@ -387,17 +397,21 @@ export function BeaconMarkerArtwork({
 }) {
   const { colors } = useTheme();
   const markerColor = beaconMarkerColor(markerState);
-  const artworkWidth = raisedPin && selected ? 116 : beaconName ? BEACON_NAME_MAX_WIDTH : 58;
-  const streetSize = markerVisualSize("beacon");
-  const visualSize = lightingTier !== "close" && !stopNumber ? 30 : streetSize;
+  const artworkWidth = raisedPin && selected ? 116 : beaconName ? BEACON_NAME_MAX_WIDTH : 78;
+  const streetSize = publicMarker ? PUBLIC_BEACON_FACE_SIZE : markerVisualSize("beacon");
+  const baselineSize = lightingTier !== "close" && !stopNumber ? publicMarker ? 34 : 30 : streetSize;
+  const visualSize = beaconFaceSize(markerState, baselineSize, lightingTier === "close");
+  const growth = visualSize - baselineSize;
+  const quiet = quietBeacon(markerState);
+  const count = lightingTier === "close" && !dimmed && (publicMarker || (markerState.count ?? 0) >= 30) ? markerState.count : undefined;
   const pinInset = raisedPin ? (selected ? NATIVE_SELECTED_LIGHT_INSET : NATIVE_BEACON_LIGHT_INSET) : 0;
-  const tipY = pinInset + streetSize / 2 + BEACON_FACE_TO_TIP;
+  const tipY = pinInset + (publicMarker ? visualSize : streetSize + growth) + BEACON_PIN_TIP.height - BEACON_PIN_TIP.overlap;
   const lighting = lightEnabled && !dimmed
     ? beaconPinEmphasis(markerState, selected, categoryColor)
     : null;
   const upperLight = lightingTier === "close" ? lighting : distantBeaconPinEmphasis(lighting, lightingTier);
   const projectionRoom = showProjection || compactProjection;
-  const projection = projectionRoom && lightEnabled && !dimmed
+  const projection = projectionRoom && lightEnabled && !dimmed && markerState.lifecycle !== "cancelled"
     ? beaconProjectionDimensions(showProjection ? "close" : lightingTier === "far" ? "far" : "medium")
     : undefined;
   return (
@@ -405,7 +419,8 @@ export function BeaconMarkerArtwork({
       <View
         style={{
           width: artworkWidth,
-          height: (streetTime || beaconName ? 70 : 56) + pinInset + (projectionRoom ? NATIVE_PROJECTION_ROOM : 0),
+          height: (streetTime || beaconName ? 70 : 56) + pinInset + (projectionRoom ? NATIVE_PROJECTION_ROOM : 0) + growth,
+          opacity: quiet && !dimmed ? 0.52 : 1,
           paddingTop: pinInset,
           alignItems: "center",
         }}
@@ -414,16 +429,18 @@ export function BeaconMarkerArtwork({
         {projection ? (
           <MapProjector kind="beacon" center={artworkWidth / 2}
             color={markerColor} top={pinInset + visualSize - 5}
-            {...projection} />
-        ) : showProjection ? <BeaconPinTip color={markerColor} faceBottom={pinInset + visualSize} /> : null}
+            {...projection} width={Math.round(projection.width * visualSize / baselineSize)} opacity={projection.opacity * (quiet ? 0.2 : markerState.light ?? 1)} />
+        ) : showProjection && !quiet ? <BeaconPinTip color={markerColor} faceBottom={pinInset + visualSize} /> : null}
         {selected && !dimmed && <View pointerEvents="none" testID="map-marker-selection-ring" style={{ position: "absolute", top: tipY - 15, left: "50%", marginLeft: -15, width: 30, height: 30, borderRadius: 15, borderWidth: 2, borderStyle: "dotted", borderColor: mapIdentityColors.selection }} />}
         <View
+          testID={publicMarker ? "public-beacon-face" : undefined}
           style={{
             width: visualSize,
             height: visualSize,
-            borderRadius: visualSize / 2,
+            borderRadius: publicMarker ? 11 : visualSize / 2,
             borderWidth: 2,
-            borderColor: markerColor,
+            borderColor: markerState.lifecycle === "cancelled" ? "#D4969D" : markerColor,
+            borderStyle: markerState.lifecycle === "upcoming" ? "dashed" : "solid",
             backgroundColor: colors.surface,
             alignItems: "center",
             justifyContent: "center",
@@ -434,15 +451,19 @@ export function BeaconMarkerArtwork({
             shadowOffset: { width: 0, height: 3 },
           }}
         >
-          <BeaconPinGlyph category={category} icon={icon} size={22} color={colors.ink} />
+          {cosmetic?.frame && !dimmed && !quiet && <View pointerEvents="none" style={{ position: "absolute", top: 2, bottom: 2, left: 2, right: 2, borderWidth: 1, borderRadius: publicMarker ? 8 : visualSize / 2, borderColor: cosmetic.frame + "99" }} />}
+          <BeaconPinGlyph category={category} icon={icon} size={beaconGlyphSize(visualSize)} color={colors.ink} />
           {stopNumber ? (
             <View pointerEvents="none" accessible={false} testID="map-plan-stop-badge" style={{ position: "absolute", left: -5, top: -5, minWidth: 16, height: 16, paddingHorizontal: 3, borderRadius: 8, borderWidth: 1, borderColor: categoryColor, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" }}>
               <Text style={{ color: colors.ink, fontSize: 9, fontWeight: "700" }}>{stopNumber}</Text>
             </View>
           ) : null}
           {!dimmed && (lightingTier === "close" || lightingTier === "medium") && (
-            <BeaconMarkerBadgeRow state={markerState} limit={lightingTier === "close" ? 3 : 1} showRelevance={showSaved} />
+            <BeaconMarkerBadgeRow state={markerState} size={visualSize} street={lightingTier === "close"} selected={selected} crowded={badgeCrowded || (!!stopNumber && !!beaconName)} publicMarker={publicMarker} count={count != null} showRelevance={showSaved} />
           )}
+          {count != null && <View testID="beacon-map-participant-count" style={{position: "absolute", bottom: -8, borderRadius: 6, borderWidth: 1, borderColor: markerColor, backgroundColor: colors.surface, paddingHorizontal: 4}}>
+            <Text style={{color: colors.ink, fontSize: 9, fontWeight: "700"}}>{count}</Text>
+          </View>}
         </View>
         {streetTime || beaconName ? (
           <View
@@ -492,10 +513,14 @@ function BeaconMapPinComponent({
   icon,
   stopNumber,
   cosmetic,
+  publicMarker = false,
+  badgeCrowded = false,
 }: {
   id: string;
   icon?: string | null;
   stopNumber?: number;
+  publicMarker?: boolean;
+  badgeCrowded?: boolean;
   cosmetic?: ReturnType<typeof beaconMapLook>;
   title: string;
   coordinate: { latitude: number; longitude: number };
@@ -514,15 +539,17 @@ function BeaconMapPinComponent({
   lightingTier?: "close" | "medium" | "far" | "micro";
   markerState: BeaconMarkerState;
 }) {
-  const { colors } = useTheme();
   const stateLabel = markerStateLabel(markerState);
   const pinInset = selected ? NATIVE_SELECTED_LIGHT_INSET : NATIVE_BEACON_LIGHT_INSET;
-  const tipBottom = pinInset + markerVisualSize("beacon") / 2 + BEACON_FACE_TO_TIP;
+  const streetSize = publicMarker ? PUBLIC_BEACON_FACE_SIZE : markerVisualSize("beacon");
+  const baselineSize = lightingTier !== "close" && !stopNumber ? publicMarker ? 34 : 30 : streetSize;
+  const growth = beaconFaceSize(markerState, baselineSize, lightingTier === "close") - baselineSize;
+  const tipBottom = pinInset + (publicMarker ? baselineSize + BEACON_PIN_TIP.height - BEACON_PIN_TIP.overlap : markerVisualSize("beacon") / 2 + BEACON_FACE_TO_TIP) + growth;
   const markerHeight = (streetTime || beaconName ? 70 : 56) + pinInset +
-    (showProjection || compactProjection ? NATIVE_PROJECTION_ROOM : 0);
-  const label = `${stopNumber ? `Plan stop ${stopNumber}` : "Map"}: ${title}${stateLabel ? `, ${stateLabel}` : ""}`;
+    (showProjection || compactProjection ? NATIVE_PROJECTION_ROOM : 0) + growth;
+  const label = `${stopNumber ? `Plan stop ${stopNumber}` : publicMarker ? "Public Beacon" : "Map"}: ${title}${stateLabel ? `, ${stateLabel}` : ""}`;
   const tracking = useMarkerTracking(
-    `${JSON.stringify(markerState)}:${id}:${categoryColor}:${selected}:${dimmed}:${streetTime ?? ""}:${beaconName ?? ""}:${appearanceKey}:${dot}:${showProjection}:${compactProjection}:${lightingTier}:${icon ?? ""}:${stopNumber ?? ""}:${cosmetic?.frame ?? ""}:${cosmetic?.beam ?? ""}`,
+    `${JSON.stringify(markerState)}:${id}:${categoryColor}:${selected}:${dimmed}:${streetTime ?? ""}:${beaconName ?? ""}:${appearanceKey}:${dot}:${showProjection}:${compactProjection}:${lightingTier}:${publicMarker}:${badgeCrowded}:${icon ?? ""}:${stopNumber ?? ""}:${cosmetic?.frame ?? ""}:${cosmetic?.beam ?? ""}`,
   );
   if (dot)
     return (
@@ -544,16 +571,9 @@ function BeaconMapPinComponent({
             justifyContent: "center",
           }}
         >
-          <View
-            style={{
-              width: 10,
-              height: 10,
-              borderRadius: 5,
-              backgroundColor: beaconMarkerColor(markerState),
-              borderWidth: 1,
-              borderColor: colors.surface,
-            }}
-          />
+          <Svg testID="map-single-stellar-beacon" width={10} height={10} viewBox="0 0 100 100" style={{ opacity: STELLAR_OPACITY }}>
+            <Path d={STELLAR_OUTLINE} fill={beaconMarkerColor(markerState)} />
+          </Svg>
         </View>
       </Marker>
     );
@@ -588,6 +608,8 @@ function BeaconMapPinComponent({
         markerState={markerState}
         cosmetic={cosmetic}
         stopNumber={stopNumber}
+        publicMarker={publicMarker}
+        badgeCrowded={badgeCrowded}
       />
     </Marker>
   );
@@ -604,6 +626,8 @@ export const BeaconMapPin = React.memo(
     left.category === right.category &&
     left.icon === right.icon &&
     left.stopNumber === right.stopNumber &&
+    left.publicMarker === right.publicMarker &&
+    left.badgeCrowded === right.badgeCrowded &&
     left.categoryColor === right.categoryColor &&
     left.cosmetic?.frame === right.cosmetic?.frame &&
     left.cosmetic?.beam === right.cosmetic?.beam &&
@@ -677,6 +701,7 @@ function FriendMapPinComponent({
           style={{
             width: avatarSize,
             height: avatarSize,
+            opacity: mapPersonOpacity(ageLabel, selected),
             borderRadius: avatarSize / 2,
             borderColor: availabilityColor,
             borderWidth: 1.5,
@@ -697,9 +722,9 @@ function FriendMapPinComponent({
             }}
           />
           {street && <AvailabilityArc detail={availabilityDetail} size={avatarSize - 3} />}
-          {street && personBadges?.map((name, index) => {
+          {street && personBadges?.slice(0, 1).map((name, index) => {
             const badge = personMarkerBadges[name];
-            return <View key={name} pointerEvents="none" accessibilityElementsHidden style={{ position: "absolute", top: -3, left: index === 0 ? -3 : undefined, right: index === 1 ? -3 : undefined, backgroundColor: badge.color, borderRadius: 7, width: 12, height: 12, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#FFFFFF" }}><Text style={{ color: "#26243A", fontSize: 8, fontWeight: "700" }}>{badge.glyph}</Text></View>;
+            return <View key={name} pointerEvents="none" accessibilityElementsHidden style={{ position: "absolute", top: -3, right: index === 0 ? -3 : undefined, backgroundColor: badge.color, borderRadius: 7, width: 12, height: 12, alignItems: "center", justifyContent: "center", borderWidth: 1, borderColor: "#FFFFFF" }}><Text style={{ color: "#26243A", fontSize: 8, fontWeight: "700" }}>{badge.glyph}</Text></View>;
           })}
           <AvatarStatusBadge state={availabilityLabel === "unavailable" ? "unavailable" : availabilityLabel === "unknown" ? "unknown" : "available"} size={street ? 12 : 10} />
         </View>
@@ -962,19 +987,18 @@ export const ClusterMapPin = React.memo(
     left.onPress === right.onPress,
 );
 
-export function BeaconMarkerBadgeRow({ state, limit, showRelevance }: { state: BeaconMarkerState; limit: 1 | 3; showRelevance?: boolean }) {
+export function BeaconMarkerBadgeRow({ state, ...options }: { state: BeaconMarkerState } & Parameters<typeof beaconMarkerSlots>[1]) {
   const { colors } = useTheme();
-  const badges = beaconMarkerBadges(state, limit, showRelevance);
+  const badges = beaconMarkerSlots(state, options);
   if (!badges.length) return null;
   return (
-    <View testID="beacon-marker-badges" pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={{ position: "absolute", bottom: -4, left: 0, right: 0, zIndex: 6, flexDirection: "row", justifyContent: "center", gap: BEACON_BADGE_GAP }}>
-      {badges.map((kind) => {
+    <View testID="beacon-marker-badges" pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={{ position: "absolute", top: 0, bottom: 0, left: 0, right: 0, zIndex: 6 }}>
+      {badges.map(({ kind, slot, left, top, diameter, glyphSize }) => {
         const { color, testId, path, filled } = beaconBadgeArtwork[kind];
-        const ownedBadge = kind === "ownership";
-        const ink = ownedBadge ? color : "#252031";
+        const ink = MAP_BADGE_INK;
         return (
-          <View key={kind} testID={testId} style={{ width: BEACON_BADGE_SIZE, height: BEACON_BADGE_SIZE, borderRadius: BEACON_BADGE_SIZE / 2, borderWidth: 1, borderColor: ownedBadge ? color : colors.surface, backgroundColor: ownedBadge ? "#30251E" : color, alignItems: "center", justifyContent: "center", shadowColor: color, shadowRadius: ownedBadge ? 2 : 0, shadowOpacity: ownedBadge ? 0.8 : 0 }}>
-            <Svg width={8} height={8} viewBox="0 0 24 24">
+          <View key={slot} testID={testId} style={{ position: "absolute", left, top, width: diameter, height: diameter, borderRadius: diameter / 2, borderWidth: 1, borderColor: colors.surface, backgroundColor: color, alignItems: "center", justifyContent: "center" }}>
+            <Svg width={glyphSize} height={glyphSize} viewBox="0 0 24 24">
               <Path d={path} fill={filled ? ink : "none"} stroke={filled ? "none" : ink} strokeWidth={2.5} strokeLinecap="round" />
             </Svg>
           </View>

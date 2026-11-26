@@ -13,7 +13,7 @@ import { clusterPeople } from "./mapDiscovery";
 import { canReadBeaconActivity } from "@/src/features/beacons/beaconModules";
 import { canReadBeaconMeetingDetails } from "./filtering";
 import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
-import { ActivityBadge } from "@/src/features/beacons/ActivityBadge";
+import { DiscoveryBeaconCard } from "@/src/features/discovery/DiscoveryBeaconCard";
 import {
   beaconDiscoveryTier,
   beaconPreviewWhen,
@@ -197,34 +197,19 @@ export function MapNearbyPanel({
                     ? data.places.find((row) => row.activity_id === activity.id)
                     : undefined;
                 return (
-                  <Pressable
+                  <DiscoveryBeaconCard
                     key={activity.id}
-                    accessibilityRole="button"
-                    accessibilityLabel={`Select ${activity.title} Beacon`}
-                    onPress={() => onBeacon(activity.id)}
-                    style={({ pressed }) => [styles.row, resultRow, { opacity: pressed ? 0.74 : 1 }]}
-                  >
-                    <ActivityBadge category={activity.category} size={32} />
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      <Text
-                        numberOfLines={1}
-                        style={[styles.body, tokens.type.secondary, { fontWeight: "600" }]}
-                      >
-                        {activity.title}
-                      </Text>
-                      <Text style={[styles.muted, tokens.type.caption]}>
-                        {beaconPreviewWhen(activity, now)}
-                      </Text>
-                      <Text
-                        numberOfLines={1}
-                        style={[styles.muted, { fontSize: 11 }]}
-                      >
-                        {place?.online_url
-                          ? "Virtual"
-                          : place?.label || "Meeting details restricted"}
-                      </Text>
-                    </View>
-                  </Pressable>
+                    activityId={activity.id}
+                    density="compact"
+                    title={activity.title}
+                    category={activity.category}
+                    mapIcon={activity.map_icon}
+                    decorationEmoji={activity.decoration_emoji}
+                    whenLabel={beaconPreviewWhen(activity, now)}
+                    locationLabel={place?.online_url ? "Virtual" : place?.label}
+                    detailsLabel={`Select ${activity.title} Beacon`}
+                    onDetails={() => onBeacon(activity.id)}
+                  />
                 );
               })}
           {(compact || tab === "Beacons") &&
@@ -236,23 +221,18 @@ export function MapNearbyPanel({
                   : Math.max(0, 3 - beacons.length),
               )
               .map((row) => (
-                <Pressable
+                <DiscoveryBeaconCard
                   key={row.activity_id}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Preview ${row.title} public Beacon`}
-                  onPress={() => onPublicBeacon?.(row.activity_id)}
-                  style={({ pressed }) => [styles.row, resultRow, { opacity: pressed ? 0.74 : 1 }]}
-                >
-                  <ActivityBadge category={row.category} size={32} />
-                  <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text numberOfLines={1} style={[styles.body, tokens.type.secondary, { fontWeight: "600" }]}>
-                      {row.title}
-                    </Text>
-                    <Text style={[styles.muted, tokens.type.caption]}>
-                      Public {"\u00b7"} {row.area_label}
-                    </Text>
-                  </View>
-                </Pressable>
+                  activityId={row.activity_id}
+                  density="compact"
+                  title={row.title}
+                  category={row.category}
+                  mapIcon={row.map_icon}
+                  whenLabel={beaconPreviewWhen({ ...row, timezone: "" }, now)}
+                  locationLabel={row.area_label}
+                  detailsLabel={`Preview ${row.title} public Beacon`}
+                  onDetails={onPublicBeacon ? () => onPublicBeacon(row.activity_id) : undefined}
+                />
               ))}
           {(compact || tab === "Friends") &&
             matchingPeople

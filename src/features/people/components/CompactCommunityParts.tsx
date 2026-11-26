@@ -1,7 +1,7 @@
-import { BeaconIcon } from "@/src/features/beacons/components/BeaconIcon";
+import { DiscoveryBeaconCard } from "@/src/features/discovery/DiscoveryBeaconCard";
 import React from "react";
 import { Pressable, Text, View } from "react-native";
-import { ArrowUpRight, ChevronRight } from "lucide-react-native";
+import { ChevronRight } from "lucide-react-native";
 import type { LucideIcon } from "lucide-react-native";
 import type { Activity } from "@/src/shared/types";
 import { useTheme } from "@/src/shared/ui";
@@ -108,55 +108,13 @@ export function CompactBeaconCard({
   onPress: () => void;
   testID?: string;
 }) {
-  const { styles, colors } = useTheme();
   return (
-    <Pressable
-      testID={testID}
-      accessibilityRole="button"
-      accessibilityLabel={`${label}: ${activity.title}`}
-      accessibilityHint="Opens a Beacon preview"
-      onPress={onPress}
-      style={[styles.card, styles.row, { minHeight: 76 }]}
-    >
-      <BeaconIcon
-        category={activity.category}
-        emoji={activity.decoration_emoji}
-        size={44}
-      />
-      <View style={{ flex: 1, minWidth: 0, gap: 5 }}>
-        <View style={styles.row}>
-          <Text style={styles.label}>{label}</Text>
-          {live ? (
-            <Text
-              style={[
-                styles.label,
-                {
-                  paddingHorizontal: 7,
-                  paddingVertical: 3,
-                  borderRadius: 10,
-                  color: colors.green,
-                  backgroundColor: colors.lime,
-                },
-              ]}
-            >
-              Live
-            </Text>
-          ) : null}
-        </View>
-        <Text style={[styles.body, { fontWeight: "600" }]} numberOfLines={2}>
-          {activity.title}
-        </Text>
-        <Text style={styles.muted}>
-          {new Date(activity.starts_at).toLocaleString([], {
-            weekday: "short",
-            month: "short",
-            day: "numeric",
-            hour: "numeric",
-            minute: "2-digit",
-          })}
-        </Text>
-      </View>
-      <ArrowUpRight size={18} color={colors.green} />
-    </Pressable>
+    <DiscoveryBeaconCard density="mini" testID={testID} activityId={activity.id} title={activity.title}
+      category={activity.category} decorationEmoji={activity.decoration_emoji} mapIcon={activity.map_icon}
+      statusLabel={label} isLive={live} detailsLabel={`${label}: ${activity.title}`} onDetails={onPress}
+      whenLabel={new Date(activity.starts_at).toLocaleString([], {
+        weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+      })}
+    />
   );
 }

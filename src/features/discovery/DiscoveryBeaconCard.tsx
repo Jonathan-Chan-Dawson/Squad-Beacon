@@ -1,100 +1,96 @@
+import React from "react";
+import { Pressable, Text, View, useWindowDimensions } from "react-native";
+import {
+  ChevronDown,
+  ChevronRight,
+  Clock3,
+  MapPin,
+  Maximize2,
+  Route,
+  Zap,
+} from "lucide-react-native";
+import { Card, useDesignTheme } from "@/src/shared/design-system";
+import type { Category } from "@/src/shared/types";
 import {
   BeaconCardArtwork,
   type BeaconArtworkStyle,
 } from "@/src/features/beacons/components/BeaconCardArtwork";
-import React from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
-import {
-  CalendarDays,
-  ChevronRight,
-  Radio,
-  Route,
-  Clock3,
-  MapPin,
-  UsersRound,
-} from "lucide-react-native";
-import type { Category } from "@/src/shared/types";
-import { Card, useDesignTheme } from "@/src/shared/design-system";
 import { BeaconIcon } from "@/src/features/beacons/components/BeaconIcon";
-import { HomeAction } from "@/src/features/beacons/components/HomeAction";
+import { BeaconPinGlyph } from "@/src/features/maps/components/BeaconPinGlyph";
+import { MapTooltipShell } from "@/src/features/maps/MapTooltipShell";
 import {
   discoveryCardMetadata,
   mapBeaconTitle,
   type DiscoveryCardCapacity,
 } from "./discoveryCardPresentation";
-import {
-  MapTooltipHeader,
-  MapTooltipShell,
-} from "@/src/features/maps/MapTooltipShell";
-import { BeaconPinGlyph } from "@/src/features/maps/components/BeaconPinGlyph";
-import { CommunityArtwork } from "@/src/features/people/components/CommunityCard";
-import type { SocialEntityType } from "@/src/features/social/types";
-import { useBeacon } from "@/src/shared/store";
-import { rewardTint } from "@/src/features/beacons/rewardLooks";
+
+export type BeaconCardDensity = "standard" | "compact" | "mini";
+
+export type CardPlanContext = {
+  title: string;
+  onPress: () => void;
+  onShowOnMap?: () => void;
+  stepIndex?: number | null;
+  stop?: { position: number; total: number };
+};
 
 export type DiscoveryBeaconCardProps = {
-  /** Map-only density. Browse and homepage cards retain their default treatment. */
+  density?: BeaconCardDensity;
   mapPreview?: boolean;
   activityId: string;
+  testID?: string;
   title: string;
   category: Category;
   artworkVariant?: BeaconArtworkStyle;
   mapIcon?: string | null;
-  mapHostLabel?: string;
-  mapCommunityName?: string;
-  mapCommunityKey?: string;
-  mapCommunityType?: SocialEntityType;
   decorationAccent?: string | null;
   decorationEmoji?: string | null;
+  relationshipColor?: string;
+  cosmeticTint?: string;
   whenLabel?: string | null;
+  statusLabel?: string;
   isLive?: boolean;
   locationLabel?: string | null;
-  goingCount: number;
+  hostLabel?: string | null;
+  description?: string | null;
+  goingCount?: number;
   capacity?: DiscoveryCardCapacity | null;
   friendsGoing?: number;
-  planContext?: {
-    title: string;
-    onPress: () => void;
-    onShowOnMap?: () => void;
-    stepIndex?: number | null;
-  };
+  planContext?: CardPlanContext;
   socialAvatars?: React.ReactNode;
   communityContext?: React.ReactNode;
   context?: React.ReactNode;
-  /** Opens the authorized attendee roster for this Beacon. */
-  onOpenPeople?: () => void;
-  /** Shows the lightweight host status footer on authorized discovery cards. */
-  hosted?: boolean;
-  primaryAction: React.ReactNode;
-  /** Accessible controls owned by the containing surface, such as Map close. */
+  smartFeature?: React.ReactNode;
+  primaryAction?: React.ReactNode;
   headerAccessory?: React.ReactNode;
   onDetails?: () => void;
   detailsLabel?: string;
-  /** The More menu is kept in the top-right toolbar. */
+  expanded?: boolean;
   menu?: React.ReactNode;
-  /** Lightweight reactions stay beside the attendance metadata. */
-  metadataAccessory?: React.ReactNode;
   shortcutActions?: React.ReactNode;
   actionShortcuts?: React.ReactNode;
   feedback?: React.ReactNode;
 };
 
 export function DiscoveryBeaconCard({
+  density = "standard",
   mapPreview = false,
   activityId,
+  testID = `discovery-beacon-card-${activityId}`,
   title,
   category,
   artworkVariant,
   mapIcon,
-  mapHostLabel,
-  mapCommunityName,
-  mapCommunityKey,
-  mapCommunityType,
   decorationAccent,
   decorationEmoji,
+  relationshipColor,
+  cosmeticTint,
   whenLabel,
+  statusLabel,
   isLive = false,
   locationLabel,
+  hostLabel,
+  description,
   goingCount,
   capacity,
   friendsGoing,
@@ -102,534 +98,450 @@ export function DiscoveryBeaconCard({
   socialAvatars,
   communityContext,
   context,
-  onOpenPeople,
-  hosted = false,
+  smartFeature,
   primaryAction,
   headerAccessory,
   onDetails,
   detailsLabel,
+  expanded,
   menu,
-  metadataAccessory,
   shortcutActions,
   actionShortcuts,
   feedback,
 }: DiscoveryBeaconCardProps) {
   const { colors, tokens } = useDesignTheme();
-  const { data } = useBeacon();
-  const cosmetic = rewardTint(data.equipped_looks?.[activityId]?.card);
-  const hasLinkedContext = !!planContext?.title.trim() || !!communityContext;
-  const contextBlockStyle = {
-    minWidth: 0,
-    maxWidth: "100%" as const,
-    alignSelf: hasLinkedContext
-      ? ("stretch" as const)
-      : ("flex-start" as const),
-    flexShrink: 0,
-    backgroundColor: colors.surfaceRaised,
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: hasLinkedContext ? 0 : 5,
-  };
-  const categoryToken = tokens.categories[category] ?? tokens.categories.Other;
-  const metadata = discoveryCardMetadata({
-    goingCount,
-    capacity,
-    friendsGoing,
-  });
-  const mapTitle = mapBeaconTitle(title, !!planContext, planContext?.stepIndex);
-  const trimmedWhenLabel = whenLabel?.trim() ?? "";
-  const displayWhenLabel =
-    isLive && trimmedWhenLabel && !/\blive\b/i.test(trimmedWhenLabel)
-      ? `Live · ${trimmedWhenLabel}`
-      : trimmedWhenLabel;
-  const peopleContent = (
-    <View
+  const { fontScale } = useWindowDimensions();
+  const mini = density === "mini";
+  const compact = density === "compact";
+  const titleText = mapBeaconTitle(
+    title,
+    !!planContext,
+    planContext?.stepIndex,
+  ).title;
+  const accent = relationshipColor ?? colors.accent;
+  const iconSize = mini ? 32 : compact ? 38 : 42;
+  const glyphSize = mini ? 19 : compact ? 22 : 25;
+  const metadata = { ...tokens.type.caption, color: colors.textSecondary };
+  const when = isLive ? whenLabel?.replace(/^live\s*[·-]\s*/i, "") : whenLabel;
+  const status = statusLabel?.trim();
+  const stop = planContext?.stop;
+  const position = stop ? `${stop.position}/${stop.total}` : null;
+  const strictLimit =
+    capacity?.strict &&
+    Number.isSafeInteger(capacity.limit) &&
+    capacity.limit! > 0
+      ? capacity.limit
+      : null;
+  const seats = Number.isFinite(goingCount)
+    ? Math.max(0, Math.floor(goingCount!))
+    : 0;
+  const fill = strictLimit ? Math.min(1, seats / strictLimit) : 0;
+  const fillColor =
+    capacity?.full || fill >= 1
+      ? colors.textSecondary
+      : fill >= 0.8
+        ? "#F5B952"
+        : colors.success;
+  const heading = (
+    <Text
+      accessibilityRole="header"
+      numberOfLines={fontScale > 1.25 ? undefined : 2}
       style={{
-        flex: 1,
-        minWidth: 0,
-        minHeight: 44,
-        flexDirection: "row",
-        alignItems: "center",
-        gap: 6,
+        ...tokens.type.titleSmall,
+        fontSize: mini ? 15 : 18,
+        color: colors.textPrimary,
+        fontWeight: "700",
       }}
     >
-      <View
-        accessibilityElementsHidden
-        importantForAccessibility="no-hide-descendants"
-        pointerEvents="none"
-      >
-        {socialAvatars ?? <UsersRound size={19} color={colors.textSecondary} />}
-      </View>
-      <Text
-        testID="discovery-going-count"
-        accessibilityLabel={metadata}
-        style={{
-          flex: 1,
-          minWidth: 0,
-          color: colors.textSecondary,
-          fontSize: 12,
-          lineHeight: 17,
-        }}
-      >
-        {metadata}
-      </Text>
+      {titleText}
+    </Text>
+  );
+  const identityIcon = (
+    <View
+      testID="beacon-category-artwork"
+      accessibilityElementsHidden
+      importantForAccessibility="no-hide-descendants"
+      style={{
+        width: iconSize,
+        height: iconSize,
+        borderRadius: mini ? 9 : 12,
+        borderLeftWidth: 2,
+        borderLeftColor: accent,
+        backgroundColor: tokens.categories[category].tint,
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      {mapIcon ? (
+        <BeaconPinGlyph
+          category={category}
+          icon={mapIcon}
+          size={glyphSize}
+          color={colors.textPrimary}
+        />
+      ) : (
+        <BeaconIcon
+          category={category}
+          emoji={decorationEmoji}
+          size={glyphSize}
+        />
+      )}
     </View>
   );
-
-  if (mapPreview) {
-    const communityTints = [tokens.categories.Fitness.tint, tokens.categories.Study.tint, tokens.categories.Gaming.tint, tokens.categories.Creative.tint, tokens.categories.Social.tint];
-    const communitySeed = [...(mapCommunityKey ?? "")].reduce((seed, character) => (seed * 31 + character.charCodeAt(0)) >>> 0, 0);
-    const headerColor = mapCommunityName ? communityTints[communitySeed % communityTints.length] : colors.surfaceRaised;
-    const subtitle = mapCommunityName ?? mapHostLabel;
-    const mapMetadata = discoveryCardMetadata({ goingCount, capacity });
-    return (
-      <MapTooltipShell testID={`discovery-beacon-card-${activityId}`} gap={3} paddingTop={6}>
-        <View
-          testID="map-beacon-identity"
-          style={{
-            backgroundColor: cosmetic ?? headerColor,
-            borderRadius: 14,
-            paddingLeft: 10,
-            paddingRight: 3,
-            paddingBottom: 4,
-          }}
-        >
+  const timeAndStatus =
+    when || status || isLive ? (
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "center",
+          flexWrap: "wrap",
+          columnGap: 8,
+          rowGap: 2,
+        }}
+      >
+        {isLive ? (
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
+            <Zap size={13} color="#F5B952" fill="#F5B952" />
+            <Text
+              accessibilityLabel="Happening now"
+              style={[
+                metadata,
+                { color: colors.textPrimary, fontWeight: "700" },
+              ]}
+            >
+              Live
+            </Text>
+          </View>
+        ) : null}
+        {when ? (
           <View
-            testID="map-beacon-header-pattern"
-            pointerEvents="none"
-            accessibilityElementsHidden
-            importantForAccessibility="no-hide-descendants"
-            aria-hidden
-            style={[StyleSheet.absoluteFill, { borderRadius: 14, overflow: "hidden", opacity: 0.38 }]}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 4,
+              flexShrink: 1,
+            }}
           >
-            <CommunityArtwork type={mapCommunityType ?? "squad"} />
-          </View>
-          <MapTooltipHeader controls={<>{menu}{headerAccessory}</>}>
-            <View style={{ minHeight: 44, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-              <Text numberOfLines={1} style={{ flexShrink: 1, color: colors.textSecondary, fontSize: 10, fontWeight: "700", textTransform: "uppercase" }}>
-                {category}
-              </Text>
-              {planContext && mapTitle.context ? (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`${mapTitle.context}: ${planContext.onShowOnMap ? "Show" : "Open"} ${planContext.title}${planContext.onShowOnMap ? " on Map" : ""}`}
-                  onPress={planContext.onShowOnMap ?? planContext.onPress}
-                  style={{ minHeight: 44, flexDirection: "row", alignItems: "center", gap: 3, flexShrink: 1, minWidth: 0 }}
-                >
-                  <Route size={11} color={colors.accent} />
-                  <Text numberOfLines={1} style={{ flexShrink: 1, color: colors.textSecondary, fontSize: 10, fontWeight: "600" }}>
-                    {mapTitle.context}
-                  </Text>
-                </Pressable>
-              ) : null}
-            </View>
-          </MapTooltipHeader>
-          <Pressable
-            accessibilityRole={onDetails ? "button" : undefined}
-            accessibilityLabel={onDetails ? `Open ${title} details` : undefined}
-            onPress={onDetails}
-            disabled={!onDetails}
-            style={{ flexDirection: "row", alignItems: "center", gap: 8, paddingRight: 7, minHeight: 40 }}
-          >
-            <View accessibilityElementsHidden style={{ width: 38, height: 38, borderRadius: 10, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" }}>
-              {!mapIcon && decorationEmoji ? <BeaconIcon emoji={decorationEmoji} category={category} size={25} /> : <BeaconPinGlyph category={category} icon={mapIcon} size={22} color={colors.textPrimary} />}
-            </View>
-            <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-              <Text accessibilityRole="header" numberOfLines={2} style={{ color: colors.textPrimary, fontSize: 20, lineHeight: 24, fontWeight: "700" }}>
-                {mapTitle.title}
-              </Text>
-              {!!subtitle && <Text numberOfLines={1} style={{ color: colors.textSecondary, fontSize: 12 }}>Hosted by {subtitle}</Text>}
-            </View>
-          </Pressable>
-        </View>
-        {trimmedWhenLabel || hosted || isLive ? (
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 6, minHeight: 20 }}>
-            <View style={{ flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 8 }}>
-              {trimmedWhenLabel ? <>
-                <Clock3 size={14} color={colors.textSecondary} />
-                <Text testID="discovery-timing" numberOfLines={2} style={{ flex: 1, color: colors.textPrimary, fontSize: 12 }}>
-                  {isLive ? trimmedWhenLabel.replace(/^live\s*[·-]\s*/i, "") : trimmedWhenLabel}
-                </Text>
-              </> : null}
-            </View>
-            {isLive ? (
-              <View accessible accessibilityLabel="Happening now" style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
-                <Radio size={12} color={colors.success} />
-                <Text style={{ color: colors.success, fontSize: 11, fontWeight: "600" }}>Live</Text>
-              </View>
-            ) : null}
-            {hosted ? (
-              <Text
-                testID="map-hosting-status"
-                style={{ color: colors.textSecondary, fontSize: 11, fontWeight: "600" }}
-              >
-                Hosting
-              </Text>
-            ) : null}
+            {!mini && !isLive && (
+              <Clock3 size={13} color={colors.textSecondary} />
+            )}
+            <Text
+              testID="discovery-timing"
+              style={[metadata, { flexShrink: 1 }]}
+            >
+              {when}
+            </Text>
           </View>
         ) : null}
-        {locationLabel ? (
-          <View style={{ flexDirection: "row", alignItems: "center", gap: 8, minHeight: 20 }}>
-            <MapPin size={14} color={colors.textSecondary} />
-            <Text testID="map-beacon-location" numberOfLines={2} style={{ flex: 1, color: colors.textPrimary, fontSize: 12 }}>{locationLabel}</Text>
-          </View>
-        ) : null}
-        <View style={{ flexDirection: "row", alignItems: "center", gap: 4 }}>
-          <Pressable
-            accessibilityRole={onOpenPeople ? "button" : undefined}
-            accessibilityLabel={onOpenPeople ? `${metadata}. View attendees` : undefined}
-            onPress={onOpenPeople}
-            disabled={!onOpenPeople}
-            style={{ flex: 1, minWidth: 0, flexDirection: "row", alignItems: "center", gap: 8, minHeight: 38 }}
+        {status && status !== when ? (
+          <Text
+            testID={
+              status === "Hosting"
+                ? mapPreview
+                  ? "map-hosting-status"
+                  : "discovery-hosting-status"
+                : undefined
+            }
+            style={metadata}
           >
-            {socialAvatars ?? <UsersRound size={17} color={colors.textSecondary} />}
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <Text testID="discovery-going-count" numberOfLines={1} style={{ color: colors.textPrimary, fontSize: 12, fontWeight: "700" }}>{mapMetadata}</Text>
-              {!!friendsGoing && <Text style={{ color: colors.textSecondary, fontSize: 11 }}>{friendsGoing} {friendsGoing === 1 ? "friend" : "friends"} here</Text>}
-            </View>
-          </Pressable>
-          {onDetails ? (
-            <Pressable accessibilityRole="button" accessibilityLabel={detailsLabel ?? "Details"} onPress={onDetails} style={{ minHeight: 38, flexDirection: "row", alignItems: "center", gap: 2, paddingHorizontal: 3 }}>
-              <Text style={{ color: colors.textSecondary, fontSize: 11 }}>Details</Text>
-              <ChevronRight size={13} color={colors.textSecondary} />
-            </Pressable>
+            {status}
+          </Text>
+        ) : null}
+      </View>
+    ) : null;
+
+  if (mini || (compact && !mapPreview && !primaryAction && !actionShortcuts)) {
+    const row = {
+      flexDirection: "row" as const,
+      alignItems: "center" as const,
+      gap: 8,
+      minHeight: 48,
+      borderRadius: 12,
+      padding: 8,
+      backgroundColor: colors.surfaceRaised,
+    };
+    const content = (
+      <>
+        {identityIcon}
+        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+          {heading}
+          {timeAndStatus}
+          {!mini && locationLabel ? (
+            <Text numberOfLines={1} style={metadata}>
+              {locationLabel}
+            </Text>
           ) : null}
         </View>
-        {context || communityContext ? (
-          <View testID="map-beacon-context" style={contextBlockStyle}>
-            {context}
-            {communityContext}
-          </View>
-        ) : null}
-        {feedback}
-        {shortcutActions}
-        <View testID="discovery-card-actions" style={{ minWidth: 0, flexDirection: "row", alignItems: "center", gap: 6 }}>
-          <View style={{ flex: 1, minWidth: 0 }}>
-            {hosted && onDetails ? <HomeAction title="Open Beacon" prominent stretch primary onPress={onDetails} /> : primaryAction}
-          </View>
-          {actionShortcuts}
-        </View>
-      </MapTooltipShell>
+        {onDetails &&
+          (expanded ? (
+            <ChevronDown size={16} color={colors.textSecondary} />
+          ) : (
+            <ChevronRight size={16} color={colors.textSecondary} />
+          ))}
+      </>
+    );
+    return onDetails ? (
+      <Pressable
+        testID={testID}
+        accessibilityRole="button"
+        accessibilityLabel={detailsLabel ?? `Open ${titleText}`}
+        accessibilityState={expanded == null ? undefined : { expanded }}
+        onPress={onDetails}
+        style={({ pressed }) => [row, { opacity: pressed ? 0.7 : 1 }]}
+      >
+        {content}
+      </Pressable>
+    ) : (
+      <View testID={testID} style={row}>
+        {content}
+      </View>
     );
   }
 
-  return (
-    <Card
-      testID={`discovery-beacon-card-${activityId}`}
-      style={{
-        padding: 16,
-        paddingTop: 12,
-        gap: 12,
-        borderWidth: 1,
-        borderColor: colors.border,
-        borderRadius: 14,
-        backgroundColor: cosmetic ?? colors.surface,
-      }}
-    >
+  const body = (
+    <>
       <BeaconCardArtwork
         category={category}
         accent={decorationAccent}
         variant={artworkVariant}
-        radius={14}
+        tint={cosmeticTint}
+        integrated
+        quiet={compact}
+        radius={16}
       />
-      <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12 }}>
-        <View style={{ width: 48, alignItems: "center", gap: 5 }}>
-          <View
-            testID="beacon-category-artwork"
-            style={{
-              width: 48,
-              height: 48,
-              borderRadius: 12,
-              overflow: "hidden",
-              backgroundColor: colors.surfaceRaised,
-              justifyContent: "center",
-              alignItems: "center",
-            }}
-          >
-            <View
-              style={{
-                position: "absolute",
-                width: 70,
-                height: 70,
-                borderRadius: 35,
-                borderWidth: 1,
-                borderColor: categoryToken.color,
-                opacity: 0.08,
-                top: -24,
-                right: -22,
-              }}
-            />
-            <View
-              style={{
-                position: "absolute",
-                width: 45,
-                height: 45,
-                borderRadius: 23,
-                borderWidth: 1,
-                borderColor: categoryToken.color,
-                opacity: 0.08,
-                bottom: -16,
-                left: -12,
-              }}
-            />
-            <BeaconIcon emoji={decorationEmoji} category={category} size={30} />
-          </View>
-          <Text
-            style={{
-              color: colors.textSecondary,
-              fontSize: 12,
-              lineHeight: 14,
-              textAlign: "center",
-              fontWeight: "500",
-            }}
-          >
-            {category}
-          </Text>
-        </View>
-
-        <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
+      <View
+        testID={mapPreview ? "map-beacon-identity" : undefined}
+        style={{ gap: 4 }}
+      >
+        <View
+          style={{
+            flexDirection: "row",
+            flexWrap: fontScale > 1.4 ? "wrap" : "nowrap",
+            alignItems: "center",
+            gap: 4,
+          }}
+        >
           <View
             style={{
               flexDirection: "row",
               alignItems: "center",
-              justifyContent: "space-between",
-              gap: 4,
-              minHeight: headerAccessory || menu ? 44 : undefined,
+              gap: 6,
+              flexShrink: 1,
             }}
           >
-            <View
-              style={{
-                flexGrow: 1,
-                flexShrink: 1,
-                flexBasis: 0,
-                minWidth: 0,
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 4,
-              }}
-            >
-              {displayWhenLabel ? (
-                <View
-                  style={{
-                    maxWidth: "100%",
-                    flexShrink: 1,
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 4,
-                    paddingHorizontal: 6,
-                    paddingVertical: 3,
-                    borderRadius: 8,
-                    backgroundColor: colors.surfaceRaised,
-                  }}
-                >
-                  <Clock3
-                    size={11}
-                    color={isLive ? colors.accent : categoryToken.color}
-                  />
-                  <Text
-                    testID="discovery-timing"
-                    numberOfLines={1}
-                    accessibilityLabel={displayWhenLabel}
-                    style={{
-                      color: isLive ? colors.accent : categoryToken.color,
-                      fontSize: 11,
-                      lineHeight: 16,
-                      flexShrink: 1,
-                    }}
-                  >
-                    {displayWhenLabel}
-                  </Text>
-                </View>
-              ) : null}
-              {hosted ? (
-                <Text
-                  testID="discovery-hosting-status"
-                  style={{ color: colors.textSecondary, fontSize: 11 }}
-                >
-                  Hosting
-                </Text>
-              ) : null}
-            </View>
-            {headerAccessory || menu ? (
-              <View
-                style={{
+            {identityIcon}
+            {!planContext && (
+              <Text numberOfLines={1} style={[metadata, { flexShrink: 1 }]}>
+                {category}
+              </Text>
+            )}
+          </View>
+          <View
+            style={{
+              marginStart: "auto",
+              flexDirection: "row",
+              alignItems: "center",
+              justifyContent: "flex-end",
+              flexShrink: 1,
+              minWidth: 0,
+            }}
+          >
+            {!!planContext?.title.trim() && (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Open Plan ${planContext.title}${stop ? `, stop ${stop.position} of ${stop.total}` : ""}`}
+                onPress={planContext.onPress}
+                style={({ pressed }) => ({
                   minHeight: 44,
+                  minWidth: 44,
+                  maxWidth: 208,
+                  flexShrink: 1,
                   flexDirection: "row",
                   alignItems: "center",
                   justifyContent: "flex-end",
                   gap: 4,
-                  flexShrink: 0,
-                  marginLeft: "auto",
-                }}
+                  paddingHorizontal: 4,
+                  opacity: pressed ? 0.7 : 1,
+                })}
               >
-                {menu}
-                {headerAccessory}
-              </View>
-            ) : null}
+                <Route color={colors.textSecondary} size={16} />
+                <View
+                  style={{
+                    flexShrink: 1,
+                    minWidth: 0,
+                    flexDirection: fontScale > 1.4 ? "column" : "row",
+                    alignItems: fontScale > 1.4 ? "flex-end" : "center",
+                    gap: 3,
+                  }}
+                >
+                  <Text numberOfLines={1} style={[metadata, { flexShrink: 1 }]}>
+                    {planContext.title.trim()}
+                  </Text>
+                  {position && (
+                    <Text
+                      testID="beacon-plan-position"
+                      style={[metadata, { fontWeight: "700" }]}
+                    >
+                      {position}
+                    </Text>
+                  )}
+                </View>
+              </Pressable>
+            )}
+            {mapPreview && planContext?.onShowOnMap && (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Zoom to Fit"
+                onPress={planContext.onShowOnMap}
+                style={({ pressed }) => ({
+                  width: 44,
+                  height: 44,
+                  justifyContent: "center",
+                  alignItems: "center",
+                  opacity: pressed ? 0.7 : 1,
+                })}
+              >
+                <Maximize2 size={18} color={colors.textSecondary} />
+              </Pressable>
+            )}
+            {menu}
+            {headerAccessory}
           </View>
-
+        </View>
+        {onDetails ? (
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel={`Open ${title} details`}
-            disabled={!onDetails}
+            accessibilityLabel={detailsLabel ?? `Open ${titleText} details`}
             onPress={onDetails}
-            style={{ minHeight: 44, justifyContent: "center" }}
+            style={{ justifyContent: "center", minHeight: 44 }}
           >
+            {heading}
+          </Pressable>
+        ) : (
+          heading
+        )}
+        {timeAndStatus}
+        {locationLabel || hostLabel ? (
+          <View
+            style={{
+              flexDirection: "row",
+              flexWrap: "wrap",
+              alignItems: "center",
+              columnGap: 8,
+              rowGap: 3,
+            }}
+          >
+            {locationLabel ? (
+              <View style={{ flexDirection: "row", gap: 4, flexShrink: 1 }}>
+                <MapPin size={13} color={colors.textSecondary} />
+                <Text
+                  testID={
+                    mapPreview
+                      ? "map-beacon-location"
+                      : "discovery-secondary-metadata"
+                  }
+                  style={[metadata, { flexShrink: 1 }]}
+                >
+                  {locationLabel}
+                </Text>
+              </View>
+            ) : null}
+            {hostLabel ? <Text style={metadata}>{hostLabel}</Text> : null}
+          </View>
+        ) : null}
+        {!compact && description?.trim() ? (
+          <Text numberOfLines={2} style={metadata}>
+            {description}
+          </Text>
+        ) : null}
+      </View>
+      {goingCount != null ? (
+        <View style={{ gap: 4 }}>
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+            {socialAvatars && (
+              <View
+                accessibilityElementsHidden
+                importantForAccessibility="no-hide-descendants"
+                pointerEvents="none"
+              >
+                {socialAvatars}
+              </View>
+            )}
             <Text
-              accessibilityRole="header"
+              testID="discovery-going-count"
+              style={[metadata, { flex: 1 }]}
+            >
+              {discoveryCardMetadata({ goingCount, capacity, friendsGoing })}
+            </Text>
+          </View>
+          {strictLimit ? (
+            <View
+              accessibilityRole="progressbar"
+              accessibilityLabel="Beacon capacity"
+              accessibilityValue={{
+                min: 0,
+                max: strictLimit,
+                now: Math.min(seats, strictLimit),
+                text: `${seats} of ${strictLimit} accepted seats`,
+              }}
               style={{
-                color: colors.textPrimary,
-                fontSize: 18,
-                lineHeight: 24,
-                fontWeight: "600",
+                height: 4,
+                borderRadius: 2,
+                backgroundColor: colors.surfaceRaised,
+                overflow: "hidden",
               }}
             >
-              {title}
-            </Text>
-          </Pressable>
-          {locationLabel ? (
-            <View
-              style={{ flexDirection: "row", alignItems: "flex-start", gap: 5 }}
-            >
-              <MapPin size={13} color={colors.textSecondary} />
-              <Text
-                testID="discovery-secondary-metadata"
+              <View
                 style={{
-                  flex: 1,
-                  color: colors.textSecondary,
-                  fontSize: 12,
-                  lineHeight: 17,
+                  width: `${fill * 100}%`,
+                  height: 4,
+                  backgroundColor: fillColor,
                 }}
-              >
-                {locationLabel}
-              </Text>
+              />
             </View>
           ) : null}
         </View>
-      </View>
-
-      <View
-        style={{
-          minHeight: 44,
-          flexDirection: "row",
-          alignItems: "center",
-          gap: 6,
-        }}
-      >
-        {onOpenPeople ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`${metadata}. View attendees`}
-            onPress={onOpenPeople}
-            style={({ pressed }) => ({
-              flex: 1,
-              minWidth: 0,
-              minHeight: 44,
-              opacity: pressed ? 0.7 : 1,
-            })}
-          >
-            {peopleContent}
-          </Pressable>
-        ) : (
-          peopleContent
-        )}
-        {metadataAccessory}
-      </View>
-
-      {planContext || context || communityContext ? (
-        <View testID="beacon-linked-context" style={contextBlockStyle}>
-          {planContext?.title.trim() ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Open Plan ${planContext.title}`}
-              onPress={planContext.onPress}
-              style={({ pressed }) => ({
-                minHeight: 44,
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 8,
-                opacity: pressed ? 0.7 : 1,
-              })}
-            >
-              <View
-                accessibilityElementsHidden
-                style={{
-                  width: 24,
-                  height: 24,
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <CalendarDays size={18} color={colors.textSecondary} />
-              </View>
-              <Text
-                style={{
-                  flex: 1,
-                  minWidth: 0,
-                  color: colors.textSecondary,
-                  fontSize: 12,
-                  lineHeight: 17,
-                }}
-              >
-                <Text style={{ fontWeight: "600" }}>Plan</Text>
-                {` · ${planContext.title.trim()}`}
-              </Text>
-            </Pressable>
+      ) : null}
+      {communityContext}
+      {context}
+      {smartFeature}
+      {shortcutActions}
+      {primaryAction || actionShortcuts ? (
+        <View
+          testID="discovery-card-actions"
+          style={{
+            flexDirection: "row",
+            flexWrap: "wrap",
+            alignItems: "center",
+            gap: 8,
+          }}
+        >
+          {primaryAction ? (
+            <View style={{ flex: 1, minWidth: 96 }}>{primaryAction}</View>
           ) : null}
-
-          {context}
-          {communityContext}
+          {actionShortcuts}
         </View>
       ) : null}
-
-      {shortcutActions}
-      {hosted && onDetails ? (
-        <View
-          testID="discovery-card-actions"
-          style={{ flexDirection: "row", alignItems: "center", gap: 8 }}
-        >
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Open Beacon"
-            testID={`beacon-open-${activityId}`}
-            onPress={onDetails}
-            style={({ pressed }) => ({
-              flex: 1,
-              minWidth: 0,
-              minHeight: 44,
-              paddingHorizontal: 16,
-              borderRadius: 12,
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 8,
-              backgroundColor: colors.accent,
-              opacity: pressed ? 0.72 : 1,
-            })}
-          >
-            <Text
-              style={{
-                color: colors.onAccent,
-                fontSize: 14,
-                lineHeight: 20,
-                fontWeight: "600",
-              }}
-            >
-              Open Beacon
-            </Text>
-          </Pressable>
-          {actionShortcuts}
-        </View>
-      ) : (
-        <View
-          testID="discovery-card-actions"
-          style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
-        >
-          <View style={{ flex: 1, minWidth: 0 }}>{primaryAction}</View>
-          {actionShortcuts}
-        </View>
-      )}
       {feedback}
+    </>
+  );
+  return mapPreview ? (
+    <MapTooltipShell testID={testID} gap={8} paddingTop={8}>
+      {body}
+    </MapTooltipShell>
+  ) : (
+    <Card
+      testID={testID}
+      style={{
+        padding: compact ? 12 : 16,
+        gap: compact ? 8 : 12,
+        borderRadius: 16,
+        borderWidth: 1,
+        borderColor: colors.border,
+        backgroundColor: colors.surface,
+      }}
+    >
+      {body}
     </Card>
   );
 }

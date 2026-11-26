@@ -1,16 +1,23 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { router, useFocusEffect, type Href } from "expo-router";
 import { randomUUID } from "expo-crypto";
 import { RadioTower, Store } from "lucide-react-native";
-import { Platform, Pressable, Text, View } from "react-native";
+import {
+  Animated,
+  Easing,
+  Platform,
+  Pressable,
+  Text,
+  View,
+} from "react-native";
 import Svg, { Circle } from "react-native-svg";
-import { priceText } from "@/src/features/beacons/BeaconShopCatalog";
 import {
   demoCoinScale,
   demoRewardActions,
 } from "@/src/features/beacons/demoRewards";
-import { getRewardLook } from "@/src/features/beacons/rewardLooks";
+import { getRewardLook, priceText } from "@/src/features/beacons/rewardLooks";
 import { Dialog } from "@/src/shared/Dialogs";
+import { useReducedMotion } from "@/src/shared/design-system";
 import { useBeacon } from "@/src/shared/store";
 import { supabase } from "@/src/shared/supabase";
 import { Button, Txt, useTheme } from "@/src/shared/ui";
@@ -30,8 +37,11 @@ type Wallet = {
   purchases_enabled: boolean;
   shop_unlocked?: boolean;
   clicker: Clicker;
+  tap_receipt?: { coin_units: number } | null;
 };
 type TapBatch = { request_id: string; week: string; taps: number };
+const batchDelay = 150;
+const maxBatch = 12;
 
 export function MiniBeaconControls() {
   const { userId, viewerEpoch, demo } = useBeacon();
@@ -46,6 +56,27 @@ function OwnerMiniBeacon() {
   const [info, setInfo] = useState(false);
   const [confirmUpgrade, setConfirmUpgrade] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [needsRetry, setNeedsRetry] = useState(false);
+  const [pulseCount, setPulseCount] = useState(0);
+  const [pulse] = useState(() => new Animated.Value(1));
+  const motion = useMemo(
+    () => ({
+      scale: pulse.interpolate({
+        inputRange: [0, 0.22, 1],
+        outputRange: [1.11, 1.04, 1],
+      }),
+      opacity: pulse.interpolate({
+        inputRange: [0, 0.45, 1],
+        outputRange: [1, 1, 0],
+      }),
+      translateY: pulse.interpolate({
+        inputRange: [0, 1],
+        outputRange: [0, -8],
+      }),
+    }),
+    [pulse],
+  );
+  const reducedMotion = useReducedMotion();
   useEffect(() => {
     if (!notice) return;
     const hide = setTimeout(() => setNotice(""), 3600);
@@ -53,8 +84,17 @@ function OwnerMiniBeacon() {
   }, [notice]);
   const current = useRef<Wallet | undefined>(undefined);
   const queued = useRef(0);
+  const demoTapCount = useRef(data.demo_rewards?.taps ?? 0);
+  const demoStarter = useRef(data.demo_rewards?.stage === 0);
   const pending = useRef<TapBatch | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const pulseTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
+  const pulseFrame = useRef<number | undefined>(undefined);
+  const activeRequest = useRef<AbortController | undefined>(undefined);
+  const attempts = useRef(0);
+  const nextBatchAt = useRef(0);
   const active = useRef(true);
   const flight = useRef(false);
   useEffect(() => {
@@ -62,34 +102,70 @@ function OwnerMiniBeacon() {
     return () => {
       active.current = false;
       if (timer.current) clearTimeout(timer.current);
+      if (pulseTimer.current) clearTimeout(pulseTimer.current);
+      if (pulseFrame.current !== undefined)
+        cancelAnimationFrame(pulseFrame.current);
+      pulse.stopAnimation();
+      activeRequest.current?.abort();
     };
-  }, []);
+  }, [pulse]);
 
   const send = useCallback(
     async (
       action: "view" | "tap" | "upgrade",
       args: Record<string, string | number> = {},
     ) => {
-      if (!userId || demo || !supabase || flight.current) return false;
+      if (!userId || demo || !supabase || flight.current) return "skipped";
       const epoch = getViewerEpoch();
       flight.current = true;
-      setBusy(true);
+      if (action !== "tap") setBusy(true);
+      const controller = new AbortController();
+      activeRequest.current = controller;
+      const deadline = setTimeout(() => controller.abort(), 8000);
       try {
-        const { data: response, error } = await supabase.rpc("beacon_rewards", {
-          p_viewer: userId,
-          p_action: action,
-          p_args: args,
-        });
-        if (error) throw error;
-        if (!active.current || epoch !== getViewerEpoch()) return false;
+        const {
+          data: response,
+          error,
+          status,
+        } = await supabase
+          .rpc("beacon_rewards", {
+            p_viewer: userId,
+            p_action: action,
+            p_args: { ...args, format: "mini" },
+          })
+          .abortSignal(controller.signal);
+        if (!active.current || epoch !== getViewerEpoch()) return "skipped";
+        if (error) {
+          const uncertain =
+            controller.signal.aborted || status === 0 || status >= 500;
+          if (uncertain) {
+            setNotice("Couldn’t sync Mini Beacon. Try again.");
+            return "retry";
+          }
+          if (
+            action === "tap" &&
+            error.message.startsWith("Refresh Mini Beacon")
+          ) {
+            current.current = undefined;
+            setWallet(undefined);
+          }
+          setNotice(error.message);
+          return "rejected";
+        }
         const next = response as Wallet;
+        if (!next?.clicker || typeof next.balance !== "number") {
+          setNotice("Mini Beacon couldn’t load. Try again.");
+          return "rejected";
+        }
         const previous = current.current;
         current.current = next;
         setWallet(next);
         if (action === "tap" && previous) {
           const unlocked =
             previous.clicker.stage === 0 && next.clicker.stage >= 1;
-          const gained = next.balance - previous.balance;
+          const gained =
+            next.tap_receipt?.coin_units ??
+            Math.max(0, next.balance - previous.balance);
           setNotice(
             unlocked
               ? "Shop unlocked! Use your Coins to customize your experience."
@@ -98,61 +174,120 @@ function OwnerMiniBeacon() {
                 : "",
           );
         } else if (action === "upgrade") setNotice("Mini Beacon upgraded.");
-        return true;
-      } catch (error) {
+        return "ok";
+      } catch {
         if (active.current && epoch === getViewerEpoch()) {
-          const message =
-            error && typeof error === "object" && "message" in error
-              ? String(error.message)
-              : "Couldn’t sync Mini Beacon. Try again.";
-          if (action === "tap" && message.startsWith("Refresh Mini Beacon")) {
-            pending.current = null;
-            queued.current = 0;
-            current.current = undefined;
-            setWallet(undefined);
-          }
-          setNotice(message);
+          setNotice("Couldn’t sync Mini Beacon. Try again.");
         }
-        return false;
+        return "retry";
       } finally {
+        clearTimeout(deadline);
+        activeRequest.current = undefined;
         flight.current = false;
-        if (active.current && epoch === getViewerEpoch()) setBusy(false);
+        if (action !== "tap" && active.current && epoch === getViewerEpoch())
+          setBusy(false);
       }
     },
     [demo, getViewerEpoch, userId],
   );
 
-  useFocusEffect(
-    useCallback(() => {
-      void send("view");
-    }, [send]),
-  );
-
   const flush = useCallback(
     async function sendBatch() {
+      if (timer.current) clearTimeout(timer.current);
       timer.current = undefined;
+      if (
+        !active.current ||
+        flight.current ||
+        (!queued.current && !pending.current)
+      )
+        return;
+      const epoch = getViewerEpoch();
+      if (demo) {
+        const taps = Math.min(queued.current, 500 - demoTapCount.current);
+        queued.current = 0;
+        if (!taps) return;
+        try {
+          await act(demoRewardActions.tap, { taps });
+          if (!active.current || epoch !== getViewerEpoch()) return;
+          demoTapCount.current += taps;
+          if (demoStarter.current && demoTapCount.current >= 10) {
+            demoStarter.current = false;
+            setNotice("Shop unlocked!");
+          } else {
+            setNotice(
+              `+${priceText(taps * (demoCoinScale / 10), demoCoinScale)} Coins`,
+            );
+          }
+        } catch {
+          if (active.current && epoch === getViewerEpoch())
+            setNotice("Couldn’t tap Mini Beacon. Try again.");
+        }
+        return;
+      }
       const clicker = current.current?.clicker;
-      if (!active.current || !clicker?.remaining) return;
-      if (flight.current) {
-        timer.current = setTimeout(() => void sendBatch(), 160);
+      if (!clicker) {
+        setNeedsRetry(true);
+        return;
+      }
+      if (!clicker.remaining) {
+        queued.current = 0;
+        pending.current = null;
         return;
       }
       if (pending.current?.week !== clicker.week) {
-        const taps = Math.min(12, queued.current, clicker.remaining);
+        pending.current = null;
+        const taps = Math.min(maxBatch, queued.current, clicker.remaining);
         if (!taps) return;
+        const wait = nextBatchAt.current - Date.now();
+        if (wait > 0) {
+          timer.current = setTimeout(() => void sendBatch(), wait);
+          return;
+        }
         queued.current -= taps;
         pending.current = {
           request_id: randomUUID(),
           week: clicker.week,
           taps,
         };
+        // Allow the server's six-per-second tap allowance to recover between batches.
+        nextBatchAt.current = Date.now() + Math.ceil((taps * 1000) / 6);
       }
-      if (!(await send("tap", pending.current))) return;
+      const result = await send("tap", pending.current);
+      if (!active.current || epoch !== getViewerEpoch()) return;
+      if (result === "retry") {
+        if (attempts.current++ === 0) {
+          timer.current = setTimeout(() => void sendBatch(), 700);
+        } else {
+          setNeedsRetry(true);
+        }
+        return;
+      }
+      if (result === "skipped") return;
       pending.current = null;
+      attempts.current = 0;
+      if (result !== "ok") {
+        queued.current = 0;
+        setNeedsRetry(true);
+        return;
+      }
+      setNeedsRetry(false);
       if (active.current && queued.current && !timer.current)
-        timer.current = setTimeout(() => void sendBatch(), 160);
+        timer.current = setTimeout(() => void sendBatch(), batchDelay);
     },
-    [send],
+    [act, demo, getViewerEpoch, send],
+  );
+
+  const sync = useCallback(async () => {
+    const result = await send("view");
+    if (!active.current || result === "skipped") return;
+    setNeedsRetry(result !== "ok");
+    if (result === "ok") await flush();
+  }, [flush, send]);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!demo && !pending.current) void sync();
+    }, [demo, sync]),
   );
 
   const demoWallet =
@@ -187,36 +322,45 @@ function OwnerMiniBeacon() {
     backgroundColor: colors.surfaceRaised,
   } as const;
   const tap = () => {
-    if (!remaining) {
+    if ((demo || wallet) && !remaining) {
       setInfo(true);
       return;
     }
-    if (demo) {
-      const epoch = getViewerEpoch();
-      void act(demoRewardActions.tap)
-        .then(() => {
-          if (active.current && epoch === getViewerEpoch())
-            setNotice(
-              stage === 0 && demoWallet?.taps === 9
-                ? "Shop unlocked!"
-                : "+0.1 Coins",
-            );
-        })
-        .catch(() => {
-          if (active.current && epoch === getViewerEpoch())
-            setNotice("Couldn’t tap Mini Beacon. Try again.");
+    if (queued.current < maxBatch) {
+      queued.current += 1;
+      const wasVisible = !!pulseTimer.current;
+      if (pulseTimer.current) clearTimeout(pulseTimer.current);
+      setPulseCount((count) => (wasVisible ? count + 1 : 1));
+      if (!reducedMotion && pulseFrame.current === undefined) {
+        pulseFrame.current = requestAnimationFrame(() => {
+          pulseFrame.current = undefined;
+          pulse.stopAnimation();
+          pulse.setValue(0);
+          Animated.timing(pulse, {
+            toValue: 1,
+            duration: 520,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: Platform.OS !== "web",
+          }).start();
         });
-      return;
+      }
+      pulseTimer.current = setTimeout(() => {
+        pulseTimer.current = undefined;
+        setPulseCount(0);
+      }, 520);
     }
-    if (!pending.current || flight.current)
-      queued.current = Math.min(12, queued.current + 1);
-    if (!timer.current) timer.current = setTimeout(() => void flush(), 140);
+    if (!demo && !current.current && !flight.current) {
+      void sync();
+    } else if (!timer.current && !flight.current) {
+      attempts.current = 0;
+      timer.current = setTimeout(() => void flush(), batchDelay);
+    }
   };
   const close = () => {
     setInfo(false);
     setConfirmUpgrade(false);
   };
-  const goToShop = () => router.push("/beacon-shop" as Href);
+  const goToShop = () => router.navigate("/beacon-shop" as Href);
 
   return (
     <View
@@ -228,11 +372,34 @@ function OwnerMiniBeacon() {
         zIndex: 1,
       }}
     >
+      {shopUnlocked ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Open Shop"
+          onPress={goToShop}
+          style={({ pressed }) => [
+            targetStyle,
+            { opacity: pressed ? 0.65 : 1 },
+          ]}
+        >
+          <View
+            testID="profile-shop-face"
+            style={[
+              circleStyle,
+              { borderWidth: 1, borderColor: colors.border },
+            ]}
+          >
+            <Store color={colors.accent} size={14} />
+          </View>
+        </Pressable>
+      ) : (
+        <View style={targetStyle} />
+      )}
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Tap Mini Beacon"
         accessibilityHint="Press and hold for Mini Beacon details."
-        accessibilityState={{ busy: !demo && !wallet && !notice }}
+        accessibilityState={{ busy: !demo && !wallet && !needsRetry }}
         accessibilityActions={[{ name: "details", label: "About Mini Beacon" }]}
         onAccessibilityAction={(event) => {
           if (event.nativeEvent.actionName === "details") setInfo(true);
@@ -252,7 +419,15 @@ function OwnerMiniBeacon() {
           { transform: [{ scale: pressed ? 0.92 : 1 }] },
         ]}
       >
-        <View testID="profile-mini-beacon-face" style={circleStyle}>
+        <Animated.View
+          testID="profile-mini-beacon-face"
+          style={[
+            circleStyle,
+            !reducedMotion && {
+              transform: [{ scale: motion.scale }],
+            },
+          ]}
+        >
           <Svg
             pointerEvents="none"
             width={size}
@@ -281,28 +456,33 @@ function OwnerMiniBeacon() {
             )}
           </Svg>
           <RadioTower color={colors.accent} size={14} />
-        </View>
+        </Animated.View>
       </Pressable>
-      {shopUnlocked && (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Open Shop"
-          onPress={goToShop}
-          style={({ pressed }) => [
-            targetStyle,
-            { opacity: pressed ? 0.65 : 1 },
-          ]}
+      {!!pulseCount && (
+        <Animated.View
+          testID="mini-beacon-tap-feedback"
+          aria-hidden
+          importantForAccessibility="no-hide-descendants"
+          pointerEvents="none"
+          style={{
+            position: "absolute",
+            right: 0,
+            top: -9,
+            backgroundColor: colors.surfaceRaised,
+            borderRadius: tokens.radius.sm,
+            paddingHorizontal: 5,
+            opacity: reducedMotion ? 1 : motion.opacity,
+            transform: [
+              {
+                translateY: reducedMotion ? 0 : motion.translateY,
+              },
+            ],
+          }}
         >
-          <View
-            testID="profile-shop-face"
-            style={[
-              circleStyle,
-              { borderWidth: 1, borderColor: colors.border },
-            ]}
-          >
-            <Store color={colors.accent} size={14} />
-          </View>
-        </Pressable>
+          <Text style={[styles.label, { color: colors.accent }]}>
+            +{pulseCount}
+          </Text>
+        </Animated.View>
       )}
       {!!notice && !info && (
         <View
@@ -350,12 +530,16 @@ function OwnerMiniBeacon() {
             </>
           )}
           {look && <Txt muted>Equipped ring · {look.name}</Txt>}
-          {!clicker && !demo && (
+          {(!clicker || needsRetry) && !demo && (
             <Button
               compact
-              title="Refresh Mini Beacon"
+              title={needsRetry ? "Retry Mini Beacon" : "Refresh Mini Beacon"}
               disabled={busy}
-              onPress={() => void send("view")}
+              onPress={() => {
+                attempts.current = 0;
+                if (clicker && needsRetry && pending.current) void flush();
+                else void sync();
+              }}
             />
           )}
           {shopUnlocked && (
@@ -381,7 +565,7 @@ function OwnerMiniBeacon() {
                 void send("upgrade", {
                   stage: clicker.stage + 1,
                   expected_price: clicker.next_price!,
-                });
+                }).then(() => flush());
               }}
             />
           )}

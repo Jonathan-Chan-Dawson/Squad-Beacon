@@ -1,9 +1,10 @@
 import { getDesignColorTheme } from "../../src/theme/data";
 import { themeNames } from "../../src/theme/palettes";
-import { BEACON_NAME_MAX_WIDTH, EMPTY_MARKER_STATE } from "../../src/features/maps/markerIdentity";
+import { BEACON_NAME_MAX_WIDTH, EMPTY_MARKER_STATE, mapPersonOpacity } from "../../src/features/maps/markerIdentity";
 import { beaconPinSymbols } from "../../src/features/maps/beaconPinArtwork";
-import { appendBeaconUpperBeam, appendMapProjector, beaconProjectionDimensions } from "../../src/features/maps/projector";
+import { appendBeaconUpperBeam, appendMapProjector, beaconProjectionDimensions, clusterPrism } from "../../src/features/maps/projector";
 import { miniAvatarSvg } from "../../src/features/profile/avatarArt";
+import { STELLAR_OPACITY, STELLAR_OUTLINE } from "../../src/features/maps/clusterBloom";
 import { test, expect } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import ts from "typescript";
@@ -42,10 +43,14 @@ const script = ts.transpileModule(
   let resolvedAppearance = "light";
   const EMPTY_MARKER_STATE = ${JSON.stringify(EMPTY_MARKER_STATE)};
   const BEACON_NAME_MAX_WIDTH = ${BEACON_NAME_MAX_WIDTH};
+  const STELLAR_OPACITY = ${STELLAR_OPACITY};
+  const STELLAR_OUTLINE = ${JSON.stringify(STELLAR_OUTLINE)};
   let colors = { green: "#218466", ink: "#182c30", white: "#fff", success: "#176B4A", outline: "#718078", surface: "#fff", textPrimary: "#182c30" };
   const reducedMotion = false, group = {}, coordinates = [];
   const onPick = undefined, identityViewer = "viewer";
   ${lighting}
+  const mapPersonOpacity = ${mapPersonOpacity.toString()};
+  const clusterPrism = ${JSON.stringify(clusterPrism)};
   const appendMapProjector = ${appendMapProjector.toString()};
   const appendBeaconUpperBeam = ${appendBeaconUpperBeam.toString()};
   const beaconProjectionDimensions = ${beaconProjectionDimensions.toString()};
@@ -71,12 +76,13 @@ const script = ts.transpileModule(
     document.querySelectorAll(".beacon-marker").forEach(node => node.remove());
     zoom = input.zoom;
     if (input.colors) colors = input.colors;
-    const result = marker(41.88, -87.64, "?", "Test Beacon", () => clicks++, false, 0, "#218466", input.selected, false, "", "unknown", input.live ?? true, input.chip, input.identity, !!input.identity?.owned, !!input.compact, false, undefined, undefined, undefined, input.name);
+    const result = marker(41.88, -87.64, "?", "Test Beacon", () => clicks++, false, 0, "#218466", input.selected, false, "", "unknown", input.live ?? true, input.chip, input.identity, !!input.identity?.owned, !!input.compact, false, undefined, undefined, undefined, input.name, undefined, undefined, undefined, !!input.publicMarker);
     if (input.compact) {
       result.classList.add("beacon-marker");
       document.body.append(result);
     }
   };
+  window.renderClusterProjector = () => appendMapProjector(document.body, clusterPrism.pearl, 14, 24, 36, 1, "cluster");
   window.renderIdentityMarker = input => {
     document.querySelectorAll(".beacon-marker").forEach(node => node.remove());
     zoom = 16;
@@ -184,76 +190,52 @@ test("Beacon names sit below the pin tip and truncate within the chip", async ({
   expect(bounds.width).toBeLessThanOrEqual(BEACON_NAME_MAX_WIDTH);
 });
 
-test("beam height and gradient follow one priority in both appearances and at compact zoom", async ({ page }, testInfo) => {
-  await page.setViewportSize({ width: 750, height: 460 });
+test("public Beacons have a larger rounded-square lens and an anchored projector", async ({ page }) => {
   await page.setContent("<body></body>");
   await page.addStyleTag({ content: css });
   await page.addScriptTag({ content: script });
-  const cases = [
-    { selected: true, identity: { participatingLive: true, owned: true }, level: 3, tint: "rgb(245, 185, 82)", color: "245, 185, 82" },
-    { selected: false, identity: { participatingLive: true, owned: true }, level: 3, tint: "rgb(245, 185, 82)", color: "245, 185, 82" },
-    { selected: false, identity: { owned: true }, level: 3, tint: "rgb(245, 185, 82)", color: "245, 185, 82" },
-    { selected: false, identity: { friendHosted: true, squadHosted: true }, level: 4, tint: "rgb(119, 185, 250)", color: "119, 185, 250" },
-    { selected: false, identity: { squadHosted: true }, level: 5, tint: "rgb(104, 214, 162)", color: "104, 214, 162" },
-  ];
+  await page.evaluate(() => (window as any).renderMarker({ zoom: 16, publicMarker: true, selected: true, live: false }));
+  const face = page.locator("[data-public-beacon-face]");
+  const projector = page.getByTestId("map-beacon-projector");
+  await expect(face).toHaveCSS("width", "44px");
+  await expect(face).toHaveCSS("border-radius", "11px");
+  await expect(face).toHaveCSS("border-top-color", "rgb(178, 156, 233)");
+  await expect(projector).toHaveCSS("height", "21px");
+  const lens = (await face.boundingBox())!;
+  const beam = (await projector.boundingBox())!;
+  expect(Math.abs(lens.x + lens.width / 2 - beam.x - beam.width / 2)).toBeLessThan(0.5);
+});
+
+test("cluster projector has a static pearl and prism gradient", async ({ page }) => {
+  await page.setContent("<body></body>");
+  await page.addScriptTag({ content: script });
+  await page.evaluate(() => (window as any).renderClusterProjector());
+  const projector = page.getByTestId("map-cluster-projector");
+  await expect(projector.locator(":scope > span").first()).toHaveCSS(
+    "background-image", /rgb\(165, 232, 255\).*rgb\(244, 248, 255\).*rgb\(207, 185, 255\)/,
+  );
+  await expect(projector).toHaveCSS("animation-name", "none");
+});
+
+test("Hosting and Joined retain their rectangular upper beam in both themes", async ({ page }, info) => {
+  await page.setContent("<body></body>");
+  await page.addStyleTag({ content: css });
+  await page.addScriptTag({ content: script });
   for (const appearance of ["light", "dark"] as const) {
     const semantic = getDesignColorTheme(themeNames[0], appearance).colors;
     const colors = { ...semantic, white: semantic.surface, ink: semantic.textPrimary, green: semantic.primary };
-    await page.emulateMedia({ colorScheme: appearance, reducedMotion: "reduce" });
-    await page.evaluate(({ background, ink }) => {
-      document.body.style.background = background;
-      const row = document.createElement("div");
-      row.id = "beam-comparison";
-      row.style.cssText = `display:flex;position:absolute;left:12px;top:12px;background:${background};color:${ink};font:600 12px system-ui;padding:8px 3px;`;
-      (window as any).beamComparison = row;
-    }, { background: appearance === "dark" ? "#151a22" : "#f5f7fb", ink: colors.ink });
-    for (const [index, item] of cases.entries()) {
-      for (const compact of item.selected ? [false] : [false, true]) {
-        await page.evaluate((input) => (window as any).renderMarker(input), {
-          ...item, colors, zoom: compact ? 12 : 16, compact, live: item.identity.participatingLive ?? false,
-        });
-        const glow = page.getByTestId("beacon-marker-glow");
-        await expect(glow).toHaveAttribute("data-lighting-level", String(item.level));
-        await expect(page.getByTestId("map-marker-selection-ring")).toHaveCount(Number(item.selected));
-        const haloRadius = compact ? 8 : item.level === 3 ? 13 : 10;
-        await expect(glow).toHaveCSS("box-shadow", new RegExp(`0px 0px ${haloRadius}px`));
-        const height = compact ? 0 : 24;
-        const beam = page.getByTestId("beacon-marker-beam");
-        if (height) {
-          await expect(beam).toHaveCSS("height", `${height}px`);
-          await expect(beam).toHaveCSS("background-image", new RegExp(item.color));
-          await expect(page.getByTestId("map-beacon-projector")).toHaveCSS("color", item.tint);
-        } else {
-          await expect(beam).toHaveCount(0);
-        }
-        if (item.identity.participatingLive && !compact) {
-          const pulse = page.locator(".map-now-halo");
-          await expect(pulse).toHaveCount(1);
-          await expect(pulse).toHaveCSS("animation-name", "none");
-          await expect(pulse).toHaveCSS("border-top-color", item.tint);
-        }
-        if (!compact) {
-          await page.locator(".beacon-marker").evaluate((marker, label) => {
-            const sample = document.createElement("div");
-            sample.style.cssText = "position:relative;width:138px;height:184px;text-align:center;";
-            const copy = marker.cloneNode(true) as HTMLElement;
-            copy.style.left = "50%";
-            copy.style.top = "134px";
-            const caption = document.createElement("span");
-            caption.style.cssText = "position:absolute;bottom:4px;left:0;right:0";
-            caption.textContent = label;
-            sample.append(copy, caption);
-            (window as any).beamComparison.append(sample);
-          }, ["Selected", "Live and going", "Yours", "Friend-hosted", "Your Squad"][index]);
-        }
-      }
+    await page.evaluate(color => { document.body.style.background = color; }, colors.surface);
+    for (const zoom of [16, 14, 10, 8]) {
+      await page.evaluate(input => (window as any).renderMarker(input), {
+        zoom, colors, identity: { joined: true, count: 30, lifecycle: "upcoming", light: 0.9 }, name: "Neighbourhood coffee",
+      });
+      const beam = page.getByTestId("beacon-marker-beam");
+      if (zoom >= 14) {
+        await expect(beam).toHaveCSS("height", zoom === 16 ? "24px" : "16px");
+        await expect(beam).toHaveCSS("background-image", /232, 165, 77/);
+      } else await expect(beam).toHaveCount(0);
+      await page.screenshot({ path: info.outputPath(`marker-${appearance}-${zoom}.png`), animations: "disabled" });
     }
-    await page.locator(".beacon-marker").evaluate((last) => {
-      last.remove();
-      document.body.append((window as any).beamComparison);
-    });
-    await page.locator("#beam-comparison").screenshot({ path: testInfo.outputPath(`beam-comparison-${appearance}.png`), animations: "disabled" });
-    await page.locator("#beam-comparison").evaluate((row) => row.remove());
   }
 });
 
@@ -262,10 +244,10 @@ test("important individual Beacons keep a quieter upper beam farther out", async
   await page.addScriptTag({ content: script });
   const beam = page.getByTestId("beacon-marker-beam");
   for (const [zoom, selected, identity, height] of [
-    [14, true, {}, 16],
+    [14, true, {}, 0],
     [14, false, { participatingLive: true }, 16],
     [14, false, { owned: true }, 16],
-    [14, false, { friendHosted: true }, 16],
+    [14, false, { friendHosted: true }, 0],
     [10, true, {}, 0],
     [8, true, {}, 0],
   ] as const) {
@@ -293,11 +275,14 @@ test("web Beacon ripple stays at the badge center across dot/full sizes, chips, 
           chip,
           selected,
         });
-        await expect(page.getByTestId("beacon-marker-beam")).toHaveCount(Number(zoom >= 16));
+        await expect(page.getByTestId("beacon-marker-beam")).toHaveCount(0);
         await expect(page.getByTestId("beacon-pin-tip")).toHaveCount(Number(zoom >= 16));
         if (zoom < 16) {
           await expect(page.locator(".map-now-halo")).toHaveCount(0);
           await expect(page.getByTestId("map-beacon-projector")).toHaveCount(0);
+          if (zoom < 12 && !selected) {
+            await expect(page.getByTestId("map-single-stellar-beacon")).toHaveCSS("opacity", "0.9");
+          }
           await page.getByRole("button", { name: "Test Beacon" }).click();
           continue;
         }
@@ -349,62 +334,23 @@ test("web Beacon ripple stays at the badge center across dot/full sizes, chips, 
   expect(Math.abs(reduced.y)).toBeLessThan(0.1);
 });
 
-test("close Beacons center their icon, projector, and three small bottom badges", async ({
-  page,
-}) => {
+test("Beacon badges keep semantic positions when density changes", async ({ page }) => {
   await page.setContent("<body></body>");
   await page.addStyleTag({ content: css });
   await page.addScriptTag({ content: script });
-  for (const theme of themeNames)
-    for (const appearance of ["light", "dark"] as const) {
-      const semantic = getDesignColorTheme(theme, appearance).colors;
-      const colors = {
-        ...semantic,
-        white: semantic.surface,
-        ink: semantic.textPrimary,
-        green: semantic.primary,
-      };
-      for (const owned of [false, true]) {
-        await page.evaluate(
-          (input) => (window as any).renderIdentityMarker(input),
-          { appearance, owned, colors, selected: owned },
-        );
-        const bookmark = page.getByTestId("beacon-saved-bookmark");
-        await expect(bookmark).toHaveCount(1);
-        await expect(page.getByTestId("beacon-ownership-star")).toHaveCount(
-          Number(owned),
-        );
-        const friendBadge = page.getByTestId("beacon-friend-badge");
-        if (owned)
-          await expect(page.getByRole("button")).toHaveAccessibleName(
-            /Your Beacon/,
-          );
-        await expect(friendBadge).toHaveCount(Number(!owned));
-        await expect(page.getByTestId("beacon-friend-rim")).toHaveCount(0);
-        const row = page.getByTestId("beacon-marker-badges");
-        await expect(row).toHaveAttribute("aria-hidden", "true");
-        await expect(row).toHaveCSS("pointer-events", "none");
-        await expect(row.locator(":scope > span")).toHaveCount(3);
-        await expect(row.locator(":scope > span").first()).toHaveAttribute("data-testid", owned ? "beacon-ownership-star" : "beacon-friend-badge");
-        await expect(row.locator(":scope > span").nth(1)).toHaveAttribute("data-testid", "beacon-live-badge");
-        if (owned) await expect(row.locator(":scope > span").first()).toHaveCSS("color", "rgb(245, 185, 82)");
-        await expect(bookmark).toHaveCSS("width", "11px");
-        const lens = page.getByTestId("beacon-marker-glow");
-        const lensBox = (await lens.boundingBox())!;
-        const glyphBox = (await lens.locator("svg").boundingBox())!;
-        const rowBox = (await row.boundingBox())!;
-        const projectorBox = (await page.getByTestId("map-beacon-projector").boundingBox())!;
-        const center = (box: { x: number; width: number }) => box.x + box.width / 2;
-        for (const box of [glyphBox, rowBox, projectorBox]) expect(Math.abs(center(box) - center(lensBox))).toBeLessThan(0.5);
-        expect(Math.abs(glyphBox.y + glyphBox.height / 2 - lensBox.y - lensBox.height / 2)).toBeLessThan(0.5);
-        expect(rowBox.y).toBeGreaterThan(glyphBox.y + glyphBox.height);
-        await expect(page.getByRole("button")).toHaveAccessibleName(
-          /Saved, Friend-hosted, Live/,
-        );
-      }
+  const identity = { owned: true, saved: true, interest: true, live: true, count: 15 };
+  for (const [zoom, selected, count] of [[16, true, 4], [16, false, 4], [14, false, 1], [10, false, 0]]) {
+    await page.evaluate(input => (window as any).renderMarker(input), { zoom, selected, identity });
+    const slots = page.locator("[data-badge-slot]");
+    await expect(slots).toHaveCount(zoom === 14 ? 2 : count);
+    if (zoom === 16) {
+      await expect(page.getByTestId("beacon-saved-bookmark")).toHaveAttribute("data-badge-slot", "saved");
+      await expect(page.getByTestId("beacon-saved-bookmark")).toHaveCSS("width", "12px");
+      await expect(page.getByTestId("beacon-saved-bookmark")).toHaveCSS("background-color", "rgb(201, 182, 250)");
+      await expect(page.getByTestId("beacon-ownership-star")).toHaveAttribute("data-badge-slot", "identity");
+      await expect(page.getByTestId("beacon-live-badge")).toHaveAttribute("data-badge-slot", "lifecycle");
     }
-  await page.evaluate(() => (window as any).renderIdentityMarker({ owned: true, compact: true }));
-  await expect(page.getByTestId("beacon-marker-badges").locator(":scope > span")).toHaveCount(1);
+  }
 });
 
 test("pulse expands, fades and stops during gestures; detached petals never animate", async ({

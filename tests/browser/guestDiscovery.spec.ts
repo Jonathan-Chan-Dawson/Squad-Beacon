@@ -89,24 +89,24 @@ test.beforeEach(async ({ page }) => {
   );
 });
 
-test("the first ordinary visit opens public Beacons and the tour stays replayable", async ({ page }) => {
+test("the first visit opens the normal Map and the tours stay replayable", async ({ page }) => {
   await guest(page, { sectionTutorials: true });
   await page.goto("/");
+  await expect(page).toHaveURL(/\/$/);
+  const mapTip = page.getByRole("dialog", { name: "Welcome to the Map!" });
+  await mapTip.getByRole("button", { name: "Got it" }).click();
+  await expect(page.getByTestId("full-map-screen")).toBeVisible();
+  await page.getByRole("tab", { name: "Beacons", exact: true }).click();
   await expect(page).toHaveURL(/\/activities$/);
   const welcome = page.getByRole("dialog", { name: "Welcome to Squad Beacon!" });
   await expect(welcome).toBeVisible();
   await welcome.getByRole("button", { name: "Let’s explore" }).click();
-  await expect(page.getByTestId("visitor-discovery").getByText("Coffee in the neighborhood")).toBeVisible();
-  await expect(page.getByTestId("saved-tools-entry")).toHaveCount(0);
-  await page.goto("/");
-  await expect(page).toHaveURL(/\/$/);
-  await expect(page.getByTestId("full-map-screen")).toBeVisible();
-  const mapTip = page.getByRole("dialog", { name: "Welcome to the Map!" });
-  await mapTip.getByRole("button", { name: "Got it" }).click();
+  await expect(page.getByTestId("home-explore-beacons").getByText("Coffee in the neighborhood")).toBeVisible();
+  await expect(page.getByTestId("saved-tools-entry")).toBeVisible();
   await page.goto("/activities");
-  await expect(page.getByTestId("visitor-discovery")).toBeVisible();
+  await expect(page.getByTestId("home-explore-beacons")).toBeVisible();
   await expect(welcome).toHaveCount(0);
-  await page.getByRole("button", { name: "Help & Tips" }).click();
+  await page.goto("/help");
   await page.getByRole("button", { name: "Quick Tour" }).click();
   await page.getByRole("button", { name: "Replay Map tutorial", exact: true }).click();
   await expect(mapTip).toBeVisible();
@@ -116,7 +116,7 @@ test("signing in from the visitor welcome does not show a second welcome", async
   const { account } = await guest(page);
   await page.goto("/activities");
   await page.getByRole("dialog", { name: "Welcome to Squad Beacon!" }).getByRole("button", { name: "Skip introduction" }).click();
-  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await page.getByTestId("home-friends-section").getByRole("button", { name: "Login to use", exact: true }).click();
   await enterAccount(page);
   await expect(page).toHaveURL(/\/activities$/);
   await expect(page.locator('[data-testid="saved-tools-entry"]:visible')).toBeVisible();
@@ -129,7 +129,7 @@ test("signing in from the visitor welcome does not show a second welcome", async
 test("email confirmation restores Create without private draft parameters", async ({ page }) => {
   await guest(page);
   await page.goto("/create?kind=ping&draftId=private-draft");
-  await expect(page.getByRole("button", { name: "Sign in", exact: true }).last()).toBeVisible();
+  await expect(page.getByRole("button", { name: "Login to use", exact: true })).toBeVisible();
   await page.goto("/auth/confirm?token_hash=fixture-email&type=email");
   await page.getByRole("button", { name: "Confirm and continue", exact: true }).click();
   await expect(page).toHaveURL(/\/create$/);
@@ -150,14 +150,23 @@ test("signed-out visitors see the original Map, tabs and Create button", async (
   expect(runtime.account.snapshotReads).toBe(0);
   expect(runtime.account.reads).toBe(0);
   await page.getByRole("button", { name: "Create", exact: true }).click();
+  const blank = page.getByRole("button", { name: "Create Blank Beacon" });
+  await expect(blank).toBeVisible();
+  await blank.click();
   await expect(page.getByLabel("Email", { exact: true })).toBeVisible();
   await page
     .getByRole("button", { name: "Keep exploring", exact: true })
     .click();
+  await expect(blank).toBeVisible();
+  await page.goBack();
   await expect(page.getByTestId("full-map-screen")).toBeVisible();
   await page.getByRole("tab", { name: "Profile", exact: true }).click();
-  await expect(page.getByText("Make Squad Beacon yours.", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  const identity = page.getByTestId("profile-identity");
+  const login = identity.getByRole("button", { name: "Login to use", exact: true });
+  await expect(page.getByTestId("profile-tabs")).toBeVisible();
+  await identity.getByRole("button", { name: "Dismiss login card", exact: true }).click();
+  await expect(identity.getByTestId("login-to-use-card")).toHaveCount(0);
+  await login.click();
   await expect(page.getByLabel("Email", { exact: true })).toBeVisible();
 });
 
@@ -172,7 +181,7 @@ test("the Beacons home and full Browse directory work signed out", async ({
     .click();
   await expect(page).toHaveURL(/\/activities$/);
   await expect(page.getByRole("dialog", { name: "Welcome to Squad Beacon!" })).toHaveCount(0);
-  await page.getByRole("button", { name: "Browse all", exact: true }).click();
+  await page.getByRole("button", { name: "Explore all →", exact: true }).click();
   const directory = page.getByTestId("browse-beacons-screen");
   await expect(directory).toBeVisible();
   await expect(
@@ -183,6 +192,14 @@ test("the Beacons home and full Browse directory work signed out", async ({
     .getByRole("button", { name: "Saved Beacons", exact: true })
     .click();
   await expect(page.getByLabel("Email", { exact: true })).toBeVisible();
+});
+
+test("a guest can sign in and continue with the selected Create template", async ({ page }) => {
+  await guest(page);
+  await page.goto("/create");
+  await page.getByTestId("creation-starters").getByRole("button", { name: "Basketball", exact: true }).click();
+  await enterAccount(page);
+  await expect(page.getByLabel("Activity title", { exact: true })).toHaveValue("Basketball");
 });
 
 test("joining uses existing login and returns to the existing Browse preview for confirmation", async ({
@@ -223,10 +240,11 @@ test("protected direct links show existing authentication without reading privat
 }) => {
   const runtime = await guest(page);
   for (const path of [
-    "/create",
+    "/create?editor=yes",
     `/activity/${beaconId}/chat`,
   ]) {
     await page.goto(path);
+    await page.getByRole("button", { name: "Login to use", exact: true }).click();
     await expect(page.getByLabel("Email", { exact: true })).toBeVisible();
   }
   expect(runtime.account.snapshotReads).toBe(0);
@@ -236,14 +254,15 @@ test("protected direct links show existing authentication without reading privat
 test("guest Squads retains the Communities tab when sign-in is cancelled", async ({ page }, info) => {
   const runtime = await guest(page);
   await page.goto("/squads");
-  await expect(page.getByText("Your conversations will appear here.")).toBeVisible();
-  await page.getByRole("tab", { name: "Communities", exact: true }).click();
-  await expect(page.getByText("Networks · Organizations · Squads")).toBeVisible();
+  await expect(page.getByText("Log in to see your chats and connect with friends.")).toBeVisible();
+  const communities = page.getByRole("button", { name: "Communities", exact: true });
+  await communities.click();
+  await expect(page.getByRole("heading", { name: "Your Communities" })).toBeVisible();
   await page.screenshot({ path: info.outputPath("guest-communities.png"), animations: "disabled" });
-  await page.getByRole("button", { name: "Sign in to join or create a Squad" }).click();
+  await page.getByRole("button", { name: "Login to use", exact: true }).click();
   await expect(page.getByLabel("Email", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Keep exploring" }).click();
-  await expect(page.getByRole("tab", { name: "Communities", exact: true })).toHaveAttribute("aria-selected", "true");
+  await expect(communities).toHaveAttribute("aria-pressed", "true");
   expect(runtime.account.snapshotReads).toBe(0);
 });
 

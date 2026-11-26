@@ -14,6 +14,7 @@ import {
 } from "@/src/features/planning/domain";
 import { isValidCoordinate, type Coordinate } from "@/src/shared/exploration";
 import { mapBeaconTitle } from "@/src/features/discovery/discoveryCardPresentation";
+import { planningKindLabels } from "@/src/features/planning/planningLabels";
 
 export type MapContextFilter = {
   kind: "plan" | "thread" | "beacon";
@@ -28,8 +29,12 @@ export type MapContextPoint = Coordinate & {
   activityId?: string;
   stopNumber?: number;
   publicBeaconId?: string;
+  publicSummary?: Pick<import("@/src/features/discovery/types").PublicBeaconSummary, "accepted_seat_count" | "viewer_response" | "starts_at" | "ends_at">;
   category?: Category;
   threadId?: string;
+  planningKind?: "ping" | "vote" | "draw" | "time";
+  planningDeadline?: string;
+  planningPlace?: string;
   suggestion: boolean;
 };
 export type MapContextView = {
@@ -99,7 +104,7 @@ export function resolveMapContext(
       });
     return coordinate;
   }
-  function addDraft(id: string, payload: BeaconDraft, threadId: string) {
+  function addDraft(id: string, payload: BeaconDraft, threadId: string, planningKind: MapContextPoint["planningKind"], deadline?: string) {
     if (
       payload.online_url != null ||
       payload.latitude == null ||
@@ -116,6 +121,9 @@ export function resolveMapContext(
         id,
         title: payload.title,
         threadId,
+        planningKind,
+        planningDeadline: deadline,
+        planningPlace: payload.label || undefined,
         suggestion: true,
       });
   }
@@ -157,23 +165,26 @@ export function resolveMapContext(
   } else {
     const thread = data.planning_threads.find((row) => row.id === filter.id);
     if (!thread || !canReadPlanningThread(data, thread, viewerId)) return null;
-    result.label = `${thread.kind === "vote" ? "Vote" : thread.kind === "draw" ? "Draw" : "Ping"}: ${thread.title}`;
+    result.label = `${planningKindLabels[thread.kind]}: ${thread.title}`;
     if (thread.materialized_activity_id)
       addActivity(thread.materialized_activity_id, false);
-    if (thread.kind === "ping") {
+    const deadline = thread.status === "open" ? thread.deadline_at : undefined;
+    if (thread.kind === "ping" || thread.kind === "time") {
       if (!thread.materialized_activity_id && thread.payload)
-        addDraft(`ping:${thread.id}`, thread.payload, thread.id);
-    } else {
+        addDraft(`${thread.kind}:${thread.id}`, thread.payload, thread.id, thread.kind, deadline);
+    }
+    if (thread.kind !== "ping") {
       for (const proposal of visiblePlanningProposals(
         data,
         data.planning_proposals,
         thread.id,
         viewerId,
       )) {
-        if (!canReadPlanningThread(data, thread, proposal.author_id)) continue;
+        if (!canReadPlanningThread(data, thread, proposal.author_id) || proposal.disqualified_at) continue;
         // A linked Beacon's independent privacy rules also apply to its proposal location.
         if (proposal.activity_id) addActivity(proposal.activity_id, true);
-        else addDraft(`proposal:${proposal.id}`, proposal.payload, thread.id);
+        else if (!thread.materialized_activity_id)
+          addDraft(`proposal:${proposal.id}`, proposal.payload, thread.id, thread.kind, deadline);
       }
     }
   }

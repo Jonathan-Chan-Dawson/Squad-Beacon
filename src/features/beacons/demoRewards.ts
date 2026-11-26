@@ -24,14 +24,23 @@ export function applyDemoRewards(
   const wallet = data.demo_rewards ?? { balance: 0, owned: [] };
   if (action === demoRewardActions.tap) {
     const taps = wallet.taps ?? 0;
-    if (taps >= 500) return data;
+    const requested = payload.taps ?? 1;
+    if (
+      typeof requested !== "number" ||
+      !Number.isInteger(requested) ||
+      requested < 1 ||
+      requested > 12
+    )
+      throw new Error("Choose between 1 and 12 taps.");
+    const accepted = Math.min(requested, 500 - taps);
+    if (!accepted) return data;
     return {
       ...data,
       demo_rewards: {
         ...wallet,
-        balance: wallet.balance + demoCoinScale / 10,
-        stage: wallet.stage === 0 && taps < 9 ? 0 : 1,
-        taps: taps + 1,
+        balance: wallet.balance + accepted * (demoCoinScale / 10),
+        stage: wallet.stage === 0 && taps + accepted < 10 ? 0 : 1,
+        taps: taps + accepted,
       },
     };
   }

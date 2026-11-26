@@ -3,6 +3,7 @@ import { SemanticEmpty } from "@/src/features/onboarding/OnboardingUI";
 import { randomUUID } from "expo-crypto";
 import { useNow } from "@/src/shared/useNow";
 import { CreationSavedDrafts } from "./components/CreationSavedDrafts";
+import { LoginToUse } from "@/src/features/auth/LoginToUse";
 import React, { useCallback, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams, type Href } from "expo-router";
@@ -557,7 +558,7 @@ export function CreateHome({
           }}
           showSelectedCheckmark={false}
         />
-        {source === "My Templates" && <PremiumPreview kind="Beacon" />}
+        {source === "My Templates" && !!userId && <PremiumPreview kind="Beacon" />}
         {source === "My Templates" ? (
           <>
             {savedResults.map((item) => (
@@ -574,7 +575,9 @@ export function CreateHome({
                 </IconButton>
               </View>
             ))}
-            {!savedResults.length && (
+            {!userId ? (
+              <LoginToUse destination="/beacon-templates" params={{ ...context, templates: "mine" }} detail="Log in to see your saved templates." />
+            ) : !savedResults.length && (
               <SemanticEmpty
                 name={query.trim() ? "empty.search" : "empty.templates"}
                 illustration="templates"
@@ -715,7 +718,9 @@ export function CreateHome({
       <SpontaneityEntry />
       <Text style={styles.h2}>Quick Access</Text>
       <Button compact secondary title="Activity Note" icon={<Pencil size={17} color={colors.green} />} onPress={() => router.push("/activity-note")} />
-      <CreationSavedDrafts key={userId} savedToken={routeContext.savedDraft} />
+      {userId ? <CreationSavedDrafts key={userId} savedToken={routeContext.savedDraft} /> : (
+        <LoginToUse destination="/create" params={context} detail="Log in to see your saved drafts." resumeCurrentPage />
+      )}
       <Field
         label="Search activities or templates"
         placeholder="Search activities or templates…"

@@ -201,42 +201,20 @@ for (const [width, height, dark] of [
     await fits(page, tooltip);
     await expect(page.getByTestId("map-tooltip-card")).toBeVisible();
     await stayedStill(page, before);
-    const info = tooltip.getByRole("button", {
-      name: "Beacon info & actions",
-      exact: true,
-    });
+    const bookmark = tooltip.getByRole("button", { name: /^(?:Unsave|Save) Beacon$/ });
     const close = tooltip.getByRole("button", {
       name: "Close map preview",
       exact: true,
     });
-    const infoBox = (await info.boundingBox())!,
+    const bookmarkBox = (await bookmark.boundingBox())!,
       closeBox = (await close.boundingBox())!;
-    expect(infoBox.x + infoBox.width).toBeLessThanOrEqual(closeBox.x + 1);
-    expect(Math.abs(infoBox.y - closeBox.y)).toBeLessThan(2);
-    await expect(
-      tooltip.getByTestId("discovery-card-actions").getByRole("button"),
-    ).toHaveCount(1);
-    const actionBox = (await tooltip
-      .getByTestId("discovery-card-actions")
-      .getByRole("button")
-      .boundingBox())!;
-    const previewBox = (await tooltip.boundingBox())!;
-    expect(actionBox.y + actionBox.height).toBeLessThanOrEqual(
-      previewBox.y + previewBox.height + 1,
-    );
-    await expect(
-      tooltip.getByRole("button", { name: "See overview", exact: true }),
-    ).toHaveCount(0);
-    await info.click();
-    await expect(
-      page.getByRole("button", { name: "Share Beacon", exact: true }),
-    ).toBeVisible();
+    expect(bookmarkBox.x + bookmarkBox.width).toBeLessThanOrEqual(closeBox.x + 1);
+    expect(Math.abs(bookmarkBox.y - closeBox.y)).toBeLessThan(2);
+    const dock = tooltip.getByTestId("discovery-card-actions");
+    await expect(dock).toBeInViewport();
+    await expect(dock.getByRole("button").first()).toBeInViewport();
+    await expect(tooltip.getByRole("button", { name: "See overview", exact: true })).toBeVisible();
     await stayedStill(page, before);
-    await page.keyboard.press("Escape");
-    await expect(tooltip).toBeVisible();
-    await expect(
-      page.getByRole("button", { name: "Share Beacon", exact: true }),
-    ).toHaveCount(0);
     await page.screenshot({ path: `.expo/map-selection-${width}.png` });
     await close.click();
     await expect(tooltip).toHaveCount(0);
@@ -324,14 +302,7 @@ test("public selection stays coarse and anchored without changing the area", asy
   await fits(page, callout);
   await expect(callout).toContainText(/approximate area/i);
   await stayedStill(page, before);
-  await callout
-    .getByRole("button", { name: "Beacon info & actions", exact: true })
-    .click();
-  await expect(
-    page.getByRole("dialog", { name: "Public Beacon information" }),
-  ).toBeVisible();
-  await page.keyboard.press("Escape");
-  await expect(callout).toBeVisible();
+  await expect(callout.getByRole("button", { name: /^Beacon tools|^Beacon info & actions$/ })).toHaveCount(0);
   await callout
     .getByRole("button", { name: "Close map preview", exact: true })
     .click();

@@ -4,14 +4,7 @@ import {
   discoveryCardMetadata,
   mapBeaconTitle,
   discoveryContextLabel,
-  shouldUseAdaptiveDiscoveryShell,
 } from "../src/features/discovery/discoveryCardPresentation";
-
-test("the compact shell stays opt-in so existing Home Explore cards keep their presentation", () => {
-  assert.equal(shouldUseAdaptiveDiscoveryShell("discovery"), false);
-  assert.equal(shouldUseAdaptiveDiscoveryShell("home", true), false);
-  assert.equal(shouldUseAdaptiveDiscoveryShell("discovery", true), true);
-});
 
 test("discovery metadata prioritizes accepted count and strict spots remaining", () => {
   assert.equal(

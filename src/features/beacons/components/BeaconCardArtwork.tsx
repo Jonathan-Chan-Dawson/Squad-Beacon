@@ -43,12 +43,16 @@ export function BeaconCardArtwork({
   variant = "Constellation",
   quiet = false,
   radius = 0,
+  integrated = false,
+  tint,
 }: {
   category: Category;
   accent?: string | null;
   variant?: BeaconArtworkStyle;
   quiet?: boolean;
   radius?: number;
+  integrated?: boolean;
+  tint?: string;
 }) {
   const { colors, categories } = useDesignTheme();
   const gradient = `beacon-art-${useId().replace(/[^a-zA-Z0-9_-]/g, "")}`;
@@ -73,7 +77,7 @@ export function BeaconCardArtwork({
           : 0.075;
   const lineOpacity = quiet ? 0.16 : 0.25;
   const surfaceOpacity = variant === "Minimal" ? 0.035 : quiet ? 0.08 : 0.15;
-  const panelInset = quiet ? 5 : 7;
+  const panelInset = integrated ? 0 : quiet ? 5 : 7;
   return (
     <View
       pointerEvents="none"
@@ -92,7 +96,7 @@ export function BeaconCardArtwork({
           left: panelInset,
           right: panelInset,
           height: quiet ? 84 : 124,
-          borderRadius: Math.max(10, radius - panelInset),
+          borderRadius: integrated ? 0 : Math.max(10, radius - panelInset),
           overflow: "hidden",
         }}
       >
@@ -102,21 +106,42 @@ export function BeaconCardArtwork({
           style={{ position: "absolute", top: 0, left: 0 }}
         >
           <Defs>
-            <LinearGradient
-              id={`${gradient}-header`}
-              x1="0%"
-              y1="0%"
-              x2="0%"
-              y2="100%"
-            >
-              <Stop offset="0" stopColor={color} stopOpacity={surfaceOpacity} />
-              <Stop
-                offset="0.5"
-                stopColor={color}
-                stopOpacity={surfaceOpacity * 0.6}
-              />
-              <Stop offset="1" stopColor={color} stopOpacity={0} />
-            </LinearGradient>
+            {integrated ? (
+              <RadialGradient
+                id={`${gradient}-header`}
+                cx="96%"
+                cy="0%"
+                rx="88%"
+                ry="98%"
+              >
+                <Stop
+                  offset="0"
+                  stopColor={tint ?? color}
+                  stopOpacity={tint ? (quiet ? 0.14 : 0.23) : surfaceOpacity}
+                />
+                <Stop offset="1" stopColor={tint ?? color} stopOpacity={0} />
+              </RadialGradient>
+            ) : (
+              <LinearGradient
+                id={`${gradient}-header`}
+                x1="0%"
+                y1="0%"
+                x2="0%"
+                y2="100%"
+              >
+                <Stop
+                  offset="0"
+                  stopColor={tint ?? color}
+                  stopOpacity={surfaceOpacity}
+                />
+                <Stop
+                  offset="0.5"
+                  stopColor={color}
+                  stopOpacity={surfaceOpacity * 0.6}
+                />
+                <Stop offset="1" stopColor={color} stopOpacity={0} />
+              </LinearGradient>
+            )}
           </Defs>
           <Rect width="100%" height="100%" fill={`url(#${gradient}-header)`} />
         </Svg>

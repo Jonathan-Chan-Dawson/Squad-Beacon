@@ -11,6 +11,7 @@ export function usePublicBeacons(
   query: string,
   coordinate?: Coordinate | null,
   publicId?: string,
+  enabled = true,
 ) {
   const {
     data,
@@ -25,8 +26,8 @@ export function usePublicBeacons(
   const refresh = useCallback(() => setRevision((value) => value + 1), []);
   useFocusEffect(
     useCallback(() => {
-      refresh();
-    }, [refresh]),
+      if (enabled) refresh();
+    }, [enabled, refresh]),
   );
   const [result, setResult] = useState<{
     snapshot: typeof data;
@@ -51,7 +52,7 @@ export function usePublicBeacons(
     publicId,
   ]);
   useEffect(() => {
-    if ((userId && data.viewer_id !== userId) || demo || !supabase) return;
+    if (!enabled || (userId && data.viewer_id !== userId) || demo || !supabase) return;
     let current = true;
     const epoch = getViewerEpoch();
     const timer = setTimeout(() => {
@@ -131,6 +132,7 @@ export function usePublicBeacons(
     };
   }, [
     data,
+    enabled,
     demo,
     userId,
     query,
@@ -140,6 +142,7 @@ export function usePublicBeacons(
     key,
     publicId,
   ]);
+  if (!enabled) return { rows: [], focused: null, error: undefined, ready: false, refresh };
   if (__DEV__ && demo && userId && demoScenario === "offline")
     return {
       rows: [],

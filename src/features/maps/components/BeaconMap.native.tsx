@@ -1,8 +1,13 @@
 import {
   EMPTY_MARKER_STATE,
+  publicBeaconMarkerState,
+  beaconFaceSize,
+  planningMarkerArtwork,
+  mapIdentityColors,
+  planningDeadlineSoon,
+  nextMapPlanStop,
   visibleMapLabels,
   mapAvailabilityColors,
-  mapIdentityColors,
   ownsMapBeacon,
   prepareMapIdentity,
   mapBeaconMarkerStates,
@@ -23,6 +28,7 @@ import {
   presentationArtworkPoints,
   type NativeMapMode,
   type NativeMapPresentation,
+  crowdedBeaconMarkers,
 } from "../nativeMapPresentation";
 import { LivingMapPin } from "./LivingMapMarkers.native";
 import React, {
@@ -53,7 +59,6 @@ import { isValidCoordinate } from "@/src/shared/exploration";
 import { useBeacon } from "@/src/shared/store";
 import { useTheme } from "@/src/shared/ui";
 import { usePreferences } from "@/src/shared/preferences";
-import { BeaconPinGlyph } from "./BeaconPinGlyph";
 import { planPathArrowheads } from "../contextFilters";
 import { useDesignTheme } from "@/src/theme";
 import { googleMapStyles } from "@/src/theme/map";
@@ -170,6 +175,8 @@ export default function BeaconMap({
   controlCommand,
   mapStyle,
   selectedActivityId = null,
+  selectedPublicBeaconId = null,
+  selectedPlanningPointId,
   selectedPersonId = null,
   focusBackground,
   onLongPress,
@@ -277,6 +284,7 @@ export default function BeaconMap({
     () => mapBeaconMarkerStates(identityData, activities, contextPoints, identityLookup, now),
     [activities, contextPoints, identityData, identityLookup, now],
   );
+  const nextStopId = nextMapPlanStop(contextPoints, markerStates);
   const reducedMotion = useReducedMotion();
   const categoryColors = useMemo(
     () =>
@@ -718,6 +726,9 @@ export default function BeaconMap({
       friendsProminent,
     ],
   );
+  const crowdedBadges = useMemo(() => crowdedBeaconMarkers(presentations, zoom, id =>
+    beaconFaceSize(markerStates.get(id.slice(7)), 40, presentationMode === "stack")
+  ), [presentations, zoom, markerStates, presentationMode]);
   const [artworkCache] = useState(() => new ClusterArtworkCache());
   const memberModels = useMemo(
     () =>
@@ -774,7 +785,7 @@ export default function BeaconMap({
       group.members.length === 1
         ? [group.members[0].id] : [])),
     zoom,
-    (id) => id === `beacon:${selectedActivityId}` || id === `person:${selectedPersonId}` ? 0 : markerStates.get(id.slice(7))?.owned ? 1 : id.startsWith("person:") || markerStates.get(id.slice(7))?.friendHosted ? 2 : 3,
+    (id) => id === `beacon:${selectedActivityId}` || id === `beacon:${selectedPublicBeaconId}` || id === `person:${selectedPersonId}` ? 0 : markerStates.get(id.slice(7))?.owned ? 1 : id.startsWith("person:") || markerStates.get(id.slice(7))?.friendHosted ? 2 : 3,
   );
   for (const id of markerLabels) renderedSingletonIds.add(id);
   const [cameraMoving, setCameraMoving] = useState(false);
@@ -1124,6 +1135,7 @@ export default function BeaconMap({
                   categoryColor={categoryColors[category]}
                   icon={point.mapIcon}
                   stopNumber={point.stopNumber}
+                  streetTime={point.id === nextStopId && presentationMode === "stack" ? "Next stop" : undefined}
                   showProjection={presentationMode === "stack"}
                   lightingTier={lightingTier[presentationMode]}
                   compactProjection={presentationMode === "swarm"}
@@ -1136,6 +1148,35 @@ export default function BeaconMap({
                 />
               );
             }
+            if (point.publicBeaconId) {
+              const category = point.category ?? "Other";
+              return (
+                <BeaconMapPin
+                  key={point.id}
+                  id={point.id}
+                  title={point.title}
+                  coordinate={point}
+                  category={category}
+                  categoryColor={categoryColors[category]}
+                  icon={point.mapIcon}
+                  publicMarker
+                  badgeCrowded={crowdedBadges.has(`beacon:${point.publicBeaconId}`)}
+                  showProjection={presentationMode === "stack"}
+                  compactProjection={presentationMode === "swarm"}
+                  lightingTier={lightingTier[presentationMode]}
+                  selected={selectedPublicBeaconId === point.publicBeaconId}
+                  beaconName={!onPick && markerLabels.has(`beacon:${point.publicBeaconId}`) ? point.title : undefined}
+                  dimmed={false}
+                  appearanceKey={appearanceKey}
+                  markerState={publicBeaconMarkerState(point.publicSummary, now)}
+                  disabled={!!onPick}
+                  onPress={() => onContextPoint?.(point)}
+                />
+              );
+            }
+            const art = planningMarkerArtwork[point.planningKind ?? "ping"];
+            const planningSelected = selectedPlanningPointId === point.id;
+            const deadlineSoon = planningDeadlineSoon(point.planningDeadline, now);
             return point.activityId ? (
               <Circle
                 key={`context:${point.id}`}
@@ -1151,8 +1192,9 @@ export default function BeaconMap({
                 key={point.id}
                 coordinate={point}
                 anchor={{ x: 0.5, y: 0.5 }}
-                zIndex={2}
-                accessibilityLabel={`${point.publicBeaconId ? "Public Beacon" : "Suggestion"}: ${point.title}`}
+                zIndex={planningSelected ? 900 : 2}
+                accessibilityState={{ selected: planningSelected }}
+                accessibilityLabel={`${art.label}: ${point.title}${deadlineSoon ? ", decision deadline soon" : ""}`}
                 onPress={(event) => {
                   event.stopPropagation();
                   if (!onPick) onContextPoint?.(point);
@@ -1166,34 +1208,32 @@ export default function BeaconMap({
                     justifyContent: "center",
                   }}
                 >
+                  {planningSelected && <View pointerEvents="none" style={{ position: "absolute", width: 42, height: 42, borderRadius: 21, borderWidth: 2, borderStyle: "dotted", borderColor: mapIdentityColors.selection }} />}
                   <View
                     style={{
                       paddingHorizontal: 8,
                       paddingVertical: 5,
-                      borderRadius: point.publicBeaconId ? 13 : 12,
-                      minWidth: 46,
-                      minHeight: 46,
+                      borderRadius: 16,
+                      minWidth: 32,
+                      minHeight: 32,
                       alignItems: "center",
                       justifyContent: "center",
-                      borderWidth: point.publicBeaconId ? 2 : 1,
-                      borderStyle:
-                        point.publicBeaconId
-                          ? "solid"
-                          : "dashed",
-                      borderColor: point.publicBeaconId ? mapIdentityColors.other : colors.green,
+                      borderWidth: 1,
+                      borderStyle: point.planningKind === "ping" ? "dashed" : "solid",
+                      borderColor: art.color,
                       backgroundColor: colors.surface,
                     }}
                   >
-                    {point.publicBeaconId ? <BeaconPinGlyph category={point.category ?? "Other"} icon={point.mapIcon} size={23} color={colors.ink} /> : <Text
+                    <Text
                       numberOfLines={1}
                       style={{
-                        maxWidth: 150,
-                        color: colors.green,
-                        fontSize: 11,
+                        color: art.color,
+                        fontSize: 17,
                       }}
                     >
-                      ? Suggestion
-                    </Text>}
+                      {art.glyph}
+                    </Text>
+                    {deadlineSoon && <Text style={{ position: "absolute", top: -4, right: -3, borderRadius: 6, backgroundColor: colors.surface, color: art.color, fontSize: 10 }}>◷</Text>}
                   </View>
                 </View>
               </Marker>
@@ -1262,6 +1302,8 @@ export default function BeaconMap({
                   longitude: place.longitude!,
                 }}
                 markerState={markerStates.get(activity.id)!}
+                publicMarker={identityLookup.publicIds.has(activity.id)}
+                badgeCrowded={crowdedBadges.has(`beacon:${activity.id}`)}
                 category={activity.category}
                 icon={zoom >= 14 || selectedPin ? activity.map_icon : undefined}
                 categoryColor={categoryColors[activity.category]}

@@ -10,7 +10,8 @@ import { GuestShareSheet } from "@/src/features/sharing/GuestShareSheet";
 import { guestSharingOrigin } from "@/src/features/sharing/guestTransport";
 import {
   resolveActivityToolEntry,
-  type BeaconToolId as ToolId,
+  canOpenActivitySchedule,
+  type BeaconToolId,
 } from "@/src/features/beacons/activityToolEntry";
 import { AttendanceControls } from "@/src/features/beacons/AttendanceControls";
 import { BeaconMemories } from "@/src/features/beacons/BeaconMemories";
@@ -142,6 +143,8 @@ const tabIcons = {
   Memories: Camera,
   Chat: MessagesSquare,
 } satisfies Record<DetailTab, typeof Info>;
+
+type ToolId = Exclude<BeaconToolId, "agenda">;
 
 const toolLabels: Record<ToolId, string> = {
   checklist: "Checklist",
@@ -1066,7 +1069,7 @@ export default function ActivityDetail() {
           },
         }))
     : [];
-  if (canAccess && (data.is_demo || data.capabilities?.beacon_expansion) && (canManage || data.premium_tool_configs?.some(c=>c.activity_id===activity.id&&c.kind==="agenda"))) tools.push({id:"agenda",icon:<CalendarDays size={20}/>,label:"Activity schedule",status:"Preparation and activity timeline",onPress:()=>setSelectedTool("agenda")});
+  if (userId && canOpenActivitySchedule(data, activity, userId)) tools.push({id:"agenda",icon:<CalendarDays size={20}/>,label:"Activity schedule",status:"Preparation and activity timeline",onPress:()=>setSelectedTool("agenda")});
   const activeTool =
     selectedTool && tools.some((tool) => tool.id === selectedTool)
       ? selectedTool

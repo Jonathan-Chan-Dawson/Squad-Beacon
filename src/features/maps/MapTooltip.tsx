@@ -6,7 +6,10 @@ import { browseEntryReason } from "@/src/features/discovery/domain";
 import { discoveryContextLabel } from "@/src/features/discovery/discoveryCardPresentation";
 import { BeaconFeedCard } from "@/src/features/beacons/components/BeaconFeedCard";
 import { activityFeedCardProps } from "@/src/features/beacons/screens/activityFeedCard";
-import { readablePlanForActivity } from "@/src/features/beacons/screens/discoveryPlan";
+import {
+  readablePlanForActivity,
+  readablePlanStopPosition,
+} from "@/src/features/beacons/screens/discoveryPlan";
 import {
   canReadBeaconActivity,
   canUseBeaconModules,
@@ -19,7 +22,8 @@ import { shareBeaconInvitation } from "@/src/features/sharing/shareBeacon";
 import React from "react";
 import { View } from "react-native";
 import { MapTooltipClose } from "./MapTooltipShell";
-import type { MapContextFilter } from "./contextFilters";
+import { MapRelationshipActions } from "./MapRelationshipActions";
+import { resolveMapContext, type MapContextFilter } from "./contextFilters";
 import type { MapBeaconFeature } from "./mapBeaconFeatures";
 
 export function MapTooltip({
@@ -53,7 +57,6 @@ export function MapTooltip({
   )
     return null;
 
-  const community = communityAssociations.find(row => row.activity_id === activity.id && row.priority === 0)?.summary;
   const reason = browseEntryReason(
     { kind: "activity", activity },
     data,
@@ -62,13 +65,17 @@ export function MapTooltip({
     communityAssociations,
   );
   const plan = readablePlanForActivity(data, activity, userId);
+  const planFilter = plan ? { kind: "plan" as const, id: plan.id } : undefined;
+  const canFitPlan =
+    planFilter &&
+    onShowContext &&
+    !!resolveMapContext(data, userId, planFilter)?.points.length;
   const planContext = plan
     ? {
         title: plan.title,
         stepIndex: activity.plan_step_index,
-        onShowOnMap: onShowContext
-          ? () => onShowContext({ kind: "plan", id: plan.id })
-          : undefined,
+        stop: readablePlanStopPosition(data, activity, plan, userId),
+        onShowOnMap: canFitPlan ? () => onShowContext(planFilter) : undefined,
         onPress: () =>
           router.push({ pathname: "/plan/[id]", params: { id: plan.id } }),
       }
@@ -117,15 +124,12 @@ export function MapTooltip({
 
   return (
     <View testID="map-tooltip-card">
+      <MapRelationshipActions beaconId={activity.id} onShow={onShowContext} threadOnly />
       <BeaconFeedCard
         compact
         mapPreview
         mapIcon={activity.map_icon}
-        mapCommunityName={community?.name}
-        mapCommunityKey={community?.entity_id}
-        mapCommunityType={community?.entity_type}
         presentation="discovery"
-        adaptiveDiscovery
         detailsLabel="See overview"
         headerAccessory={
           <MapTooltipClose label="Close map preview" onClose={onClose} />
@@ -140,7 +144,7 @@ export function MapTooltip({
               {visibleReason ? (
                 <DiscoveryContextNote label={visibleReason} />
               ) : null}
-              <BeaconCommunityRow activityId={activity.id} compact tooltip />
+              <BeaconCommunityRow activityId={activity.id} inline />
             </View>
           ) : null
         }

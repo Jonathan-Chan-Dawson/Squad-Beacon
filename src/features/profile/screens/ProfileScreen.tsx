@@ -8,6 +8,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Pencil, Settings, Sparkles, X } from "lucide-react-native";
 import { useBeacon } from "@/src/shared/store";
+import { LoginToUse } from "@/src/features/auth/LoginToUse";
 import {
   Button,
   IconButton,
@@ -74,7 +75,9 @@ function ProfileScreenBody() {
   }
   const params = useLocalSearchParams<{ section?: string }>();
   const [tab, setTab] = useState<ProfileTab>(
-    params.section === "aspirations" ? "About" : "Overview",
+    params.section === "aspirations" || params.section === "About"
+      ? "About"
+      : params.section === "Beacons" ? "Beacons" : "Overview",
   );
   const [sectionScroll, setSectionScroll] = useState<{
     y: number;
@@ -134,16 +137,16 @@ function ProfileScreenBody() {
         </View>
       }
     >
-      {profile ? (
+      {profile || !userId ? (
         <ProfileExperience
-          key={profile.id}
+          key={profile?.id ?? "signed-out"}
           profile={profile}
           tab={displayedTab}
           onTabChange={setTab}
           onAspirationPosition={focusAspirations}
-          progression={<MiniBeaconControls />}
-          overviewAccessory={<View testID="profile-membership-section"><PersonalMembershipSummary /></View>}
-          actions={
+          progression={profile && <MiniBeaconControls />}
+          overviewAccessory={profile ? <View testID="profile-membership-section"><PersonalMembershipSummary /></View> : undefined}
+          actions={profile ? (
             <>
               <Button
                 title="Edit profile"
@@ -163,6 +166,11 @@ function ProfileScreenBody() {
                 </View>
               )}
             </>
+          ) : (
+            <View style={{ width: "100%" }}>
+              <LoginToUse destination="/profile" params={{ section: displayedTab }} detail="Log in to personalize and share your profile." />
+            </View>
+          )
           }
         />
       ) : loading ? (

@@ -1,3 +1,4 @@
+import { DiscoveryBeaconCard } from "@/src/features/discovery/DiscoveryBeaconCard";
 import { ActivityCategoryChoices } from "../ActivityCategoryChoices";
 import { activeAvailability, availabilityColors } from "../../availability";
 import { useAvailabilityNow } from "../../availabilityClock";
@@ -1325,16 +1326,16 @@ export function UpNextCard({ personId }: { personId: string }) {
     <View testID="up-next" style={{ gap: 6 }}>
       <Text style={styles.label}>Up Next</Text>
       {next ? (
-        <Pressable accessibilityRole="button" accessibilityLabel={`Open upcoming Beacon: ${next.title}`}
-          onPress={() => router.push({ pathname: "/activity/[id]", params: { id: next.id } })}
-          style={{ flexDirection: "row", alignItems: "center", gap: 10, padding: 10, minHeight: 48, borderRadius: 12, backgroundColor: colors.surfaceRaised }}>
-          <BeaconIcon category={next.category} emoji={next.decoration_emoji} size={34} />
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={styles.label} numberOfLines={2}>{next.title.replace(/^Plan stop \d+\s*:\s*(?=\S)/i, "")}</Text>
-            <Txt muted>{new Date(next.starts_at).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" })} · {new Date(next.starts_at).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}</Txt>
-          </View>
-          <ChevronRight size={16} color={colors.muted} />
-        </Pressable>
+        <DiscoveryBeaconCard
+          density="mini" activityId={next.id}
+          title={next.title.replace(/^Plan stop \d+\s*:\s*(?=\S)/i, "")} category={next.category}
+          decorationEmoji={next.decoration_emoji} mapIcon={next.map_icon}
+          detailsLabel={`Open upcoming Beacon: ${next.title}`}
+          whenLabel={new Date(next.starts_at).toLocaleString(undefined, {
+            weekday: "long", month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+          })}
+          onDetails={() => router.push({ pathname: "/activity/[id]", params: { id: next.id } })}
+        />
       ) : (
         <View style={{ gap: 6, padding: 10, borderRadius: 12, backgroundColor: colors.surfaceRaised }}>
           <Txt muted>Nothing coming up yet.</Txt>

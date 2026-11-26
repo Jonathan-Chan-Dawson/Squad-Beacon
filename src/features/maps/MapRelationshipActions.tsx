@@ -8,14 +8,17 @@ import { activityWhen } from "@/src/shared/domain";
 import { Button, useTheme } from "@/src/shared/ui";
 import { canReadBeaconActivity } from "@/src/features/beacons/beaconModules";
 import { resolveMapContext, type MapContextFilter } from "./contextFilters";
+import { planningCreationModes } from "@/src/features/planning/PlanningKindSelector";
 
 /** Shared by the existing preview and expanded Beacon panel. */
 export function MapRelationshipActions({
   beaconId,
   onShow,
   expanded = false,
+  threadOnly = false,
 }: {
   expanded?: boolean;
+  threadOnly?: boolean;
   beaconId: string;
   onShow?: (filter: MapContextFilter) => void;
 }) {
@@ -32,7 +35,7 @@ export function MapRelationshipActions({
   )
     return null;
   const filters: MapContextFilter[] = [
-    ...(activity.plan_id
+    ...(!threadOnly && activity.plan_id
       ? [{ kind: "plan" as const, id: activity.plan_id }]
       : []),
     ...data.planning_threads
@@ -47,12 +50,17 @@ export function MapRelationshipActions({
       )
       .map((thread) => ({ kind: "thread" as const, id: thread.id })),
   ];
-  const permitted = filters.filter((filter) =>
-    resolveMapContext(data, userId, filter),
-  );
+  const permitted = filters.filter((filter) => {
+    const view = resolveMapContext(data, userId, filter);
+    return filter.kind === "thread"
+      ? view?.points.some((point) => point.activityId === beaconId)
+      : !!view;
+  });
   if (!permitted.length) return null;
   return (
-    <View style={{ gap: 6 }}>
+    <View style={threadOnly
+      ? { gap: 2, marginBottom: 4, paddingHorizontal: 10, borderWidth: 1, borderColor: colors.line, borderRadius: 12, backgroundColor: colors.white }
+      : { gap: 6 }}>
       {permitted.map((filter) =>
         filter.kind === "plan" ? (
           (() => {
@@ -140,20 +148,28 @@ export function MapRelationshipActions({
               </View>
             );
           })()
-        ) : (
-          <Button
-            key={`${filter.kind}:${filter.id}`}
-            compact
-            secondary
-            title={
-              data.planning_threads.find((thread) => thread.id === filter.id)
-                ?.kind === "ping"
-                ? "Related activities"
-                : "Show Suggested Beacons"
-            }
-            onPress={() => onShow(filter)}
-          />
-        ),
+        ) : (() => {
+          const thread = data.planning_threads.find((row) => row.id === filter.id)!;
+          const mode = planningCreationModes.find(({ kind }) => kind === thread.kind)!;
+          const Icon = mode.Icon;
+          return (
+            <Pressable
+              key={`thread:${filter.id}`}
+              accessibilityRole="button"
+              accessibilityLabel={`Show ${mode.label} on Map, ${thread.title}`}
+              onPress={() => onShow(filter)}
+              style={{ flexDirection: "row", alignItems: "center", minHeight: 44, gap: 7, borderTopWidth: threadOnly ? 0 : 1, borderColor: colors.line }}
+            >
+              <Icon size={15} color={colors.muted} />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.label}>{mode.label}</Text>
+                <Text numberOfLines={1} style={styles.muted}>{thread.title}</Text>
+              </View>
+              <Text style={[styles.label, { color: colors.green }]}>Show on Map</Text>
+              <ChevronRight size={14} color={colors.green} />
+            </Pressable>
+          );
+        })(),
       )}
     </View>
   );

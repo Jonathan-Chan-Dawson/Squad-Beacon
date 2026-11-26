@@ -7,32 +7,33 @@ import { useBeacon } from "@/src/shared/store";
 import { useTheme } from "@/src/shared/ui";
 import { switchComposerKind } from "./composerSession";
 import { connectedPlanningEnabled } from "./connected";
+import { planningKindLabels } from "./planningLabels";
 
 export const planningCreationModes = [
   {
     kind: "ping",
-    label: "Ping",
+    label: planningKindLabels.ping,
     tab: "Ping",
     Icon: Radio,
     description: "See who’s interested",
   },
   {
     kind: "time",
-    label: "Find a Time",
+    label: planningKindLabels.time,
     tab: "Time",
     Icon: CalendarClock,
     description: "See when people are free",
   },
   {
     kind: "vote",
-    label: "Vote",
+    label: planningKindLabels.vote,
     tab: "Vote",
     Icon: Vote,
     description: "Let the group choose",
   },
   {
     kind: "draw",
-    label: "Random Draw",
+    label: planningKindLabels.draw,
     tab: "Draw",
     Icon: Dices,
     description: "Pick a choice at random",
@@ -41,13 +42,15 @@ export const planningCreationModes = [
 
 export function PlanningModeMenu({
   onSelect,
+  layout = "grid",
 }: {
   onSelect: (kind: (typeof planningCreationModes)[number]["kind"]) => void;
+  layout?: "grid" | "list";
 }) {
   const { data } = useBeacon();
   const { colors, styles } = useTheme();
   return (
-    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+    <View style={{ flexDirection: layout === "list" ? "column" : "row", flexWrap: layout === "list" ? "nowrap" : "wrap", gap: 8 }}>
       {planningCreationModes
         .filter(({ kind }) => kind !== "time" || connectedPlanningEnabled(data))
         .map(({ kind, label, description, Icon }) => (
@@ -60,9 +63,11 @@ export function PlanningModeMenu({
             style={({ pressed }) => [
               styles.card,
               {
-                flexBasis: "45%",
-                flexGrow: 1,
-                minHeight: 92,
+                flexBasis: layout === "list" ? undefined : "45%",
+                flexGrow: layout === "list" ? 0 : 1,
+                minHeight: layout === "list" ? 58 : 92,
+                flexDirection: layout === "list" ? "row" : "column",
+                alignItems: layout === "list" ? "center" : undefined,
                 gap: 4,
                 padding: 12,
                 opacity: pressed ? 0.7 : 1,
@@ -70,8 +75,10 @@ export function PlanningModeMenu({
             ]}
           >
             <Icon size={19} color={colors.green} aria-hidden />
-            <Text style={styles.body}>{label}</Text>
-            <Text style={styles.muted}>{description}</Text>
+            <View style={{ gap: 3 }}>
+              <Text style={styles.body}>{label}</Text>
+              <Text style={styles.muted}>{description}</Text>
+            </View>
           </Pressable>
         ))}
     </View>

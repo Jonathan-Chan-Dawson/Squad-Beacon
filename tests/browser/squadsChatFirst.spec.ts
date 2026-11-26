@@ -252,7 +252,7 @@ test("a response prompt jumps to its exact Squad Ping and shares its response st
     .getByRole("button", { name: "Open Squad chat", exact: true })
     .scrollIntoViewIfNeeded();
   await page.screenshot({
-    path: "docs/screenshots/phase4ca/squad-ping-handoff.png",
+    path: "test-results/visual-captures/phase4ca/squad-ping-handoff.png",
   });
   await page
     .getByRole("button", { name: "Open Squad chat", exact: true })

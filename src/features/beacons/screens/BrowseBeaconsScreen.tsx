@@ -47,7 +47,6 @@ import {
   canReadBeaconActivity,
   canUseBeaconModules,
 } from "@/src/features/beacons/beaconModules";
-import { readablePlanForActivity } from "./discoveryPlan";
 import { canViewProfile } from "@/src/features/profile/privacy";
 import { canOpenSquadProfile } from "@/src/features/people/squadProfile";
 import { activeOrganizationRole } from "@/src/features/organizations/domain";
@@ -121,29 +120,7 @@ export default function BrowseBeaconsScreen() {
     [],
   );
   const pendingSection = useRef<BrowseSection | null>(null);
-  const [visibleCards, setVisibleCards] = useState<Set<string>>(
-    () => new Set(),
-  );
-  const onVisibleCards = useCallback(
-    ({
-      viewableItems,
-    }: {
-      viewableItems: { item: BrowseDiscoveryEntry; isViewable: boolean }[];
-    }) =>
-      setVisibleCards(
-        new Set(
-          viewableItems
-            .filter(
-              (row) =>
-                row.isViewable &&
-                row.item &&
-                (row.item.kind === "activity" || row.item.kind === "public"),
-            )
-            .map((row) => browseEntryId(row.item)),
-        ),
-      ),
-    [],
-  );
+
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [savedOpen, setSavedOpen] = useState(false);
   const selectedCategories = useMemo(
@@ -589,7 +566,6 @@ export default function BrowseBeaconsScreen() {
         <PublicBeaconPreview
           key={entry.summary.activity_id}
           summary={entry.summary}
-          adaptiveDiscovery
           compact
           contextLabel={contextLabel}
           onClose={() => undefined}
@@ -608,7 +584,6 @@ export default function BrowseBeaconsScreen() {
     const response = data.rsvps.find(
       (row) => row.activity_id === activity.id && row.user_id === userId,
     );
-    const plan = readablePlanForActivity(data, activity, userId);
     const feedProps = activityFeedCardProps(data, activity, userId, now, {
       onOpen: () => openActivity(activity.id),
       onRSVP: (status) => respond(activity.id, status),
@@ -667,7 +642,6 @@ export default function BrowseBeaconsScreen() {
         <BeaconFeedCard
           compact
           presentation="discovery"
-          adaptiveDiscovery
           compactFooter={
             visibleContextLabel ||
             communityAssociations.some(
@@ -680,23 +654,10 @@ export default function BrowseBeaconsScreen() {
                     detail={contextDetail}
                   />
                 ) : null}
-                <BeaconCommunityRow activityId={activity.id} compact />
+                <BeaconCommunityRow activityId={activity.id} inline />
               </View>
             ) : null
           }
-          planContext={
-            plan
-              ? {
-                  title: plan.title,
-                  onPress: () =>
-                    router.push({
-                      pathname: "/plan/[id]",
-                      params: { id: plan.id },
-                    }),
-                }
-              : undefined
-          }
-          animationVisible={visibleCards.has(activity.id)}
           {...feedProps}
           onOpenPeople={() => openActivityPeople(activity.id)}
         />
@@ -809,8 +770,6 @@ export default function BrowseBeaconsScreen() {
             paddingBottom: insets.bottom + tokens.layout.scrollClearance,
             gap: 0,
           }}
-          onViewableItemsChanged={onVisibleCards}
-          viewabilityConfig={{ itemVisiblePercentThreshold: 10 }}
           sections={[
             { key: "now", title: "Happening Now", data: nowEntries },
             { key: "upcoming", title: "Coming Up", data: upcomingEntries },
@@ -1246,7 +1205,6 @@ export default function BrowseBeaconsScreen() {
             <PublicBeaconPreview
               key={selectedPublicSummary.activity_id}
               summary={selectedPublicSummary}
-              adaptiveDiscovery
               contextLabel={browseEntryReason(
                 { kind: "public", summary: selectedPublicSummary },
                 data,

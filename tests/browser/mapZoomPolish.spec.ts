@@ -6,6 +6,7 @@ const tiers = [
   ["medium", "neighborhood", 14],
   ["far", "city", 11],
   ["micro", "regional", 8],
+  ["micro", "world", 4],
 ] as const;
 
 for (const appearance of ["light", "dark"] as const) {
@@ -50,10 +51,12 @@ for (const appearance of ["light", "dark"] as const) {
           if (scale === "medium") await expect(groups.getByTestId("map-cluster-projector").first()).toBeVisible();
         } else {
           await expect(map.getByTestId("map-beacon-projector")).toHaveCount(0);
-          await expect(map.getByTestId("map-cluster-projector")).toHaveCount(0);
+          if (scale === "micro") await expect(map.getByTestId("map-cluster-projector")).toHaveCount(0);
         }
         if (scale === "far" || scale === "micro") {
-          await expect(groups.getByTestId("cluster-constellation-dot").first()).toBeVisible();
+          await expect(groups.locator('[data-signal-kind="stellar"]').first()).toBeVisible();
+        }
+        if (scale === "micro") {
           await expect(groups.getByTestId("cluster-friend-satellite")).toHaveCount(0);
           await expect(groups.locator(".map-petal-item")).toHaveCount(0);
         }

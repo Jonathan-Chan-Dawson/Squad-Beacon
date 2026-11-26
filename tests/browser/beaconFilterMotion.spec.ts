@@ -102,7 +102,7 @@ for (const scenario of [
     const show = sheet.getByRole("button", { name: /^Show \d+ Beacons$/ });
     await expect(show).toBeInViewport({ ratio: 1 });
     await sheet.screenshot({
-      path: `docs/screenshots/beacon-map-hotfix-2026-10-31/filters-${scenario.width}-${scenario.dark ? "dark" : "light"}-${scenario.reduced ? "reduced" : "motion"}.png`,
+      path: `test-results/visual-captures/beacon-map-hotfix-2026-10-31/filters-${scenario.width}-${scenario.dark ? "dark" : "light"}-${scenario.reduced ? "reduced" : "motion"}.png`,
     });
     await show.click();
     await expect(sheet).toHaveCount(0);

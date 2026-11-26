@@ -4,7 +4,6 @@ import {
   beaconPetalLimit,
   clusterLayout,
   clusterPetalOffset,
-  CLUSTER_COUNT_ANCHOR,
   CLUSTER_OWNERSHIP_ANCHOR,
 } from "../src/features/maps/clusterLayout";
 import { KeyedMapLayers } from "../src/features/maps/keyedMapLayers";
@@ -15,7 +14,7 @@ import {
 import type { ClusterPoint } from "../src/features/maps/cluster";
 import {
   bloomGeometry,
-  constellationDiameter,
+  stellarDiameter,
   petalBookmarkVisible,
 } from "../src/features/maps/clusterBloom";
 import { nativePresentation } from "../src/features/maps/nativeMapPresentation";
@@ -61,7 +60,6 @@ for (const count of [2, 3, 4, 5, 6, 10, 11, 25])
     if (count === 2) assert.equal(offsets[0].x, -offsets[1].x);
     if (count === 3) assert.equal(new Set(offsets.map((p) => p.x)).size, 3);
     assert.equal(layout.shadowTop + layout.shadowSize, layout.size);
-    assert.deepEqual(CLUSTER_COUNT_ANCHOR, { right: 0, bottom: 0 });
     assert.deepEqual(CLUSTER_OWNERSHIP_ANCHOR, { right: 0, top: 0 });
   });
 test("keyed layers retain object identity and fresh callbacks, update only changed entries and remove filtered entities", () => {
@@ -234,23 +232,50 @@ test("shared clock changes update location accessibility without restarting bitm
   assert.equal(after.visualRevision, before.visualRevision);
 });
 
-test("city and regional constellations reserve stable orbital positions", () => {
+test("city and regional constellations use stable integrated facet budgets", () => {
   const anchor = { latitude: 41.885, longitude: -87.642 };
   const categories = ["Social", "Social", "Creative", "Fitness", "Study"] as const;
   const members: ClusterPoint[] = categories.map((category, index) => ({
     ...anchor, category, id: `beacon:${index}`, kind: "beacon",
   }));
   const render = (mode: "micro" | "atmosphere", input: ClusterPoint[]) =>
-    bloomGeometry(nativePresentation({ ...anchor, id: "constellation", members: input }, mode, {}, new Set())).dots;
-  assert.equal(render("atmosphere", members).length, 3);
-  assert.equal(render("micro", members).length, 2);
+    bloomGeometry(nativePresentation({ ...anchor, id: "constellation", members: input }, mode, {}, new Set())).signal;
+  assert.equal(render("atmosphere", members)?.facets, 3);
+  assert.equal(render("micro", members)?.facets, 2);
   assert.deepEqual(render("atmosphere", members.map((point, index) => ({
     ...point, longitude: point.longitude + index * 0.01,
   })).reverse()), render("atmosphere", members));
 });
 
-test("signal sizes step through the five exact Beacon count bands", () => {
-  assert.deepEqual([2, 9, 10, 49, 50, 199, 200, 499, 500, 10000].map(constellationDiameter), [12, 12, 18, 18, 24, 24, 30, 30, 38, 38]);
+test("stellar sizes grow smoothly within the footprint cap", () => {
+  const sizes = [2, 5, 15, 30, 100, 500, 1000, 10000].map(stellarDiameter);
+  assert.equal(sizes[0], 18);
+  assert.equal(sizes.at(-1), 56);
+  assert.ok(sizes.every((size, index) => !index || size >= sizes[index - 1]));
+});
+test("city adapts small mixed groups between petals and a star", () => {
+  const anchor = { latitude: 0, longitude: 0 };
+  const members: ClusterPoint[] = [
+    { ...anchor, id: "beacon:1", kind: "beacon" },
+    { ...anchor, id: "beacon:2", kind: "beacon" },
+    { ...anchor, id: "person:1", kind: "person" },
+  ];
+  const base = nativePresentation({ ...anchor, id: "city", members }, "atmosphere", {}, new Set());
+  const petals = bloomGeometry({ ...base, allowCityPetals: true });
+  assert.equal(petals.primary.length, 2);
+  assert.ok(petals.satellites.length <= 1);
+  assert.equal(petals.signal, undefined);
+  const stellar = bloomGeometry({ ...base, allowCityPetals: false });
+  assert.equal(stellar.primary.length, 0);
+  assert.ok(stellar.signal);
+  assert.equal(stellar.countBadge?.text, petals.countBadge?.text);
+  const crowded = bloomGeometry({
+    ...base,
+    allowCityPetals: true,
+    decorationObstacles: [{ x: 0, y: 0, width: 64, height: 20 }],
+  });
+  assert.equal(crowded.distant, true);
+  assert.equal(crowded.countBadge?.text, petals.countBadge?.text);
 });
 
 test("nearby artwork reduces satellites without shifting petals or mutating authorized locations", () => {

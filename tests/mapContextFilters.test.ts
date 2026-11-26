@@ -7,7 +7,7 @@ import {
   type PlanningThread,
 } from "../src/shared/types";
 import { resolveMapContext, mapContextCameraKind, planPathArrowheads } from "../src/features/maps/contextFilters";
-import { readablePlanForActivity } from "../src/features/beacons/screens/discoveryPlan";
+import { readablePlanForActivity, readablePlanStopPosition } from "../src/features/beacons/screens/discoveryPlan";
 import { showBeaconOnMap } from "../src/features/maps/mapDiscovery";
 
 const activity = (id: string, index = 0): Activity => ({
@@ -93,6 +93,19 @@ function thread(kind: PlanningThread["kind"]): PlanningThread {
     resolved_at: null,
   };
 }
+test("Find a Time only creates a context pin for its authorized physical place", () => {
+  const data = fixture();
+  data.planning_threads.push(thread("time"));
+  const focus = { kind: "thread", id: "thread" } as const;
+  const context = resolveMapContext(data, "viewer", focus)!;
+  assert.equal(context.label, "Find a Time: Dinner");
+  assert.equal(context.points[0].planningPlace, "Cafe");
+  assert.equal(context.points[0].planningKind, "time");
+  assert.equal(resolveMapContext(data, "other", focus), null);
+  data.planning_threads[0].payload = { ...draft, latitude: null, longitude: null };
+  assert.deepEqual(resolveMapContext(data, "viewer", focus)?.points, []);
+});
+
 test("Plan context reveals permitted unavailable Beacons in order without altering normal discovery", () => {
   const data = fixture();
   assert.equal(showBeaconOnMap(data, data.activities[0], "viewer"), false);
@@ -158,6 +171,34 @@ test("discovery Plan context requires the Beacon's exact linked, readable Plan",
   data.viewer_id = "another-viewer";
   assert.equal(readablePlanForActivity(data, beacon, "viewer"), undefined);
 });
+
+test("the card fraction follows the visible itinerary and excludes private stops", () => {
+  const data = fixture();
+  const [second, first] = data.activities;
+  const plan = data.plans[0];
+  second.plan_step_index = 2;
+  data.activities.push({ ...activity("hidden", 1), owner_id: "stranger" });
+  assert.deepEqual(readablePlanStopPosition(data, first, plan, "viewer"), { position: 1, total: 2 });
+  assert.deepEqual(readablePlanStopPosition(data, second, plan, "viewer"), { position: 2, total: 2 });
+  assert.equal(readablePlanStopPosition(data, data.activities[2], plan, "viewer"), undefined);
+  assert.equal(readablePlanStopPosition(data, first, plan, "another"), undefined);
+});
+
+test("an explicit itinerary link can identify a Beacon without a legacy Plan ID", () => {
+  const data = fixture();
+  const beacon = data.activities[0];
+  const plan = data.plans[0];
+  beacon.plan_id = null;
+  data.plan_stops = [{
+    id: "stop", plan_id: plan.id, author_id: "viewer", position: 1, title: "",
+    details: "", proposed_at: null, activity_id: beacon.id, thread_id: null,
+    approval: "approved", state: "active", created_at: "",
+  }];
+  assert.equal(readablePlanForActivity(data, beacon, "viewer"), plan);
+  data.plans.push({ ...plan, id: "second-plan" });
+  data.plan_stops.push({ ...data.plan_stops[0], id: "other-stop", plan_id: "second-plan" });
+  assert.equal(readablePlanForActivity(data, beacon, "viewer"), undefined);
+});
 for (const kind of ["vote", "draw"] as const)
   test(`${kind} suggestions retain draft identity and independent Beacon privacy`, () => {
     const data = fixture();
@@ -192,7 +233,7 @@ for (const kind of ["vote", "draw"] as const)
       kind: "thread",
       id: "thread",
     })!;
-    assert.equal(view.label, `${kind === "vote" ? "Vote" : "Draw"}: Dinner`);
+    assert.equal(view.label, `${kind === "vote" ? "Vote" : "Random Draw"}: Dinner`);
     assert.deepEqual(
       view.points.map((point) => point.id),
       ["proposal:draft"],

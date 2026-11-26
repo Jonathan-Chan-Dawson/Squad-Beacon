@@ -25,7 +25,7 @@ function persist(destination: string | null) {
   }
 }
 const supported =
-  /^\/(?:invite|guest-claim|share|discover\/[^/]+|create|activity\/[^/]+(?:\/chat)?|person\/[^/]+|squad\/[^/]+|squad-chat\/[^/]+|messages\/[^/]+|space\/[^/]+|organization\/[^/]+|council\/[^/]+|plan\/[^/]+|activities|profile(?:\/edit)?|map|squads|your-activity|plans|calendar|friends|responses|settings(?:\/premium)?|library|find-friends|location|widgets|beacon-templates|plan-editor|squad-boosts)\/?$/;
+  /^\/(?:invite|guest-claim|share|discover\/[^/]+|create|planning\/create|activity-note|activity-created|activity\/[^/]+(?:\/chat)?|person\/[^/]+|squad\/[^/]+|squad-chat\/[^/]+|messages\/[^/]+|space\/[^/]+|organization\/[^/]+|council\/[^/]+|plan\/[^/]+|activities|profile(?:\/edit)?|map|squads|communities|community-directory|your-activity|plans|calendar|friends|responses|settings(?:\/(?:premium|privacy))?|library|find-friends|location|widgets|beacon-templates|plan-editor|squad-boosts|my-collection|spontaneity|beacon-shop|councils|moderation|organizations|routines)\/?$/;
 
 export function rememberEntryIntent(
   path: string,

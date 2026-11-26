@@ -10,8 +10,9 @@ import {
   SmilePlus,
   Timer,
   Trophy,
-  LayoutGrid,
-  MoreHorizontal,
+  CalendarDays,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react-native";
 import { useBeacon } from "@/src/shared/store";
 import { useDesignTheme } from "@/src/shared/design-system";
@@ -20,6 +21,7 @@ import { ReactionPicker } from "./feed/ReactionPicker";
 import { beaconEngagement, cardToolLabels } from "../beaconEngagement";
 const toolIcons = {
   checklist: ListChecks,
+  agenda: CalendarDays,
   journal: NotebookPen,
   focus: Timer,
   experiences: Images,
@@ -36,7 +38,6 @@ export function BeaconCardEngagement({
   mode?: "both" | "reactions" | "comments";
   outlined?: boolean;
   labeled?: boolean;
-  separateChat?: boolean;
 }) {
   const { data, userId, act } = useBeacon();
   const { colors } = useDesignTheme();
@@ -321,7 +322,7 @@ export function BeaconCardEngagement({
   );
 }
 
-export function BeaconToolMenuRows({
+function BeaconToolMenuRows({
   activityId,
   afterMenu,
 }: {
@@ -337,11 +338,13 @@ export function BeaconToolMenuRows({
   const preview = beaconEngagement(data, userId, activityId);
   if (!preview?.tools.length) return null;
   const groups = [
-    { title: "Collaboration", tools: ["checklist", "journal"] as const },
+    { title: "Planning", tools: ["checklist", "agenda"] as const },
+    { title: "Collaboration", tools: ["journal"] as const },
     {
-      title: "Media & Activities",
-      tools: ["experiences", "focus", "music", "scoreboard"] as const,
+      title: "During the activity",
+      tools: ["focus", "scoreboard", "music"] as const,
     },
+    { title: "Memories", tools: ["experiences"] as const },
   ];
   return (
     <>
@@ -358,6 +361,9 @@ export function BeaconToolMenuRows({
                   key={tool}
                   label={cardToolLabels[tool]!}
                   icon={<Icon size={18} color={colors.textSecondary} />}
+                  trailing={
+                    <ChevronRight size={15} color={colors.textSecondary} />
+                  }
                   onPress={() =>
                     afterMenu(() => {
                       const current = beaconEngagement(
@@ -385,18 +391,7 @@ export function BeaconToolMenuRows({
   );
 }
 
-export type BeaconToolsMenuOwner = {
-  anchorRef: React.RefObject<View | null>;
-  onOpen: () => void;
-};
-
-export function BeaconToolsButton({
-  activityId,
-  menuOwner,
-}: {
-  activityId: string;
-  menuOwner?: BeaconToolsMenuOwner;
-}) {
+export function BeaconToolsButton({ activityId }: { activityId: string }) {
   const { data, userId } = useBeacon();
   const { colors } = useDesignTheme();
   const preview = beaconEngagement(data, userId, activityId);
@@ -408,21 +403,16 @@ export function BeaconToolsButton({
     continuation.current = null;
   }, [userId, activityId]);
   const count = preview?.tools.length ?? 0;
-  if (!count && !menuOwner) return null;
+  if (!count) return null;
   return (
     <>
-      <View ref={menuOwner?.anchorRef ?? anchor} collapsable={false}>
+      <View ref={anchor} collapsable={false}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={
-            count ? `Beacon tools, ${count} available` : "More Beacon actions"
-          }
-          accessibilityState={{
-            expanded: menuOwner ? undefined : open === identity,
-          }}
-          onPress={menuOwner?.onOpen ?? (() => setOpen(identity))}
+          accessibilityLabel={`Beacon tools, ${count} available`}
+          accessibilityState={{ expanded: open === identity }}
+          onPress={() => setOpen(identity)}
           style={{
-            width: count ? 76 : 44,
             minWidth: 44,
             minHeight: 44,
             flexDirection: "row",
@@ -430,58 +420,36 @@ export function BeaconToolsButton({
             alignItems: "center",
             justifyContent: "center",
             borderRadius: 12,
-            paddingHorizontal: 6,
+            paddingHorizontal: 8,
             backgroundColor: colors.surfaceRaised,
           }}
         >
-          {count ? (
-            <LayoutGrid size={16} color={colors.accent} />
-          ) : (
-            <MoreHorizontal size={20} color={colors.textSecondary} />
-          )}
-          {count ? (
-            <Text style={{ color: colors.textPrimary, fontSize: 11 }}>
-              Tools
-            </Text>
-          ) : null}
-          {count ? (
-            <Text
-              accessible={false}
-              style={{
-                color: colors.textSecondary,
-                fontSize: 11,
-                lineHeight: 16,
-                marginLeft: 4,
-              }}
-            >
-              {count}
-            </Text>
-          ) : null}
+          <Text style={{ color: colors.textSecondary, fontSize: 12 }}>
+            Tools {count}
+          </Text>
+          <ChevronDown size={14} color={colors.textSecondary} />
         </Pressable>
       </View>
-      {!menuOwner ? (
-        <ContextMenu
-          title="Beacon tools"
-          visible={open === identity && !!count}
-          anchorRef={anchor}
-          mode="dropdown"
-          anchoredOnly
-          onClose={() => setOpen(null)}
-          onDismiss={() => {
-            const callback = continuation.current;
-            continuation.current = null;
-            callback?.();
+      <ContextMenu
+        title="Beacon tools"
+        visible={open === identity && !!count}
+        anchorRef={anchor}
+        mode="dropdown"
+        onClose={() => setOpen(null)}
+        onDismiss={() => {
+          const callback = continuation.current;
+          continuation.current = null;
+          callback?.();
+        }}
+      >
+        <BeaconToolMenuRows
+          activityId={activityId}
+          afterMenu={(callback) => {
+            continuation.current = callback;
+            setOpen(null);
           }}
-        >
-          <BeaconToolMenuRows
-            activityId={activityId}
-            afterMenu={(callback) => {
-              continuation.current = callback;
-              setOpen(null);
-            }}
-          />
-        </ContextMenu>
-      ) : null}
+        />
+      </ContextMenu>
     </>
   );
 }

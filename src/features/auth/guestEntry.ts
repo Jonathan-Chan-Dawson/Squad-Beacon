@@ -17,11 +17,15 @@ export function guestEntryReason(value: string | undefined) {
 }
 
 export function openGuestEntry(
-  destination: "/activities" | "/create" | "/profile" | "/squads" | "/",
+  destination: string,
   reason?: keyof typeof reasons,
   mode?: "create",
   params: Record<string, string> = {},
+  resumeCurrentPage = false,
 ) {
   rememberEntryIntent(destination, params);
-  router.push({ pathname: "/auth/sign-in", params: { reason, mode } });
+  router.push({
+    pathname: "/auth/sign-in",
+    params: { reason, mode, resume: resumeCurrentPage ? "yes" : undefined },
+  });
 }

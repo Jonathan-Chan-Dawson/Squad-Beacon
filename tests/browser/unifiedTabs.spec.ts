@@ -53,7 +53,7 @@ for (const appearance of ["light", "dark"] as const) {
         (document.activeElement as HTMLElement | null)?.blur(),
       );
       await page.screenshot({
-        path: `docs/screenshots/unified-tabs-2026-10-31/${appearance}-${width}-activity.png`,
+        path: `test-results/visual-captures/unified-tabs-2026-10-31/${appearance}-${width}-activity.png`,
       });
       await demo("/squads");
       const search = page.getByRole("textbox", {
@@ -71,7 +71,7 @@ for (const appearance of ["light", "dark"] as const) {
       await expect(unread).toHaveAttribute("aria-pressed", "true");
       await noOverflow();
       await page.screenshot({
-        path: `docs/screenshots/unified-tabs-2026-10-31/${appearance}-${width}-chats.png`,
+        path: `test-results/visual-captures/unified-tabs-2026-10-31/${appearance}-${width}-chats.png`,
       });
       await demo("/friends");
       await page.getByRole("button", { name: "Friends", exact: true }).click();
@@ -102,7 +102,7 @@ for (const appearance of ["light", "dark"] as const) {
       await page.keyboard.press("Escape");
       await noOverflow();
       await page.screenshot({
-        path: `docs/screenshots/card-context-social-2026-10-31/${appearance}-${width}-friends.png`,
+        path: `test-results/visual-captures/card-context-social-2026-10-31/${appearance}-${width}-friends.png`,
       });
     });
   }

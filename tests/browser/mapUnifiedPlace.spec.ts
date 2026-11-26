@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 const labels = [
   "Create Beacon",
-  "Start Ping",
+  "Ask Group",
   "Add live update",
   "Directions",
   "Search location",
@@ -20,8 +20,10 @@ async function enter(page: Page, width = 390, dark = false) {
   );
   await page.routeWebSocket("**/hot", () => {});
   await page.routeWebSocket("**/message", () => {});
-  await page.goto("/");
+  await page.goto("/auth/sign-in");
   await page.getByRole("button", { name: /Explore the demo/ }).click();
+  const intro = page.getByRole("button", { name: "Skip introduction", exact: true });
+  if (await intro.isVisible()) await intro.click();
   await expect(
     page.getByRole("button", { name: "Choose a place", exact: true }),
   ).toBeVisible();
@@ -171,7 +173,11 @@ test("search replaces the selected place and Ping uses the existing creation rou
     .first()
     .click();
   await expect(menu).toContainText("Chicago");
-  await menu.getByRole("button", { name: "Start Ping", exact: true }).click();
+  await menu.getByRole("button", { name: "Ask Group", exact: true }).click();
+  const tools = page.getByRole("dialog", { name: "Ask Group", exact: true });
+  for (const label of ["Ping", "Find a Time", "Vote", "Random Draw"])
+    await expect(tools.getByRole("button", { name: label, exact: true })).toBeVisible();
+  await tools.getByRole("button", { name: "Ping", exact: true }).click();
   await expect
     .poll(() => new URL(page.url()).pathname)
     .toBe("/planning/create");
@@ -189,6 +195,26 @@ test("live update returns to the same place menu", async ({ page }) => {
   await page.getByRole("button", { name: "Close", exact: true }).click();
   await expect(menu).toBeVisible();
 });
+
+for (const [kind, label] of [["time", "Find a Time"], ["vote", "Vote"], ["draw", "Random Draw"]] as const) {
+  test(`Ask Group opens the ${label} composer with the chosen coordinates`, async ({ page }, info) => {
+    await enter(page);
+    await choose(page);
+    const menu = page.getByTestId("map-place-actions");
+    await menu.getByRole("button", { name: "Ask Group", exact: true }).click();
+    const picker = page.getByRole("dialog", { name: "Ask Group", exact: true });
+    if (kind === "time")
+      await picker.screenshot({ path: info.outputPath("ask-group.png") });
+    await picker.getByRole("button", { name: label, exact: true }).click();
+    await expect.poll(() => new URL(page.url()).searchParams.get("kind")).toBe(kind);
+    const url = new URL(page.url());
+    expect(url.pathname).toBe("/planning/create");
+    expect(url.searchParams.get("latitude")).toBeTruthy();
+    expect(url.searchParams.get("longitude")).toBeTruthy();
+    await page.goBack();
+    await expect(page.getByRole("button", { name: "Choose a place", exact: true })).toBeVisible();
+  });
+}
 
 test("short phone and reduced motion keep the pin clear and all actions reachable", async ({
   page,

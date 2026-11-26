@@ -10,7 +10,11 @@ const demoHistory: BeaconScore["history"] = [
 ];
 
 /** Profile mounts this hook in a viewer-keyed component. */
-export function useBeaconScore(userId: string | null, demo: boolean) {
+export function useBeaconScore(
+  userId: string | null,
+  demo: boolean,
+  syncOnFocus = true,
+) {
   const alive = useRef(false);
   const revision = useRef(0);
   const [remote, setRemote] = useState<BeaconScore>();
@@ -50,8 +54,8 @@ export function useBeaconScore(userId: string | null, demo: boolean) {
 
   useFocusEffect(
     useCallback(() => {
-      void refresh();
-    }, [refresh]),
+      if (syncOnFocus) void refresh();
+    }, [refresh, syncOnFocus]),
   );
   return {
     points: demo ? 1500 : (remote?.total ?? 0),

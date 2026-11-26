@@ -16,8 +16,6 @@ import { useNow } from "@/src/shared/useNow";
 import { pendingSocialCount } from "@/src/features/people/communication";
 import { useReducedMotion } from "react-native-reanimated";
 import { AccountGate } from "@/src/features/auth/AccountGate";
-import { openGuestEntry } from "@/src/features/auth/guestEntry";
-import { accountReadiness } from "@/src/shared/accountReadiness";
 
 const tabScreenLayout: NonNullable<
   React.ComponentProps<typeof Tabs>["screenLayout"]
@@ -248,11 +246,7 @@ export default function TabLayout() {
                 const params: Record<string, string> = state.routes[state.index].name === "index"
                   ? { fromMap: "yes" }
                   : {};
-                if (accountReadiness(account).state === "signed-out") {
-                  openGuestEntry("/create", "create", undefined, params);
-                } else {
-                  router.push({ pathname: "/create", params });
-                }
+                router.push({ pathname: "/create", params });
               }}
               style={{
                 position: "absolute",

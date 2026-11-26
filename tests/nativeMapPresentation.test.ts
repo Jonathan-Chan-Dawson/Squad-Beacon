@@ -228,8 +228,8 @@ test("compact far-zoom groups retain all IDs while drawing only their previews",
   );
   assert.equal(beaconItem.group.members.length, 16);
   assert.deepEqual(presentationArtworkPoints(beaconItem), []);
-  assert.equal(bloomGeometry(beaconItem).signal?.width, 12);
-  assert.ok(bloomGeometry(beaconItem).dots.length <= 2);
+  assert.equal(bloomGeometry(beaconItem).signal?.width, 30);
+  assert.equal(bloomGeometry(beaconItem).signal?.facets, 2);
   assert.equal(bloomGeometry(beaconItem).countBadge?.text, "👥 11 · ✦ 5");
   const friendItem = nativePresentation(
     group(points(4, "person")),
@@ -238,6 +238,7 @@ test("compact far-zoom groups retain all IDs while drawing only their previews",
     new Set(),
   );
   assert.equal(friendItem.visible.length, 0);
+  assert.equal(bloomGeometry(friendItem).signal?.facets, 0);
   assert.equal(presentationArtworkPoints(friendItem).length, 0);
 });
 

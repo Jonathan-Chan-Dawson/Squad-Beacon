@@ -2,7 +2,7 @@ import { appendBeaconUpperBeam, appendMapProjector } from "./projector";
 import {
   beaconPinEmphasis,
   beaconMarkerColor,
-  constellationRelationships,
+  stellarRelationships,
   mapIdentityColors,
   distantBeaconPinEmphasis,
   type BeaconMarkerState,
@@ -18,6 +18,7 @@ import {
   bloomGeometry,
   bloomAccessibilityLabel,
   petalBookmarkVisible,
+  STELLAR_OUTLINE, STELLAR_CORE, STELLAR_FACETS, STELLAR_PEOPLE, STELLAR_OPACITY, STELLAR_PERSON,
 } from "./clusterBloom";
 import type { ClusterPoint } from "./cluster";
 import {
@@ -86,23 +87,38 @@ export function webConstellation(
     );
   }
   if (geometry.signal) {
-    const { x, y, width } = geometry.signal;
-    const signal = document.createElement("span");
-    signal.dataset.testid = "cluster-signal";
+    const { x, y, width, facets, glow } = geometry.signal;
+    const signal = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    signal.setAttribute("data-testid", "cluster-signal");
+    signal.setAttribute("data-signal-kind", geometry.friendsOnly ? "people" : "stellar");
     signal.setAttribute("aria-hidden", "true");
-    signal.style.cssText = `position:absolute;box-sizing:border-box;left:${center + x - width / 2}px;top:${center + y - width / 2}px;width:${width}px;height:${width}px;border-radius:50%;border:1px solid ${options.line};background:${options.surface};opacity:.85;pointer-events:none;`;
+    signal.setAttribute("viewBox", "0 0 100 100");
+    signal.style.cssText = `position:absolute;left:${center + x - width / 2}px;top:${center + y - width / 2}px;width:${width}px;height:${width}px;opacity:${geometry.friendsOnly ? 1 : STELLAR_OPACITY};pointer-events:none;`;
+    const path = (d: string, color: string, stroke?: string, strokeWidth?: number) => {
+      const part = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      part.setAttribute("d", d);
+      part.setAttribute("fill", color);
+      if (stroke && strokeWidth) {
+        part.setAttribute("stroke", stroke);
+        part.setAttribute("stroke-width", String(strokeWidth));
+        part.setAttribute("stroke-linejoin", "round");
+      }
+      signal.append(part);
+      return part;
+    };
+    if (geometry.friendsOnly) {
+      path(STELLAR_PEOPLE, "#B5CCEC", "#293750", 8);
+    } else {
+      if (glow) path(STELLAR_OUTLINE, "none", "#CFB9FF", width >= 36 ? 8 : 5).setAttribute("opacity", "0.36");
+      path(STELLAR_OUTLINE, "#E8DFFD", "#594A78", 3);
+      stellarRelationships(presentation.beacons, point => options.beaconState?.(point), facets)
+        .forEach((relationship, index) => {
+          path(STELLAR_FACETS[index], mapIdentityColors[relationship]).setAttribute("data-relationship", relationship);
+        });
+      path(STELLAR_CORE, "#FFF4DE").setAttribute("opacity", "0.93");
+    }
     node.append(signal);
   }
-  const relationships = constellationRelationships(presentation.beacons, (point) => options.beaconState?.(point), geometry.dots.length);
-  geometry.dots.slice(0, relationships.length).forEach(({ offset, size }, index) => {
-    const dot = document.createElement("span");
-    dot.dataset.testid = "cluster-constellation-dot";
-    dot.dataset.relationship = relationships[index];
-    dot.setAttribute("aria-hidden", "true");
-    const color = mapIdentityColors[relationships[index]];
-    dot.style.cssText = `position:absolute;left:${center + offset.x - size / 2}px;top:${center + offset.y - size / 2}px;width:${size}px;height:${size}px;border-radius:50%;background:${color};pointer-events:none;`;
-    node.append(dot);
-  });
   const appendFriendAvatar = (marker: HTMLElement, point: ClusterPoint) => {
     const source = options.friendAvatar?.(point);
     if (!source) return;
@@ -157,18 +173,20 @@ export function webConstellation(
       item.style.transform = "none";
       item.style.justifyContent = "center";
       if (geometry.distant) {
-        const dot = document.createElement("span");
-        dot.dataset.testid = "map-activity-dot";
         const person = point.kind === "person";
         const color = person
           ? (options.friendColor?.(point) ?? options.ink)
           : beaconMarkerColor(options.beaconState?.(point));
-        dot.style.cssText = `width:${markerSize}px;height:${markerSize}px;border-radius:50%;background:${color};opacity:${person ? 0.65 : 1};`;
-        if (accent?.beamHeight) {
-          const opacity = Math.round(accent.glowOpacity * 255).toString(16).padStart(2, "0");
-          dot.style.boxShadow = `0 0 5px ${accent.color}${opacity}`;
-        }
-        item.replaceChildren(dot);
+        const glyph = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        glyph.setAttribute("data-testid", person ? "map-single-person-signal" : "map-single-stellar-beacon");
+        glyph.setAttribute("aria-hidden", "true");
+        glyph.setAttribute("viewBox", "0 0 100 100");
+        glyph.style.cssText = `width:${markerSize}px;height:${markerSize}px;opacity:${STELLAR_OPACITY};pointer-events:none;`;
+        const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+        path.setAttribute("d", person ? STELLAR_PERSON : STELLAR_OUTLINE);
+        path.setAttribute("fill", color);
+        glyph.append(path);
+        item.replaceChildren(glyph);
       } else {
         const face = item.firstElementChild as HTMLElement | null;
         if (face) face.style.transform = `scale(${markerSize / 32})`;

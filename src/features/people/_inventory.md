@@ -3,15 +3,14 @@ People feature
 - socialSelection.ts / components/SocialSelector.tsx: controlled recipient selection with explicit supported kinds, compact category rails, secondary Friends/private-list filters, and bulk-selection undo. Stored spaces display as Organizations and stored organizations as Networks; membership never expands into invitations.
 - Chat rows retain their existing layout, with a compact Friends/Add Friends separator before the start-chat friend rows.
 
-- screens/MessagingHubScreen.tsx: same-tab Chats/Communities hub, independent search state, compact controls and legacy entry parameters; screens/SquadsScreen.tsx preserves the public entry point.
+- screens/MessagingHubScreen.tsx: same-tab Chats/Communities hub, independent search state, guest login prompts, compact controls and legacy entry parameters.
 - privateLists.ts / components/PrivateListsSheet.tsx: eligible personal people filters, automatic Friends/Favorites and persisted owner-private list editing.
 
 - components/CommunityAvatar.tsx, SquadIconPicker.tsx and squadIcons.ts: shared group/list symbols and an admin-only persisted Squad icon choice. People keep the existing privacy-aware ProfileAvatar minis/photos.
 
 - screens/ResponsesScreen.tsx: full-screen live decision/invitation/join-request inbox; compact filters/rows and existing canonical actions. components/ResponsesSheet.tsx retains compatibility for existing launchers.
-- SquadsScreen and CommunicationHubScreen use Chats/Communities access, one compact response row and a searchable vertical New Message directory. Interactive Ping cards remain in Squad chat.
+- MessagingHubScreen and CommunicationHubScreen use Chats/Communities access, one compact response row and a searchable vertical New Message directory. Interactive Ping cards remain in Squad chat.
 
-- screens/SquadsScreen.tsx: chat-first Squads entry with temporary search, compact communities and a secondary people/private-list directory, also reused by Profile’s Friends & Lists entry.
 - screens/SquadProfileScreen.tsx: one member-gated Squad Info overview; focused Members, Invite, Beacons & Plans and Settings routes retain existing handlers and normal Back navigation. Legacy tab parameters remain valid.
 - squadProfile.ts: current-snapshot Squad membership, privacy, Beacon, Plan, Routine, Ping/Vote and linked-Organization selectors; Space parent access is selected in spaces/domain.ts.
 - CommunicationHub.tsx / screens/CommunicationHubScreen.tsx: chat-first home and a separate Communities directory. Joined Networks, Organizations and Squads have card sections with dedicated searchable full lists with authorized member previews. HubDirectory provides paged, summary-only Explore sections with existing join and request actions.

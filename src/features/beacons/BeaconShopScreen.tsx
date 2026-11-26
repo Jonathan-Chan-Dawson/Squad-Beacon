@@ -1,4 +1,10 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   router,
   useFocusEffect,
@@ -17,7 +23,6 @@ import { BeaconScoreSheet } from "@/src/features/profile/components/BeaconScoreS
 import { useBeaconScore } from "@/src/features/profile/useBeaconScore";
 import {
   BeaconShopCatalog,
-  priceText,
   ShopArtwork,
   ShopPrice,
   type ShopProduct as Product,
@@ -27,6 +32,7 @@ import {
   getRewardLook,
   lookSlots,
   lookSlotLabels,
+  priceText,
   rewardLooks,
   type EquippedLooks,
   type LookId,
@@ -155,7 +161,7 @@ function EquipLookActions({
 }
 
 export default function BeaconShopScreen() {
-  const { userId, demo } = useBeacon();
+  const { userId, demo, viewerEpoch } = useBeacon();
   const params = useLocalSearchParams<{
     tab?: string;
     type?: string;
@@ -166,11 +172,16 @@ export default function BeaconShopScreen() {
       key={JSON.stringify([
         userId,
         demo,
+        viewerEpoch,
         params.type,
         params.target,
         params.tab,
       ])}
-      tab={params.tab === "Quests" || params.tab === "Progress" ? params.tab : "Shop"}
+      tab={
+        params.tab === "Quests" || params.tab === "Progress"
+          ? params.tab
+          : "Shop"
+      }
       type={isTarget(params.type) ? params.type : undefined}
       target={params.target}
     />
@@ -188,7 +199,7 @@ function Rewards({
 }) {
   const { userId, data, demo, act, getViewerEpoch, refresh } = useBeacon();
   const { styles, semanticColors: colors } = useTheme();
-  const score = useBeaconScore(userId, demo);
+  const score = useBeaconScore(userId, demo, false);
   const [scoreOpen, setScoreOpen] = useState(false);
   const [aboutOpen, setAboutOpen] = useState(false);
   const [tab, setTab] = useState(initialTab);
@@ -200,11 +211,12 @@ function Rewards({
   const previousWallet = useRef<Wallet | undefined>(undefined);
   const alive = useRef(false);
   const inFlight = useRef(false);
+  const walletRead = useRef<AbortController | undefined>(undefined);
   useEffect(() => {
     alive.current = true;
     return () => {
       alive.current = false;
-
+      walletRead.current?.abort();
     };
   }, []);
   const load = useCallback(
@@ -218,18 +230,27 @@ function Rewards({
       setBusy(true);
       setNotice(undefined);
       const epoch = getViewerEpoch();
+      const controller = new AbortController();
+      if (action === "view") walletRead.current = controller;
+      const deadline = setTimeout(() => controller.abort(), 8000);
       try {
-        const { data, error } = await supabase.rpc("beacon_rewards", {
-          p_viewer: userId,
-          p_action: action,
-          p_args: {
-            ...(target && type ? { target_type: type, target_id: target } : {}),
-            ...args,
-          },
-        });
+        const { data, error } = await supabase
+          .rpc("beacon_rewards", {
+            p_viewer: userId,
+            p_action: action,
+            p_args: {
+              ...(target && type
+                ? { target_type: type, target_id: target }
+                : {}),
+              ...args,
+            },
+          })
+          .abortSignal(controller.signal);
         if (error) throw error;
         if (!alive.current || epoch !== getViewerEpoch()) return;
         const next = data as Wallet;
+        if (!Array.isArray(next?.catalog))
+          throw new Error("Rewards couldn’t load. Try again.");
         const previous = previousWallet.current;
         previousWallet.current = next;
         setWallet(next);
@@ -252,20 +273,25 @@ function Rewards({
           );
         }
         if (action === "equip") {
-          await refresh();
-          if (alive.current && epoch === getViewerEpoch())
-            setNotice("Appearance updated.");
+          setNotice("Appearance updated.");
+          void refresh().catch(() => {
+            if (alive.current && epoch === getViewerEpoch())
+              setNotice("Appearance saved. Reopen your profile to refresh it.");
+          });
         }
         if (action === "unlock") setNotice("Look unlocked and ready to equip.");
       } catch (error) {
         if (alive.current && epoch === getViewerEpoch()) {
-          const message =
-            typeof error === "object" && error && "message" in error
+          const message = controller.signal.aborted
+            ? "Rewards took too long to load. Try again."
+            : typeof error === "object" && error && "message" in error
               ? String(error.message)
               : "Rewards couldn’t sync. Try again.";
           setNotice(message);
         }
       } finally {
+        clearTimeout(deadline);
+        if (walletRead.current === controller) walletRead.current = undefined;
         inFlight.current = false;
         if (alive.current && epoch === getViewerEpoch()) setBusy(false);
       }
@@ -303,19 +329,26 @@ function Rewards({
   const xp = wallet?.xp ?? 0;
   const { index, stage, nextStage } = beaconScoreTier(xp);
   const scale = wallet?.coin_scale ?? 12600;
-  const catalog = (wallet?.catalog ?? previewCatalog).filter((item) =>
-    getRewardLook(item.id),
+  const sourceCatalog = wallet?.catalog ?? previewCatalog;
+  const catalog = useMemo(
+    () => sourceCatalog.filter((item) => getRewardLook(item.id)),
+    [sourceCatalog],
   );
-  const visible = catalog.filter(
-    (item) =>
-      !type ||
-      lookSlots[type].includes(item.slot) ||
-      (type === "profile" && item.slot === "profile_set"),
+  const visible = useMemo(
+    () =>
+      catalog.filter(
+        (item) =>
+          !type ||
+          lookSlots[type].includes(item.slot) ||
+          (type === "profile" && item.slot === "profile_set"),
+      ),
+    [catalog, type],
   );
   const shopLocked = wallet?.shop_unlocked === false;
-  const selected = wallet && !shopLocked
-    ? catalog.find((item) => item.id === details?.id)
-    : undefined;
+  const selected =
+    wallet && !shopLocked
+      ? catalog.find((item) => item.id === details?.id)
+      : undefined;
   const equipped = Object.values(wallet?.equipped ?? {}).filter(
     (id): id is string => !!id,
   );
@@ -335,7 +368,9 @@ function Rewards({
       await act(demoRewardActions[action], args);
       if (!alive.current || getViewerEpoch() !== epoch) return;
       setNotice(
-        action === "unlock" ? "Look unlocked and ready to equip." : "Appearance updated.",
+        action === "unlock"
+          ? "Look unlocked and ready to equip."
+          : "Appearance updated.",
       );
     } catch (error) {
       if (alive.current && getViewerEpoch() === epoch)
@@ -366,7 +401,12 @@ function Rewards({
   };
 
   return (
-    <Screen title="Rewards" eyebrow="" compactHeader create={false} scrollStateKey={tab}
+    <Screen
+      title="Rewards"
+      eyebrow=""
+      compactHeader
+      create={false}
+      scrollStateKey={tab}
       headerAction={
         <IconButton label="About Rewards" onPress={() => setAboutOpen(true)}>
           <Info size={20} color={colors.textSecondary} />
@@ -456,9 +496,18 @@ function Rewards({
             </>
           )}
         </View>
-        <View accessibilityRole="tablist" style={{ flexDirection: "row", flexWrap: "wrap" }}>
+        <View
+          accessibilityRole="tablist"
+          style={{ flexDirection: "row", flexWrap: "wrap" }}
+        >
           {rewardTabs.map((item) => (
-            <PrimaryTab key={item} role="tab" label={item} selected={item === tab} onPress={() => setTab(item)} />
+            <PrimaryTab
+              key={item}
+              role="tab"
+              label={item}
+              selected={item === tab}
+              onPress={() => setTab(item)}
+            />
           ))}
         </View>
         {notice && !selected && (
@@ -478,9 +527,22 @@ function Rewards({
         {tab === "Shop" && shopLocked ? (
           <View style={{ gap: 8 }}>
             <Txt>Tap Mini Beacon 10 times to unlock Shop.</Txt>
-            <Button compact title="Open Profile" onPress={() => router.navigate("/profile")} />
+            <Button
+              compact
+              title="Open Profile"
+              onPress={() => router.navigate("/profile")}
+            />
           </View>
-        ) : tab === "Shop" && !wallet ? null : tab === "Shop" ? (
+        ) : tab === "Shop" && !wallet ? (
+          <View
+            accessibilityLiveRegion="polite"
+            style={{ paddingVertical: 12 }}
+          >
+            <Txt muted>
+              {busy || !notice ? "Loading Shop…" : "Shop couldn’t load."}
+            </Txt>
+          </View>
+        ) : tab === "Shop" ? (
           <>
             <BeaconShopCatalog
               products={visible}
@@ -500,8 +562,19 @@ function Rewards({
           <View style={{ gap: 8 }}>
             <Text style={styles.h2}>Beacon Score</Text>
             <Txt>{xp.toLocaleString()} lifetime XP</Txt>
-            <Txt muted>Earn XP by participating in Squad Beacon. Use Coins to customize your experience.</Txt>
-            <Button compact secondary title="View Beacon Score" onPress={() => { setScoreOpen(true); void score.refresh(); }} />
+            <Txt muted>
+              Earn XP by participating in Squad Beacon. Use Coins to customize
+              your experience.
+            </Txt>
+            <Button
+              compact
+              secondary
+              title="View Beacon Score"
+              onPress={() => {
+                setScoreOpen(true);
+                void score.refresh();
+              }}
+            />
           </View>
         ) : (
           <>
@@ -674,7 +747,10 @@ function Rewards({
                   <Button
                     secondary
                     title="Find ways to earn Coins"
-                    onPress={() => { closePreview(); setTab("Quests"); }}
+                    onPress={() => {
+                      closePreview();
+                      setTab("Quests");
+                    }}
                   />
                 ) : (
                   <Button
@@ -696,13 +772,27 @@ function Rewards({
           </View>
         )}
       </Dialog>
-      <Dialog title="About Rewards" visible={aboutOpen} onClose={() => setAboutOpen(false)}>
+      <Dialog
+        title="About Rewards"
+        visible={aboutOpen}
+        onClose={() => setAboutOpen(false)}
+      >
         <View style={{ gap: 8 }}>
-          <Txt>XP tracks your lifetime Beacon Score. Coins pay for looks and upgrades.</Txt>
-          <Txt muted>Energy is your weekly allowance for rewarded taps on Profile.</Txt>
+          <Txt>
+            XP tracks your lifetime Beacon Score. Coins pay for looks and
+            upgrades.
+          </Txt>
+          <Txt muted>
+            Energy is your weekly allowance for rewarded taps on Profile.
+          </Txt>
         </View>
       </Dialog>
-      <BeaconScoreSheet score={score} visible={scoreOpen} onClose={() => setScoreOpen(false)} insideRewards />
+      <BeaconScoreSheet
+        score={score}
+        visible={scoreOpen}
+        onClose={() => setScoreOpen(false)}
+        insideRewards
+      />
     </Screen>
   );
 }

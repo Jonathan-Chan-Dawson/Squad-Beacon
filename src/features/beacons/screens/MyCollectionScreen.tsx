@@ -16,12 +16,16 @@ import { Screen, Button, Empty, useTheme } from "@/src/shared/ui";
 import { useBeacon } from "@/src/shared/store";
 import { useDesignTheme, Skeleton } from "@/src/shared/design-system";
 import { personalCollections, collectionTitles } from "../personalCollections";
-import { SavedBeaconArtwork } from "../components/SavedBeaconArtwork";
+import { BeaconFeedCard } from "../components/BeaconFeedCard";
+import { activityFeedCardProps } from "./activityFeedCard";
+import { shareBeaconInvitation } from "@/src/features/sharing/shareBeacon";
+import { useNow } from "@/src/shared/useNow";
 
 export default function MyCollectionScreen() {
   const { data, userId, loading, act } = useBeacon();
   const { colors } = useDesignTheme();
   const { styles } = useTheme();
+  const now = useNow();
   const params = useLocalSearchParams<{ section?: string }>();
   const section = ["saved", "friends", "squads", "templates"].includes(
     params.section ?? "",
@@ -113,85 +117,18 @@ export default function MyCollectionScreen() {
       path: "/library" as const,
     },
   ];
-  const savedCard = (
-    activity: (typeof groups.saved)[number],
-    removable = false,
-  ) => (
-    <View
+  const savedCard = (activity: (typeof groups.saved)[number]) => userId ? (
+    <BeaconFeedCard
       key={activity.id}
-      style={{
-        flexDirection: "row",
-        alignItems: "center",
-        borderRadius: 16,
-        borderWidth: 1,
-        borderColor: colors.border,
-        backgroundColor: colors.surface,
-        overflow: "hidden",
-      }}
-    >
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={`Open ${activity.title}`}
-        onPress={() =>
-          router.push({
-            pathname: "/activity/[id]",
-            params: { id: activity.id },
-          })
-        }
-        style={({ pressed }) => ({
-          flex: 1,
-          minWidth: 0,
-          flexDirection: "row",
-          gap: 12,
-          alignItems: "center",
-          padding: 12,
-          opacity: pressed ? 0.72 : 1,
-        })}
-      >
-        <SavedBeaconArtwork activity={activity} />
-        <View style={{ flex: 1, gap: 5 }}>
-          <Text
-            numberOfLines={2}
-            style={{
-              color: colors.textPrimary,
-              fontSize: 16,
-              fontWeight: "600",
-            }}
-          >
-            {activity.title}
-          </Text>
-          <Text style={{ color: colors.textSecondary, fontSize: 12 }}>
-            {activity.category} ·{" "}
-            {new Date(activity.starts_at).toLocaleDateString([], {
-              month: "short",
-              day: "numeric",
-            })}
-          </Text>
-        </View>
-      </Pressable>
-      {removable && (
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Unsave ${activity.title}`}
-          disabled={!!busy}
-          onPress={() =>
-            void mutate(activity.id, "save_beacon", {
-              activity_id: activity.id,
-              saved: false,
-            })
-          }
-          style={{
-            width: 44,
-            height: 44,
-            alignItems: "center",
-            justifyContent: "center",
-          }}
-        >
-          <X size={18} color={colors.textSecondary} />
-        </Pressable>
-      )}
-    </View>
-  );
+      compact
+      {...activityFeedCardProps(data, activity, userId, now, {
+        onOpen: () => router.push({ pathname: "/activity/[id]", params: { id: activity.id } }),
+        onRSVP: async (status) => { await act("rsvp", { id: activity.id, status }); },
+        onSave: async () => { await act("save_beacon", { activity_id: activity.id, saved: false }); },
+        onShare: async () => { await shareBeaconInvitation(data, userId, activity); },
+      })}
+    />
+  ) : null;
   return (
     <Screen
       title={title}
@@ -299,7 +236,7 @@ export default function MyCollectionScreen() {
           )}
           {kind === "saved" &&
             (recent.length ? (
-              recent.map((row) => savedCard(row, true))
+              recent.map(savedCard)
             ) : (
               <Empty
                 title="No Saved Beacons Yet"

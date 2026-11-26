@@ -2,7 +2,7 @@ Maps feature
 
 - MyBeaconsSheet.tsx: underlined Hosting/Joined count tabs, category icons and time/location rows inside a scrolling 70% sheet.
 - myBeacons.ts: authorized unexpired Hosting/Joined navigation; explicit Beacon context preserves discovery filters and restores the prior camera on removal.
-- markerIdentity.ts: viewer-authorized marker state, shared lighting precedence (selected, live participation, owned, friend, Squad), pulse metrics, and friend freshness labels. Category artwork and location tips remain separate from the lighting. Live pulses run on individual undimmed pins and visible Plan stops, stop during gestures, and use a static ring with reduced motion.
+- markerIdentity.ts: viewer-authorized relationship, lifecycle, sizing, and fixed badge slots. Native and web share the adaptive badge budget, Hosting and Joined beam eligibility, live pulse metrics, and friend freshness treatment.
 
 - screens/MapScreen.tsx: full-map tab; coordinates search, safe area/context, inline discovery, area/compass, previews, and map options.
 - MapPlaceActions.tsx: shared pin-anchored actions for long-press, place selection and bottom-right Choose a place. MapScreen owns selected-place source/phase, search replacement and query restoration; editor picking retains Use This Location. Search and Close stay in the header; a separate compact Get directions footer identifies Google Maps as its external destination. Place activity reuses PulsePlacePreview details-only confirmation/reporting controls.
@@ -39,7 +39,7 @@ Maps feature
 - components/BeaconLocationPreview.native.tsx: shared noninteractive, permission-gated physical-location mini map used by native detail and Overview; caller controls Map focus.
 
 - nativeMapPresentation.ts: shared zoom modes, selected-marker protection, ranked Beacon grouping, neighbor-aware count placement and rendering budget; friend positions never feed Beacon density. Grouping uses tighter 32/40/52/64px screen-space distances across tiers with fractional-zoom compensation; mixed friend/Beacon attachment uses 32px (28px in Friends emphasis).
-- clusterLayout.ts, clusterBloom.ts: shared petal geometry, compact shadows, adaptive close-zoom friends and unified total-count badges; dense close/medium groups add bounded decorative previews from authorized members. Far/micro modes retain compact artwork.
+- clusterLayout.ts, clusterBloom.ts: shared petal geometry, compact shadows, authorized avatar peeks, unified count badges, and the static Stellar Beacon paths. Small city groups use petals when they fit. Distant activity groups use the same star silhouette with bounded size and integrated relationship facets.
 - projector.ts and components/MapProjector.tsx draw grounded projection artwork for individual markers and clusters while retaining their geographic anchors.
 - components/LivingMapMarkers.native.tsx: original-artwork native blooms, shared shadow/count styling and accessible expanded touch targets.
 

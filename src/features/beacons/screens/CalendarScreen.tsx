@@ -1,3 +1,4 @@
+import { DiscoveryBeaconCard } from "@/src/features/discovery/DiscoveryBeaconCard";
 import { PremiumPreview } from "@/src/features/profile/settings/PremiumUI";
 import { PlanChoice } from "@/src/features/plans/PlanPresentation";
 import { ActivityFrame } from "@/src/features/activity/ActivityFrame";
@@ -400,6 +401,17 @@ export default function CalendarScreen() {
             : "";
           const isExpanded = expanded === item.key;
           const hasItinerary = !!item.activities?.length;
+          if (item.kind === "beacon") {
+            const activity = data.activities.find((row) => row.id === item.id);
+            return (
+              <DiscoveryBeaconCard key={item.key} density="mini" activityId={item.id}
+                title={item.title} category={activity?.category ?? "Other"}
+                mapIcon={activity?.map_icon} decorationEmoji={activity?.decoration_emoji}
+                whenLabel={time} statusLabel={item.label}
+                detailsLabel={[item.title, time, item.label].filter(Boolean).join(", ")}
+                onDetails={() => openItem(item)} />
+            );
+          }
           return (
             <View key={item.key} style={{ gap: 4 }}>
               <Pressable
@@ -480,49 +492,20 @@ export default function CalendarScreen() {
                   }}
                 >
                   {item.activities.map((activity) => (
-                    <Pressable
+                    <DiscoveryBeaconCard
                       key={activity.id}
-                      accessibilityRole="button"
-                      accessibilityLabel={`Open Beacon: ${activity.title}`}
-                      onPress={() =>
-                        router.push({
-                          pathname: "/activity/[id]",
-                          params: { id: activity.id },
-                        })
-                      }
-                      style={{
-                        minHeight: 44,
-                        paddingVertical: 8,
-                        flexDirection: "row",
-                        alignItems: "center",
-                        gap: 8,
-                      }}
-                    >
-                      <Text
-                        style={{
-                          width: 70,
-                          color: colors.textSecondary,
-                          ...tokens.type.caption,
-                        }}
-                      >
-                        {new Date(activity.startsAt).toLocaleTimeString([], {
-                          timeZone: timezone,
-                          hour: "numeric",
-                          minute: "2-digit",
-                        })}
-                      </Text>
-                      <Text
-                        style={{
-                          flex: 1,
-                          minWidth: 0,
-                          color: colors.textPrimary,
-                          ...tokens.type.secondary,
-                        }}
-                      >
-                        {activity.title}
-                      </Text>
-                      <ChevronRight size={15} color={colors.textSecondary} />
-                    </Pressable>
+                      activityId={activity.id}
+                      density="mini"
+                      title={activity.title}
+                      category={data.activities.find((row) => row.id === activity.id)?.category ?? "Other"}
+                      whenLabel={new Date(activity.startsAt).toLocaleTimeString([], {
+                        timeZone: timezone,
+                        hour: "numeric",
+                        minute: "2-digit",
+                      })}
+                      detailsLabel={`Open Beacon: ${activity.title}`}
+                      onDetails={() => router.push({ pathname: "/activity/[id]", params: { id: activity.id } })}
+                    />
                   ))}
                   <Pressable
                     accessibilityRole="button"

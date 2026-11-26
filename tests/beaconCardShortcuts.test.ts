@@ -37,6 +37,7 @@ test("a readable friend's Beacon uses an explicitly authorized host message rath
 });
 
 import { beaconEngagement } from "../src/features/beacons/beaconEngagement";
+import { resolveActivityToolEntry } from "../src/features/beacons/activityToolEntry";
 
 test("Tools include Memories' separate destination and exclude disabled or unconfigured modules", () => {
   const data = makeDemo();
@@ -64,6 +65,18 @@ test("Tools include Memories' separate destination and exclude disabled or uncon
     activity[key] = false;
   assert.deepEqual(beaconEngagement(data, DEMO_ID, activity.id)!.tools, []);
   assert.equal(beaconEngagement(data, "other-account", activity.id), null);
+});
+
+test("only an enabled schedule contributes a card shortcut, with a valid workspace destination", () => {
+  const data = makeDemo();
+  const activity = data.activities.find((row) => row.id === "demo-tools")!;
+  const agenda = { enabled: true, steps: [] };
+  data.premium_tool_configs = [{ id: "schedule", activity_id: activity.id, thread_id: null, kind: "agenda", settings: { agenda }, revision: 0 }];
+  assert.ok(beaconEngagement(data, DEMO_ID, activity.id)?.tools.includes("agenda"));
+  assert.deepEqual(resolveActivityToolEntry(data, activity, DEMO_ID, "tools", "agenda"), { tab: "Activity", tool: "agenda" });
+  assert.deepEqual(resolveActivityToolEntry(data, activity, "another-viewer", "tools", "agenda"), { tab: "Overview", tool: null });
+  agenda.enabled = false;
+  assert.ok(!beaconEngagement(data, DEMO_ID, activity.id)?.tools.includes("agenda"));
 });
 
 test("reaction overflow retains every authorized type and deduplicates people", () => {

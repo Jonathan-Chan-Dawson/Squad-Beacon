@@ -2,7 +2,6 @@
 export const CLUSTER_MARKER_SIZE = 32;
 export const CLUSTER_SHADOW_OPACITY = 0.14;
 export const CLUSTER_FRIEND_SHADOW_OPACITY = 0.07;
-export const CLUSTER_COUNT_ANCHOR = { right: 0, bottom: 0 } as const;
 export const CLUSTER_OWNERSHIP_ANCHOR = { right: 0, top: 0 } as const;
 export type BloomScale = "close" | "medium" | "far" | "micro";
 

@@ -666,7 +666,13 @@ export function AvailabilityControls({
   expanded,
   onExpand,
   onBeforeRespond,
+  previewLimit,
+  onDirtyChange,
+  readOnly = false,
 }: {
+  previewLimit?: number;
+  onDirtyChange?: (dirty: boolean) => void;
+  readOnly?: boolean;
   onBeforeRespond?: () => void;
   thread: PlanningThread;
   compact?: boolean;
@@ -692,10 +698,15 @@ export function AvailabilityControls({
   const [none, setNone] = useState(saved?.none_work ?? false);
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
-  const closed =
+  const closed = readOnly ||
     thread.status !== "open" ||
     Date.parse(thread.deadline_at) <= now ||
     !!thread.finalized_at;
+  const hasEdits = slots.some((s) => answers[s.id] !== saved?.answers[s.id]) ||
+    none !== (saved?.none_work ?? false);
+  React.useEffect(() => {
+    onDirtyChange?.(!closed && hasEdits);
+  }, [closed, hasEdits, onDirtyChange]);
   if (!expanded)
     return (
       <View style={{ gap: 8 }}>
@@ -735,10 +746,14 @@ export function AvailabilityControls({
   return (
     <View style={{ gap: compact ? 4 : 14 }}>
       <View style={{ gap: 4 }}>
-        <Text style={styles.h2}>What works for you?</Text>
-        <Text style={styles.muted}>
-          Answer each time, then save your availability.
-        </Text>
+        {previewLimit === undefined && (
+          <>
+            <Text style={styles.h2}>What works for you?</Text>
+            <Text style={styles.muted}>
+              Answer each time, then save your availability.
+            </Text>
+          </>
+        )}
         {!!slots[0] && (
           <Text style={styles.label}>
             Times shown in{" "}
@@ -746,7 +761,9 @@ export function AvailabilityControls({
           </Text>
         )}
       </View>
-      {summary.slots.map((s, index) => (
+      {(previewLimit === undefined ? summary.slots : [...summary.slots].sort(
+        (a, b) => Date.parse(a.starts_at) - Date.parse(b.starts_at),
+      ).slice(0, previewLimit)).map((s, index) => (
         <View
           key={s.id}
           testID={`time-option-${s.id}`}

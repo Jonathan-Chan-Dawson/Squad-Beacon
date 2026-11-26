@@ -5,6 +5,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { ArrowLeft, List, Plus } from "lucide-react-native";
 import { communityTypePlural } from "@/src/features/social/communityPresentation";
 import { useBeacon } from "@/src/shared/store";
+import { openGuestEntry } from "@/src/features/auth/guestEntry";
 import { inviteContact } from "@/src/platform/contacts";
 import { InviteQR } from "../InviteQR";
 import { CommunicationHub, type ChatFilter } from "../CommunicationHub";
@@ -24,6 +25,7 @@ export default function MessagingHubScreen({
   const params = useLocalSearchParams<{
     tab?: string;
     peopleLists?: string;
+    new?: string;
     section?: string;
     type?: string;
     discover?: string;
@@ -48,7 +50,7 @@ export default function MessagingHubScreen({
   );
   const [selection, setSelection] = useState<PeopleListSelection | null>(null);
   const [listsOpen, setListsOpen] = useState(params.peopleLists === "yes");
-  const [newChat, setNewChat] = useState(false);
+  const [newChat, setNewChat] = useState(params.new === "yes");
   const [queries, setQueries] = useState({ Chats: "", Communities: "" });
   const [createSpace, setCreateSpace] = useState(false);
   const [createOrganization, setCreateOrganization] = useState(false);
@@ -93,6 +95,11 @@ export default function MessagingHubScreen({
   function changeFilter(next: ChatFilter) {
     setFilter(next);
     if (next !== "Friends") setSelection(null);
+  }
+  function openNewMenu(open: boolean) {
+    if (open && !userId)
+      openGuestEntry("/squads", section === "Chats" ? "chats" : "squads", undefined, { section, new: "yes" });
+    else setNewChat(open);
   }
   return (
     <SafeAreaView edges={["top"]} style={styles.screen}>
@@ -157,14 +164,14 @@ export default function MessagingHubScreen({
             {section === "Chats" ? (
               <HeaderAction
                 label="Private Lists"
-                onPress={() => setListsOpen(true)}
+                onPress={() => userId ? setListsOpen(true) : openGuestEntry("/squads", "chats", undefined, { peopleLists: "yes" })}
               >
                 <List size={20} color={colors.muted} />
               </HeaderAction>
             ) : (
               <HeaderAction
                 label="Create community"
-                onPress={() => setNewChat(true)}
+                onPress={() => openNewMenu(true)}
               >
                 <Plus size={20} color={colors.muted} />
               </HeaderAction>
@@ -188,8 +195,8 @@ export default function MessagingHubScreen({
           }
           queries={queries}
           onSearchOpenChange={() => {}}
-          newMenuOpen={newChat}
-          onNewMenuOpenChange={setNewChat}
+          newMenuOpen={!!userId && newChat}
+          onNewMenuOpenChange={openNewMenu}
           createSpaceOpen={createSpace}
           onCreateSpaceOpenChange={setCreateSpace}
           createOrganizationOpen={createOrganization}
@@ -207,7 +214,7 @@ export default function MessagingHubScreen({
         />
       </View>
       <PrivateListsSheet
-        visible={listsOpen}
+        visible={!!userId && listsOpen}
         onClose={() => {
           setListsOpen(false);
           if (params.peopleLists) router.setParams({ peopleLists: undefined });

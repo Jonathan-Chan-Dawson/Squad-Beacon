@@ -1,5 +1,8 @@
 import type { Href } from "expo-router";
 
+export const priceText = (value: number, scale = 12600) =>
+  (value / scale).toLocaleString(undefined, { maximumFractionDigits: 4 });
+
 export const rewardLooks = {
   classic: { name: "Classic", slot: "skin", color: "#65E5E8", price: 0 },
   "ember-beam": {

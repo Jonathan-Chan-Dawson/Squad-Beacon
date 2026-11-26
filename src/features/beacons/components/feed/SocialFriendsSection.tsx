@@ -1,4 +1,5 @@
 import { rewardTint } from "@/src/features/beacons/rewardLooks";
+import { LoginToUse } from "@/src/features/auth/LoginToUse";
 import React, {
   useCallback,
   useEffect,
@@ -717,11 +718,14 @@ export function SocialFriendsSection() {
         </Text>
         <HomeAction
           title="See All →"
-          label={"See all " + friends.length + " friends"}
+          label={userId ? "See all " + friends.length + " friends" : "See all friends"}
           plain
           onPress={() => router.push("/friends")}
         />
       </View>
+      {!userId ? (
+        <LoginToUse destination="/activities" detail="Log in to see friends and make plans together." resumeCurrentPage />
+      ) : <>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
         {filters.map(({ label, count, scope, filter }) => {
           const selected = browse.scope === scope && browse.filter === filter;
@@ -793,6 +797,7 @@ export function SocialFriendsSection() {
         </Text>
       )}
       {controller.detailSheet}
+      </>}
     </View>
   );
 }

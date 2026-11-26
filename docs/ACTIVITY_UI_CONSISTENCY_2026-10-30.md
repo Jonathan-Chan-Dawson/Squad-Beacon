@@ -27,7 +27,7 @@ Browser evidence uses local demo data. Hosted data, native builds, simulators an
 
 ## Screenshots
 
-The [screenshot folder](screenshots/activity-consistency-2026-10-30/) contains each tested width and theme, plus actual 75% desktop zoom and direct conversations.
+The [screenshot folder](screenshots/activity-consistency-2026-10-30/) contains representative captures across widths, themes, and 75% desktop zoom.
 
 | Surface | Light | Dark |
 | --- | --- | --- |

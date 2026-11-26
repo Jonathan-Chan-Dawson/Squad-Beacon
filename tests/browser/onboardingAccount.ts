@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import type { Page } from "@playwright/test";
+import type { Data } from "../../src/shared/types";
 import { makeScenario } from "../../src/features/onboarding/scenarios";
 import {
   normalizeProfileQuery,
@@ -27,6 +28,7 @@ export async function mockOnboardingAccount(
     failVerify?: boolean;
     failResend?: number;
     sectionTutorials?: boolean;
+    configureSnapshot?: (data: Data, viewer: string) => void;
   } = {},
 ) {
   if (!options.sectionTutorials) {
@@ -71,6 +73,7 @@ export async function mockOnboardingAccount(
     });
     snapshot.profiles = [];
   }
+  options.configureSnapshot?.(snapshot, viewer);
   const user = {
     id: viewer,
     aud: "authenticated",

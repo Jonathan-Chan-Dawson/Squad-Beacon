@@ -1,9 +1,6 @@
 import React from "react";
-import { Pressable, Text, View } from "react-native";
 import type { Activity } from "@/src/shared/types";
-import { useTheme } from "@/src/shared/ui";
-import { BeaconIcon } from "../BeaconIcon";
-import { cardPresentation } from "@/src/theme/cardPresentation";
+import { DiscoveryBeaconCard } from "@/src/features/discovery/DiscoveryBeaconCard";
 
 export type CurrentBeaconRole = "hosting" | "cohosting" | "going";
 
@@ -51,94 +48,21 @@ export function CurrentBeaconPreview({
   featured?: boolean;
   compact?: boolean;
 }) {
-  const { colors, tokens } = useTheme();
-  const iconSize = featured || compact ? 34 : 44;
-  const iconGlyphSize = featured || compact ? 24 : 30;
-  const content = (
-    <>
-      <View
-        style={{
-          width: iconSize,
-          height: iconSize,
-          borderRadius: cardPresentation.insetRadius,
-          backgroundColor: tokens.categories[activity.category].tint,
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <BeaconIcon
-          category={activity.category}
-          emoji={activity.decoration_emoji}
-          size={iconGlyphSize}
-        />
-      </View>
-      <View style={{ flex: 1, minWidth: 0, gap: 1 }}>
-        <Text
-          style={{
-            color: colors.green,
-            fontSize: 11,
-            lineHeight: 16,
-            fontWeight: "600",
-          }}
-        >
-          {featured ? "Featured · Happening now" : "Happening now"}
-        </Text>
-        <Text
-          numberOfLines={2}
-          style={{
-            color: colors.ink,
-            ...tokens.type.secondary,
-            fontWeight: "600",
-          }}
-        >
-          {activity.title}
-        </Text>
-        <Text
-          numberOfLines={1}
-          style={{ color: colors.muted, fontSize: 11, lineHeight: 15 }}
-        >
-          {startedLabel(activity, now)} · {untilLabel(activity)} ·{" "}
-          {currentBeaconRoleLabel(role)}
-        </Text>
-      </View>
-    </>
-  );
-
-  if (!onPress)
-    return (
-      <View
-        testID="current-beacon-preview"
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          gap: cardPresentation.rowGap,
-          minHeight: iconSize + 8,
-          paddingVertical: 4,
-        }}
-      >
-        {content}
-      </View>
-    );
-
   return (
-    <Pressable
+    <DiscoveryBeaconCard
+      activityId={activity.id}
       testID="current-beacon-preview"
-      accessibilityRole="button"
-      accessibilityLabel={`${featured ? "Featured, " : ""}Happening now: ${activity.title}. ${startedLabel(activity, now)}. ${currentBeaconRoleLabel(role)}.`}
-      onPress={onPress}
-      style={({ pressed }) => ({
-        flexDirection: "row",
-        alignItems: "center",
-        gap: cardPresentation.rowGap,
-        minHeight: Math.max(cardPresentation.touchTarget, iconSize + 8),
-        paddingHorizontal: compact ? 3 : 7,
-        paddingVertical: 4,
-        borderRadius: cardPresentation.insetRadius,
-        backgroundColor: featured ? colors.green + "0A" : "transparent",
-        opacity: pressed ? 0.72 : 1,
-      })}
-    >
-      {content}
-    </Pressable>
+      density={compact ? "mini" : "compact"}
+      title={activity.title}
+      category={activity.category}
+      mapIcon={activity.map_icon}
+      decorationEmoji={activity.decoration_emoji}
+      decorationAccent={activity.decoration_accent}
+      isLive
+      whenLabel={`${startedLabel(activity, now)} · ${untilLabel(activity)}`}
+      statusLabel={currentBeaconRoleLabel(role)}
+      detailsLabel={`${featured ? "Featured, " : ""}Happening now: ${activity.title}. ${startedLabel(activity, now)}. ${currentBeaconRoleLabel(role)}.`}
+      onDetails={onPress}
+    />
   );
 }

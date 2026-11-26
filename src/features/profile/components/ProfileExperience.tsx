@@ -1,4 +1,7 @@
+import { DiscoveryBeaconCard } from "@/src/features/discovery/DiscoveryBeaconCard";
 import { SemanticEmpty } from "@/src/features/onboarding/OnboardingUI";
+import { LoginToUse } from "@/src/features/auth/LoginToUse";
+import { openGuestEntry } from "@/src/features/auth/guestEntry";
 import {
   LivingActivitySection,
   UpNextCard,
@@ -17,6 +20,7 @@ import {
   Library,
   MapPin,
   Settings,
+  UserRound,
   Users,
 } from "lucide-react-native";
 import type { Profile } from "@/src/shared/types";
@@ -53,36 +57,13 @@ import { getAspirationProgress } from "../aspirations";
 
 export type ProfileTab = "Overview" | "Beacons" | "About";
 function ActivityRow({ row }: { row: ProfileContentRow }) {
-  const { styles, semanticColors: colors } = useTheme();
   return (
-    <View style={{ gap: 2, paddingVertical: 6 }}>
-      <MotionPressable
-        accessibilityRole="button"
-        accessibilityLabel={`Open ${row.title}`}
-        onPress={() => openProfileBeacon(row.id)}
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          gap: 12,
-          minHeight: 64,
-        }}
-      >
-        <ActivityBadge category={row.category} size={44} />
-        <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
-          <Text numberOfLines={2} style={[styles.body, { fontWeight: "600" }]}>
-            {row.title}
-          </Text>
-          <Txt muted>
-            {new Date(row.startsAt).toLocaleDateString(undefined, {
-              month: "short",
-              day: "numeric",
-            })}{" "}
-            · {row.role === "host" ? "Hosted" : "Joined"}
-            {row.status === "cancelled" ? " · Canceled" : ""}
-          </Txt>
-        </View>
-        <ChevronRight size={18} color={colors.textSecondary} />
-      </MotionPressable>
+    <View style={{ gap: 4 }}>
+      <DiscoveryBeaconCard density="mini" activityId={row.id} title={row.title} category={row.category}
+        onDetails={() => openProfileBeacon(row.id)}
+        whenLabel={new Date(row.startsAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
+        statusLabel={row.status === "cancelled" ? "Cancelled" : row.role === "host" ? "Hosted" : "Joined"}
+      />
       {row.hasMemories && (
         <View style={{ alignSelf: "flex-start", marginLeft: 56 }}>
           <Button
@@ -215,7 +196,7 @@ export function ProfileExperience({
   onTabChange,
   onAspirationPosition,
 }: {
-  profile: Profile;
+  profile?: Profile;
   actions: React.ReactNode;
   overviewAccessory?: React.ReactNode;
   accessory?: React.ReactNode;
@@ -237,19 +218,21 @@ export function ProfileExperience({
   }, [tab, reduced, fade]);
   const tabStyle = useAnimatedStyle(() => ({ opacity: fade.value }));
   const now = useNow();
-  const own = userId === profile.id;
+  const personId = profile?.id ?? "";
+  const own = !!profile && userId === personId;
+  const ownPage = own || !profile;
   const [directory, setDirectory] = useState<
     "friends" | "squads" | "communities" | null
   >(null);
   const [expandedBio, setExpandedBio] = useState(false);
   const summary = useProfileContent({
-    personId: profile.id,
+    personId,
     filter: "all",
     pageSize: 1,
   });
   const [statusViewerOpen, setStatusViewerOpen] = useState(false);
-  const status = visibleSoloActivity(data, profile.id, userId, now);
-  const presence = data.viewer_id === userId ? data.presence?.find((p) => p.owner_id === profile.id) : undefined;
+  const status = profile ? visibleSoloActivity(data, personId, userId, now) : undefined;
+  const presence = profile && data.viewer_id === userId ? data.presence?.find((p) => p.owner_id === personId) : undefined;
   const availabilityNow = useAvailabilityNow(Date.parse(presence?.availability_until ?? ""), !!presence);
   const availabilityDetail = activeAvailability(presence, availabilityNow);
   const availability = presence || data.capabilities?.timed_availability
@@ -260,7 +243,7 @@ export function ProfileExperience({
     tokens.availability[
       availability === "ending-soon" ? "endingSoon" : availability
     ].color;
-  const featured = selectProfileBeacon(data, profile, userId, now);
+  const featured = profile ? selectProfileBeacon(data, profile, userId, now) : undefined;
   const meetingLabel =
     featured && userId && canViewBeaconMeetingDetails(data, featured.id, userId)
       ? data.places.find((place) => place.activity_id === featured.id)?.label
@@ -269,9 +252,9 @@ export function ProfileExperience({
     !!featured &&
     Date.parse(featured.starts_at) <= now &&
     Date.parse(featured.ends_at) > now;
-  const contexts = selectSharedProfileContexts(data, profile.id, userId);
+  const contexts = profile ? selectSharedProfileContexts(data, personId, userId) : [];
   const viewer = data.profiles.find((p) => p.id === userId);
-  const sharedInterests = own
+  const sharedInterests = own || !profile
     ? []
     : profile.interests.filter((interest) =>
         viewer?.interests.includes(interest),
@@ -303,6 +286,12 @@ export function ProfileExperience({
       pathname: "/profile/edit",
       params: section ? { section } : {},
     });
+  const loginSection = (title: string, detail: string) => (
+    <View style={{ gap: 8 }}>
+      <Text style={styles.h2}>{title}</Text>
+      <LoginToUse destination="/profile" params={{ section: tab }} detail={detail} />
+    </View>
+  );
   function openContext(context: (typeof contexts)[number]) {
     if (context.entityType === "organization")
       router.push({
@@ -322,13 +311,13 @@ export function ProfileExperience({
       }}
     >
       <View style={{ alignItems: "center", gap: 6, maxWidth: "46%" }}>
-        {!(data.is_demo || data.capabilities?.living_activity) && (
+        {profile && !(data.is_demo || data.capabilities?.living_activity) && (
           <StatusBubble
             personId={profile.id}
             onPress={() => setStatusViewerOpen(true)}
           />
         )}
-        <MotionPressable
+        {profile ? <MotionPressable
           testID="profile-avatar"
           accessibilityRole="button"
           accessibilityLabel={
@@ -348,7 +337,11 @@ export function ProfileExperience({
             size={availabilityControl && profileWidth < 360 ? 64 : 88}
             status={availability}
           />
-        </MotionPressable>
+        </MotionPressable> : (
+          <View style={{ width: 88, height: 88, borderRadius: 44, backgroundColor: colors.surfaceRaised, alignItems: "center", justifyContent: "center" }}>
+            <UserRound size={32} color={colors.textSecondary} />
+          </View>
+        )}
       </View>
       <View style={{ flex: 1, minWidth: 0, gap: 4 }}>
         <Text
@@ -361,10 +354,10 @@ export function ProfileExperience({
             },
           ]}
         >
-          {profile.name}
+          {profile?.name ?? "Your profile"}
         </Text>
-        <Txt muted>@{profile.username}</Txt>
-        {!!profile.home && (
+        {profile && <Txt muted>@{profile.username}</Txt>}
+        {!!profile?.home && (
           <View style={{ flexDirection: "row", gap: 5, alignItems: "center" }}>
             <MapPin size={13} color={colors.textSecondary} />
             <Text style={[styles.muted, { flex: 1, fontSize: 12 }]}>
@@ -377,7 +370,7 @@ export function ProfileExperience({
             <SharedStatusControl profilePill />
           ) : null
         ) : (
-          availability !== "unknown" && (
+          profile && availability !== "unknown" && (
             <View
               style={{
                 flexDirection: "row",
@@ -421,9 +414,9 @@ export function ProfileExperience({
   return (
     <View ref={sectionRoot} style={{ gap: 14 }}>
       <View
-        testID={own ? "profile-identity" : "person-profile-identity"}
+        testID={ownPage ? "profile-identity" : "person-profile-identity"}
         style={{ gap: 10, padding: 2, overflow: "hidden", borderRadius: 22,
-          backgroundColor: rewardTint(data.equipped_looks?.[profile.id]?.profile) }}
+          backgroundColor: rewardTint(data.equipped_looks?.[personId]?.profile) }}
       >
         <Svg
           pointerEvents="none"
@@ -452,20 +445,20 @@ export function ProfileExperience({
             {own && progression && <View style={{ alignSelf: "flex-end" }}>{progression}</View>}
           </>
         )}
-        {!own && <BeaconTierBadge personId={profile.id} />}
-        {(data.is_demo || data.capabilities?.living_activity) && !own && (
+        {profile && !own && <BeaconTierBadge personId={personId} />}
+        {profile && (data.is_demo || data.capabilities?.living_activity) && !own && (
           <StatusBubble
             attached
             personId={profile.id}
             onPress={() => setStatusViewerOpen(true)}
           />
         )}
-        <StatusViewer
-          personId={profile.id}
+        {profile && <StatusViewer
+          personId={personId}
           visible={statusViewerOpen}
           onClose={() => setStatusViewerOpen(false)}
-        />
-        {!!profile.bio && (
+        />}
+        {!!profile?.bio && (
           <MotionPressable
             accessibilityRole="button"
             accessibilityLabel={expandedBio ? "Collapse bio" : "Expand bio"}
@@ -479,7 +472,7 @@ export function ProfileExperience({
             </Text>
           </MotionPressable>
         )}
-        {!profile.bio && own && (
+        {profile && !profile.bio && own && (
           <Button
             title="Add a little about yourself"
             compact
@@ -493,15 +486,17 @@ export function ProfileExperience({
         >
           {[
             {
-              label: own ? "Beacons" : "Visible Beacons",
+              label: ownPage ? "Beacons" : "Visible Beacons",
               count: summary.page?.beaconCount,
               press: () => onTabChange("Beacons"),
             },
             {
-              label: own ? "Friends" : "Mutual friends",
+              label: ownPage ? "Friends" : "Mutual friends",
               count: summary.page?.friendIds.length,
               press: () =>
-                own
+                !profile
+                  ? openGuestEntry("/squads", "chats", undefined, { peopleLists: "yes" })
+                  : own
                   ? router.push({
                       pathname: "/(tabs)/squads",
                       params: { peopleLists: "yes" },
@@ -509,14 +504,14 @@ export function ProfileExperience({
                   : setDirectory("friends"),
             },
             {
-              label: own ? "Squads" : "Shared Squads",
+              label: ownPage ? "Squads" : "Shared Squads",
               count: summary.page?.squadIds.length,
-              press: () => setDirectory("squads"),
+              press: () => profile ? setDirectory("squads") : router.push({ pathname: "/squads", params: { section: "Communities" } }),
             },
           ].map((stat, i) => (
             <MotionPressable
               accessibilityRole="button"
-              accessibilityLabel={`Open ${own ? "your " : ""}${stat.label.toLowerCase()}`}
+              accessibilityLabel={`Open ${ownPage ? "your " : ""}${stat.label.toLowerCase()}`}
               key={stat.label}
               onPress={stat.press}
               style={{
@@ -575,7 +570,7 @@ export function ProfileExperience({
         <View
           style={{ display: tab === "Overview" ? "flex" : "none", gap: 22 }}
         >
-          {data.is_demo || data.capabilities?.living_activity ? (
+          {!profile ? loginSection("Up Next", "Log in to see what you have planned.") : data.is_demo || data.capabilities?.living_activity ? (
             <LivingActivitySection key={profile.id} personId={profile.id} compact dashboard />
           ) : (
             <UpNextCard personId={profile.id} />
@@ -658,12 +653,12 @@ export function ProfileExperience({
               </View>
             </MotionPressable>
           )}
-          {overviewAccessory}
-          <ProfileAlbums
+          {profile ? overviewAccessory : loginSection("Membership", "Log in to see your membership.")}
+          {profile ? <ProfileAlbums
             personId={profile.id}
             own={own}
             active={tab === "Overview"}
-          />
+          /> : loginSection("Albums", "Log in to see your albums.")}
           {!own &&
             (contexts.length > 0 ||
               sharedInterests.length > 0 ||
@@ -718,7 +713,7 @@ export function ProfileExperience({
                 )}
               </View>
             )}
-          {(own || profile.interests.length > 0) && (
+          {!profile ? loginSection("Interests", "Log in to add your interests.") : (own || profile.interests.length > 0) && (
             <View style={{ gap: 10 }}>
               <View style={styles.between}>
                 <Text style={styles.h2}>Interests</Text>
@@ -737,7 +732,7 @@ export function ProfileExperience({
               )}
             </View>
           )}
-          {own && (
+          {!profile ? loginSection("My Space", "Log in to open your collection and settings.") : own && (
             <View style={{ gap: 8 }}>
               <Text style={styles.h2}>My Space</Text>
               <View style={{ flexDirection: "row", gap: 8 }}>
@@ -776,9 +771,10 @@ export function ProfileExperience({
           )}
         </View>
         <View style={{ display: tab === "Beacons" ? "flex" : "none" }}>
-          <BeaconHistory personId={profile.id} />
+          {profile ? <BeaconHistory personId={profile.id} /> : loginSection("Beacon History", "Log in to see your Beacons.")}
         </View>
         <View style={{ display: tab === "About" ? "flex" : "none", gap: 20 }}>
+          {profile ? <>
           {own && (
             <Button
               title="Edit about you"
@@ -882,6 +878,7 @@ export function ProfileExperience({
                 )}
             </View>
           )}
+          </> : loginSection("About you", "Log in to add your interests, identity, and goals.")}
         </View>
       </Animated.View>
       <Sheet

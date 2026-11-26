@@ -53,13 +53,6 @@ export function discoveryContextLabel(
   return trimmed;
 }
 
-export function shouldUseAdaptiveDiscoveryShell(
-  presentation: "personal-preview" | "home" | "discovery" | undefined,
-  adaptiveDiscovery = false,
-) {
-  return presentation === "discovery" && adaptiveDiscovery;
-}
-
 export function discoveryCardMetadata({
   goingCount,
   capacity,

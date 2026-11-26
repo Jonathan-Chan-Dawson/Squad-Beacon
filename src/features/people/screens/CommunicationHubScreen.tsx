@@ -1,5 +1,6 @@
 import { NavigationFilterChip } from "@/src/shared/NavigationTabs";
 import { SemanticEmpty } from "@/src/features/onboarding/OnboardingUI";
+import { LoginToUse } from "@/src/features/auth/LoginToUse";
 import { OrganizationDirectory } from "@/src/features/organizations/OrganizationDirectory";
 import {
   activeOrganizationRole,
@@ -603,6 +604,8 @@ export function CommunicationHub({
           <MessageCircle size={19} color={colors.green} />
         </Pressable>
       );
+    if (!userId)
+      return <LoginToUse destination="/squads" params={{ section: "Chats", tab: conversationFilter }} detail="Log in to see your chats and connect with friends." />;
     const isNew =
       !allChats.length && !startFriends.length && !communities.length;
     return (
@@ -703,7 +706,9 @@ export function CommunicationHub({
             <ChevronDown size={20} color={colors.green} />
           )}
         </Pressable>
-        {communityQuery.length === 1 ? (
+        {!userId ? (
+          <LoginToUse destination="/squads" params={{ section: "Communities" }} detail="Log in to view and join Squads, Organizations, and Networks." />
+        ) : communityQuery.length === 1 ? (
           <Txt muted>Type at least 2 characters to explore communities.</Txt>
         ) : exploreOpen || communityQuery ? (
           directoryTypes.map((type) => (

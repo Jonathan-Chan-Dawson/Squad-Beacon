@@ -1,23 +1,5 @@
-import { BeaconCardArtwork, beaconArtworkStyles } from "./BeaconCardArtwork";
-import {
-  useBeaconParticipation,
-  ParticipationButtons,
-  ParticipationActions,
-} from "../useBeaconParticipation";
-import { beaconCardShortcuts } from "../beaconCardShortcuts";
-import { cardSocialPreview } from "../cardSocialPreview";
-import { useBeacon } from "@/src/shared/store";
-import { usePreferences } from "@/src/shared/preferences";
-import { ProfileAvatar } from "@/src/features/profile/ProfileAvatar";
-import { useFocusEffect } from "expo-router";
-import { BeaconToolMenuRows } from "./BeaconCardEngagement";
-import { BeaconCardShortcuts } from "./BeaconCardShortcuts";
-import { ActionRow, ContextMenu, MenuGroup } from "@/src/shared/ContextMenu";
-import { cardSecondaryMetadata, compactCountdown } from "../cardPresentation";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-  Image,
-  AppState,
   Pressable,
   Text,
   View,
@@ -27,46 +9,60 @@ import {
 import {
   Bookmark,
   Check,
-  Clock3,
+  ChevronRight,
+  CircleHelp,
   Flag,
+  ListChecks,
   MapPin,
-  Monitor,
   MoreHorizontal,
   Share2,
   Star,
-  ChevronRight,
-  CircleHelp,
-  Crown,
+  UsersRound,
 } from "lucide-react-native";
 import Swipeable, {
   SwipeDirection,
   type SwipeableMethods,
 } from "react-native-gesture-handler/ReanimatedSwipeable";
 import Animated, {
-  cancelAnimation,
-  Easing,
   useAnimatedStyle,
-  useSharedValue,
-  withRepeat,
-  withTiming,
   type SharedValue,
 } from "react-native-reanimated";
-import type { Activity, Category } from "@/src/shared/types";
+import { router } from "expo-router";
+import type { Activity, Category, Data } from "@/src/shared/types";
+import { AvatarStack, useDesignTheme } from "@/src/shared/design-system";
+import { ActionRow, ContextMenu, MenuGroup } from "@/src/shared/ContextMenu";
+import { useBeacon } from "@/src/shared/store";
+import { usePreferences } from "@/src/shared/preferences";
+import { activityWhen } from "@/src/shared/domain";
 import {
-  Avatar,
-  AvatarStack,
-  Card,
-  IconButton,
-  uiHaptics,
-  useDesignTheme,
-  useReducedMotion,
-} from "@/src/shared/design-system";
-import { ActivityBadge } from "@/src/features/beacons/ActivityBadge";
-import { useNow } from "@/src/shared/useNow";
+  DiscoveryBeaconCard,
+  type CardPlanContext,
+} from "@/src/features/discovery/DiscoveryBeaconCard";
+import {
+  beaconMarkerState,
+  beaconMarkerColor,
+  prepareMapIdentity,
+} from "@/src/features/maps/markerIdentity";
+import { beaconArtworkStyles } from "./BeaconCardArtwork";
+import { BeaconCardShortcuts } from "./BeaconCardShortcuts";
 import { HomeAction } from "./HomeAction";
-import { BeaconIcon } from "./BeaconIcon";
-import { DiscoveryBeaconCard } from "@/src/features/discovery/DiscoveryBeaconCard";
-import { shouldUseAdaptiveDiscoveryShell } from "@/src/features/discovery/discoveryCardPresentation";
+import {
+  ParticipationActions,
+  ParticipationButtons,
+  useBeaconParticipation,
+} from "../useBeaconParticipation";
+import { useAvailabilityNow } from "../availabilityClock";
+import { beaconCardShortcuts } from "../beaconCardShortcuts";
+import { cardSocialPreview } from "../cardSocialPreview";
+import { cardSecondaryMetadata, compactCountdown } from "../cardPresentation";
+import { hubToolShortcuts } from "../hubSelectors";
+import { rewardTint } from "../rewardLooks";
+import { resolveActivityToolEntry } from "../activityToolEntry";
+import {
+  readablePlanForActivity,
+  readablePlanStopPosition,
+} from "../screens/discoveryPlan";
+import { beaconRoleFor } from "../permissions";
 
 export type FeedRsvpStatus =
   "going" | "interested" | "requested" | "invited" | "declined" | "unknown";
@@ -85,33 +81,18 @@ export type BeaconFeedLocation = {
 };
 
 export interface BeaconFeedCardProps {
-  /** Homepage-only display treatments; other lists retain their existing layout. */
-  presentation?: "personal-preview" | "home" | "discovery";
-  /** Opt into the shared compact shell on Browse and Map discovery surfaces. */
-  adaptiveDiscovery?: boolean;
-  /** Opt-in Map preview density and anchored actions; no change to other card surfaces. */
+  /** Discovery lists prioritize participation and omit personal Smart Features. */
+  presentation?: "discovery";
   mapPreview?: boolean;
   mapIcon?: string | null;
-  mapCommunityName?: string;
-  mapCommunityKey?: string;
-  mapCommunityType?: import("@/src/features/social/types").SocialEntityType;
   /** Accessible controls owned by the containing surface, such as Map close. */
   headerAccessory?: React.ReactNode;
   demoArtwork?: boolean;
   decorationAccent?: string | null;
   decorationEmoji?: string | null;
-  animationVisible?: boolean;
   /** Use the compact home/list treatment while keeping the same permission and RSVP callbacks. */
   compact?: boolean;
-  /** Emphasize a confirmed personal Beacon on the home hub. */
-  featured?: boolean;
-  planRelation?: string | null;
-  planContext?: {
-    title: string;
-    onPress: () => void;
-    onShowOnMap?: () => void;
-    stepIndex?: number | null;
-  };
+  planContext?: CardPlanContext;
   compactFooter?: React.ReactNode;
   activityId: string;
   title: string;
@@ -158,108 +139,6 @@ export interface BeaconFeedCardProps {
   onReport?: () => Promise<void> | void;
   /** Temporarily disables PagerView while the swipe rail owns a gesture. */
   onCardSwipeStateChange?: (active: boolean) => void;
-}
-
-type CardAction = "rsvp" | "change" | "save" | "share" | "report" | null;
-
-function readableError(error: unknown, fallback: string) {
-  return error instanceof Error && error.message.trim()
-    ? error.message
-    : fallback;
-}
-
-function formatDateTime(value: number) {
-  if (!Number.isFinite(value)) return "";
-  try {
-    return new Intl.DateTimeFormat(undefined, {
-      weekday: "short",
-      month: "short",
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-    }).format(new Date(value));
-  } catch {
-    return "";
-  }
-}
-
-function LiveIndicator({
-  reducedMotion,
-  active = true,
-}: {
-  reducedMotion: boolean;
-  active?: boolean;
-}) {
-  const { colors } = useDesignTheme();
-  const pulse = useSharedValue(0);
-  const pulseStyle = useAnimatedStyle(() => ({
-    opacity: reducedMotion || !active ? 0 : (1 - pulse.value) * 0.55,
-    transform: [{ scale: 0.5 + pulse.value * 1.3 }],
-  }));
-
-  useEffect(() => {
-    cancelAnimation(pulse);
-    if (!reducedMotion && active) {
-      pulse.value = withRepeat(
-        withTiming(1, {
-          duration: 1400,
-          easing: Easing.out(Easing.quad),
-        }),
-        -1,
-        false,
-      );
-    } else {
-      pulse.value = 0;
-    }
-    return () => cancelAnimation(pulse);
-  }, [pulse, reducedMotion, active]);
-
-  return (
-    <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
-      <View
-        style={{
-          width: 18,
-          height: 18,
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <Animated.View
-          testID="beacon-live-pulse"
-          accessibilityElementsHidden
-          style={[
-            {
-              position: "absolute",
-              width: 16,
-              height: 16,
-              borderRadius: 8,
-              borderWidth: 1,
-              borderColor: colors.accent,
-            },
-            pulseStyle,
-          ]}
-        />
-        <View
-          style={{
-            width: 7,
-            height: 7,
-            borderRadius: 4,
-            backgroundColor: colors.accent,
-          }}
-        />
-      </View>
-      <Text
-        style={{
-          color: colors.accent,
-          fontWeight: "700",
-          fontSize: 12,
-          lineHeight: 16,
-        }}
-      >
-        Live
-      </Text>
-    </View>
-  );
 }
 
 function SwipeReveal({
@@ -315,24 +194,31 @@ function SwipeReveal({
   );
 }
 
-export function BeaconFeedCard({
-  presentation,
-  adaptiveDiscovery = false,
-  mapPreview = false,
-  mapIcon,
-  mapCommunityName,
-  mapCommunityKey,
-  mapCommunityType,
-  headerAccessory,
-  demoArtwork = false,
-  decorationAccent,
-  decorationEmoji,
-  animationVisible = true,
-  compact = false,
-  featured = false,
-  planRelation,
-  planContext,
-  compactFooter,
+const identityBySnapshot = new WeakMap<
+  Data,
+  ReturnType<typeof prepareMapIdentity>
+>();
+
+function cardIdentity(data: Data, viewer: string | null) {
+  if (!viewer || data.viewer_id !== viewer) return undefined;
+  const existing = identityBySnapshot.get(data);
+  if (existing) return existing;
+  const next = prepareMapIdentity(data, viewer);
+  identityBySnapshot.set(data, next);
+  return next;
+}
+
+export function BeaconFeedCard(props: BeaconFeedCardProps) {
+  const { userId, viewerEpoch } = useBeacon();
+  return (
+    <BeaconFeedCardBody
+      key={`${props.activityId}:${userId}:${viewerEpoch}`}
+      {...props}
+    />
+  );
+}
+
+function BeaconFeedCardBody({
   activityId,
   title,
   category,
@@ -342,1339 +228,413 @@ export function BeaconFeedCard({
   activityStatus,
   whenLabel,
   hostName,
-  hostAvatarUri,
   location,
-  goingAvatars,
   goingCount,
-  target,
-  capacityRemaining,
   rsvpStatus,
   approved,
   approvalRequired,
-  joinApprovalGranted,
   isHost,
   isFull,
   isClosed,
   isPast,
   saved,
   onOpen,
-  onOpenPeople,
-  onRSVP,
-  onChangeRSVP,
-  detailsLabel,
   onMap,
   onChat,
   onSave,
   onShare,
   onReport,
+  onOpenPeople,
   onCardSwipeStateChange,
+  mapPreview = false,
+  compact = false,
+  presentation,
+  mapIcon,
+  headerAccessory,
+  demoArtwork,
+  decorationAccent,
+  decorationEmoji,
+  compactFooter,
+  planContext,
+  detailsLabel,
 }: BeaconFeedCardProps) {
   const { colors, tokens } = useDesignTheme();
-  const { data: socialData, userId: socialViewer } = useBeacon();
+  const { data, userId, getViewerEpoch } = useBeacon();
   const { showAvatars } = usePreferences();
   const participation = useBeaconParticipation(activityId);
-  const socialPreview = cardSocialPreview(socialData, socialViewer, activityId);
-  const canMap = beaconCardShortcuts(
-    socialData,
-    socialViewer,
-    activityId,
-  )?.canMap;
-  const latestMap = useRef({ data: socialData, viewer: socialViewer });
-  useEffect(() => {
-    latestMap.current = { data: socialData, viewer: socialViewer };
-  }, [socialData, socialViewer]);
-  const [screenFocused, setScreenFocused] = useState(true);
-  useFocusEffect(
-    useCallback(() => {
-      setScreenFocused(true);
-      return () => setScreenFocused(false);
-    }, []),
-  );
-  const [appActive, setAppActive] = useState(
-    AppState.currentState === "active",
-  );
-  useEffect(() => {
-    const subscription = AppState.addEventListener("change", (value) =>
-      setAppActive(value === "active"),
-    );
-    return () => subscription.remove();
-  }, []);
-  const reducedMotion = useReducedMotion();
-  const now = useNow();
+  const social = cardSocialPreview(data, userId, activityId);
+  const activity =
+    participation.state?.activity ??
+    data.activities.find((row) => row.id === activityId);
+  const now = useAvailabilityNow(Date.parse(endsAt));
+  const latest = useRef({ data, userId });
   const [menuVisible, setMenuVisible] = useState(false);
   const menuAnchor = useRef<View>(null);
-  const menuContinuation = useRef<(() => void) | null>(null);
+  const continuation = useRef<(() => void) | null>(null);
+  const lock = useRef(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const swipeable = useRef<SwipeableMethods | null>(null);
+  const swipeActive = useRef(false);
+  const swipeCallback = useRef(onCardSwipeStateChange);
+  useEffect(() => {
+    latest.current = { data, userId };
+    swipeCallback.current = onCardSwipeStateChange;
+  }, [data, userId, onCardSwipeStateChange]);
   useEffect(
     () => () => {
-      menuContinuation.current = null;
+      continuation.current = null;
+      if (swipeActive.current) swipeCallback.current?.(false);
     },
     [],
   );
-  const afterMenu = (callback: () => void) => {
-    menuContinuation.current = callback;
-    setMenuVisible(false);
-  };
-  const menuDismissed = () => {
-    const callback = menuContinuation.current;
-    menuContinuation.current = null;
-    callback?.();
-  };
-  const [busyAction, setBusyAction] = useState<CardAction>(null);
-  const [actionError, setActionError] = useState("");
-  const actionLock = useRef(false);
-  const swipeableRef = useRef<SwipeableMethods | null>(null);
-  const swipeActiveRef = useRef(false);
-  const swipeCallbackRef = useRef(onCardSwipeStateChange);
-
-  const startTime = Date.parse(startsAt);
-  const endTime = Date.parse(endsAt);
-  const validInterval =
-    Number.isFinite(startTime) &&
-    Number.isFinite(endTime) &&
-    endTime > startTime;
-  const isLive =
-    activityStatus === "scheduled" &&
-    validInterval &&
-    startTime <= now &&
-    endTime > now;
-  const elapsedPercent = isLive
-    ? Math.max(
-        0,
-        Math.min(100, ((now - startTime) / (endTime - startTime)) * 100),
-      )
-    : 0;
-  const endsInMinutes = isLive
-    ? Math.max(1, Math.ceil((endTime - now) / 60_000))
-    : 0;
-  const isEnded =
-    isPast ||
-    activityStatus === "completed" ||
-    (validInterval && endTime <= now);
-  const isCancelled = activityStatus === "cancelled";
-  const requestPending =
+  const notifySwipe = useCallback((active: boolean) => {
+    if (swipeActive.current === active) return;
+    swipeActive.current = active;
+    swipeCallback.current?.(active);
+  }, []);
+  const start = Date.parse(startsAt);
+  const end = Date.parse(endsAt);
+  const cancelled = activityStatus === "cancelled";
+  const completed = activityStatus === "completed";
+  const ended =
+    !cancelled && (isPast || completed || (Number.isFinite(end) && end <= now));
+  const live =
+    !ended && activityStatus === "scheduled" && start <= now && now < end;
+  const pending =
     rsvpStatus === "requested" ||
     (rsvpStatus === "going" && approvalRequired && !approved);
-  const isGoing = rsvpStatus === "going" && !requestPending;
-  const isResponseClosed = isHost || isEnded || isCancelled || isClosed;
-  const isSolo = activityMode === "solo";
-  // Remaining spots are informational for soft capacity; only the canonical strict limit closes joining.
-  const full = isFull;
+  const going = rsvpStatus === "going" && !pending;
   const canSwipe =
-    !isResponseClosed &&
-    !isSolo &&
-    !full &&
-    !requestPending &&
-    !isGoing &&
-    busyAction === null;
-  const editorial = presentation === "home" || presentation === "discovery";
-  const secondaryMetadata = cardSecondaryMetadata(title, location, hostName);
-  const categoryToken = tokens.categories[category] ?? tokens.categories.Other;
-  const previewAvatars = socialPreview?.rosterAllowed
-    ? socialPreview.attendeeAvatars
-    : (socialPreview?.friendAvatars ?? []);
-
-  const notifySwipeState = useCallback((active: boolean) => {
-    if (swipeActiveRef.current === active) return;
-    swipeActiveRef.current = active;
-    swipeCallbackRef.current?.(active);
-  }, []);
-
-  useEffect(() => {
-    swipeCallbackRef.current = onCardSwipeStateChange;
-  }, [onCardSwipeStateChange]);
-
-  useEffect(
-    () => () => {
-      if (swipeActiveRef.current) {
-        swipeActiveRef.current = false;
-        swipeCallbackRef.current?.(false);
-      }
-    },
-    [],
-  );
-
-  const runRsvp = async (status: FeedRsvpAction) => {
-    const intent =
-      status === "going"
-        ? "join"
-        : status === "interested"
-          ? "maybe"
-          : participation.state?.going
-            ? "leave"
-            : participation.state?.pending
-              ? "cancel_request"
-              : "remove_maybe";
-    await participation.perform(intent);
-  };
-
-  const runAction = useCallback(
-    async (
-      action: Exclude<CardAction, "rsvp" | null>,
-      callback: () => Promise<void> | void,
-      fallback: string,
-    ) => {
-      if (actionLock.current || busyAction !== null) return;
-      actionLock.current = true;
-      setBusyAction(action);
-      setActionError("");
-      try {
-        await callback();
-      } catch (error) {
-        setActionError(readableError(error, fallback));
-      } finally {
-        actionLock.current = false;
-        setBusyAction(null);
-      }
-    },
-    [busyAction],
-  );
-
-  const whenText = (() => {
-    if (isCancelled) return "Cancelled";
-    if (isEnded) return "Ended";
-    if (isLive) {
-      return editorial
-        ? compactCountdown("Ends", endsInMinutes)
-        : endsInMinutes === 1
-          ? "Ends in 1 min"
-          : `Ends in ${endsInMinutes} min`;
-    }
-    if (validInterval && startTime > now) {
-      const minutes = Math.ceil((startTime - now) / 60_000);
-      if (minutes < 60)
-        return minutes <= 1 ? "Starts now" : `Starts in ${minutes} min`;
-      return whenLabel || formatDateTime(startTime);
-    }
-    return whenLabel || "";
-  })();
-
-  const mapWhen = (() => {
-    if (!mapPreview || !isLive || !validInterval) return whenText;
-    const formatter = new Intl.DateTimeFormat(undefined, { hour: "numeric", minute: "2-digit" });
-    return [formatter.format(startTime), formatter.format(endTime)].join("–");
-  })();
-
-  const onSwipeableOpen = (
-    direction: SwipeDirection.LEFT | SwipeDirection.RIGHT,
-  ) => {
-    if (!canSwipe) {
-      swipeableRef.current?.close();
-      notifySwipeState(false);
-      return;
-    }
-    void runRsvp(direction === SwipeDirection.RIGHT ? "going" : "interested");
-  };
-
-  const responseLabel = requestPending
-    ? "Request pending"
-    : rsvpStatus === "invited"
-      ? "You are invited"
-      : isGoing
-        ? "You are going"
-        : rsvpStatus === "interested"
-          ? "You are considering it"
-          : "";
-
-  if (presentation === "personal-preview")
-    return (
-      <Pressable
-        testID="personal-activity-preview"
-        accessibilityRole="button"
-        accessibilityLabel={`Open ${title}`}
-        onPress={onOpen}
-        style={({ pressed }) => ({
-          minHeight: 68,
-          paddingHorizontal: 10,
-          paddingVertical: 8,
-          flexDirection: "row",
-          alignItems: "center",
-          gap: 10,
-          borderBottomWidth: 1,
-          borderColor: colors.border,
-          backgroundColor: colors.surface,
-          opacity: pressed ? 0.75 : 1,
-        })}
-      >
-        <BeaconIcon emoji={decorationEmoji} category={category} size={32} />
-        <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
-          <Text
-            numberOfLines={2}
-            style={{
-              color: colors.textPrimary,
-              fontSize: 14,
-              lineHeight: 20,
-              fontWeight: "500",
-            }}
-          >
-            {title}
-          </Text>
-          <Text
-            numberOfLines={1}
-            style={{
-              color: isLive ? colors.accent : colors.textSecondary,
-              fontSize: 12,
-              lineHeight: 16,
-              fontWeight: "400",
-            }}
-          >
-            {[whenText, isHost ? "Hosting" : isGoing ? "Going" : responseLabel]
-              .filter(Boolean)
-              .join(" · ")}
-          </Text>
-        </View>
-        <ChevronRight size={17} color={colors.textSecondary} />
-      </Pressable>
-    );
-
-  const artworkVariant = demoArtwork
+    !mapPreview &&
+    !compact &&
+    !isHost &&
+    !isClosed &&
+    !ended &&
+    !cancelled &&
+    !isFull &&
+    activityMode !== "solo" &&
+    !pending &&
+    !going &&
+    !participation.operation.busy;
+  const tone = tokens.categories[category] ?? tokens.categories.Other;
+  const identity = cardIdentity(data, userId);
+  const markerState =
+    activity && identity
+      ? beaconMarkerState(data, activity, identity, now)
+      : undefined;
+  const relationshipColor = beaconMarkerColor(markerState);
+  const premiumStyle =
+    identity &&
+    data.premium_tool_configs?.find(
+      (config) =>
+        config.activity_id === activityId && config.kind === "appearance",
+    )?.settings.style;
+  const cycleArtwork = demoArtwork
     ? beaconArtworkStyles[
         Array.from(activityId).reduce(
-          (sum, character) => sum + character.charCodeAt(0),
+          (sum, char) => sum + char.charCodeAt(0),
           0,
         ) % beaconArtworkStyles.length
       ]
     : undefined;
-  const card = shouldUseAdaptiveDiscoveryShell(
-    presentation,
-    adaptiveDiscovery,
-  ) ? (
+  const secondary = cardSecondaryMetadata(title, location, hostName);
+  const effectiveTime =
+    cancelled || ended
+      ? undefined
+      : live
+        ? compactCountdown("Ends", Math.max(1, Math.ceil((end - now) / 60000)))
+        : activity
+          ? activityWhen(activity, new Date(now))
+          : whenLabel;
+  const status = cancelled
+    ? "Cancelled"
+    : completed
+      ? "Completed"
+      : ended
+        ? "Ended"
+        : isHost
+          ? "Hosting"
+          : pending
+            ? "Requested"
+            : going
+              ? "Going"
+              : rsvpStatus === "interested"
+                ? "Interested"
+                : rsvpStatus === "invited"
+                  ? "Invited"
+                  : isClosed
+                    ? "Closed"
+                    : undefined;
+  const people = social?.rosterAllowed
+    ? social.attendeeAvatars
+    : social?.friendAvatars;
+  const shortcuts = beaconCardShortcuts(data, userId, activityId);
+  const linkedPlan =
+    !planContext && activity && userId
+      ? readablePlanForActivity(data, activity, userId)
+      : undefined;
+  const cardPlan =
+    planContext ??
+    (linkedPlan && activity && userId
+      ? {
+          title: linkedPlan.title,
+          stepIndex: activity.plan_step_index,
+          stop: readablePlanStopPosition(data, activity, linkedPlan, userId),
+          onPress: () =>
+            router.push({
+              pathname: "/plan/[id]",
+              params: { id: linkedPlan.id },
+            }),
+        }
+      : undefined);
+  const tool =
+    presentation == null && !mapPreview && activity && (isHost || going)
+      ? hubToolShortcuts(data, activity, userId).find(
+          (entry) => entry.tool === "checklist" && !entry.label.endsWith("/0"),
+        )
+      : undefined;
+  const canTapPrimary =
+    participation.state?.choices ||
+    participation.state?.allowed.includes("join");
+  const openLabel = isHost || going ? "Open Beacon" : "View Beacon";
+  const afterMenu = (action: () => void) => {
+    continuation.current = action;
+    setMenuVisible(false);
+  };
+  const runAction = async (
+    action: () => Promise<void> | void,
+    fallback: string,
+  ) => {
+    if (lock.current) return;
+    const epoch = getViewerEpoch();
+    lock.current = true;
+    setBusy(true);
+    setError("");
+    try {
+      await action();
+    } catch (failure) {
+      if (getViewerEpoch() === epoch)
+        setError(
+          failure instanceof Error && failure.message.trim()
+            ? failure.message
+            : fallback,
+        );
+    } finally {
+      lock.current = false;
+      if (getViewerEpoch() === epoch) setBusy(false);
+    }
+  };
+  const openTool = () => {
+    const current = latest.current;
+    const next = current.data.activities.find((row) => row.id === activityId);
+    if (
+      current.userId !== userId ||
+      resolveActivityToolEntry(
+        current.data,
+        next,
+        current.userId,
+        "tools",
+        "checklist",
+      ).tool !== "checklist"
+    )
+      return;
+    router.push({
+      pathname: "/activity/[id]",
+      params: { id: activityId, tab: "tools", tool: "checklist" },
+    });
+  };
+
+  const bookmark = (
+    <HomeAction
+      label={saved ? "Unsave Beacon" : "Save Beacon"}
+      selected={saved}
+      plain
+      disabled={busy}
+      icon={
+        <Bookmark
+          size={19}
+          color={saved ? colors.accent : colors.textSecondary}
+          fill={saved ? colors.accent : "none"}
+        />
+      }
+      onPress={() => void runAction(onSave, "Could not update saved Beacons.")}
+    />
+  );
+  const card = (
     <DiscoveryBeaconCard
+      density={mapPreview ? "compact" : "standard"}
       mapPreview={mapPreview}
-      mapIcon={mapIcon}
-      mapCommunityName={mapCommunityName}
-      mapCommunityKey={mapCommunityKey}
-      mapCommunityType={mapCommunityType}
-      mapHostLabel={hostName}
       activityId={activityId}
       title={title}
       category={category}
-      artworkVariant={artworkVariant}
+      mapIcon={mapIcon ?? activity?.map_icon}
+      artworkVariant={cycleArtwork}
       decorationAccent={decorationAccent}
       decorationEmoji={decorationEmoji}
-      whenLabel={mapWhen}
-      isLive={isLive}
-      locationLabel={
-        secondaryMetadata?.kind === "host" ? null : secondaryMetadata?.label
+      relationshipColor={relationshipColor}
+      cosmeticTint={
+        (identity
+          ? rewardTint(data.equipped_looks?.[activityId]?.card)
+          : undefined) ??
+        (premiumStyle === "sunrise"
+          ? tokens.categories.Creative.color
+          : premiumStyle === "ocean"
+            ? tokens.categories.Study.color
+            : undefined)
       }
-      goingCount={socialPreview?.capacity.count ?? goingCount}
-      capacity={socialPreview?.capacity ?? null}
-      friendsGoing={socialPreview?.friendCount}
-      onOpenPeople={socialPreview?.rosterAllowed ? onOpenPeople : undefined}
-      hosted={isHost}
-      planContext={planContext}
-      headerAccessory={headerAccessory}
+      whenLabel={effectiveTime}
+      statusLabel={
+        activity &&
+        userId &&
+        !ended &&
+        !cancelled &&
+        beaconRoleFor(data, activity, userId) === "coowner"
+          ? "Co-hosting"
+          : status
+      }
+      isLive={live}
+      hostLabel={
+        secondary?.kind === "host" && !isHost ? secondary.label : undefined
+      }
+      locationLabel={secondary?.kind !== "host" ? secondary?.label : undefined}
+      goingCount={social?.capacity.count ?? goingCount}
+      capacity={social?.capacity}
+      friendsGoing={social?.friendCount}
       socialAvatars={
-        showAvatars && previewAvatars.length ? (
-          <AvatarStack people={previewAvatars} size={24} limit={3} />
+        showAvatars && people?.length ? (
+          <AvatarStack people={people} size={24} limit={3} />
         ) : undefined
       }
+      planContext={cardPlan}
+      headerAccessory={headerAccessory}
       context={compactFooter}
-      shortcutActions={
-        <BeaconCardShortcuts
-          activityId={activityId}
-          section="social"
-          labeledSocial
-        />
-      }
-      actionShortcuts={
-        <BeaconCardShortcuts
-          activityId={activityId}
-          section="actions"
-          mapPreview={mapPreview}
-          onChat={onChat}
-          menuOwner={
-            mapPreview
-              ? { anchorRef: menuAnchor, onOpen: () => setMenuVisible(true) }
-              : undefined
-          }
-        />
-      }
-      primaryAction={
-        <ParticipationButtons
-          controller={participation}
-          onOpen={onOpen}
-          hostingLabel={isHost ? "Hosting management" : undefined}
-          primaryOnly
-          prominent
-          stretch
-          showMaybe={false}
-        />
+      smartFeature={
+        tool ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={openTool}
+            style={({ pressed }) => ({
+              minHeight: 44,
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 8,
+              padding: 8,
+              borderRadius: 10,
+              backgroundColor: colors.surfaceRaised,
+              opacity: pressed ? 0.75 : 1,
+            })}
+          >
+            <ListChecks size={18} color={colors.accent} />
+            <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+              <Text
+                style={{ ...tokens.type.secondary, color: colors.textPrimary }}
+              >
+                Checklist
+              </Text>
+              <Text
+                style={{ ...tokens.type.caption, color: colors.textSecondary }}
+              >
+                {tool.label.replace(/^Checklist\s*/, "")} complete
+              </Text>
+            </View>
+            <ChevronRight size={16} color={colors.textSecondary} />
+          </Pressable>
+        ) : null
       }
       onDetails={onOpen}
       detailsLabel={detailsLabel}
       menu={
         mapPreview ? (
-          <HomeAction
-            label={saved ? "Unsave Beacon" : "Save Beacon"}
-            selected={saved}
-            plain
-            disabled={busyAction !== null}
-            icon={
-              <Bookmark
-                size={19}
-                color={saved ? colors.accent : colors.textSecondary}
-                fill={saved ? colors.accent : "none"}
+          bookmark
+        ) : (
+          <>
+            {bookmark}
+            <View ref={menuAnchor} collapsable={false}>
+              <HomeAction
+                label="More Beacon actions"
+                plain
+                disabled={busy}
+                icon={<MoreHorizontal size={20} color={colors.textSecondary} />}
+                onPress={() => setMenuVisible(true)}
               />
-            }
-            onPress={() =>
-              void runAction("save", onSave, "Could not update saved Beacons.")
-            }
+            </View>
+          </>
+        )
+      }
+      shortcutActions={
+        <BeaconCardShortcuts activityId={activityId} section="social" />
+      }
+      actionShortcuts={
+        <BeaconCardShortcuts
+          activityId={activityId}
+          section="actions"
+          onChat={onChat}
+        />
+      }
+      primaryAction={
+        isHost || going || !canTapPrimary || ended || cancelled ? (
+          <HomeAction
+            title={openLabel}
+            label={isHost ? "Hosting management" : openLabel}
+            prominent
+            primary
+            stretch
+            onPress={onOpen}
           />
         ) : (
-          <View ref={menuAnchor} collapsable={false}>
-            <HomeAction
-              label="More Beacon actions"
-              plain
-              disabled={busyAction !== null}
-              icon={<MoreHorizontal size={20} color={colors.textSecondary} />}
-              onPress={() => setMenuVisible(true)}
-            />
-          </View>
+          <ParticipationButtons
+            controller={participation}
+            onOpen={onOpen}
+            primaryOnly
+            prominent
+            stretch
+            showMaybe={false}
+          />
         )
       }
       feedback={
-        <>
-          {participation.feedback}
-          {actionError ? (
-            <Text
-              accessibilityRole="alert"
-              accessibilityLiveRegion="polite"
-              style={{ color: colors.danger, ...tokens.type.caption }}
-            >
-              {actionError}
-            </Text>
-          ) : null}
-        </>
+        participation.feedback || error ? (
+          <>
+            {participation.feedback}
+            {error ? (
+              <Text
+                accessibilityRole="alert"
+                accessibilityLiveRegion="polite"
+                style={{ color: colors.danger, ...tokens.type.caption }}
+              >
+                {error}
+              </Text>
+            ) : null}
+          </>
+        ) : null
       }
     />
-  ) : (
-    <Card
-      testID={`beacon-feed-card-${activityId}`}
-      style={{
-        padding: editorial ? 12 : compact ? tokens.space.sm : tokens.space.md,
-        gap: editorial || compact ? 6 : 10,
-        borderWidth: 1,
-        borderBottomWidth: 1,
-        borderBottomColor: colors.border,
-        borderLeftWidth: editorial ? 1 : 4,
-        borderLeftColor: editorial ? colors.border : categoryToken.color,
-        borderRadius:
-          editorial || compact ? tokens.radius.md : tokens.radius.card,
-        backgroundColor: colors.surface,
-      }}
-    >
-      <BeaconCardArtwork
-        category={category}
-        accent={decorationAccent}
-        variant={artworkVariant}
-        quiet={!editorial || compact}
-        radius={editorial || compact ? tokens.radius.md : tokens.radius.card}
-      />
-      {editorial ? (
-        <>
-          <View
-            testID="discovery-editorial-row"
-            style={{ flexDirection: "row", alignItems: "flex-start", gap: 12 }}
-          >
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Open ${title}`}
-              onPress={onOpen}
-              style={{
-                width: compact ? 44 : 64,
-                gap: tokens.space.xxs,
-                minHeight: compact ? 64 : 80,
-              }}
-            >
-              <View
-                testID="beacon-category-artwork"
-                style={{
-                  width: compact ? 44 : 64,
-                  height: compact ? 44 : 68,
-                  borderRadius: tokens.radius.sm,
-                  overflow: "hidden",
-                  backgroundColor: categoryToken.tint,
-                  justifyContent: "center",
-                  alignItems: "center",
-                }}
-              >
-                <View
-                  style={{
-                    position: "absolute",
-                    width: 70,
-                    height: 70,
-                    borderRadius: 35,
-                    borderWidth: 1,
-                    borderColor: categoryToken.color,
-                    opacity: 0.18,
-                    top: -24,
-                    right: -22,
-                  }}
-                />
-                <View
-                  style={{
-                    position: "absolute",
-                    width: 45,
-                    height: 45,
-                    borderRadius: 23,
-                    borderWidth: 1,
-                    borderColor: categoryToken.color,
-                    opacity: 0.18,
-                    bottom: -16,
-                    left: -12,
-                  }}
-                />
-                <BeaconIcon
-                  emoji={decorationEmoji}
-                  category={category}
-                  size={compact ? 28 : 38}
-                />
-              </View>
-              <Text
-                style={{
-                  color: categoryToken.color,
-                  fontSize: 10,
-                  lineHeight: 14,
-                  textAlign: "center",
-                  fontWeight: "500",
-                }}
-              >
-                {category}
-              </Text>
-            </Pressable>
-            <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
-              <View
-                style={{
-                  flexDirection: "row",
-                  justifyContent: "space-between",
-                  alignItems: "flex-start",
-                  gap: 4,
-                }}
-              >
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    flexWrap: "wrap",
-                    gap: 4,
-                    flex: 1,
-                    minWidth: 0,
-                    maxWidth: "100%",
-                  }}
-                >
-                  {isHost ? (
-                    <View
-                      style={{
-                        flexDirection: "row",
-                        alignItems: "center",
-                        gap: 4,
-                        paddingHorizontal: 6,
-                        paddingVertical: 3,
-                        borderRadius: 8,
-                        backgroundColor: colors.surfaceRaised,
-                      }}
-                    >
-                      <Crown size={11} color={colors.accent} />
-                      <Text
-                        style={{
-                          color: colors.accent,
-                          fontSize: 11,
-                          lineHeight: 16,
-                        }}
-                      >
-                        Hosting
-                      </Text>
-                    </View>
-                  ) : null}
-                  {isLive ? (
-                    <View
-                      style={{
-                        paddingHorizontal: 5,
-                        paddingVertical: 3,
-                        borderRadius: 8,
-                        backgroundColor: colors.surfaceRaised,
-                      }}
-                    >
-                      <LiveIndicator
-                        reducedMotion={reducedMotion}
-                        active={screenFocused && appActive && animationVisible}
-                      />
-                    </View>
-                  ) : null}
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: 4,
-                      paddingHorizontal: 6,
-                      paddingVertical: 3,
-                      borderRadius: 8,
-                      backgroundColor: categoryToken.tint,
-                      flexShrink: 1,
-                      maxWidth: "100%",
-                    }}
-                  >
-                    <Clock3
-                      size={11}
-                      color={isLive ? colors.accent : categoryToken.color}
-                    />
-                    <Text
-                      testID="discovery-timing"
-                      style={{
-                        color: isLive ? colors.accent : categoryToken.color,
-                        fontSize: 11,
-                        lineHeight: 16,
-                        flexShrink: 1,
-                      }}
-                    >
-                      {isCancelled ? "Cancelled" : isEnded ? "Ended" : whenText}
-                    </Text>
-                  </View>
-                </View>
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    marginLeft: "auto",
-                    marginTop: -12,
-                    flexShrink: 0,
-                    gap: 2,
-                  }}
-                >
-                  <View ref={menuAnchor} collapsable={false}>
-                    <HomeAction
-                      label="More Beacon actions"
-                      plain
-                      icon={
-                        <MoreHorizontal
-                          size={18}
-                          color={colors.textSecondary}
-                        />
-                      }
-                      onPress={() => setMenuVisible(true)}
-                    />
-                  </View>
-                </View>
-              </View>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`View ${title} details`}
-                onPress={onOpen}
-                style={{ minHeight: 44, justifyContent: "flex-start", gap: 5 }}
-              >
-                <Text
-                  accessibilityRole="header"
-                  style={{
-                    color: colors.textPrimary,
-                    ...tokens.type.headline,
-                  }}
-                >
-                  {title}
-                </Text>
-                {secondaryMetadata?.kind !== "host" && secondaryMetadata ? (
-                  <View
-                    style={{
-                      flexDirection: "row",
-                      alignItems: "flex-start",
-                      gap: 5,
-                    }}
-                  >
-                    <MapPin size={13} color={colors.textSecondary} />
-                    <Text
-                      testID="discovery-secondary-metadata"
-                      style={{
-                        flex: 1,
-                        color: colors.textSecondary,
-                        fontSize: 12,
-                        lineHeight: 17,
-                      }}
-                    >
-                      {secondaryMetadata.label}
-                    </Text>
-                  </View>
-                ) : null}
-              </Pressable>
-            </View>
-          </View>
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              flexWrap: "wrap",
-              gap: 6,
-            }}
-          >
-            {showAvatars && socialPreview?.friendAvatars.length ? (
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  paddingRight: 4,
-                }}
-              >
-                {socialPreview.friendAvatars.map((person, index) => (
-                  <View
-                    key={person.id}
-                    style={{
-                      marginLeft: index ? -7 : 0,
-                      borderRadius: 16,
-                      borderWidth: 2,
-                      borderColor: colors.surface,
-                    }}
-                  >
-                    <ProfileAvatar profile={person} size={25} />
-                  </View>
-                ))}
-                {socialPreview.friendRemainder > 0 ? (
-                  <Text
-                    style={{
-                      color: colors.textSecondary,
-                      fontSize: 11,
-                      marginLeft: 3,
-                    }}
-                  >
-                    +{socialPreview.friendRemainder}
-                  </Text>
-                ) : null}
-              </View>
-            ) : null}
-            <View style={{ flex: 1, minWidth: 0 }}>
-              {socialPreview?.host ? (
-                <Text
-                  testID="discovery-host"
-                  numberOfLines={compact ? 1 : undefined}
-                  style={{
-                    color: colors.textSecondary,
-                    ...tokens.type.caption,
-                  }}
-                >
-                  {socialPreview.host.id === socialViewer
-                    ? "You’re hosting"
-                    : `Hosted by ${socialPreview.host.name}`}
-                </Text>
-              ) : null}
-              <Text
-                testID="discovery-going-count"
-                style={{
-                  color: colors.textSecondary,
-                  ...tokens.type.caption,
-                }}
-              >
-                {socialPreview?.capacity.count ?? goingCount} going
-                {socialPreview && socialPreview.friendCount > 1
-                  ? ` · ${socialPreview.friendCount} friends attending`
-                  : ""}
-              </Text>
-            </View>
-          </View>
-          {socialPreview?.capacity.limit != null ? (
-            <View style={{ gap: 5 }}>
-              <Text
-                style={{
-                  color: colors.textSecondary,
-                  fontSize: 11,
-                  lineHeight: 16,
-                }}
-              >
-                {socialPreview.capacity.strict
-                  ? `${socialPreview.capacity.count} of ${socialPreview.capacity.limit} · ${socialPreview.capacity.remaining} spots left`
-                  : `Suggested size ${socialPreview.capacity.limit}`}
-              </Text>
-              {socialPreview.capacity.strict ? (
-                <View
-                  accessible
-                  accessibilityLabel={`${socialPreview.capacity.count} of ${socialPreview.capacity.limit} places filled`}
-                  style={{ flexDirection: "row", gap: 3 }}
-                >
-                  {Array.from({ length: 8 }, (_, index) => (
-                    <View
-                      key={index}
-                      style={{
-                        flex: 1,
-                        height: 4,
-                        borderRadius: 3,
-                        overflow: "hidden",
-                        backgroundColor: colors.border,
-                      }}
-                    >
-                      <View
-                        style={{
-                          height: 4,
-                          width: `${Math.max(0, Math.min(1, (socialPreview.capacity.count / Math.max(1, socialPreview.capacity.limit!)) * 8 - index)) * 100}%`,
-                          backgroundColor: colors.accent,
-                        }}
-                      />
-                    </View>
-                  ))}
-                </View>
-              ) : null}
-            </View>
-          ) : null}
-          <BeaconCardShortcuts
-            activityId={activityId}
-            section="social"
-            labeledSocial
-          />
-          <View
-            testID="discovery-card-actions"
-            style={{
-              flexDirection: "row",
-              flexWrap: "wrap",
-              alignItems: "flex-end",
-              gap: 6,
-            }}
-          >
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <ParticipationButtons
-                controller={participation}
-                onOpen={onOpen}
-                stretch
-                prominent
-                primaryOnly
-                showMaybe={false}
-              />
-            </View>
-            <BeaconCardShortcuts
-              activityId={activityId}
-              section="actions"
-              onChat={onChat}
-            />
-          </View>
-
-          {participation.feedback}
-          {compactFooter}
-        </>
-      ) : compact ? (
-        <>
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "flex-start",
-              gap: tokens.space.sm,
-            }}
-          >
-            <ActivityBadge category={category} size={36} />
-            <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: tokens.space.xs,
-                }}
-              >
-                <Text
-                  numberOfLines={1}
-                  style={{
-                    flex: 1,
-                    color: categoryToken.color,
-                    fontSize: tokens.type.caption.fontSize,
-                    lineHeight: tokens.type.caption.lineHeight,
-                    fontWeight: tokens.type.weight.bold,
-                    textTransform: "uppercase",
-                    letterSpacing: 0.45,
-                  }}
-                >
-                  {category}
-                  {featured ? (isLive ? " · LIVE" : " · UP NEXT") : ""}
-                </Text>
-                {isLive ? (
-                  <LiveIndicator reducedMotion={reducedMotion} />
-                ) : null}
-                <Text
-                  accessibilityLabel={`${goingCount} ${goingCount === 1 ? "person" : "people"} going`}
-                  numberOfLines={1}
-                  style={{
-                    color: colors.textSecondary,
-                    ...tokens.type.caption,
-                    fontWeight: tokens.type.weight.semibold,
-                  }}
-                >
-                  {goingCount} going
-                </Text>
-              </View>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`View ${title} details`}
-                onPress={onOpen}
-                onLongPress={() => {
-                  setMenuVisible(true);
-                  void uiHaptics.light();
-                }}
-                delayLongPress={450}
-                style={{ minHeight: 44, justifyContent: "center" }}
-              >
-                <Text
-                  accessibilityRole="header"
-                  numberOfLines={2}
-                  maxFontSizeMultiplier={tokens.type.denseMaxMultiplier}
-                  style={{
-                    color: colors.textPrimary,
-                    ...tokens.type.headline,
-                  }}
-                >
-                  {title}
-                </Text>
-              </Pressable>
-            </View>
-            <View ref={menuAnchor} collapsable={false}>
-              <IconButton
-                label="More Beacon actions"
-                onPress={() => setMenuVisible(true)}
-                disabled={busyAction !== null}
-              >
-                <MoreHorizontal size={20} color={colors.textPrimary} />
-              </IconButton>
-            </View>
-          </View>
-
-          {actionError ? (
-            <Text
-              accessibilityRole="alert"
-              accessibilityLiveRegion="polite"
-              style={{ color: colors.danger, ...tokens.type.caption }}
-            >
-              {actionError}
-            </Text>
-          ) : null}
-
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              gap: 4,
-              flexWrap: "wrap",
-            }}
-          >
-            <View
-              style={{ flexGrow: 1, flexBasis: "100%", minWidth: 0, gap: 2 }}
-            >
-              <Text
-                numberOfLines={1}
-                style={{ color: colors.textSecondary, ...tokens.type.caption }}
-              >
-                {[hostName, location?.label].filter(Boolean).join(" · ")}
-              </Text>
-              <Text
-                numberOfLines={1}
-                style={{
-                  color: isLive ? colors.accent : colors.textSecondary,
-                  ...tokens.type.caption,
-                }}
-              >
-                {[
-                  whenText,
-                  isHost
-                    ? "Hosting"
-                    : isGoing
-                      ? "Going"
-                      : requestPending
-                        ? "Request pending"
-                        : rsvpStatus === "interested"
-                          ? "Maybe"
-                          : "Beacon",
-                ]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </Text>
-            </View>
-            <View style={{ width: "100%", minWidth: 0 }}>
-              <BeaconCardShortcuts activityId={activityId} section="social" />
-            </View>
-            <View style={{ flex: 1, minWidth: 0 }}>
-              <ParticipationButtons
-                controller={participation}
-                onOpen={onOpen}
-                prominent
-                stretch
-                showMaybe={false}
-                primaryOnly
-              />
-            </View>
-            <BeaconCardShortcuts
-              activityId={activityId}
-              section="actions"
-              onChat={onChat}
-            />
-          </View>
-
-          {planRelation ? (
-            <Text
-              numberOfLines={1}
-              style={{ color: colors.textSecondary, ...tokens.type.caption }}
-            >
-              Plan · {planRelation}
-            </Text>
-          ) : null}
-          {compactFooter}
-        </>
-      ) : (
-        <>
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "flex-start",
-              gap: tokens.space.sm,
-            }}
-          >
-            <ActivityBadge category={category} size={42} />
-            <View style={{ flex: 1, minWidth: 0, gap: tokens.space.xs }}>
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  flexWrap: "wrap",
-                  gap: tokens.space.xs,
-                }}
-              >
-                <Text
-                  style={{
-                    color: categoryToken.color,
-                    fontSize: tokens.type.caption.fontSize,
-                    lineHeight: tokens.type.caption.lineHeight,
-                    fontWeight: tokens.type.weight.bold,
-                    textTransform: "uppercase",
-                    letterSpacing: 0.45,
-                  }}
-                >
-                  {category}
-                </Text>
-                {isLive ? (
-                  <LiveIndicator reducedMotion={reducedMotion} />
-                ) : null}
-              </View>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`View ${title} details`}
-                onPress={onOpen}
-                onLongPress={() => {
-                  setMenuVisible(true);
-                  void uiHaptics.light();
-                }}
-                delayLongPress={450}
-                style={{ minHeight: 44, justifyContent: "center" }}
-              >
-                <Text
-                  accessibilityRole="header"
-                  numberOfLines={2}
-                  maxFontSizeMultiplier={tokens.type.denseMaxMultiplier}
-                  style={{
-                    color: colors.textPrimary,
-                    ...tokens.type.headline,
-                  }}
-                >
-                  {title}
-                </Text>
-              </Pressable>
-              <View
-                style={{
-                  flexDirection: "row",
-                  alignItems: "center",
-                  gap: tokens.space.sm,
-                }}
-              >
-                {hostAvatarUri ? (
-                  <Image
-                    accessibilityLabel={`${hostName}'s profile photo`}
-                    source={{ uri: hostAvatarUri }}
-                    style={{
-                      width: 30,
-                      height: 30,
-                      borderRadius: 15,
-                      backgroundColor: colors.surfaceRaised,
-                    }}
-                  />
-                ) : (
-                  <Avatar
-                    name={hostName}
-                    size={30}
-                    accessibilityLabel={`Avatar for ${hostName}`}
-                  />
-                )}
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text
-                    numberOfLines={1}
-                    maxFontSizeMultiplier={tokens.type.denseMaxMultiplier}
-                    style={{
-                      color: colors.textPrimary,
-                      ...tokens.type.secondary,
-                      fontWeight: tokens.type.weight.semibold,
-                    }}
-                  >
-                    {hostName}
-                  </Text>
-                  <Text
-                    numberOfLines={1}
-                    style={{
-                      color: colors.textSecondary,
-                      ...tokens.type.caption,
-                    }}
-                  >
-                    Host
-                  </Text>
-                </View>
-                <View ref={menuAnchor} collapsable={false}>
-                  <IconButton
-                    label="More Beacon actions"
-                    onPress={() => setMenuVisible(true)}
-                    disabled={busyAction !== null}
-                  >
-                    <MoreHorizontal size={20} color={colors.textPrimary} />
-                  </IconButton>
-                </View>
-              </View>
-            </View>
-          </View>
-
-          {whenText || location ? (
-            <View style={{ gap: tokens.space.xs }}>
-              {whenText ? (
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: tokens.space.xs,
-                  }}
-                >
-                  {isLive ? (
-                    <Clock3 size={16} color={colors.accent} />
-                  ) : (
-                    <Clock3 size={16} color={colors.textSecondary} />
-                  )}
-                  <Text
-                    accessibilityLabel={
-                      isLive ? `Live now, ${whenText}` : whenText
-                    }
-                    style={{
-                      color: isLive ? colors.accent : colors.textSecondary,
-                      ...tokens.type.secondary,
-                      fontWeight: isLive
-                        ? tokens.type.weight.semibold
-                        : tokens.type.weight.regular,
-                    }}
-                  >
-                    {whenText}
-                  </Text>
-                </View>
-              ) : null}
-              {isLive ? (
-                <View
-                  accessible
-                  accessibilityRole="progressbar"
-                  accessibilityLabel={`${title} elapsed time`}
-                  accessibilityValue={{
-                    min: 0,
-                    max: 100,
-                    now: Math.round(elapsedPercent),
-                  }}
-                  style={{
-                    height: 4,
-                    borderRadius: 2,
-                    overflow: "hidden",
-                    backgroundColor: colors.surfaceRaised,
-                  }}
-                >
-                  <View
-                    style={{
-                      width: `${elapsedPercent}%`,
-                      height: "100%",
-                      borderRadius: 2,
-                      backgroundColor: colors.accent,
-                    }}
-                  />
-                </View>
-              ) : null}
-              {location ? (
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: tokens.space.xs,
-                  }}
-                >
-                  {location.kind === "online" ? (
-                    <Monitor size={16} color={categoryToken.color} />
-                  ) : (
-                    <MapPin size={16} color={categoryToken.color} />
-                  )}
-                  <Text
-                    numberOfLines={1}
-                    style={{
-                      flex: 1,
-                      color: colors.textPrimary,
-                      ...tokens.type.secondary,
-                    }}
-                  >
-                    {location.label}
-                  </Text>
-                  {location.distanceLabel ? (
-                    <Text
-                      numberOfLines={1}
-                      style={{
-                        color: colors.textSecondary,
-                        ...tokens.type.caption,
-                      }}
-                    >
-                      {location.distanceLabel}
-                    </Text>
-                  ) : null}
-                </View>
-              ) : null}
-            </View>
-          ) : null}
-
-          <View
-            style={{
-              flexDirection: "row",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: tokens.space.sm,
-            }}
-          >
-            <View
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                gap: tokens.space.sm,
-                flex: 1,
-                minWidth: 0,
-              }}
-            >
-              {goingAvatars.length ? (
-                <AvatarStack people={goingAvatars} size={30} limit={3} />
-              ) : null}
-              <Text
-                numberOfLines={1}
-                accessibilityLabel={`${goingCount} ${goingCount === 1 ? "person" : "people"} going`}
-                style={{
-                  flexShrink: 1,
-                  color: colors.textPrimary,
-                  ...tokens.type.secondary,
-                  fontWeight: tokens.type.weight.semibold,
-                }}
-              >
-                {goingCount} going
-              </Text>
-            </View>
-            <View style={{ alignItems: "flex-end", gap: 2 }}>
-              {target !== null && target > 0 ? (
-                <Text
-                  style={{
-                    color: colors.textSecondary,
-                    ...tokens.type.caption,
-                  }}
-                >
-                  {target > goingCount
-                    ? `Need ${Math.max(0, target - goingCount)} more`
-                    : "Goal met"}
-                </Text>
-              ) : null}
-              {capacityRemaining !== null ? (
-                <Text
-                  style={{
-                    color: colors.textSecondary,
-                    ...tokens.type.caption,
-                  }}
-                >
-                  {capacityRemaining}{" "}
-                  {capacityRemaining === 1 ? "spot" : "spots"} left
-                </Text>
-              ) : null}
-            </View>
-          </View>
-
-          {responseLabel ? (
-            <Text
-              accessibilityLiveRegion="polite"
-              style={{
-                color: isGoing ? colors.accent : colors.textSecondary,
-                ...tokens.type.caption,
-                fontWeight: tokens.type.weight.semibold,
-              }}
-            >
-              {responseLabel}
-            </Text>
-          ) : null}
-
-          <BeaconCardShortcuts
-            activityId={activityId}
-            section="social"
-            labeledSocial
-          />
-          <View
-            style={{
-              flexDirection: "row",
-              flexWrap: "wrap",
-              alignItems: "center",
-              gap: 6,
-            }}
-          >
-            <View style={{ flex: 1, minWidth: 120 }}>
-              <ParticipationButtons
-                controller={participation}
-                onOpen={onOpen}
-                prominent
-                stretch
-                showMaybe={false}
-                primaryOnly
-              />
-            </View>
-            <BeaconCardShortcuts
-              activityId={activityId}
-              section="actions"
-              onChat={onChat}
-            />
-          </View>
-          {participation.feedback}
-
-          {saved ? (
-            <Text
-              accessibilityLabel="Saved Beacon"
-              style={{
-                alignSelf: "flex-end",
-                color: colors.accent,
-                ...tokens.type.caption,
-                fontWeight: tokens.type.weight.semibold,
-              }}
-            >
-              Saved
-            </Text>
-          ) : null}
-
-          {actionError ? (
-            <Text
-              accessibilityRole="alert"
-              accessibilityLiveRegion="polite"
-              style={{ color: colors.danger, ...tokens.type.caption }}
-            >
-              {actionError}
-            </Text>
-          ) : null}
-        </>
-      )}
-    </Card>
   );
 
   return (
-    <View style={{ gap: tokens.space.xs }}>
-      {!compact && canSwipe ? (
+    <View testID={mapPreview ? undefined : `beacon-feed-card-${activityId}`}>
+      {canSwipe ? (
         <Swipeable
-          ref={swipeableRef}
-          enabled={canSwipe}
+          ref={swipeable}
           friction={1.15}
           leftThreshold={102}
           rightThreshold={102}
           overshootLeft={false}
           overshootRight={false}
-          containerStyle={{
-            borderRadius: tokens.radius.card,
-            overflow: "hidden",
+          containerStyle={{ borderRadius: 16, overflow: "hidden" }}
+          onSwipeableOpenStartDrag={() => notifySwipe(true)}
+          onSwipeableCloseStartDrag={() => notifySwipe(false)}
+          onSwipeableWillClose={() => notifySwipe(false)}
+          onSwipeableClose={() => notifySwipe(false)}
+          onSwipeableOpen={(direction) => {
+            if (canSwipe)
+              void participation.perform(
+                direction === SwipeDirection.RIGHT ? "join" : "maybe",
+              );
+            swipeable.current?.close();
+            notifySwipe(false);
           }}
-          childrenContainerStyle={{ borderRadius: tokens.radius.card }}
-          onSwipeableOpenStartDrag={() => notifySwipeState(true)}
-          onSwipeableCloseStartDrag={() => notifySwipeState(false)}
-          onSwipeableWillClose={() => notifySwipeState(false)}
-          onSwipeableClose={() => notifySwipeState(false)}
-          onSwipeableOpen={onSwipeableOpen}
           renderLeftActions={(progress) => (
             <SwipeReveal
               progress={progress}
@@ -1688,9 +648,9 @@ export function BeaconFeedCard({
             <SwipeReveal
               progress={progress}
               label="Maybe"
-              color={categoryToken.color}
-              backgroundColor={categoryToken.tint}
-              icon={<Star size={17} color={categoryToken.color} />}
+              color={tone.color}
+              backgroundColor={tone.tint}
+              icon={<Star size={17} color={tone.color} />}
             />
           )}
         >
@@ -1699,110 +659,110 @@ export function BeaconFeedCard({
       ) : (
         card
       )}
-      <ContextMenu
-        title={mapPreview ? "Beacon tools & actions" : title}
-        mode={mapPreview ? "dropdown" : "context"}
-        anchoredOnly={mapPreview}
-        visible={menuVisible}
-        anchorRef={menuAnchor}
-        onClose={() => setMenuVisible(false)}
-        onDismiss={menuDismissed}
-      >
-        {mapPreview ? (
-          <BeaconToolMenuRows activityId={activityId} afterMenu={afterMenu} />
-        ) : null}
-        {participation.state?.allowed.length ? (
-          <MenuGroup title="Participation">
-            {participation.state.choices ? (
-              <ActionRow
-                label="Change RSVP"
-                icon={<CircleHelp size={18} color={colors.textSecondary} />}
-                onPress={() => afterMenu(participation.openChoices)}
+      {!mapPreview && (
+        <ContextMenu
+          title={title}
+          mode="context"
+          visible={menuVisible}
+          anchorRef={menuAnchor}
+          onClose={() => setMenuVisible(false)}
+          onDismiss={() => {
+            const action = continuation.current;
+            continuation.current = null;
+            action?.();
+          }}
+        >
+          {participation.state?.allowed.length ? (
+            <MenuGroup title="Participation">
+              {participation.state.choices && (
+                <ActionRow
+                  label="Change RSVP"
+                  icon={<CircleHelp size={18} color={colors.textSecondary} />}
+                  onPress={() => afterMenu(participation.openChoices)}
+                />
+              )}
+              <ParticipationActions
+                state={participation.state}
+                busy={participation.operation.busy}
+                onPerform={participation.perform}
+                after={afterMenu}
+                omitJoin
               />
-            ) : null}
-            <ParticipationActions
-              state={participation.state}
-              busy={participation.operation.busy}
-              onPerform={participation.perform}
-              after={afterMenu}
-              omitJoin
+            </MenuGroup>
+          ) : null}
+          <MenuGroup title="Beacon actions">
+            {social?.rosterAllowed && onOpenPeople && (
+              <ActionRow
+                label="People"
+                icon={<UsersRound size={18} color={colors.textSecondary} />}
+                onPress={() =>
+                  afterMenu(() => {
+                    const current = latest.current;
+                    if (
+                      current.userId === userId &&
+                      cardSocialPreview(
+                        current.data,
+                        current.userId,
+                        activityId,
+                      )?.rosterAllowed
+                    )
+                      onOpenPeople();
+                  })
+                }
+              />
+            )}
+            {shortcuts?.canMap && onMap && (
+              <ActionRow
+                label="View on Map"
+                icon={<MapPin size={18} color={colors.textSecondary} />}
+                onPress={() =>
+                  afterMenu(() => {
+                    const current = latest.current;
+                    if (
+                      current.userId === userId &&
+                      beaconCardShortcuts(
+                        current.data,
+                        current.userId,
+                        activityId,
+                      )?.canMap
+                    )
+                      onMap();
+                  })
+                }
+              />
+            )}
+            <ActionRow
+              label="Share Beacon"
+              icon={<Share2 size={18} color={colors.textSecondary} />}
+              disabled={busy}
+              onPress={() =>
+                afterMenu(
+                  () => void runAction(onShare, "Could not share this Beacon."),
+                )
+              }
             />
           </MenuGroup>
-        ) : null}
-        <MenuGroup title={mapPreview ? "Beacon actions" : "Save & Share"}>
-          {!mapPreview && onMap && canMap ? (
-            <ActionRow
-              label="View on Map"
-              icon={<MapPin size={18} color={colors.textSecondary} />}
-              onPress={() =>
-                afterMenu(() => {
-                  if (
-                    latestMap.current.viewer === socialViewer &&
-                    beaconCardShortcuts(
-                      latestMap.current.data,
-                      latestMap.current.viewer,
-                      activityId,
-                    )?.canMap
+          {onReport && !isHost && (
+            <MenuGroup title="Safety">
+              <ActionRow
+                label="Report Beacon"
+                danger
+                icon={<Flag size={18} color={colors.danger} />}
+                disabled={busy}
+                onPress={() =>
+                  afterMenu(
+                    () =>
+                      void runAction(
+                        onReport,
+                        "Could not open the report flow.",
+                      ),
                   )
-                    onMap();
-                })
-              }
-            />
-          ) : null}
-          {!mapPreview ? (
-            <ActionRow
-              label={saved ? "Unsave Beacon" : "Save Beacon"}
-              icon={<Bookmark size={18} color={colors.textSecondary} />}
-              disabled={busyAction !== null}
-              onPress={() =>
-                afterMenu(
-                  () =>
-                    void runAction(
-                      "save",
-                      onSave,
-                      "Could not update saved Beacons.",
-                    ),
-                )
-              }
-            />
-          ) : null}
-          <ActionRow
-            label="Share Beacon"
-            icon={<Share2 size={18} color={colors.textSecondary} />}
-            disabled={busyAction !== null}
-            onPress={() =>
-              afterMenu(
-                () =>
-                  void runAction(
-                    "share",
-                    onShare,
-                    "Could not share this Beacon.",
-                  ),
-              )
-            }
-          />
-        </MenuGroup>
-        {onReport && !isHost ? (
-          <MenuGroup title="Safety">
-            <ActionRow
-              label="Report Beacon"
-              danger
-              icon={<Flag size={18} color={colors.danger} />}
-              disabled={busyAction !== null}
-              onPress={() =>
-                afterMenu(
-                  () =>
-                    void runAction(
-                      "report",
-                      onReport,
-                      "Could not open the report flow.",
-                    ),
-                )
-              }
-            />
-          </MenuGroup>
-        ) : null}
-      </ContextMenu>
+                }
+              />
+            </MenuGroup>
+          )}
+        </ContextMenu>
+      )}
       {participation.dialogs}
     </View>
   );

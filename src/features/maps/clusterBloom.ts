@@ -16,48 +16,39 @@ const intersects = (a: Box, b: Box) =>
   Math.abs(a.x - b.x) < (a.width + b.width) / 2 + 2 &&
   Math.abs(a.y - b.y) < (a.height + b.height) / 2 + 2;
 
-export function constellationDiameter(count: number) {
-  return count >= 500 ? 38 : count >= 200 ? 30 : count >= 50 ? 24 : count >= 10 ? 18 : 12;
+export function stellarDiameter(count: number) {
+  return Math.min(56, Math.round(18 + 13 * Math.log10(Math.max(2, count) / 2)));
 }
 
-function constellationDots(
-  item: NativeMapPresentation,
-  signal: Box,
-  clear: (box: Box) => boolean,
-) {
-  const regional = item.scale === "micro";
-  for (let length = Math.min(item.beacons.length, regional ? 2 : 3); length > 0; length--) {
-    const dots = Array.from({ length }, (_, index) => {
-      const angle = length === 1 ? -Math.PI / 2 : -Math.PI * (0.16 + 0.68 * index / (length - 1));
-      const radius = signal.width / 2;
-      return { size: regional ? 4 : 5, offset: { x: signal.x + Math.cos(angle) * radius, y: signal.y + Math.sin(angle) * radius } };
-    });
-    if (
-      dots.every(({ offset, size }) =>
-        clear({ ...offset, width: size, height: size }),
-      )
-    )
-      return dots;
-  }
-  return [];
-}
+// All paths share a 100 × 100 view box. The colored facets meet the core.
+export const STELLAR_OUTLINE = "M50 4Q57 39 96 50Q57 61 50 96Q43 61 4 50Q43 39 50 4Z";
+export const STELLAR_CORE = "M50 21Q56 43 79 50Q56 57 50 79Q44 57 21 50Q44 43 50 21Z";
+export const STELLAR_OPACITY = 0.9;
+export const STELLAR_PERSON = "M50 43a13 13 0 1 0 0-26 13 13 0 0 0 0 26M23 84V73a27 27 0 0 1 54 0v11Z";
+export const STELLAR_FACETS = [
+  "M50 4Q55 34 62 45L50 50L46 40Z",
+  "M96 50Q66 55 55 63L50 50L60 46Z",
+  "M50 96Q45 66 38 55L50 50L54 60Z",
+];
+export const STELLAR_PEOPLE = "M42 40a9 9 0 1 0 0-18 9 9 0 0 0 0 18m22 3a8 8 0 1 0 0-16M22 70v-5a20 20 0 0 1 40 0v5zm46 0h11v-5a15 15 0 0 0-12-15";
 
 /** Keep geographic anchors fixed, and reserve the count before placing secondary artwork. */
-function calculateBloomGeometry(item: NativeMapPresentation) {
+function calculateBloomGeometry(item: NativeMapPresentation, allowCity = item.allowCityPetals) {
   const beaconTotal = item.beacons.length;
   const peopleCount = item.people.length;
   const friendsOnly = beaconTotal === 0;
   const grouped = beaconTotal + peopleCount > 1;
   const street = item.scale === "close";
-  const distant = item.scale === "far" || item.scale === "micro";
+  const cityPetals = item.scale === "far" && allowCity && grouped && !friendsOnly && beaconTotal + peopleCount <= 5;
+  const distant = !cityPetals && (item.scale === "far" || item.scale === "micro");
   let markerSize = distant
     ? friendsOnly
-      ? 5
-      : 8
+      ? 9
+      : 11
     : grouped
       ? street
         ? 29
-        : 24
+        : cityPetals ? 22 : 24
       : friendsOnly
         ? street
           ? 34
@@ -67,7 +58,7 @@ function calculateBloomGeometry(item: NativeMapPresentation) {
           : 30;
   const clear = (box: Box) =>
     !item.decorationObstacles?.some((obstacle) => intersects(box, obstacle));
-  const baseLimit = friendsOnly ? 2 : beaconPetalLimit(beaconTotal, item.scale);
+  const baseLimit = friendsOnly ? 2 : cityPetals ? 2 : beaconPetalLimit(beaconTotal, item.scale);
   const members = friendsOnly ? item.people : item.beacons;
   let primary = grouped
     ? distant
@@ -126,6 +117,8 @@ function calculateBloomGeometry(item: NativeMapPresentation) {
     offsets = petalOffsets(primary.length);
     availableCountBox = findCount();
   }
+  if (cityPetals && (primary.length !== Math.min(2, beaconTotal) || !availableCountBox))
+    return calculateBloomGeometry(item, false);
   let countBox: Box = availableCountBox ?? { x: 0, y: countY(), width, height };
   if (grouped && !distant && !primary.length && item.decorationObstacles) {
     const previewSize = 24;
@@ -207,10 +200,22 @@ function calculateBloomGeometry(item: NativeMapPresentation) {
         fontSize,
       }
     : undefined;
-  const signalDiameter = friendsOnly ? 10 : constellationDiameter(beaconTotal);
-  const signalBox = { x: countBox.x, y: countBox.y - (countBox.height + signalDiameter) / 2 + 2, width: signalDiameter, height: signalDiameter };
-  const signal = grouped && distant && clear(signalBox) ? signalBox : undefined;
-  const dots = signal ? constellationDots(item, signal, clear) : [];
+  const desiredDiameter = friendsOnly ? 18 : stellarDiameter(beaconTotal + peopleCount);
+  const signal = grouped && distant
+    ? [...new Set([desiredDiameter, Math.max(18, desiredDiameter - 6), 18])]
+        .map(diameter => ({
+          x: countBox.x,
+          y: countBox.y - (countBox.height + diameter) / 2 + 2,
+          width: diameter,
+          height: diameter,
+          facets: friendsOnly ? 0 : diameter < desiredDiameter ? 1 : item.scale === "micro" ? 2 : 3,
+          glow: !friendsOnly && diameter === desiredDiameter && clear({
+            x: countBox.x, y: countBox.y - (countBox.height + diameter) / 2 + 2,
+            width: diameter + 4, height: diameter + 4,
+          }),
+        }))
+        .find(clear)
+    : undefined;
   const satellites: ClusterPoint[] = [];
   const satelliteOffsets: Offset[] = [];
   const satelliteSize = street ? 17 : 14;
@@ -238,7 +243,7 @@ function calculateBloomGeometry(item: NativeMapPresentation) {
     );
     for (const point of item.people.slice(
       0,
-      friendSatelliteLimit(primary.length, item.scale),
+      cityPetals ? 1 : friendSatelliteLimit(primary.length, item.scale),
     )) {
       const offset = slots.find((slot) => {
         const box = { ...slot, width: satelliteSize, height: satelliteSize };
@@ -284,11 +289,7 @@ function calculateBloomGeometry(item: NativeMapPresentation) {
                 Math.abs(projector.top + projector.height + 5),
               )
             : 0,
-          signal ? Math.abs(signal.y) + signal.height / 2 : 0,
-          ...dots.map(
-            ({ offset, size }) =>
-              Math.max(Math.abs(offset.x), Math.abs(offset.y)) + size / 2,
-          ),
+          signal ? Math.max(Math.abs(signal.x), Math.abs(signal.y)) + signal.width / 2 : 0,
         ),
       ) + 2
     : Math.max(
@@ -323,7 +324,6 @@ function calculateBloomGeometry(item: NativeMapPresentation) {
     satelliteOffsets,
     satelliteSize,
     countBadge,
-    dots,
     signal,
     distant,
     projector,
@@ -333,17 +333,19 @@ const geometryCache = new WeakMap<
   NativeMapPresentation,
   {
     obstacles: NativeMapPresentation["decorationObstacles"];
+    allowCityPetals: NativeMapPresentation["allowCityPetals"];
     value: ReturnType<typeof calculateBloomGeometry>;
   }
 >();
 /** Immutable presentation geometry is reused by rendering, revision keys, and native overlays. */
 export function bloomGeometry(item: NativeMapPresentation) {
   const cached = geometryCache.get(item);
-  if (cached && cached.obstacles === item.decorationObstacles)
+  if (cached && cached.obstacles === item.decorationObstacles && cached.allowCityPetals === item.allowCityPetals)
     return cached.value;
   const value = calculateBloomGeometry(item);
   geometryCache.set(item, {
     obstacles: item.decorationObstacles,
+    allowCityPetals: item.allowCityPetals,
     value,
   });
   return value;

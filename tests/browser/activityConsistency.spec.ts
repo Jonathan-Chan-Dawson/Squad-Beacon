@@ -48,7 +48,7 @@ for (const appearance of ["light", "dark"] as const) {
       expect(Math.abs(feedBox!.x - home.x - 16)).toBeLessThan(2);
       expect(feedBox!.width).toBeLessThanOrEqual(608);
       await page.screenshot({
-        path: `docs/screenshots/activity-consistency-2026-10-30/${appearance}-${width}-beacons.png`,
+        path: `test-results/visual-captures/activity-consistency-2026-10-30/${appearance}-${width}-beacons.png`,
       });
       await demo(page, "/your-activity");
       const header = await column(page, "activity-header-column");
@@ -83,7 +83,7 @@ for (const appearance of ["light", "dark"] as const) {
             .click();
         }
         await page.screenshot({
-          path: `docs/screenshots/activity-consistency-2026-10-30/${appearance}-${width}-${tab.toLowerCase()}-workspace.png`,
+          path: `test-results/visual-captures/activity-consistency-2026-10-30/${appearance}-${width}-${tab.toLowerCase()}-workspace.png`,
         });
       }
       await demo(page, "/squads");
@@ -92,7 +92,7 @@ for (const appearance of ["light", "dark"] as const) {
         page.getByRole("button", { name: "Chats", exact: true }),
       ).toBeVisible();
       await page.screenshot({
-        path: `docs/screenshots/activity-consistency-2026-10-30/${appearance}-${width}-chats.png`,
+        path: `test-results/visual-captures/activity-consistency-2026-10-30/${appearance}-${width}-chats.png`,
       });
       await page
         .getByRole("button", { name: "Communities", exact: true })
@@ -128,14 +128,14 @@ for (const appearance of ["light", "dark"] as const) {
       expect(await page.evaluate(() => devicePixelRatio)).toBeCloseTo(0.75, 2);
       await column(page, "beacons-header-column");
       await page.screenshot({
-        path: `docs/screenshots/activity-consistency-2026-10-30/${appearance}-desktop-75-beacons.png`,
+        path: `test-results/visual-captures/activity-consistency-2026-10-30/${appearance}-desktop-75-beacons.png`,
       });
       await demo(page, `${baseURL}/your-activity`);
       await column(page, "activity-header-column");
       await column(page, "activity-actions-column");
       await page.getByRole("tab", { name: "Calendar", exact: true }).click();
       await page.screenshot({
-        path: `docs/screenshots/activity-consistency-2026-10-30/${appearance}-desktop-75-calendar.png`,
+        path: `test-results/visual-captures/activity-consistency-2026-10-30/${appearance}-desktop-75-calendar.png`,
       });
       await demo(page, `${baseURL}/squads`);
       await column(page, "chats-content-column");
@@ -184,7 +184,7 @@ for (const appearance of ["light", "dark"] as const) {
       page.getByRole("textbox", { name: "Message", exact: true }),
     ).toBeVisible();
     await page.screenshot({
-      path: `docs/screenshots/activity-consistency-2026-10-30/${appearance}-1440-conversation.png`,
+      path: `test-results/visual-captures/activity-consistency-2026-10-30/${appearance}-1440-conversation.png`,
     });
   });
 }

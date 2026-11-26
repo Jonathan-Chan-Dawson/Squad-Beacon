@@ -2,7 +2,11 @@ import { PremiumHeaderButton } from "@/src/features/profile/components/PremiumEn
 import { UpNextCard, LivingActivitySection } from "../components/feed/LivingActivitySection";
 import { homePresentation } from "@/src/features/onboarding/presentation";
 import { useOnboarding } from "@/src/features/onboarding/runtime";
-import { GuestBeaconsWelcome } from "@/src/features/onboarding/GuestBeaconsWelcome";
+import { LoginToUse } from "@/src/features/auth/LoginToUse";
+import { PublicBeaconPreview } from "@/src/features/discovery/PublicBeaconPreview";
+import { usePublicBeacons } from "@/src/features/discovery/usePublicBeacons";
+import type { PublicBeaconSummary } from "@/src/features/discovery/types";
+import { supabase } from "@/src/shared/supabase";
 import {
   HomeInvitation,
   SemanticEmpty,
@@ -84,6 +88,23 @@ export default function ActivitiesScreen() {
   const exploration = useExploration();
   const insets = useSafeAreaInsets();
   const now = useNow();
+  const publicBeacons = usePublicBeacons("", null, undefined, !userId);
+  const publicNow = publicBeacons.rows.filter((row) =>
+    Date.parse(row.starts_at) <= now && Date.parse(row.ends_at) > now).slice(0, 2);
+  const publicUpcoming = publicBeacons.rows.filter((row) =>
+    Date.parse(row.starts_at) > now).slice(0, 3);
+  const renderPublicBeacon = (summary: PublicBeaconSummary) => (
+    <PublicBeaconPreview
+      key={summary.activity_id}
+      summary={summary}
+      compact
+      adaptiveDiscovery
+      hideClose
+      onClose={() => {}}
+      onJoined={(id) => router.push({ pathname: "/activity/[id]", params: { id } })}
+      onDetails={() => router.push({ pathname: "/discover/[id]", params: { id: summary.activity_id } })}
+    />
+  );
   const progress = useOnboarding();
   const simulatedError = __DEV__ && demo && demoScenario === "offline";
   const home = homePresentation(
@@ -354,6 +375,8 @@ export default function ActivitiesScreen() {
       goToMap,
       now,
       respond,
+      setReportActivityId,
+      setReportReason,
       shareActivity,
       showAvatars,
       userId,
@@ -564,11 +587,9 @@ export default function ActivitiesScreen() {
             Your saved link expired. You can start again from Beacons.
           </Text>
         )}
-        {!userId && !loading && <GuestBeaconsWelcome />}
         {home.kind === "welcome" && (
           <HomeInvitation welcome friends={home.friends} />
         )}
-        {userId ? (
           <View
             testID="home-friends-section"
             style={{
@@ -579,11 +600,12 @@ export default function ActivitiesScreen() {
           >
             <SocialFriendsSection key={userId ?? "signed-out"} />
           </View>
-        ) : null}
-        {userId && data.viewer_id === userId && (
+        {(!userId || data.viewer_id === userId) && (
           <View testID="home-personal-timeline" style={{ gap: 8, borderTopWidth: 1, borderTopColor: designColors.border, paddingTop: 12 }}>
             {hubHeading("Your Activity", "My Activity →", () => router.push("/your-activity" as Href))}
-            {data.is_demo || data.capabilities?.living_activity ? (
+            {!userId ? (
+              <LoginToUse destination="/your-activity" detail="Log in to see your current activity and what’s up next." />
+            ) : data.is_demo || data.capabilities?.living_activity ? (
               <LivingActivitySection key={userId} personId={userId} compact dashboard suggestIdeas />
             ) : (
               <UpNextCard personId={userId} />
@@ -596,7 +618,7 @@ export default function ActivitiesScreen() {
         {home.kind === "loading" ? (
           <Skeleton height={160} borderRadius={12} />
         ) : null}
-        {userId && (nowPreview.length || upcomingPreview.length) ? (
+        {!userId || nowPreview.length || upcomingPreview.length ? (
           <View
             testID="home-explore-beacons"
             style={{
@@ -643,12 +665,17 @@ export default function ActivitiesScreen() {
                 />
               </View>
             </View>
-            {loading && !data.activities.length ? (
+            {!userId && (!supabase || publicBeacons.error) ? (
+              <>
+                <Txt muted>Public Beacons couldn’t load.</Txt>
+                <Button title="Try again" compact secondary onPress={publicBeacons.refresh} />
+              </>
+            ) : (!userId && !publicBeacons.ready) || (loading && !data.activities.length) ? (
               <Skeleton height={110} borderRadius={12} />
-            ) : !nowPreview.length && !upcomingPreview.length ? (
+            ) : !(userId ? nowPreview.length || upcomingPreview.length : publicNow.length || publicUpcoming.length) ? (
               <Txt muted>No Beacons to explore right now.</Txt>
             ) : null}
-            {nowPreview.length ? (
+            {(userId ? nowPreview.length : publicNow.length) ? (
               <Text
                 accessibilityRole="header"
                 style={{
@@ -661,15 +688,15 @@ export default function ActivitiesScreen() {
                 Happening Now
               </Text>
             ) : null}
-            {nowPreview.map((activity) => (
+            {userId ? nowPreview.map((activity) => (
               <BeaconFeedCard
                 key={activity.id}
                 presentation="discovery"
                 compact
                 {...buildCardProps(activity)}
               />
-            ))}
-            {upcomingPreview.length ? (
+            )) : publicNow.map(renderPublicBeacon)}
+            {(userId ? upcomingPreview.length : publicUpcoming.length) ? (
               <Text
                 accessibilityRole="header"
                 style={{
@@ -682,14 +709,14 @@ export default function ActivitiesScreen() {
                 Coming Up
               </Text>
             ) : null}
-            {upcomingPreview.map((activity) => (
+            {userId ? upcomingPreview.map((activity) => (
               <BeaconFeedCard
                 key={activity.id}
                 presentation="discovery"
                 compact
                 {...buildCardProps(activity)}
               />
-            ))}
+            )) : publicUpcoming.map(renderPublicBeacon)}
           </View>
         ) : null}
         {userId && home.kind === "compact" &&
@@ -719,7 +746,6 @@ export default function ActivitiesScreen() {
             }}
           />
         ) : null}
-        {userId ? (
           <View
             collapsable={false}
             style={{
@@ -776,7 +802,6 @@ export default function ActivitiesScreen() {
               ))}
             </View>
           </View>
-        ) : null}
       </ScrollView>
       <Sheet
         title="Your response"

@@ -28,6 +28,8 @@ import {
   visiblePlanningProposals,
 } from "./domain";
 import { PlanningResponseControls } from "./PlanningResponseControls";
+import { ShowPlanningOnMap } from "./ShowPlanningOnMap";
+import { planningCreationModes } from "./PlanningKindSelector";
 import { ProposalEditor } from "./ProposalEditor";
 import type { BeaconDraft, PlanningProposal } from "./types";
 const dateLabel = (value: string) =>
@@ -227,10 +229,12 @@ export default function PlanningDetailScreen({
       </PlanningFrame>
     );
 
-  if (thread.kind === "time" || thread.resolution_policy === "explicit") return <PlanningFrame embedded={embedded} title={thread.title} eyebrow={thread.kind === "time" ? "FIND A TIME" : thread.kind.toUpperCase()}>
+  const kindLabel = planningCreationModes.find(({ kind }) => kind === thread.kind)!.label.toUpperCase();
+  if (thread.kind === "time" || thread.resolution_policy === "explicit") return <PlanningFrame embedded={embedded} title={thread.title} eyebrow={kindLabel}>
     <CouncilEnhancements threadId={thread.id}/>
     {manages && <GuestShareButton kind="decision" target={thread.id} title={thread.title} readOnly={thread.kind === "draw"} />}
     {thread.body && <Txt>{thread.body}</Txt>}
+    <ShowPlanningOnMap threadId={thread.id} onShow={onShowSuggested} />
     {!thread.materialized_activity_id && <PlanningResponseControls threadId={thread.id}/>}
     <CouncilProposalReview thread={thread}/>
     <ConnectedPlanningActions thread={thread}/>
@@ -245,23 +249,11 @@ export default function PlanningDetailScreen({
     <PlanningFrame
       embedded={embedded}
       title={thread.title}
-      eyebrow={thread.kind.toUpperCase()}
+      eyebrow={kindLabel}
     >
       <CouncilEnhancements threadId={thread.id}/>
     {manages && <GuestShareButton kind="decision" target={thread.id} title={thread.title} readOnly={thread.kind === "draw"} />}
-      <Button
-        title={
-          thread.kind === "ping"
-            ? "Show Ping-related Beacons"
-            : "Show Suggested Beacons"
-        }
-        secondary
-        onPress={() =>
-          onShowSuggested
-            ? onShowSuggested(thread.id)
-            : router.push({ pathname: "/", params: { mapThread: thread.id } })
-        }
-      />
+      <ShowPlanningOnMap threadId={thread.id} onShow={onShowSuggested} />
       <View style={styles.card}>
         <View style={styles.row}>
           <Icon color={colors.green} size={19} />

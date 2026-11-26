@@ -1,3 +1,4 @@
+import { DiscoveryBeaconCard } from "@/src/features/discovery/DiscoveryBeaconCard";
 import PlanEditorScreen from "./PlanEditorScreen";
 import { livingPlansEnabled, planPermissions } from "./livingPlans";
 import { LivingPlanDetail } from "./LivingPlansScreen";
@@ -282,19 +283,22 @@ function LegacyPlanDetail() {
                     ? "MANUAL START"
                     : `BEACON ${index + 1}`}
               </Text>
-              <Text style={styles.h2}>{beacon.title}</Text>
-              <Txt>
-                {waiting
-                  ? `Waiting to start · estimated ${beacon.plan_step?.start_time}`
+              <DiscoveryBeaconCard
+                density="mini"
+                activityId={beacon.id}
+                title={beacon.title}
+                category={beacon.category}
+                mapIcon={beacon.map_icon}
+                decorationEmoji={beacon.decoration_emoji}
+                whenLabel={waiting
+                  ? (beacon.plan_step?.start_time ? `Waiting to start · estimated ${beacon.plan_step.start_time}` : "Waiting to start")
                   : new Date(beacon.starts_at).toLocaleString([], {
-                      timeZone: plan.timezone,
-                      weekday: "short",
-                      month: "short",
-                      day: "numeric",
-                      hour: "numeric",
-                      minute: "2-digit",
-                    })}
-              </Txt>
+                    timeZone: plan.timezone, weekday: "short", month: "short", day: "numeric",
+                    hour: "numeric", minute: "2-digit",
+                  })}
+                detailsLabel={`Open Beacon: ${beacon.title}`}
+                onDetails={() => router.push({ pathname: "/activity/[id]", params: { id: beacon.id } })}
+              />
               <Txt muted>
                 {beacon.status === "completed"
                   ? "Completed"
@@ -330,16 +334,6 @@ function LegacyPlanDetail() {
                 {place?.label ? ` · ${place.label}` : ""}
               </Txt>
               {beacon.description && <Txt>{beacon.description}</Txt>}
-              <Button
-                compact
-                title="Open Beacon"
-                onPress={() =>
-                  router.push({
-                    pathname: "/activity/[id]",
-                    params: { id: beacon.id },
-                  })
-                }
-              />
               {!!destination && (
                 <Action
                   compact

@@ -1,6 +1,7 @@
 import { openCommunityProfile } from "@/src/features/social/communityNavigation";
 import React, { createContext, useContext, useRef, useState } from "react";
 import { Pressable, Text, View } from "react-native";
+import { ChevronRight } from "lucide-react-native";
 import { useBeacon } from "@/src/shared/store";
 import { Action, Button, Sheet, useTheme } from "@/src/shared/ui";
 import { CommunityAvatar } from "@/src/features/people/components/CommunityAvatar";
@@ -9,7 +10,6 @@ import { communityTypeLabel } from "@/src/features/social/communityPresentation"
 import type { SocialDirectorySummary } from "@/src/features/social/types";
 import type { BeaconCommunityAssociation } from "./beaconCommunities";
 import { useBeaconCommunities } from "./useBeaconCommunities";
-import { compactCommunityMembershipPresentation } from "./communityRowPresentation";
 
 const Communities = createContext<{
   rows: BeaconCommunityAssociation[];
@@ -209,116 +209,22 @@ function CommunityIdentity({
   );
 }
 
-function CompactCommunityIdentity({
-  summary,
-  hasRelatedCommunities,
-  onOpen,
-  onChanged,
-  tooltip = false,
-}: {
-  summary: SocialDirectorySummary;
-  hasRelatedCommunities: boolean;
-  onOpen: () => void;
-  onChanged?: () => void;
-  tooltip?: boolean;
-}) {
-  const { styles } = useTheme();
-  const { current, run } = useCommunityMembership(summary, onChanged);
-  const presentation = compactCommunityMembershipPresentation(current);
-  const title = presentation.actionTitle;
-  const isJoined = presentation.status === "joined";
-  const isRequested = presentation.status === "requested";
-  const typeLabel = communityTypeLabel(current.entity_type);
-
-  return (
-    <View
-      style={{
-        flexDirection: "row",
-        flexWrap: "wrap",
-        alignItems: "center",
-        gap: hasRelatedCommunities ? 2 : 8,
-      }}
-    >
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={
-          isJoined
-            ? `View ${typeLabel} ${current.name}, joined`
-            : `View ${typeLabel} ${current.name}`
-        }
-        onPress={onOpen}
-        style={{
-          flex: 1,
-          flexDirection: "row",
-          alignItems: "center",
-          gap: 8,
-          minWidth: tooltip ? 0 : 136,
-          minHeight: 44,
-        }}
-      >
-        <CommunityAvatar type={current.entity_type} size={20} />
-        <Text
-          numberOfLines={tooltip ? 1 : 2}
-          style={{
-            ...styles.body,
-            flex: 1,
-            minWidth: 0,
-            fontSize: 12,
-            lineHeight: 17,
-          }}
-        >
-          {current.name}
-        </Text>
-        {isJoined ? (
-          <Text style={{ ...styles.muted, fontSize: 11 }}>Joined</Text>
-        ) : null}
-      </Pressable>
-      {title ? (
-        <View
-          style={{ maxWidth: "100%", minHeight: 44, justifyContent: "center" }}
-        >
-          <Action
-            title={title}
-            accessibilityLabel={
-              title === "Accept Invite"
-                ? `Accept Invite to ${typeLabel} ${current.name}`
-                : `${title} ${current.name}`
-            }
-            secondary
-            compact
-            run={run}
-          />
-        </View>
-      ) : isRequested ? (
-        <Text
-          accessibilityLiveRegion="polite"
-          style={[styles.muted, { minHeight: 44, textAlignVertical: "center" }]}
-        >
-          Requested
-        </Text>
-      ) : null}
-    </View>
-  );
-}
-
 /** A safe association enriches a card; an unavailable enrichment never hides it. */
 export function BeaconCommunityRow({
   activityId,
   associations,
-  compact = false,
-  tooltip = false,
+  inline = false,
 }: {
   activityId: string;
   associations?: BeaconCommunityAssociation[];
-  compact?: boolean;
-  tooltip?: boolean;
+  inline?: boolean;
 }) {
   const inherited = useContext(Communities);
   const loaded = useBeaconCommunities(
     inherited || associations ? [] : [activityId],
   );
   const [relatedSelection, setRelatedSelection] = useState<string | null>(null);
-  const { userId, viewerEpoch } = useBeacon();
+  const { data, userId, viewerEpoch } = useBeacon();
   const { colors } = useTheme();
   const selectionKey = `${userId}:${viewerEpoch}:${activityId}`;
   const relatedOpen = relatedSelection === selectionKey;
@@ -330,18 +236,63 @@ export function BeaconCommunityRow({
   return (
     <View
       testID="beacon-community-row"
-      style={{ gap: compact && rows.length > 1 ? 0 : 4 }}
+      style={{ gap: 4 }}
       key={`${userId}:${viewerEpoch}:${activityId}`}
     >
-      {compact ? (
-        <CompactCommunityIdentity
-          key={`${userId}:${viewerEpoch}:${primary.summary.entity_type}:${primary.summary.entity_id}`}
-          summary={primary.summary}
-          tooltip={tooltip}
-          hasRelatedCommunities={rows.length > 1}
-          onOpen={() => openCommunityProfile(primary.summary)}
-          onChanged={refresh}
-        />
+      {inline ? (
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`View ${communityTypeLabel(primary.summary.entity_type)} ${primary.summary.name}`}
+            onPress={() => openCommunityProfile(primary.summary)}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 4,
+              minHeight: 44,
+              minWidth: 0,
+              flexShrink: 1,
+            }}
+          >
+            <CommunityAvatar
+              type={primary.summary.entity_type}
+              iconKey={
+                primary.summary.entity_type === "squad" &&
+                userId &&
+                data.viewer_id === userId
+                  ? data.squads.find(
+                      (squad) => squad.id === primary.summary.entity_id,
+                    )?.icon_key
+                  : undefined
+              }
+              size={20}
+            />
+            <Text
+              numberOfLines={1}
+              style={{ color: colors.muted, fontSize: 12, flexShrink: 1 }}
+            >
+              {primary.summary.name}
+            </Text>
+            <ChevronRight size={13} color={colors.muted} />
+          </Pressable>
+          {rows.length > 1 && (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Show Related Communities, ${rows.length - 1} more`}
+              onPress={() => setRelatedSelection(selectionKey)}
+              style={{
+                minHeight: 44,
+                minWidth: 44,
+                justifyContent: "center",
+                alignItems: "center",
+              }}
+            >
+              <Text style={{ color: colors.muted, fontSize: 12 }}>
+                +{rows.length - 1}
+              </Text>
+            </Pressable>
+          )}
+        </View>
       ) : (
         <CommunityIdentity
           key={`${userId}:${viewerEpoch}:${primary.summary.entity_type}:${primary.summary.entity_id}`}
@@ -350,33 +301,13 @@ export function BeaconCommunityRow({
           onChanged={refresh}
         />
       )}
-      {rows.length > 1 ? (
-        compact ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Show Related Communities, ${rows.length - 1} more`}
-            onPress={() => setRelatedSelection(selectionKey)}
-            style={{
-              alignSelf: "flex-start",
-              justifyContent: "center",
-              minHeight: 44,
-              paddingHorizontal: 4,
-            }}
-          >
-            <Text
-              style={{ color: colors.muted, textDecorationLine: "underline" }}
-            >
-              Related Communities ({rows.length - 1})
-            </Text>
-          </Pressable>
-        ) : (
-          <Button
-            title="Related Communities"
-            secondary
-            compact
-            onPress={() => setRelatedSelection(selectionKey)}
-          />
-        )
+      {!inline && rows.length > 1 ? (
+        <Button
+          title="Related Communities"
+          secondary
+          compact
+          onPress={() => setRelatedSelection(selectionKey)}
+        />
       ) : null}
       <Sheet
         title="Related Communities"

@@ -12,6 +12,7 @@ import {
   bloomGeometry,
   bloomAccessibilityLabel,
   petalBookmarkVisible,
+  STELLAR_OUTLINE, STELLAR_CORE, STELLAR_FACETS, STELLAR_PEOPLE, STELLAR_OPACITY, STELLAR_PERSON,
 } from "../clusterBloom";
 import { Marker, Polygon } from "react-native-maps";
 import { MapProjector } from "./MapProjector";
@@ -25,8 +26,9 @@ import type { ClusterPoint } from "../cluster";
 import type { ClusterMemberArtwork } from "../clusterArtwork";
 import {
   beaconPinEmphasis,
+  beaconGlyphSize,
   beaconMarkerColor,
-  constellationRelationships,
+  stellarRelationships,
   type BeaconMarkerState,
   distantBeaconPinEmphasis,
   mapIdentityColors,
@@ -92,6 +94,7 @@ const MemberArtwork = React.memo(function MemberArtwork({
         id={model.id.slice(7)}
         category={model.category}
         categoryColor={categoryColors[model.category]}
+        publicMarker={model.publicMarker}
       />
     );
   const size = compact ? 32 : 36;
@@ -111,7 +114,7 @@ const MemberArtwork = React.memo(function MemberArtwork({
         style={{
           width: size,
           height: size,
-          borderRadius: size / 2,
+          borderRadius: model.publicMarker ? 8 : size / 2,
           borderWidth: 2,
           borderColor: color,
           backgroundColor: colors.surface,
@@ -120,7 +123,7 @@ const MemberArtwork = React.memo(function MemberArtwork({
         }}
       >
         {model.kind === "beacon" ? (
-          <BeaconPinGlyph category={model.category} size={17} color={colors.ink} />
+          <BeaconPinGlyph category={model.category} size={beaconGlyphSize(32)} color={colors.ink} />
         ) : model.profile ? (
           <FriendMapAvatar
             profile={model.profile}
@@ -131,7 +134,7 @@ const MemberArtwork = React.memo(function MemberArtwork({
         {model.kind === "person" && (
           <AvatarStatusBadge state={model.availability} size={8} />
         )}
-        {showIdentity && model.kind === "beacon" && <BeaconMarkerBadgeRow state={model.markerState} limit={1} showRelevance={showSaved} />}
+        {showIdentity && model.kind === "beacon" && <BeaconMarkerBadgeRow state={model.markerState} size={32} petal showRelevance={showSaved} />}
       </View>
     </View>
   );
@@ -223,7 +226,7 @@ function LivingMapPinComponent({
     ? members.find((member) => member.id === geometry.primary[0]?.id)
     : undefined;
   const states = new Map(members.flatMap((member) => member.kind === "beacon" ? [[member.id, member.markerState] as const] : []));
-  const relationships = constellationRelationships(presentation.beacons, (point) => beaconStates?.get(point.id.slice(7)) ?? states.get(point.id), geometry.dots.length);
+  const relationships = stellarRelationships(presentation.beacons, (point) => beaconStates?.get(point.id.slice(7)) ?? states.get(point.id), geometry.signal?.facets ?? 0);
   const shadowGradientId = React.useId().replace(/:/g, "");
   const shadowOpacity = geometry.friendsOnly ? CLUSTER_FRIEND_SHADOW_OPACITY : CLUSTER_SHADOW_OPACITY;
   const [avatarRevision, setAvatarRevision] = React.useState(0);
@@ -331,24 +334,35 @@ function LivingMapPinComponent({
             color={explorer ? mapIdentityColors.cluster : beaconMarkerColor(projectorBeacon?.kind === "beacon" ? projectorBeacon.markerState : undefined)}
           />
         )}
-        {geometry.signal && <View pointerEvents="none" testID="cluster-signal" style={{ position: "absolute", left: geometry.center + geometry.signal.x - geometry.signal.width / 2, top: geometry.center + geometry.signal.y - geometry.signal.height / 2, width: geometry.signal.width, height: geometry.signal.height, borderRadius: geometry.signal.width / 2, borderWidth: 1, borderColor: colors.line, backgroundColor: colors.surface, opacity: 0.85 }} />}
-        {geometry.dots.slice(0, relationships.length).map(({ offset, size }, index) => (
-          <View
-            key={relationships[index]}
-            testID="cluster-constellation-dot"
-            accessible={false}
+        {geometry.signal && (
+          <Svg
             pointerEvents="none"
+            testID="cluster-signal"
+            accessible={false}
+            width={geometry.signal.width}
+            height={geometry.signal.height}
+            viewBox="0 0 100 100"
             style={{
               position: "absolute",
-              left: geometry.center + offset.x - size / 2,
-              top: geometry.center + offset.y - size / 2,
-              width: size,
-              height: size,
-              borderRadius: size / 2,
-              backgroundColor: mapIdentityColors[relationships[index]],
+              left: geometry.center + geometry.signal.x - geometry.signal.width / 2,
+              top: geometry.center + geometry.signal.y - geometry.signal.height / 2,
+              opacity: geometry.friendsOnly ? 1 : STELLAR_OPACITY,
             }}
-          />
-        ))}
+          >
+            {geometry.friendsOnly ? (
+              <Path d={STELLAR_PEOPLE} fill="#B5CCEC" stroke="#293750" strokeWidth={8} strokeLinejoin="round" />
+            ) : (
+              <>
+                {geometry.signal.glow && <Path d={STELLAR_OUTLINE} fill="none" stroke="#CFB9FF" strokeWidth={geometry.signal.width >= 36 ? 8 : 5} opacity={0.36} strokeLinejoin="round" />}
+                <Path d={STELLAR_OUTLINE} fill="#E8DFFD" stroke="#594A78" strokeWidth={3} strokeLinejoin="round" />
+                {relationships.map((relationship, index) => (
+                  <Path key={relationship} d={STELLAR_FACETS[index]} fill={mapIdentityColors[relationship]} />
+                ))}
+                <Path d={STELLAR_CORE} fill="#FFF4DE" opacity={0.93} />
+              </>
+            )}
+          </Svg>
+        )}
         {geometry.primary.map((point, index) => {
           const model = members.find((member) => member.id === point.id),
             offset = geometry.offsets[index];
@@ -386,16 +400,15 @@ function LivingMapPinComponent({
                 }}
               >
                 {geometry.distant ? (
-                  <View
-                    testID="map-activity-dot"
-                    style={{
-                      width: 32,
-                      height: 32,
-                      borderRadius: 16,
-                      backgroundColor: color,
-                      opacity: model.kind === "person" ? 0.65 : 1,
-                    }}
-                  />
+                  <Svg
+                    testID={model.kind === "person" ? "map-single-person-signal" : "map-single-stellar-beacon"}
+                    width={32}
+                    height={32}
+                    viewBox="0 0 100 100"
+                    style={{ opacity: STELLAR_OPACITY }}
+                  >
+                    <Path d={model.kind === "person" ? STELLAR_PERSON : STELLAR_OUTLINE} fill={color} />
+                  </Svg>
                 ) : (
                   <MemberArtwork
                     model={model}

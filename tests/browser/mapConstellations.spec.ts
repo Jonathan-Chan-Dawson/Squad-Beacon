@@ -24,8 +24,8 @@ test.beforeEach(async ({ page }) => {
   await page.addScriptTag({
     content: `
     window.selected = []; window.explorers = 0;
-    window.renderConstellation = (count, mode = 'stack', owned = false) => {
-      const members = Array.from({length:count}, (_,i) => ({id:'beacon:'+i,kind:'beacon',category:'Social',latitude:41.88 + i*.00001,longitude:-87.64 + i*.00002}));
+    window.renderConstellation = (count, mode = 'stack', owned = false, kind = 'beacon') => {
+      const members = Array.from({length:count}, (_,i) => ({id:kind+':'+i,kind,category:'Social',latitude:41.88 + i*.00001,longitude:-87.64 + i*.00002}));
       const group = {id:'fixture',latitude:41.88,longitude:-87.64,members};
       const presentation = constellations.nativePresentation(group,mode,{},new Set(owned ? ['beacon:0'] : []));
       const rendered = constellations.webConstellation(presentation, {
@@ -57,6 +57,20 @@ test("small stacks expand, select exact members and collapse with Escape", async
     .getByRole("button", { name: "Open beacon:1", exact: true })
     .press("Escape");
   await expect(stack).not.toHaveAttribute("data-expanded");
+});
+
+test("distant Beacon constellations use a pearl signal and retain the exact count", async ({ page }) => {
+  await page.evaluate(() => (window as any).renderConstellation(25, "atmosphere"));
+  const constellation = page.getByTestId("map-constellation");
+  await expect(constellation).toHaveAttribute("data-beacon-count", "25");
+  const signal = constellation.getByTestId("cluster-signal");
+  await expect(signal).toHaveAttribute("data-signal-kind", "stellar");
+  await expect(signal).toHaveCSS("opacity", "0.9");
+  await expect(signal.locator("[data-relationship]")).toHaveCount(1);
+  await page.evaluate(() => (window as any).renderConstellation(1, "micro"));
+  await expect(page.getByTestId("map-single-stellar-beacon")).toHaveCSS("width", "11px");
+  await page.evaluate(() => (window as any).renderConstellation(1, "micro", false, "person"));
+  await expect(page.getByTestId("map-single-person-signal")).toHaveCSS("width", "9px");
 });
 
 for (const count of [6, 10, 11, 14, 25])

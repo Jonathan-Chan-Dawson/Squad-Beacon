@@ -1,3 +1,4 @@
+import { DiscoveryBeaconCard } from "@/src/features/discovery/DiscoveryBeaconCard";
 import { connectedPlanningEnabled } from "@/src/features/planning/connected";
 import { planningCreationModes } from "@/src/features/planning/PlanningKindSelector";
 import { PremiumPreview } from "@/src/features/profile/settings/PremiumUI";
@@ -1022,14 +1023,29 @@ function PlanTimeline({ planId }: { planId: string }) {
                   : 1,
             }}
           >
-            <TimelineHeading
-              title={title}
-              index={index}
-              kind={activity ? "beacon" : thread ? "decision" : "idea"}
-              pending={stop.approval === "pending"}
-              expanded={expanded}
-              onPress={() => setSelected(expanded ? null : stop.id)}
-            />
+            {activity ? (
+              <DiscoveryBeaconCard
+                density="mini"
+                activityId={activity.id}
+                title={activity.title}
+                category={activity.category}
+                mapIcon={activity.map_icon}
+                decorationEmoji={activity.decoration_emoji}
+                whenLabel={timing}
+                detailsLabel={`${index + 1}. ${title}`}
+                expanded={expanded}
+                onDetails={() => setSelected(expanded ? null : stop.id)}
+              />
+            ) : (
+              <TimelineHeading
+                title={title}
+                index={index}
+                kind={thread ? "decision" : "idea"}
+                pending={stop.approval === "pending"}
+                expanded={expanded}
+                onPress={() => setSelected(expanded ? null : stop.id)}
+              />
+            )}
             <Txt muted>
               {stop.approval === "pending"
                 ? "Pending approval · "
@@ -1041,7 +1057,7 @@ function PlanTimeline({ planId }: { planId: string }) {
                 : unavailable
                   ? "No longer shared with you"
                   : activity
-                    ? `${activity.status === "completed" ? "Completed" : activity.status === "cancelled" ? "Cancelled" : "Linked Beacon"} · ${timing} · ${data.rsvps.filter((r) => r.activity_id === activity.id && r.status === "going").length} Going`
+                    ? `${activity.status === "completed" ? "Completed" : activity.status === "cancelled" ? "Cancelled" : "Linked Beacon"} · ${data.rsvps.filter((r) => r.activity_id === activity.id && r.status === "going").length} Going`
                     : thread
                       ? `${thread.kind === "time" ? "Find a Time" : thread.kind === "ping" ? "Ping" : thread.kind === "draw" ? "Draw" : thread.vote_method === "approval" ? "Approval Vote" : "Pick One Vote"} · ${thread.not_organized_at ? "Not organized" : thread.finalized_at && !thread.materialized_activity_id ? "Selected · awaiting confirmation" : thread.status === "open" ? "Open" : thread.status === "no_options" ? "No eligible options" : thread.status === "resolved" ? "Resolved" : thread.status === "cancelled" ? "Cancelled" : "Closed"}${thread.materialized_activity_id ? " · Result ready" : ""}`
                       : `Idea${stop.proposed_at ? ` · Proposed ${new Date(stop.proposed_at).toLocaleString()}` : " · Still deciding"}`}

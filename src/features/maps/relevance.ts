@@ -1,3 +1,4 @@
+import { isApprovedGoing } from "@/src/features/beacons/permissions";
 import { followedBeaconIds } from "@/src/features/discovery/beaconTopics";
 import { beaconDiscoveryTier, beaconInterestMatch } from "./discoveryRanking";
 import type { Data } from "@/src/shared/types";
@@ -17,25 +18,6 @@ export function deriveMapPointPriorities(
   const activitiesById = new Map(
     data.activities.map((activity) => [activity.id, activity]),
   );
-  const going = new Map<string, number>();
-  for (const rsvp of data.rsvps)
-    if (rsvp.status === "going")
-      going.set(rsvp.activity_id, (going.get(rsvp.activity_id) ?? 0) + 1);
-  for (const activityId of activityIds) {
-    const activity = activitiesById.get(activityId);
-    if (!activity) continue;
-    const attendance =
-      activity.accepted_seat_count ?? (going.get(activity.id) ?? 0) + 1;
-    priorities[`beacon:${activity.id}`] = {
-      tier: beaconDiscoveryTier(data, activity, viewerId, now, personalized),
-      affinity:
-        Number(personalized && beaconInterestMatch(data, activity, viewerId)) +
-        (activity.owner_id === viewerId ? 100 : 0) +
-        Number(following.has(activity.id)) * 0.5,
-      attendance,
-    };
-  }
-
   const closeListIds = data.lists
     .filter(
       (list) =>
@@ -56,6 +38,28 @@ export function deriveMapPointPriorities(
       )
       .map((favorite) => favorite.target_id),
   );
+  const going = new Map<string, number>();
+  for (const rsvp of data.rsvps) {
+    const activity = activitiesById.get(rsvp.activity_id);
+    if (activity && rsvp.user_id !== activity.owner_id && isApprovedGoing(activity, rsvp))
+      going.set(rsvp.activity_id, (going.get(rsvp.activity_id) ?? 0) + 1);
+  }
+  for (const activityId of activityIds) {
+    const activity = activitiesById.get(activityId);
+    if (!activity) continue;
+    const attendance =
+      activity.accepted_seat_count ?? (going.get(activity.id) ?? 0) + 1;
+    priorities[`beacon:${activity.id}`] = {
+      tier: beaconDiscoveryTier(data, activity, viewerId, now, personalized),
+      affinity:
+        Number(personalized && beaconInterestMatch(data, activity, viewerId)) +
+        (activity.owner_id === viewerId ? 100 : 0) +
+        Number(following.has(activity.id)) * 0.5 +
+        Number(personalized && (closeFriendIds.has(activity.owner_id) || starredFriends.has(activity.owner_id))),
+      attendance,
+    };
+  }
+
   const availablePeople = new Set(
     data.activities
       .filter(

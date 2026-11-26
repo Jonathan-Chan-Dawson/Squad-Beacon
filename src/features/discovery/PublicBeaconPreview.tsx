@@ -6,24 +6,20 @@ import { browseEntryReason } from "./domain";
 import React, { useEffect, useRef, useState } from "react";
 import { Text, View } from "react-native";
 import { useBeacon } from "@/src/shared/store";
-import { useNow } from "@/src/shared/useNow";
-import { Action, Button, useTheme } from "@/src/shared/ui";
+import { useAvailabilityNow } from "@/src/features/beacons/availabilityClock";
+import { Button, useTheme } from "@/src/shared/ui";
 import { useDesignTheme } from "@/src/shared/design-system";
-import { ActivityBadge } from "@/src/features/beacons/ActivityBadge";
 import { HomeAction } from "@/src/features/beacons/components/HomeAction";
 import { beaconPreviewWhen } from "@/src/features/maps/discoveryRanking";
 import { DiscoveryBeaconCard } from "./DiscoveryBeaconCard";
 import { DiscoveryContextNote } from "./DiscoveryContextNote";
 import { discoveryContextLabel } from "./discoveryCardPresentation";
-import { MoreHorizontal } from "lucide-react-native";
-import { ContextMenu } from "@/src/shared/ContextMenu";
-import { MapTooltipControl } from "@/src/features/maps/MapTooltipShell";
+import { mapIdentityColors } from "@/src/features/maps/markerIdentity";
 import type { PublicBeaconSummary } from "./types";
 import { requestSignIn } from "@/src/features/auth/navigation";
 
 export type PublicBeaconPreviewProps = {
   summary: PublicBeaconSummary;
-  /** Use the shared discovery shell only on Browse and Map surfaces. */
   adaptiveDiscovery?: boolean;
   mapPreview?: boolean;
   compact?: boolean;
@@ -41,7 +37,6 @@ type PublicResponse = "going" | "requested" | null;
 
 export function PublicBeaconPreview({
   summary,
-  adaptiveDiscovery = false,
   mapPreview = false,
   compact = false,
   showCommunityIdentity = true,
@@ -53,13 +48,10 @@ export function PublicBeaconPreview({
   hideClose = false,
 }: PublicBeaconPreviewProps) {
   const { styles } = useTheme();
-  const [mapInfoOpen, setMapInfoOpen] = useState(false);
-  const mapInfoAnchor = useRef<View>(null);
   const { colors } = useDesignTheme();
   const { data, userId, act, getViewerEpoch } = useBeacon();
-  const now = useNow();
+  const now = useAvailabilityNow(Date.parse(summary.ends_at));
   const associations = useBeaconCommunityAssociations();
-  const mapCommunity = showCommunityIdentity ? associations.find(row => row.activity_id === summary.activity_id && row.priority === 0)?.summary : undefined;
   const reason =
     contextLabel ??
     browseEntryReason(
@@ -230,83 +222,13 @@ export function PublicBeaconPreview({
     }
   };
 
-  if (!adaptiveDiscovery) {
-    const legacyDisabled =
-      busy ||
-      pending ||
-      (closed && !going) ||
-      !Number.isFinite(endTime) ||
-      endTime <= now;
-    return (
-      <View
-        testID="map-public-preview"
-        style={[styles.card, { padding: 16, gap: 8 }]}
-      >
-        <View style={styles.row}>
-          <ActivityBadge category={summary.category} size={34} />
-          <Text style={[styles.h2, { flex: 1 }]}>{summary.title}</Text>
-        </View>
-        <Text style={styles.muted}>
-          {beaconPreviewWhen({ ...summary, timezone: "" }, now)}
-        </Text>
-        <Text style={styles.body}>{summary.area_label}</Text>
-        <Text style={styles.muted}>Public Beacon · Approximate area</Text>
-        {reason ? <Text style={styles.muted}>{reason}</Text> : null}
-        <Text style={styles.label}>{summary.accepted_seat_count} going</Text>
-        <Action
-          title={actionLabel}
-          disabled={legacyDisabled}
-          run={async () => {
-            if (going) onJoined(summary.activity_id);
-            else await joinPublicBeacon();
-          }}
-        />
-        {!compact ? (
-          <Text style={styles.muted}>
-            {pending
-              ? "The host will review your request."
-              : "Join to see the meeting details and meet the people going."}
-          </Text>
-        ) : null}
-        {showCommunityIdentity ? (
-          <BeaconCommunityRow activityId={summary.activity_id} />
-        ) : null}
-        {!compact && !hideClose ? (
-          <Button title="Close preview" secondary compact onPress={onClose} />
-        ) : null}
-        {joinError ? (
-          <Text
-            accessibilityRole="alert"
-            accessibilityLiveRegion="polite"
-            style={{ color: colors.danger, fontSize: 12, lineHeight: 17 }}
-          >
-            {joinError}
-          </Text>
-        ) : null}
-      </View>
-    );
-  }
-
   return (
     <View testID="map-public-preview" style={{ gap: 8 }}>
       <DiscoveryBeaconCard
         mapPreview={mapPreview}
+        density={mapPreview ? "compact" : "standard"}
+        relationshipColor={summary.viewer_response === "going" ? mapIdentityColors.joined : mapIdentityColors.other}
         mapIcon={summary.map_icon}
-        mapCommunityName={mapCommunity?.name}
-        mapCommunityKey={mapCommunity?.entity_id}
-        mapCommunityType={mapCommunity?.entity_type}
-        actionShortcuts={
-          mapPreview ? (
-            <View ref={mapInfoAnchor} collapsable={false}>
-              <MapTooltipControl
-                label="Beacon info & actions"
-                onPress={() => setMapInfoOpen(true)}
-                icon={<MoreHorizontal size={20} color={colors.textSecondary} />}
-                expanded={mapInfoOpen}
-              />
-            </View>
-          ) : undefined
-        }
         activityId={summary.activity_id}
         title={summary.title}
         category={summary.category}
@@ -325,15 +247,21 @@ export function PublicBeaconPreview({
         }}
         headerAccessory={headerAccessory}
         primaryAction={
-          <HomeAction
-            title={actionLabel}
-            label={actionLabel}
-            stretch
-            prominent={mapPreview}
-            primary={!disabled}
-            disabled={disabled}
-            onPress={() => void joinPublicBeacon()}
-          />
+          ended ? null : (
+            <HomeAction
+              title={going && detailsAction ? "Open Beacon" : actionLabel}
+              label={going && detailsAction ? "Open Beacon" : actionLabel}
+              stretch
+              prominent={mapPreview}
+              primary={!disabled}
+              disabled={disabled && !(going && detailsAction)}
+              onPress={
+                going && detailsAction
+                  ? detailsAction
+                  : () => void joinPublicBeacon()
+              }
+            />
+          )
         }
         onDetails={detailsAction}
         context={
@@ -356,7 +284,7 @@ export function PublicBeaconPreview({
         }
         communityContext={
           showCommunityIdentity ? (
-            <BeaconCommunityRow activityId={summary.activity_id} compact />
+            <BeaconCommunityRow activityId={summary.activity_id} inline />
           ) : null
         }
         feedback={
@@ -374,27 +302,6 @@ export function PublicBeaconPreview({
       {!compact && !hideClose ? (
         <Button title="Close preview" secondary compact onPress={onClose} />
       ) : null}
-      {mapPreview && (
-        <ContextMenu
-          title="Public Beacon information"
-          mode="dropdown"
-          anchoredOnly
-          visible={mapInfoOpen}
-          anchorRef={mapInfoAnchor}
-          onClose={() => setMapInfoOpen(false)}
-        >
-          <Text style={styles.body}>Public Beacon · Approximate area</Text>
-          <Text style={styles.muted}>
-            {visibleContextLabel ||
-              (pending
-                ? "The host will review your request."
-                : "Join to see the meeting details and people going.")}
-          </Text>
-          {showCommunityIdentity && (
-            <BeaconCommunityRow activityId={summary.activity_id} compact />
-          )}
-        </ContextMenu>
-      )}
     </View>
   );
 }

@@ -482,10 +482,10 @@ test("linked Draw decision opens with Back inside the existing sheet", async ({
     .getByRole("button", { name: "View Draw decision", exact: true })
     .click();
   await panel
-    .getByRole("button", { name: "Show Suggested Beacons", exact: true })
+    .getByRole("button", { name: "Show on Map", exact: true })
     .click();
   await expect(panel).toHaveCount(0);
-  const context = page.getByRole("button", { name: /^Remove Draw:/ });
+  const context = page.getByRole("button", { name: /^Remove Random Draw:/ });
   await expect(context).toBeVisible();
   await context.click();
   await expect(context).toHaveCount(0);

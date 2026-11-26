@@ -3,7 +3,7 @@ import { mapBeaconTitle } from "@/src/features/discovery/discoveryCardPresentati
 import { planPathArrowheads } from "../contextFilters";
 import type { Category } from "@/src/shared/types";
 import { isBeaconLive } from "@/src/features/beacons/beaconLive";
-import { bloomGeometry } from "../clusterBloom";
+import { bloomGeometry, STELLAR_OPACITY, STELLAR_OUTLINE } from "../clusterBloom";
 import { KeyedMapLayers } from "../keyedMapLayers";
 import { ClusterArtworkCache, type ClusterMemberArtwork } from "../clusterArtwork";
 import { nextAvailabilityExpiry } from "@/src/features/beacons/availability";
@@ -13,14 +13,22 @@ import {
   mapBeaconMarkerStates,
   markerStateLabel,
   beaconPinEmphasis,
-  beaconMarkerBadges,
+  beaconMarkerSlots,
+  beaconFaceSize,
+  quietBeacon,
+  mapPersonOpacity,
   beaconBadgeArtwork,
-  BEACON_BADGE_SIZE,
-  BEACON_BADGE_GAP,
+  MAP_BADGE_INK,
+  beaconGlyphSize,
+  PUBLIC_BEACON_FACE_SIZE,
   beaconMarkerColor,
-  constellationRelationships,
+  stellarRelationships,
   personMarkerBadges,
   EMPTY_MARKER_STATE,
+  publicBeaconMarkerState,
+  planningMarkerArtwork,
+  planningDeadlineSoon,
+  nextMapPlanStop,
   distantBeaconPinEmphasis,
   BEACON_PIN_LIGHT_INSET,
   BEACON_PIN_TIP,
@@ -40,6 +48,7 @@ import {
   MapPresentationCache,
   presentationArtworkPoints,
   type NativeMapMode,
+  crowdedBeaconMarkers,
 } from "../nativeMapPresentation";
 import { appendBeaconUpperBeam, appendMapProjector, beaconProjectionDimensions } from "../projector";
 import { webConstellation } from "../webConstellation";
@@ -609,6 +618,8 @@ export default function BeaconMap(props: MapProps) {
     selected,
     selectionIsTemporary = false,
     selectedActivityId = null,
+    selectedPublicBeaconId = null,
+    selectedPlanningPointId,
     selectedPersonId = null,
     focusBackground,
     focused,
@@ -782,6 +793,8 @@ export default function BeaconMap(props: MapProps) {
       cosmetic?: ReturnType<typeof beaconMapLook>,
       availabilityDetail?: ClusterMemberArtwork["availabilityDetail"],
       personBadges?: ClusterMemberArtwork["personBadges"],
+      publicMarker = false,
+      badgeCrowded = false,
     ): HTMLButtonElement | Leaflet.Marker => {
       if (!friend) tone = beaconMarkerColor(identity);
       if (cacheKey && !detached) {
@@ -806,6 +819,8 @@ export default function BeaconMap(props: MapProps) {
           cosmetic,
           availabilityDetail,
           personBadges,
+          publicMarker,
+          badgeCrowded,
           colors.white,
           colors.ink,
           colors.line,
@@ -846,6 +861,8 @@ export default function BeaconMap(props: MapProps) {
               cosmetic,
               availabilityDetail,
               personBadges,
+              publicMarker,
+              badgeCrowded,
             ) as Leaflet.Marker,
           click,
         ) as Leaflet.Marker;
@@ -861,28 +878,31 @@ export default function BeaconMap(props: MapProps) {
       const dot =
         !friend && !detached && !stopNumber && !selectedPin &&
         (presentationMode.current === "atmosphere" || presentationMode.current === "micro");
-      const visualSize = compact
+      const baselineSize = publicMarker && !compact && !dot ? (street ? PUBLIC_BEACON_FACE_SIZE : 34) : compact
         ? 32
         : dot
           ? 10
           : !street && !stopNumber && !friend
             ? 30
             : friend ? street ? 32 : 24 : markerVisualSize("beacon");
-      const iconWidth = compact ? 32 : 64;
+      const visualSize = friend || compact || dot ? baselineSize : beaconFaceSize(identity, baselineSize, street);
+      const quiet = quietBeacon(identity);
+      const count = !friend && !dot && !compact && street && !dimmed && (publicMarker || (identity?.count ?? 0) >= 30) ? identity?.count : undefined;
+      const iconWidth = compact ? 32 : Math.max(64, visualSize + 8);
       const pinInset = !friend && !dot && !detached ? BEACON_PIN_LIGHT_INSET : 0;
       const tipSize = BEACON_PIN_TIP;
-      const tipTop = pinInset + markerVisualSize("beacon") - tipSize.overlap;
+      const tipTop = pinInset + (publicMarker ? visualSize : markerVisualSize("beacon") + visualSize - baselineSize) - tipSize.overlap;
       const tipBottom = tipTop + tipSize.height;
-      const projected = (street || compactProjection) && !dot && !compact && !dimmed && !onPick && !friend;
+      const projected = (street || compactProjection) && !dot && !compact && !dimmed && !onPick && !friend && identity?.lifecycle !== "cancelled";
       const projection = projected
         ? beaconProjectionDimensions(street ? "close" : presentationMode.current === "swarm" ? "medium" : "far")
         : undefined;
-      const iconHeight = compact ? 32 : friend ? 52 : (timeChip || beaconName ? 68 : 48) + pinInset + (projection ? 15 : 0);
+      const iconHeight = compact ? 32 : friend ? 52 : (timeChip || beaconName ? 68 : 48) + pinInset + (projection ? 15 : 0) + visualSize - baselineSize;
       node.type = "button";
       node.setAttribute("aria-label", label);
       node.title = label;
       node.dataset.availability = availabilityLabel;
-      node.style.cssText = `position:relative;border:0;border-radius:0;background:transparent;color:${colors.ink};padding:${pinInset}px 0 0;box-sizing:border-box;width:${iconWidth}px;height:${iconHeight}px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;font:600 16px system-ui;cursor:pointer;opacity:${dimmed ? 0.28 : 1};filter:${dimmed ? "saturate(.25)" : "none"};transform:scale(${selectedPin && !compact ? BEACON_SELECTED_SCALE : 1});transform-origin:50% ${friend || dot || compact ? "50%" : `${tipBottom}px`};transition:${reducedMotion ? "none" : "transform 180ms cubic-bezier(.2,.8,.2,1),opacity 180ms ease"};`;
+      node.style.cssText = `position:relative;border:0;border-radius:0;background:transparent;color:${colors.ink};padding:${pinInset}px 0 0;box-sizing:border-box;width:${iconWidth}px;height:${iconHeight}px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;font:600 16px system-ui;cursor:pointer;opacity:${dimmed ? 0.25 : quiet ? 0.52 : 1};filter:${dimmed ? "saturate(.25)" : "none"};transform:scale(${selectedPin && !compact ? BEACON_SELECTED_SCALE : 1});transform-origin:50% ${friend || dot || compact ? "50%" : `${tipBottom}px`};transition:${reducedMotion ? "none" : "transform 180ms cubic-bezier(.2,.8,.2,1),opacity 180ms ease"};`;
       if (selectedPin && !friend && !detached) node.setAttribute("aria-current", "true");
       if (selectedPin && !detached) {
         const ring = document.createElement("span");
@@ -894,7 +914,7 @@ export default function BeaconMap(props: MapProps) {
       if (friend) {
         const frame = document.createElement("span");
         frame.dataset.clusterFace = "true";
-        frame.style.cssText = `position:relative;box-sizing:border-box;flex-shrink:0;width:${visualSize}px;height:${visualSize}px;border:${compact ? 2 : 3}px solid ${tone};border-radius:50%;background:${colors.white};display:flex;align-items:center;justify-content:center;box-shadow:${compact ? "none" : "0 3px 10px #172c2940"};`;
+        frame.style.cssText = `position:relative;box-sizing:border-box;flex-shrink:0;width:${visualSize}px;height:${visualSize}px;border:${compact ? 2 : 3}px solid ${tone};border-radius:50%;background:${colors.white};display:flex;align-items:center;justify-content:center;opacity:${mapPersonOpacity(ageLabel, selectedPin)};box-shadow:${compact ? "none" : "0 3px 10px #172c2940"};`;
         const img = document.createElement("img");
         img.src =
           "data:image/svg+xml;charset=utf-8," +
@@ -918,12 +938,12 @@ export default function BeaconMap(props: MapProps) {
           status.style.cssText = `position:absolute;bottom:-3px;right:-3px;width:12px;height:12px;border:1px solid ${colors.white};border-radius:50%;background:${busy ? "#F0B574" : "#79DDB0"};color:#243129;display:grid;place-items:center;font:700 8px system-ui;box-sizing:border-box;`;
           frame.append(status);
         }
-        if (!dimmed && street && !compact) personBadges?.forEach((name, index) => {
+        if (!dimmed && street && !compact) personBadges?.slice(0, 1).forEach((name, index) => {
           const badge = personMarkerBadges[name];
           const node = document.createElement("span");
           node.setAttribute("aria-hidden", "true");
           node.textContent = badge.glyph;
-          node.style.cssText = `position:absolute;top:-3px;${index === 0 ? "left" : "right"}:-3px;width:12px;height:12px;border:1px solid ${colors.white};border-radius:50%;background:${badge.color};color:#26243A;display:grid;place-items:center;font:700 8px system-ui;pointer-events:none;`;
+          node.style.cssText = `position:absolute;top:-3px;${index === 0 ? "right" : "left"}:-3px;width:12px;height:12px;border:1px solid ${colors.white};border-radius:50%;background:${badge.color};color:#26243A;display:grid;place-items:center;font:700 8px system-ui;pointer-events:none;`;
           frame.append(node);
         });
         node.append(frame);
@@ -958,8 +978,8 @@ export default function BeaconMap(props: MapProps) {
           appendMapProjector(node, tone,
             pinInset + visualSize - 5,
             projection.height,
-            projection.width,
-            projection.opacity,
+            Math.round(projection.width * visualSize / baselineSize),
+            projection.opacity * (quiet ? 0.2 : identity?.light ?? 1),
             "beacon");
         if (street && !dot && !compact) {
           const tip = document.createElement("span");
@@ -969,8 +989,17 @@ export default function BeaconMap(props: MapProps) {
           node.append(tip);
         }
         const badge = document.createElement("span");
-        if (!dot) addBeaconGlyph(badge, text as Category, compact ? 17 : 22, compact ? undefined : customIcon);
-        badge.style.cssText = `position:relative;box-sizing:border-box;flex-shrink:0;width:${visualSize}px;height:${visualSize}px;border:${dot ? 1 : compact ? 2 : 3}px solid ${dot ? colors.white : tone};border-radius:${visualSize / 2}px;background:${dot ? tone : colors.surface};display:flex;align-items:center;justify-content:center;box-shadow:${dot ? "none" : `0 0 10px ${tone}85,0 3px 10px #172c2940`};font-size:${compact ? 20 : 22}px;`;
+        if (!dot) addBeaconGlyph(badge, text as Category, beaconGlyphSize(visualSize), compact ? undefined : customIcon);
+        if (publicMarker && !dot) badge.dataset.publicBeaconFace = "true";
+        badge.style.cssText = `position:relative;box-sizing:border-box;flex-shrink:0;width:${visualSize}px;height:${visualSize}px;border:${dot ? 1 : compact ? 2 : 3}px solid ${dot ? colors.white : identity?.lifecycle === "cancelled" ? "#D4969D" : tone};border-radius:${publicMarker && !dot ? (compact ? 8 : 11) : visualSize / 2}px;background:${dot ? tone : colors.surface};display:flex;align-items:center;justify-content:center;box-shadow:${dot ? "none" : `0 0 10px ${tone}85,0 3px 10px #172c2940`};font-size:${compact ? 20 : 22}px;`;
+        if (dot) {
+          badge.dataset.testid = "map-single-stellar-beacon";
+          badge.style.border = "0";
+          badge.style.background = "transparent";
+          badge.style.opacity = String(STELLAR_OPACITY);
+          badge.innerHTML = `<svg aria-hidden="true" width="${visualSize}" height="${visualSize}" viewBox="0 0 100 100"><path d="${STELLAR_OUTLINE}" fill="${tone}"/></svg>`;
+        }
+        if (!dot && identity?.lifecycle === "upcoming") badge.style.borderStyle = "dashed";
         if (upperLight) {
           const { level, color, glowOpacity } = upperLight;
           const inner = Math.round(glowOpacity * (street && !compact ? 255 : 120)).toString(16).padStart(2, "0");
@@ -983,6 +1012,11 @@ export default function BeaconMap(props: MapProps) {
           badge.dataset.testid = "beacon-marker-glow";
           badge.dataset.lightingLevel = String(level);
         }
+        if (cosmetic?.frame && !dot && !compact && !dimmed && !quiet) {
+          const trim = document.createElement("span");
+          trim.style.cssText = `position:absolute;inset:2px;border:1px solid ${cosmetic.frame}99;border-radius:inherit;pointer-events:none;`;
+          badge.append(trim);
+        }
         face.append(badge);
         if (stopNumber) {
           const order = document.createElement("span");
@@ -993,23 +1027,34 @@ export default function BeaconMap(props: MapProps) {
           face.append(order);
         }
         if (!dimmed && !dot && (street || presentationMode.current === "swarm")) {
-          const badges = beaconMarkerBadges(identity ?? EMPTY_MARKER_STATE, street && !compact ? 3 : 1);
+          const badges = beaconMarkerSlots(identity ?? EMPTY_MARKER_STATE, {
+            size: visualSize, street: street && !compact, selected: selectedPin, petal: detached,
+            crowded: badgeCrowded || compact || (!!beaconName && !!stopNumber), publicMarker, count: count != null,
+          });
           if (badges.length) {
             const row = document.createElement("span");
             row.dataset.testid = "beacon-marker-badges";
             row.setAttribute("aria-hidden", "true");
-            row.style.cssText = `position:absolute;bottom:-4px;left:0;right:0;display:flex;justify-content:center;gap:${BEACON_BADGE_GAP}px;pointer-events:none;`;
-            for (const kind of badges) {
+            row.style.cssText = `position:absolute;inset:0;pointer-events:none;`;
+            for (const { kind, slot, left, top, diameter, glyphSize } of badges) {
               const { color, testId, path, filled } = beaconBadgeArtwork[kind];
-              const ownedBadge = kind === "ownership";
               const item = document.createElement("span");
               item.dataset.testid = testId;
-              item.style.cssText = `box-sizing:border-box;flex:none;width:${BEACON_BADGE_SIZE}px;height:${BEACON_BADGE_SIZE}px;border-radius:50%;border:1px solid ${ownedBadge ? color : colors.surface};background:${ownedBadge ? "#30251E" : color};color:${ownedBadge ? color : "#252031"};display:grid;place-items:center;${ownedBadge ? `box-shadow:0 0 4px ${color}` : ""}`;
-              item.innerHTML = `<svg width="8" height="8" viewBox="0 0 24 24" fill="${filled ? "currentColor" : "none"}" stroke="${filled ? "none" : "currentColor"}" stroke-width="2.5" stroke-linecap="round"><path d="${path}"/></svg>`;
+              item.dataset.badgeSlot = slot;
+              item.style.cssText = `position:absolute;left:${left}px;top:${top}px;box-sizing:border-box;width:${diameter}px;height:${diameter}px;border-radius:50%;border:1px solid ${colors.surface};background:${color};color:${MAP_BADGE_INK};display:grid;place-items:center;`;
+              item.innerHTML = `<svg width="${glyphSize}" height="${glyphSize}" viewBox="0 0 24 24" fill="${filled ? "currentColor" : "none"}" stroke="${filled ? "none" : "currentColor"}" stroke-width="2.5" stroke-linecap="round"><path d="${path}"/></svg>`;
               row.append(item);
             }
             face.append(row);
           }
+        }
+        if (count != null) {
+          const total = document.createElement("span");
+          total.dataset.testid = "beacon-map-participant-count";
+          total.textContent = String(count);
+          total.setAttribute("aria-hidden", "true");
+          total.style.cssText = `position:absolute;left:50%;bottom:-8px;transform:translateX(-50%);padding:0 4px;border-radius:6px;background:${colors.surface};color:${colors.ink};border:1px solid ${tone};font:700 9px system-ui;pointer-events:none;`;
+          face.append(total);
         }
         node.append(face);
         if (beaconName || timeChip) {
@@ -1146,7 +1191,7 @@ export default function BeaconMap(props: MapProps) {
         group.members.length === 1
           ? [group.members[0].id] : [])),
       m.getZoom(),
-      (id) => id === `beacon:${selectedActivityId}` || id === `person:${selectedPersonId}` ? 0 : markerStates.get(id.slice(7))?.owned ? 1 : id.startsWith("person:") || markerStates.get(id.slice(7))?.friendHosted ? 2 : 3,
+      (id) => id === `beacon:${selectedActivityId}` || id === `beacon:${selectedPublicBeaconId}` || id === `person:${selectedPersonId}` ? 0 : markerStates.get(id.slice(7))?.owned ? 1 : id.startsWith("person:") || markerStates.get(id.slice(7))?.friendHosted ? 2 : 3,
     );
     for (const id of markerLabels) renderedSingletonIds.add(id);
     const pulseBudget = Math.max(
@@ -1157,6 +1202,8 @@ export default function BeaconMap(props: MapProps) {
         contextPoints.length -
         Number(!!selected),
     );
+    const crowdedBadges = crowdedBeaconMarkers(presentations, m.getZoom(), id =>
+      beaconFaceSize(markerStates.get(id.slice(7)), 40, presentationMode.current === "stack"));
     const contextActivityIds = new Set(contextPoints.flatMap((point) => point.activityId ? [point.activityId] : []));
     const planStopIds = new Set(contextPoints.flatMap((point) => point.stopNumber && point.activityId ? [point.activityId] : []));
     const liveSingletonIds = new Set((presentationMode.current === "stack" ? [...markerStates] : [])
@@ -1174,6 +1221,7 @@ export default function BeaconMap(props: MapProps) {
         decorationCache.use(point.id, JSON.stringify(point), () => L.circleMarker([point.latitude, point.longitude], { radius: point.kind === "person" ? 4 : 5, stroke: false, fillColor: "#A4A0B4", fillOpacity: 0.28, interactive: false }).addTo(decorations));
       }
     }
+    const nextStopId = nextMapPlanStop(contextPoints, markerStates);
     for (const point of contextPoints) {
       const activate = () => {
         const current = latest.current.contextPoints?.find((row) => row.id === point.id);
@@ -1184,9 +1232,9 @@ export default function BeaconMap(props: MapProps) {
         const state = point.activityId ? markerStates.get(point.activityId) ?? null : null;
         marker(
           point.latitude, point.longitude, category,
-          `Plan stop ${point.stopNumber}: ${point.title}`, activate,
+          `Plan stop ${point.stopNumber}: ${point.title}${point.id === nextStopId ? ", next stop" : ""}`, activate,
           false, 0, categories[category].color, selectedActivityId === point.activityId,
-          false, "", "unknown", !!point.activityId && liveSingletonIds.has(point.activityId), "", state, !!state?.owned, false, true,
+          false, "", "unknown", !!point.activityId && liveSingletonIds.has(point.activityId), point.id === nextStopId && presentationMode.current === "stack" ? "Next stop" : "", state, !!state?.owned, false, true,
           `context:${point.id}`, point.mapIcon, point.stopNumber,
         );
         continue;
@@ -1204,6 +1252,16 @@ export default function BeaconMap(props: MapProps) {
         !renderedSingletonIds.has(`beacon:${point.activityId}`)
       )
         continue;
+      if (point.publicBeaconId) {
+        const category = point.category ?? "Other";
+        marker(point.latitude, point.longitude, category, `Public Beacon: ${point.title}`, activate,
+          false, 0, mapIdentityColors.other, selectedPublicBeaconId === point.publicBeaconId,
+          false, "", "unknown", false, "", publicBeaconMarkerState(point.publicSummary, now), false, false, true,
+          `context:${point.id}`, point.mapIcon, undefined,
+          markerLabels.has(`beacon:${point.publicBeaconId}`) ? point.title : undefined,
+          undefined, undefined, undefined, true, crowdedBadges.has(`beacon:${point.publicBeaconId}`));
+        continue;
+      }
       if (point.activityId) {
         decorationCache.use(
           `context:${point.id}`,
@@ -1220,38 +1278,47 @@ export default function BeaconMap(props: MapProps) {
         );
       } else {
         const contextKey = `context:${point.id}`;
+        const art = planningMarkerArtwork[point.planningKind ?? "ping"];
+        const planningSelected = selectedPlanningPointId === point.id;
+        const deadlineSoon = planningDeadlineSoon(point.planningDeadline, now);
         markerCache.use(
           contextKey,
-          JSON.stringify([point, colors.green, colors.white, !!onPick]),
+          JSON.stringify([point, colors.green, colors.white, deadlineSoon, !!onPick, planningSelected]),
           () => {
             const node = document.createElement("button");
             node.type = "button";
-            if (point.publicBeaconId) addBeaconGlyph(node, point.category ?? "Other", 23, point.mapIcon);
-            else node.textContent = "?";
+            node.textContent = art.glyph;
             node.setAttribute(
               "aria-label",
-              `${point.publicBeaconId ? "Public Beacon" : "Suggestion"}: ${point.title}`,
+              `${art.label}: ${point.title}${deadlineSoon ? ", decision deadline soon" : ""}`,
             );
-            node.style.cssText = `max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-height:44px;padding:5px 8px;border:1px dashed ${colors.green};border-radius:12px;background:${colors.white};color:${colors.green};font:11px system-ui;cursor:pointer;`;
-            if (point.publicBeaconId)
-              node.style.cssText = `width:46px;height:46px;border:2px solid ${mapIdentityColors.other};border-radius:13px;background:${colors.surface};display:grid;place-items:center;color:${colors.ink};position:relative;cursor:pointer;box-shadow:0 3px 8px #172c2920;`;
+            node.style.cssText = `max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;width:44px;height:44px;padding:5px;border:0;border-radius:50%;background:transparent;color:${art.color};font:700 17px system-ui;cursor:pointer;`;
+            const lens = document.createElement("span");
+            lens.style.cssText = `position:relative;display:grid;place-items:center;width:32px;height:32px;border:1px ${point.planningKind === "ping" ? "dashed" : "solid"} ${art.color};border-radius:50%;background:${colors.surface};box-shadow:0 3px 7px ${art.color}40;`;
+            lens.textContent = art.glyph;
+            if (planningSelected) {
+              node.setAttribute("aria-current", "true");
+              lens.style.outline = `2px dotted ${mapIdentityColors.selection}`;
+              lens.style.outlineOffset = "3px";
+            }
+            if (deadlineSoon) {
+              const timer = document.createElement("span");
+              timer.textContent = "◷";
+              timer.style.cssText = `position:absolute;top:-4px;right:-3px;background:${colors.surface};border:1px solid currentColor;border-radius:50%;width:11px;height:11px;font:700 8px system-ui;`;
+              lens.append(timer);
+            }
+            node.replaceChildren(lens);
             L.DomEvent.disableClickPropagation(node);
             node.onclick = () => markerCache.activate(contextKey);
             return L.marker([point.latitude, point.longitude], {
               // The inner button owns keyboard focus and its accessible name.
               keyboard: false,
-              zIndexOffset: -100,
+              zIndexOffset: planningSelected ? 900 : -100,
               icon: L.divIcon({
                 html: node,
                 className: "beacon-marker",
-                iconSize: [
-                  point.publicBeaconId ? 46 : 88,
-                  46,
-                ],
-                iconAnchor: [
-                  point.publicBeaconId ? 23 : 44,
-                  23,
-                ],
+                iconSize: [88, 46],
+                iconAnchor: [44, 23],
               }),
             }).addTo(group);
           },
@@ -1323,6 +1390,8 @@ export default function BeaconMap(props: MapProps) {
         undefined,
         beaconMapLook(identityData.equipped_looks?.[id]),
         model.availabilityDetail,
+        model.personBadges,
+        !!context && !activity,
       ) as HTMLButtonElement;
     };
     for (const presentation of presentations.filter(
@@ -1356,9 +1425,8 @@ export default function BeaconMap(props: MapProps) {
         presentation.friendsProminent,
         bloomGeometry(presentation).satelliteOffsets,
         bloomGeometry(presentation).countBadge,
-        bloomGeometry(presentation).dots,
         bloomGeometry(presentation).signal,
-        constellationRelationships(presentation.beacons, (point) => markerStates.get(point.id.slice(7)), bloomGeometry(presentation).dots.length),
+        stellarRelationships(presentation.beacons, (point) => markerStates.get(point.id.slice(7)), bloomGeometry(presentation).signal?.facets ?? 0),
         bloomGeometry(presentation).shadowSize,
         bloomGeometry(presentation).projector,
         presentation.owned.map((point) => point.id),
@@ -1490,6 +1558,7 @@ export default function BeaconMap(props: MapProps) {
             ? mapBeaconTitle(a.title, !!a.plan_id, a.plan_step_index).title.trim()
             : undefined,
           beaconMapLook(identityData.equipped_looks?.[a.id]),
+          undefined, undefined, identityLookup.publicIds.has(a.id), crowdedBadges.has(`beacon:${a.id}`),
         );
     });
     if (showAvatars)
@@ -1634,6 +1703,8 @@ export default function BeaconMap(props: MapProps) {
     selected,
     selectionIsTemporary,
     selectedActivityId,
+    selectedPublicBeaconId,
+    selectedPlanningPointId,
     selectedPersonId,
     focusBackground,
     showAvatars,

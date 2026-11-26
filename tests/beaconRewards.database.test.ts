@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import {
+  demoCoinScale,
+  demoRewardActions,
+} from "../src/features/beacons/demoRewards";
 import { beaconScoreTier } from "../src/features/profile/beaconScore";
+import { DEMO_ID, demoAction, makeDemo } from "../src/shared/demo";
 import { guestDatabase, guestIds } from "./guestDatabase";
 
 const scale = 12600;
@@ -11,9 +16,45 @@ type Wallet = {
   welcome: string[];
   equipped: Record<string, string>;
   shop_unlocked: boolean;
-  clicker: { week: string; stage: number; starter_taps: number; remaining: number; charge: number };
+  tap_receipt?: { coin_units: number };
+  clicker: {
+    week: string;
+    stage: number;
+    starter_taps: number;
+    remaining: number;
+    charge: number;
+  };
   catalog: { id: string; price: number; owned: boolean }[];
 };
+
+test("a demo tap batch advances the starter stage and stays within the local allowance", () => {
+  const demo = {
+    ...makeDemo(),
+    viewer_id: DEMO_ID,
+    demo_rewards: { balance: 0, owned: [], stage: 0, taps: 0 },
+  };
+  const first = demoAction(demo, demoRewardActions.tap, { taps: 9 });
+  assert.deepEqual(first.demo_rewards, {
+    ...demo.demo_rewards,
+    taps: 9,
+    balance: (9 * demoCoinScale) / 10,
+  });
+  const late = {
+    ...first,
+    demo_rewards: { ...first.demo_rewards!, taps: 499 },
+  };
+  const capped = demoAction(late, demoRewardActions.tap, { taps: 12 });
+  assert.equal(capped.demo_rewards?.taps, 500);
+  assert.equal(capped.demo_rewards?.balance, demoCoinScale);
+  assert.equal(capped.demo_rewards?.stage, 1);
+  assert.throws(
+    () =>
+      demoAction({ ...demo, is_demo: false }, demoRewardActions.tap, {
+        taps: 1,
+      }),
+    /Open the demo/,
+  );
+});
 
 test("Rewards levels use the same progression at each milestone", () => {
   for (const [level, xp] of [
@@ -101,9 +142,13 @@ test("a fresh viewer can earn 120 Coins, unlock and equip a starter ring once", 
     ).rows[0].data;
     assert.deepEqual(snapshot.equipped_looks[host], { ring: "starter-ring" });
 
-    const current = await query();
+    const current = await query("view", { format: "mini" });
     assert.equal(current.clicker.stage, 0);
     assert.equal(current.shop_unlocked, false);
+    assert.equal(current.balance, 45 * scale);
+    for (const key of ["catalog", "welcome", "firsts", "history", "xp"]) {
+      assert.equal(Object.hasOwn(current, key), false);
+    }
     const tap = {
       request_id: crypto.randomUUID(),
       week: current.clicker.week,
@@ -148,12 +193,20 @@ test("a fresh viewer can earn 120 Coins, unlock and equip a starter ring once", 
     const refreshed = await query();
     assert.equal(refreshed.clicker.remaining, 500);
     assert.equal(refreshed.clicker.starter_taps, 8);
-    const finish = { request_id: crypto.randomUUID(), week: refreshed.clicker.week, taps: 2 };
-    const unlocked = await query("tap", finish);
+    const finish = {
+      request_id: crypto.randomUUID(),
+      week: refreshed.clicker.week,
+      taps: 2,
+    };
+    const unlocked = await query("tap", { ...finish, format: "mini" });
     assert.equal(unlocked.shop_unlocked, true);
     assert.equal(unlocked.clicker.stage, 1);
     assert.equal(unlocked.clicker.starter_taps, 10);
     assert.equal(unlocked.balance, 46 * scale);
+    assert.equal(unlocked.tap_receipt?.coin_units, scale / 5);
+    const replay = await query("tap", { ...finish, format: "mini" });
+    assert.deepEqual(replay.tap_receipt, unlocked.tap_receipt);
+    assert.equal(replay.balance, unlocked.balance);
     assert.equal((await query("tap", finish)).balance, unlocked.balance);
   } finally {
     await db.close();
@@ -205,7 +258,12 @@ test("wallet unit migration preserves money and older ownership, and uses histor
         "utf8",
       ),
     );
-    await db.exec(await readFile("supabase/migrations/20261124192325_mini_beacon_starter_stage.sql", "utf8"));
+    await db.exec(
+      await readFile(
+        "supabase/migrations/20261124192325_mini_beacon_starter_stage.sql",
+        "utf8",
+      ),
+    );
     await db.exec(
       "update private.beacon_coin_policy set rewards_started_at=now()-interval '4 days'",
     );

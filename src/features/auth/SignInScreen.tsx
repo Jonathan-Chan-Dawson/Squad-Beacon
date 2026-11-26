@@ -10,12 +10,14 @@ import { guestEntryReason } from "./guestEntry";
 export default function SignInScreen() {
   const account = useBeacon();
   const focused = useIsFocused();
-  const { mode, reason } = useLocalSearchParams<{ mode?: string; reason?: string }>();
+  const { mode, reason, resume } = useLocalSearchParams<{ mode?: string; reason?: string; resume?: string }>();
   const { state } = accountReadiness(account);
   useEffect(() => {
-    if (state === "ready" && focused)
-      router.replace(consumeEntryIntent() as Href);
-  }, [state, focused]);
+    if (state !== "ready" || !focused) return;
+    const destination = consumeEntryIntent();
+    if (resume === "yes" && router.canGoBack()) router.back();
+    else router.replace(destination as Href);
+  }, [state, focused, resume]);
   if (!focused) return null;
   if (state === "loading" || state === "ready") return <Loading />;
   if (state === "needs-profile")

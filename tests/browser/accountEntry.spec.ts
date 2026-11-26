@@ -14,9 +14,6 @@ async function basics(page: Page) {
     .fill("2000-01-31");
 }
 async function signIn(page: Page) {
-  if (!(await page.getByLabel("Email", { exact: true }).isVisible())) {
-    await page.getByRole("tab", { name: "Profile", exact: true }).click();
-  }
   await page
     .getByLabel("Email", { exact: true })
     .fill("  fixture@example.invalid  ");
@@ -51,6 +48,7 @@ test("new signed-out account signs in, completes only required setup and enters 
   });
   await page.goto("/activities");
   await page.getByRole("dialog", { name: "Welcome to Squad Beacon!" }).getByRole("button", { name: "Skip introduction" }).click();
+  await page.getByTestId("home-friends-section").getByRole("button", { name: "Login to use", exact: true }).click();
   await signIn(page);
   await expect(
     page.getByText("Just the basics, then you’re in."),
@@ -60,7 +58,7 @@ test("new signed-out account signs in, completes only required setup and enters 
   await page
     .getByRole("button", { name: "Enter Squad Beacon", exact: true })
     .click();
-  await page.getByLabel("Beacons", { exact: true }).press("Enter");
+  await expect(page).toHaveURL(/\/activities$/);
   await expect(page.getByTestId("onboarding-returning")).toBeVisible();
   await expect(page.getByTestId("onboarding-welcome")).toHaveCount(0);
   await expect(survey(page)).toHaveCount(0);
@@ -163,16 +161,18 @@ test("sign-out and another account reject delayed progress from the first accoun
     .getByRole("button", { name: "Sign out", exact: true })
     .last()
     .click();
-  await expect(page.getByLabel("Email", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Login to use", exact: true })).toBeVisible();
   await mockOnboardingAccount(page, {
     viewer: "92222222-2222-4222-8222-222222222222",
     signedOut: true,
     eligible: false,
   });
+  await page.getByRole("button", { name: "Login to use", exact: true }).click();
   await signIn(page);
-  await expect(page.getByLabel("Search settings", { exact: true })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Search settings", exact: true })).toBeVisible();
   await page.goBack();
-  await page.getByLabel("Beacons", { exact: true }).press("Enter");
+  await page.getByRole("tab", { name: "Beacons", exact: true })
+    .filter({ has: page.getByTestId("activities-tab-icon") }).press("Enter");
   await expect(page.getByTestId("onboarding-returning")).toBeVisible();
   first.releaseProgress();
   await expect.poll(() => first.completedReads).toBeGreaterThan(0);

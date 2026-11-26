@@ -71,6 +71,7 @@ export type NativeMapPresentation = {
   friendOverflow: number;
   friendsProminent: boolean;
   forceExplorer?: boolean;
+  allowCityPetals?: boolean;
   decorationObstacles?: {
     x: number;
     y: number;
@@ -240,7 +241,7 @@ function applyGeometry(item: NativeMapPresentation) {
   item.friendOverflow = item.people.length -
     item.visible.filter((point) => point.kind === "person").length;
   item.featureCost = Math.max(1, item.visible.length +
-    geometry.dots.length + Number(!!geometry.countBadge));
+    Number(!!geometry.signal) + Number(!!geometry.countBadge));
   return item;
 }
 
@@ -258,6 +259,7 @@ export function presentationArtworkPoints(item: NativeMapPresentation) {
 function avoidNeighborArtwork(
   items: NativeMapPresentation[],
   viewport: ClusterViewport,
+  allowCityPetals = true,
 ) {
   const screen = (point: { latitude: number; longitude: number }) =>
     nativePointOffset(
@@ -271,12 +273,14 @@ function avoidNeighborArtwork(
   const entries = items
     .map((item) => {
       item.decorationObstacles = undefined;
+      item.allowCityPetals = false;
       const geometry = bloomGeometry(item);
       const rectangles = geometry.primary.map((point, index) => ({
         ...geometry.offsets[index],
         width: geometry.markerSize,
         height: geometry.markerSize,
       }));
+      if (geometry.signal) rectangles.push(geometry.signal);
       for (const point of item.owned) {
         const index = geometry.primary.findIndex(
           (member) => member.id === point.id,
@@ -333,8 +337,27 @@ function avoidNeighborArtwork(
       { x: 0, y: bottom + 5000, width: 10000, height: 10000 },
     );
     item.decorationObstacles = neighbors;
+    item.allowCityPetals = allowCityPetals;
     applyGeometry(item);
     const geometry = bloomGeometry(item);
+    if (geometry.signal)
+      placed.push({ ...geometry.signal, x: geometry.signal.x + anchor.x, y: geometry.signal.y + anchor.y });
+    if (item.scale === "far" && !geometry.distant) {
+      geometry.offsets.forEach(offset => placed.push({
+        x: offset.x + anchor.x, y: offset.y + anchor.y,
+        width: geometry.markerSize, height: geometry.markerSize,
+      }));
+      geometry.satelliteOffsets.forEach(offset => placed.push({
+        x: offset.x + anchor.x, y: offset.y + anchor.y,
+        width: geometry.satelliteSize, height: geometry.satelliteSize,
+      }));
+      if (geometry.projector) placed.push({
+        x: geometry.projector.x + anchor.x,
+        y: geometry.projector.top + (geometry.projector.height + 5) / 2 + anchor.y,
+        width: geometry.projector.width,
+        height: geometry.projector.height + 5,
+      });
+    }
     if (geometry.countBadge)
       placed.push({
         x: geometry.countBadge.offset.x + anchor.x,
@@ -486,10 +509,14 @@ function buildMapPresentations(
           friendsProminent,
         ),
       );
-    return avoidNeighborArtwork(result, viewport);
+    return avoidNeighborArtwork(result, viewport, !pressured);
   };
   let radius = GROUP_RADIUS[mode];
   let result = build(radius);
+  if (mode === "atmosphere" && result.reduce((sum, item) => sum + item.featureCost, 0) > budget) {
+    pressured = true;
+    result = avoidNeighborArtwork(result, viewport, false);
+  }
   while (
     result.reduce((sum, item) => sum + item.featureCost, 0) > budget &&
     radius < 65536
@@ -502,6 +529,39 @@ function buildMapPresentations(
 }
 
 export { mapPointOffset as nativePointOffset } from "./mapPointOffset";
+
+/** Settled-camera budget for individual badges near other visible artwork. */
+export function crowdedBeaconMarkers(
+  items: readonly NativeMapPresentation[],
+  zoom: number,
+  faceSize: (id: string) => number,
+): Set<string> {
+  const origin = items[0]?.group;
+  if (!origin) return new Set();
+  const nearby = items.map(item => {
+    const member = item.beacons[0];
+    const single = member && item.beacons.length + item.people.length === 1;
+    const size = single ? faceSize(member.id) : bloomGeometry(item).markerSize;
+    return {
+      id: single ? member.id : undefined,
+      position: nativePointOffset(item.group, origin, zoom),
+      halfWidth: size / 2 + (single ? 12 : 24),
+      halfHeight: size / 2 + (single ? 23 : 16),
+    };
+  });
+  const crowded = new Set<string>();
+  for (let index = 0; index < nearby.length; index++) {
+    const a = nearby[index];
+    for (let second = index + 1; second < nearby.length; second++) {
+      const b = nearby[second];
+      if (Math.abs(a.position.x - b.position.x) >= a.halfWidth + b.halfWidth ||
+          Math.abs(a.position.y - b.position.y) >= a.halfHeight + b.halfHeight) continue;
+      if (a.id) crowded.add(a.id);
+      if (b.id) crowded.add(b.id);
+    }
+  }
+  return crowded;
+}
 
 export function nativeAtmosphereRadius(group: MapPointGroup, zoom = 14) {
   const latitudeScale = Math.cos((group.latitude * Math.PI) / 180);
